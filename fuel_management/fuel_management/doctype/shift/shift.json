@@ -20,8 +20,7 @@
             "fieldtype": "Link",
             "options": "User",
             "reqd": 1,
-            "in_list_view": 1,
-            "default": "frappe.session.user"
+            "in_list_view": 1
         },
         {
             "fieldname": "status",
@@ -40,7 +39,7 @@
             "label": "Start Time",
             "fieldtype": "Datetime",
             "reqd": 1,
-            "default": "frappe.datetime.now_datetime()"
+            "default": "Now"
         },
         {
             "fieldname": "end_time",
