@@ -1,0 +1,85 @@
+{
+    "name": "Shift",
+    "doctype": "DocType",
+    "module": "Fuel Management",
+    "custom": 0,
+    "naming_rule": "Expression",
+    "autoname": "format:SHIFT-{YY}-{MM}-{DD}-{####}",
+    "fields": [
+        {
+            "fieldname": "station",
+            "label": "Fuel Station",
+            "fieldtype": "Link",
+            "options": "Fuel Station",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "head_csa",
+            "label": "Head CSA",
+            "fieldtype": "Link",
+            "options": "User",
+            "reqd": 1,
+            "in_list_view": 1,
+            "default": "frappe.session.user"
+        },
+        {
+            "fieldname": "status",
+            "label": "Status",
+            "fieldtype": "Select",
+            "options": "Open\\nClosed",
+            "default": "Open",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "start_time",
+            "label": "Start Time",
+            "fieldtype": "Datetime",
+            "reqd": 1,
+            "default": "frappe.datetime.now_datetime()"
+        },
+        {
+            "fieldname": "end_time",
+            "label": "End Time",
+            "fieldtype": "Datetime"
+        },
+        {
+            "fieldname": "section_break_meters",
+            "label": "Pump Meter Readings",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "pump_meter_readings",
+            "label": "Pump Meter Readings",
+            "fieldtype": "Table",
+            "options": "Pump Meter Reading"
+        },
+        {
+            "fieldname": "section_break_dips",
+            "label": "Dip Stick Readings",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "dip_stick_readings",
+            "label": "Dip Stick Readings",
+            "fieldtype": "Table",
+            "options": "Dip Stick Reading"
+        }
+    ],
+    "permissions": [
+        {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1,
+            "create": 1,
+            "delete": 1
+        }
+    ],
+    "creation": "2024-01-01 12:00:00.000000",
+    "modified": "2024-01-01 12:00:00.000000",
+    "owner": "Administrator"
+}

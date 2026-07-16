@@ -1,0 +1,45 @@
+{
+    "name": "Dip Stick Reading",
+    "doctype": "DocType",
+    "module": "Fuel Management",
+    "custom": 0,
+    "istable": 1,
+    "fields": [
+        {
+            "fieldname": "fuel_tank",
+            "label": "Fuel Tank",
+            "fieldtype": "Link",
+            "options": "Fuel Tank",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "opening_dip",
+            "label": "Opening Dip (Liters)",
+            "fieldtype": "Float",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "closing_dip",
+            "label": "Closing Dip (Liters)",
+            "fieldtype": "Float",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "expected_stock",
+            "label": "Expected Stock (Liters)",
+            "fieldtype": "Float",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "variance",
+            "label": "Variance",
+            "fieldtype": "Float",
+            "read_only": 1,
+            "in_list_view": 1
+        }
+    ],
+    "creation": "2024-01-01 12:00:00.000000",
+    "modified": "2024-01-01 12:00:00.000000",
+    "owner": "Administrator"
+}

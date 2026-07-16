@@ -1,0 +1,65 @@
+{
+    "name": "Pump Meter Reading",
+    "doctype": "DocType",
+    "module": "Fuel Management",
+    "custom": 0,
+    "istable": 1,
+    "fields": [
+        {
+            "fieldname": "pump_nozzle",
+            "label": "Pump Nozzle",
+            "fieldtype": "Link",
+            "options": "Pump Nozzle",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "opening_electronic_meter",
+            "label": "Opening Electronic",
+            "fieldtype": "Float",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "closing_electronic_meter",
+            "label": "Closing Electronic",
+            "fieldtype": "Float",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "sales_quantity_electronic",
+            "label": "Sales (Electronic)",
+            "fieldtype": "Float",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "opening_manual_meter",
+            "label": "Opening Manual",
+            "fieldtype": "Float"
+        },
+        {
+            "fieldname": "closing_manual_meter",
+            "label": "Closing Manual",
+            "fieldtype": "Float"
+        },
+        {
+            "fieldname": "sales_quantity_manual",
+            "label": "Sales (Manual)",
+            "fieldtype": "Float",
+            "read_only": 1
+        },
+        {
+            "fieldname": "variance",
+            "label": "Variance",
+            "fieldtype": "Float",
+            "read_only": 1,
+            "in_list_view": 1
+        }
+    ],
+    "creation": "2024-01-01 12:00:00.000000",
+    "modified": "2024-01-01 12:00:00.000000",
+    "owner": "Administrator"
+}
