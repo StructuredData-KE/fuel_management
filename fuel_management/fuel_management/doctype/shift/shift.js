@@ -1,66 +1,69 @@
 frappe.ui.form.on('Shift', {
-    refresh: function(frm) {
-        check_all_variances(frm);
+    actual_cash: function(frm) {
+        if (frm.doc.expected_cash !== undefined && frm.doc.expected_cash !== null) {
+            let variance = flt(frm.doc.actual_cash) - flt(frm.doc.expected_cash);
+            frm.set_value('cash_variance', variance);
+        }
     }
 });
 
-frappe.ui.form.on('Pump Meter Reading', {
-    opening_electronic_meter: function(frm, cdt, cdn) { calculate_pump_variance(frm, cdt, cdn); },
-    closing_electronic_meter: function(frm, cdt, cdn) { calculate_pump_variance(frm, cdt, cdn); },
-    opening_manual_meter: function(frm, cdt, cdn) { calculate_pump_variance(frm, cdt, cdn); },
-    closing_manual_meter: function(frm, cdt, cdn) { calculate_pump_variance(frm, cdt, cdn); }
+function recalculate_totals(frm) {
+    let inventory_sales = 0;
+    (frm.doc.inventory_sales || []).forEach(row => {
+        inventory_sales += flt(row.amount);
+    });
+
+    let mpesa = 0;
+    (frm.doc.mpesa_payments || []).forEach(row => {
+        mpesa += flt(row.amount);
+    });
+
+    let cards = 0;
+    (frm.doc.card_payments || []).forEach(row => {
+        cards += flt(row.amount);
+    });
+
+    let invoices = 0;
+    (frm.doc.invoices || []).forEach(row => {
+        invoices += flt(row.amount);
+    });
+
+    let expenses = 0;
+    (frm.doc.shift_expenses || []).forEach(row => {
+        expenses += flt(row.amount);
+    });
+
+    let procurement = 0;
+    (frm.doc.procurement || []).forEach(row => {
+        procurement += flt(row.amount);
+    });
+
+    // Note: Fuel sales amount is calculated dynamically on the backend during save because it requires querying Item Prices.
+    // The user should click 'Save' to fetch the true expected cash.
+}
+
+frappe.ui.form.on('Shift Inventory Sale', {
+    quantity: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        if (row.quantity && row.selling_price) {
+            frappe.model.set_value(cdt, cdn, 'amount', flt(row.quantity) * flt(row.selling_price));
+        }
+    },
+    selling_price: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        if (row.quantity && row.selling_price) {
+            frappe.model.set_value(cdt, cdn, 'amount', flt(row.quantity) * flt(row.selling_price));
+        }
+    },
+    item: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        if (row.item) {
+            frappe.db.get_value('Item Price', {item_code: row.item, price_list: 'Standard Selling'}, 'price_list_rate')
+            .then(r => {
+                if (r && r.message) {
+                    frappe.model.set_value(cdt, cdn, 'selling_price', r.message.price_list_rate);
+                }
+            });
+        }
+    }
 });
-
-function calculate_pump_variance(frm, cdt, cdn) {
-    let row = frappe.get_doc(cdt, cdn);
-    let sales_elec = (row.closing_electronic_meter || 0) - (row.opening_electronic_meter || 0);
-    let sales_manual = (row.closing_manual_meter || 0) - (row.opening_manual_meter || 0);
-    
-    frappe.model.set_value(cdt, cdn, 'sales_quantity_electronic', sales_elec);
-    frappe.model.set_value(cdt, cdn, 'sales_quantity_manual', sales_manual);
-    
-    let variance = sales_elec - sales_manual;
-    frappe.model.set_value(cdt, cdn, 'variance', variance);
-    
-    check_all_variances(frm);
-}
-
-frappe.ui.form.on('Dip Stick Reading', {
-    opening_dip: function(frm, cdt, cdn) { calculate_dip_variance(frm, cdt, cdn); },
-    closing_dip: function(frm, cdt, cdn) { calculate_dip_variance(frm, cdt, cdn); },
-    expected_stock: function(frm, cdt, cdn) { calculate_dip_variance(frm, cdt, cdn); }
-});
-
-function calculate_dip_variance(frm, cdt, cdn) {
-    let row = frappe.get_doc(cdt, cdn);
-    let variance = (row.expected_stock || 0) - (row.closing_dip || 0);
-    frappe.model.set_value(cdt, cdn, 'variance', variance);
-    
-    check_all_variances(frm);
-}
-
-function check_all_variances(frm) {
-    let has_variance = false;
-    
-    if (frm.doc.pump_meter_readings) {
-        frm.doc.pump_meter_readings.forEach(d => {
-            if (d.variance && d.variance !== 0) {
-                has_variance = true;
-            }
-        });
-    }
-    
-    if (frm.doc.dip_stick_readings) {
-        frm.doc.dip_stick_readings.forEach(d => {
-            if (d.variance && d.variance !== 0) {
-                has_variance = true;
-            }
-        });
-    }
-    
-    if (has_variance) {
-        frm.set_intro('<b>⚠️ Warning: There are meter/dip stick variances in this Shift!</b>', 'red');
-    } else {
-        frm.set_intro('');
-    }
-}

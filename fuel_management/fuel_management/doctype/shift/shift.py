@@ -6,6 +6,33 @@ class Shift(Document):
         self.lock_shift_if_closed_for_csa()
         self.auto_fetch_opening_readings()
         self.calculate_expected_stock()
+        self.calculate_expected_cash()
+
+    def calculate_expected_cash(self):
+        from frappe.utils import flt
+        total_fuel_amount = 0.0
+        
+        if self.pump_meter_readings:
+            for row in self.pump_meter_readings:
+                if row.sales_quantity_electronic and row.sales_quantity_electronic > 0 and row.pump_nozzle:
+                    tank = frappe.db.get_value("Pump Nozzle", row.pump_nozzle, "fuel_tank")
+                    if tank:
+                        item_code = frappe.db.get_value("Fuel Tank", tank, "fuel_product")
+                        if item_code:
+                            price = frappe.db.get_value("Item Price", {"item_code": item_code, "price_list": "Standard Selling"}, "price_list_rate") or 0.0
+                            total_fuel_amount += (row.sales_quantity_electronic * price)
+
+        total_dry_stock_amount = sum(flt(row.amount) for row in (self.inventory_sales or []))
+        total_mpesa = sum(flt(row.amount) for row in (self.mpesa_payments or []))
+        total_cards = sum(flt(row.amount) for row in (self.card_payments or []))
+        total_invoices = sum(flt(row.amount) for row in (self.invoices or []))
+        total_expenses = sum(flt(row.amount) for row in (self.shift_expenses or []))
+        total_procurement = sum(flt(row.amount) for row in (self.procurement or []))
+
+        self.expected_cash = (total_fuel_amount + total_dry_stock_amount) - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement)
+
+        if self.actual_cash is not None:
+            self.cash_variance = flt(self.actual_cash) - flt(self.expected_cash)
 
     def on_update(self):
         self.create_stock_entry_on_close()
