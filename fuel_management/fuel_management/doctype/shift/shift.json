@@ -26,7 +26,7 @@
             "fieldname": "status",
             "label": "Status",
             "fieldtype": "Select",
-            "options": "Open\\nClosed",
+            "options": "Open\nClosed",
             "default": "Open",
             "in_list_view": 1
         },
@@ -78,6 +78,85 @@
             "label": "Stock Entry Reference",
             "fieldtype": "Link",
             "options": "Stock Entry",
+            "read_only": 1
+        },
+        {
+            "fieldname": "section_break_inventory_sales",
+            "label": "Inventory Sales (Dry Stock)",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "inventory_sales",
+            "label": "Inventory Sales",
+            "fieldtype": "Table",
+            "options": "Shift Inventory Sale"
+        },
+        {
+            "fieldname": "section_break_collections",
+            "label": "Payment Collections",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "mpesa_payments",
+            "label": "M-Pesa Payments",
+            "fieldtype": "Table",
+            "options": "Shift M-Pesa Payment"
+        },
+        {
+            "fieldname": "card_payments",
+            "label": "Card Payments",
+            "fieldtype": "Table",
+            "options": "Shift Card Payment"
+        },
+        {
+            "fieldname": "invoices",
+            "label": "Invoices (Credit)",
+            "fieldtype": "Table",
+            "options": "Shift Invoice"
+        },
+        {
+            "fieldname": "section_break_expenses",
+            "label": "Expenses & Operations",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "shift_expenses",
+            "label": "Shift Expenses",
+            "fieldtype": "Table",
+            "options": "Shift Expense"
+        },
+        {
+            "fieldname": "procurement",
+            "label": "Procurement",
+            "fieldtype": "Table",
+            "options": "Shift Procurement"
+        },
+        {
+            "fieldname": "return_to_tank",
+            "label": "Return To Tank",
+            "fieldtype": "Table",
+            "options": "Shift Return To Tank"
+        },
+        {
+            "fieldname": "section_break_reconciliation",
+            "label": "Cash Reconciliation",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "expected_cash",
+            "label": "Expected Cash",
+            "fieldtype": "Currency",
+            "read_only": 1
+        },
+        {
+            "fieldname": "actual_cash",
+            "label": "Actual Cash Counted",
+            "fieldtype": "Currency"
+        },
+        {
+            "fieldname": "cash_variance",
+            "label": "Cash Variance",
+            "fieldtype": "Currency",
             "read_only": 1
         }
     ],
