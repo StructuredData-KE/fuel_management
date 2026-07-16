@@ -67,6 +67,18 @@
             "label": "Dip Stick Readings",
             "fieldtype": "Table",
             "options": "Dip Stick Reading"
+        },
+        {
+            "fieldname": "section_break_accounting",
+            "label": "Accounting Reference",
+            "fieldtype": "Section Break"
+        },
+        {
+            "fieldname": "stock_entry_reference",
+            "label": "Stock Entry Reference",
+            "fieldtype": "Link",
+            "options": "Stock Entry",
+            "read_only": 1
         }
     ],
     "permissions": [
