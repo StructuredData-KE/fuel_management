@@ -1,0 +1,51 @@
+{
+    "name": "Fuel Tank",
+    "module": "Fuel Management",
+    "custom": 0,
+    "fields": [
+        {
+            "fieldname": "tank_name",
+            "label": "Tank Name",
+            "fieldtype": "Data",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "station",
+            "label": "Fuel Station",
+            "fieldtype": "Link",
+            "options": "Fuel Station",
+            "reqd": 1
+        },
+        {
+            "fieldname": "fuel_product",
+            "label": "Fuel Product",
+            "fieldtype": "Link",
+            "options": "Item",
+            "reqd": 1
+        },
+        {
+            "fieldname": "capacity",
+            "label": "Capacity (Liters)",
+            "fieldtype": "Float",
+            "reqd": 1
+        },
+        {
+            "fieldname": "current_volume",
+            "label": "Current Volume",
+            "fieldtype": "Float",
+            "read_only": 1
+        }
+    ],
+    "permissions": [
+        {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1,
+            "create": 1,
+            "delete": 1
+        }
+    ],
+    "naming_rule": "By fieldname",
+    "autoname": "field:tank_name"
+}

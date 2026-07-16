@@ -1,0 +1,39 @@
+{
+    "name": "Pump Nozzle",
+    "module": "Fuel Management",
+    "custom": 0,
+    "fields": [
+        {
+            "fieldname": "nozzle_name",
+            "label": "Nozzle Name",
+            "fieldtype": "Data",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "pump_group",
+            "label": "Pump Group",
+            "fieldtype": "Link",
+            "options": "Pump Group",
+            "reqd": 1
+        },
+        {
+            "fieldname": "fuel_tank",
+            "label": "Linked Fuel Tank",
+            "fieldtype": "Link",
+            "options": "Fuel Tank",
+            "reqd": 1
+        }
+    ],
+    "permissions": [
+        {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1,
+            "create": 1,
+            "delete": 1
+        }
+    ],
+    "naming_rule": "By fieldname",
+    "autoname": "field:nozzle_name"
+}

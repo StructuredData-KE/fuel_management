@@ -1,0 +1,32 @@
+{
+    "name": "Pump Group",
+    "module": "Fuel Management",
+    "custom": 0,
+    "fields": [
+        {
+            "fieldname": "group_name",
+            "label": "Group/Island Name",
+            "fieldtype": "Data",
+            "reqd": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "station",
+            "label": "Fuel Station",
+            "fieldtype": "Link",
+            "options": "Fuel Station",
+            "reqd": 1
+        }
+    ],
+    "permissions": [
+        {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1,
+            "create": 1,
+            "delete": 1
+        }
+    ],
+    "naming_rule": "By fieldname",
+    "autoname": "field:group_name"
+}

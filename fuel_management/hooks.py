@@ -67,7 +67,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "fuel_management.install.before_install"
-# after_install = "fuel_management.install.after_install"
+after_install = "fuel_management.install.after_install"
 
 # Uninstallation
 # ------------
