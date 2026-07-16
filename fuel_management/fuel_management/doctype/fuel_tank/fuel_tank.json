@@ -47,5 +47,9 @@
         }
     ],
     "naming_rule": "By fieldname",
-    "autoname": "field:tank_name"
+    "autoname": "field:tank_name",
+    "doctype": "DocType",
+    "creation": "2024-01-01 12:00:00.000000",
+    "modified": "2024-01-01 12:00:00.000000",
+    "owner": "Administrator"
 }
