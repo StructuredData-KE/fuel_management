@@ -1,0 +1,53 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-16 18:12:07.790182",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "pump_nozzle",
+  "fuel_tank",
+  "quantity"
+ ],
+ "fields": [
+  {
+   "fieldname": "pump_nozzle",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Pump Nozzle",
+   "options": "Pump Nozzle",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fuel_tank",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Fuel Tank",
+   "options": "Fuel Tank"
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantity (Liters)",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-16 18:12:07.790182",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "Shift Return To Tank",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
