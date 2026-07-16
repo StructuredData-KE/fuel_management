@@ -1,0 +1,8 @@
+{
+  "css/fuel_management.css": [
+    "public/css/fuel_management.css"
+  ],
+  "js/fuel_management.js": [
+    "public/js/fuel_management.js"
+  ]
+}
