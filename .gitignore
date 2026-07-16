@@ -1,0 +1,10 @@
+*.pyc
+*.swp
+*.sqlite
+.vscode/
+.DS_Store
+__pycache__/
+*.egg-info/
+node_modules/
+dist/
+build/

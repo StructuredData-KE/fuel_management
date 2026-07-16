@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include fuel_management *.css
+recursive-include fuel_management *.csv
+recursive-include fuel_management *.html
+recursive-include fuel_management *.ico
+recursive-include fuel_management *.js
+recursive-include fuel_management *.json
+recursive-include fuel_management *.md
+recursive-include fuel_management *.png
+recursive-include fuel_management *.py
+recursive-include fuel_management *.svg
+recursive-include fuel_management *.txt
+recursive-exclude fuel_management *.pyc
