@@ -3,10 +3,23 @@ from frappe.model.document import Document
 
 class Shift(Document):
     def validate(self):
+        self.validate_future_date()
         self.lock_shift_if_closed_for_csa()
+        self.lock_active_shift_overlap()
         self.auto_fetch_opening_readings()
         self.calculate_expected_stock()
         self.calculate_expected_cash()
+
+    def validate_future_date(self):
+        from frappe.utils import getdate, today
+        if getdate(self.date) > getdate(today()):
+            frappe.throw("Shift Date cannot be in the future.")
+
+    def lock_active_shift_overlap(self):
+        if self.is_new():
+            active_shift = frappe.db.get_value("Shift", {"station": self.station, "status": "Open", "name": ("!=", self.name)}, "name")
+            if active_shift:
+                frappe.throw(f"Cannot start a new shift. Shift {active_shift} is currently active for this station.")
 
     def calculate_expected_cash(self):
         from frappe.utils import flt
@@ -19,7 +32,14 @@ class Shift(Document):
                     if tank:
                         item_code = frappe.db.get_value("Fuel Tank", tank, "fuel_product")
                         if item_code:
-                            price = frappe.db.get_value("Item Price", {"item_code": item_code, "price_list": "Standard Selling"}, "price_list_rate") or 0.0
+                            # Pricing Engine: Fetch historical price where Valid From <= Shift Date
+                            price_record = frappe.get_all("Item Price", 
+                                filters={"item_code": item_code, "price_list": "Standard Selling", "valid_from": ("<=", self.date)},
+                                fields=["price_list_rate"],
+                                order_by="valid_from desc",
+                                limit=1
+                            )
+                            price = price_record[0].price_list_rate if price_record else 0.0
                             total_fuel_amount += (row.sales_quantity_electronic * price)
 
         total_dry_stock_amount = sum(flt(row.amount) for row in (self.inventory_sales or []))
@@ -29,7 +49,14 @@ class Shift(Document):
         total_expenses = sum(flt(row.amount) for row in (self.shift_expenses or []))
         total_procurement = sum(flt(row.amount) for row in (self.procurement or []))
 
-        self.expected_cash = (total_fuel_amount + total_dry_stock_amount) - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement)
+        # Deduct Fleet Card CSA Drops
+        total_fleet_drops = 0.0
+        if not self.is_new():
+            fleet_summaries = frappe.get_all("Fleet Card Shift Summary", filters={"shift": self.name, "docstatus": ("<", 2)}, fields=["total_csa_drops"])
+            for s in fleet_summaries:
+                total_fleet_drops += flt(s.total_csa_drops)
+
+        self.expected_cash = (total_fuel_amount + total_dry_stock_amount) - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops)
 
         if self.actual_cash is not None:
             self.cash_variance = flt(self.actual_cash) - flt(self.expected_cash)
