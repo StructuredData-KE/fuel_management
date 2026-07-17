@@ -23,6 +23,29 @@
             "in_list_view": 1
         },
         {
+            "fieldname": "shift_date",
+            "label": "Shift Date",
+            "fieldtype": "Date",
+            "reqd": 1,
+            "default": "Today",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "shift_template",
+            "label": "Shift Template",
+            "fieldtype": "Link",
+            "options": "Fuel Shift Template",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "shift_name_display",
+            "label": "Shift Name (Display)",
+            "fieldtype": "Data",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
             "fieldname": "status",
             "label": "Status",
             "fieldtype": "Select",
