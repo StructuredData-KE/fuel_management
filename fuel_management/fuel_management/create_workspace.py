@@ -10,6 +10,7 @@ def execute():
         doc = frappe.new_doc("Workspace")
         doc.name = "Fuel Management"
         doc.label = "Fuel Management"
+        doc.title = "Fuel Management"
         doc.module = "Fuel Management"
         doc.icon = "indicator-blue"
         doc.is_standard = 1
