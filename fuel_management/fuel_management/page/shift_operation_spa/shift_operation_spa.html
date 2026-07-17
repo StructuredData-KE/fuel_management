@@ -1,0 +1,144 @@
+<div class="spa-wrapper">
+    <div class="spa-glass-container">
+        <header class="spa-header">
+            <div class="header-content">
+                <h1>Shift Operations Console</h1>
+                <span id="active-shift-badge" class="badge">No Active Shift</span>
+            </div>
+            <nav class="spa-nav">
+                <button class="nav-tab active" data-target="tab-start">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    <span>Start Shift</span>
+                </button>
+                <button class="nav-tab" data-target="tab-wetstock">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                    <span>Wetstock</span>
+                </button>
+                <button class="nav-tab" data-target="tab-cash">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 17v-4a4 4 0 0 0-8 0v4"/><circle cx="12" cy="11" r="1"/></svg>
+                    <span>Cash & Drops</span>
+                </button>
+                <button class="nav-tab" data-target="tab-reconcile">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span>Reconcile</span>
+                </button>
+            </nav>
+        </header>
+
+        <main class="spa-content">
+            <!-- START SHIFT TAB -->
+            <section id="tab-start" class="tab-pane active">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Fuel Station</label>
+                        <select id="select-station" class="spa-input"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Head CSA</label>
+                        <select id="select-head-csa" class="spa-input"></select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Assigned CSAs</label>
+                        <div id="csa-tags" class="tags-input-container">
+                            <input type="text" id="add-csa-input" placeholder="Search CSA..." class="spa-input">
+                            <div id="csa-tag-list" class="tag-list"></div>
+                        </div>
+                    </div>
+                    <div class="form-actions full-width">
+                        <button id="btn-start-shift" class="btn-primary">
+                            <span class="spinner hidden"></span> Start New Shift
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- WETSTOCK TAB -->
+            <section id="tab-wetstock" class="tab-pane">
+                <h2>Pump Meter Readings</h2>
+                <div id="meters-container" class="cards-grid">
+                    <!-- Dynamic meter cards will be injected here -->
+                </div>
+                
+                <h2 class="mt-4">Dip Stick Readings</h2>
+                <div id="dips-container" class="cards-grid">
+                    <!-- Dynamic dip cards will be injected here -->
+                </div>
+                <div class="form-actions right">
+                    <button id="btn-save-wetstock" class="btn-secondary">Save Readings</button>
+                </div>
+            </section>
+
+            <!-- CASH & DROPS TAB -->
+            <section id="tab-cash" class="tab-pane">
+                <div class="cards-grid">
+                    <div class="glass-card">
+                        <h3>M-Pesa Drops</h3>
+                        <div class="drop-inputs">
+                            <input type="number" id="mpesa-amount" placeholder="Amount" class="spa-input">
+                            <input type="text" id="mpesa-ref" placeholder="Reference No" class="spa-input">
+                            <button class="btn-icon" id="btn-add-mpesa">+</button>
+                        </div>
+                        <ul id="list-mpesa" class="drop-list"></ul>
+                    </div>
+                    
+                    <div class="glass-card">
+                        <h3>Invoices (Credit Sales)</h3>
+                        <div class="drop-inputs">
+                            <select id="invoice-customer" class="spa-input"></select>
+                            <input type="number" id="invoice-amount" placeholder="Amount" class="spa-input">
+                            <button class="btn-icon" id="btn-add-invoice">+</button>
+                        </div>
+                        <ul id="list-invoice" class="drop-list"></ul>
+                    </div>
+                    
+                    <div class="glass-card">
+                        <h3>Fleet Cards</h3>
+                        <div class="drop-inputs">
+                            <select id="fleet-card-select" class="spa-input"></select>
+                            <input type="number" id="fleet-card-closing" placeholder="Closing Bal" class="spa-input">
+                            <button class="btn-icon" id="btn-add-fleet">+</button>
+                        </div>
+                        <ul id="list-fleet" class="drop-list"></ul>
+                    </div>
+                    
+                    <div class="glass-card">
+                        <h3>Expenses</h3>
+                        <div class="drop-inputs">
+                            <input type="text" id="expense-reason" placeholder="Reason" class="spa-input">
+                            <input type="number" id="expense-amount" placeholder="Amount" class="spa-input">
+                            <button class="btn-icon" id="btn-add-expense">+</button>
+                        </div>
+                        <ul id="list-expense" class="drop-list"></ul>
+                    </div>
+                </div>
+                <div class="form-actions right mt-4">
+                    <button id="btn-save-cash" class="btn-secondary">Sync Drops to Shift</button>
+                </div>
+            </section>
+
+            <!-- RECONCILE TAB -->
+            <section id="tab-reconcile" class="tab-pane">
+                <div class="reconcile-card">
+                    <div class="reconcile-row">
+                        <span>Expected Cash</span>
+                        <h3 id="expected-cash-val">KES 0.00</h3>
+                    </div>
+                    <div class="reconcile-row actual-row">
+                        <label>Actual Physical Cash</label>
+                        <input type="number" id="actual-cash-input" class="spa-input huge-input" placeholder="0.00">
+                    </div>
+                    <div class="reconcile-row variance-row">
+                        <span>Variance</span>
+                        <h3 id="variance-val">KES 0.00</h3>
+                    </div>
+                    <div class="form-actions center mt-4">
+                        <button id="btn-close-shift" class="btn-danger">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            Close Shift & Lock
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>

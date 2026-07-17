@@ -21,6 +21,12 @@ def execute():
             "type": "Card Break"
         })
         doc.append("links", {
+            "label": "Shift Operations Console (SPA)",
+            "type": "Link",
+            "link_type": "Page",
+            "link_to": "shift_operation_spa"
+        })
+        doc.append("links", {
             "label": "Shift Operations",
             "type": "Link",
             "link_type": "DocType",

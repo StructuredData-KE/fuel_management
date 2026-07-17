@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-07-17 10:25:45.717508",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-17 10:25:45.717508",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "shift_operation_spa",
+ "owner": "Administrator",
+ "page_name": "shift_operation_spa",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Shift Operations Console"
+}
