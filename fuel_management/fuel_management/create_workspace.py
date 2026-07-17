@@ -11,6 +11,11 @@ def execute():
         doc.name = "Fuel Management"
         doc.label = "Fuel Management"
         doc.title = "Fuel Management"
+        doc.module = "Fuel Management"
+        doc.is_standard = 1
+        doc.public = 1
+        doc.icon = "indicator-blue"
+        
         doc.append("links", {
             "label": "Shift Operations",
             "type": "Link",
@@ -73,54 +78,16 @@ def execute():
             "link_type": "DocType",
             "link_to": "Fleet Card"
         })
-        
-        doc.content = json.dumps([
-            {
-                "id": "header-ops",
-                "type": "header",
-                "data": {"text": "Daily Operations", "level": 4}
-            },
-            {
-                "id": "shortcut-shift",
-                "type": "shortcut",
-                "data": {"shortcut_name": "Shift", "col": 12}
-            },
-            {
-                "id": "header-setup",
-                "type": "header",
-                "data": {"text": "Station Configuration", "level": 4}
-            },
-            {
-                "id": "shortcut-station",
-                "type": "shortcut",
-                "data": {"shortcut_name": "Fuel Station", "col": 4}
-            },
-            {
-                "id": "shortcut-tank",
-                "type": "shortcut",
-                "data": {"shortcut_name": "Fuel Tank", "col": 4}
-            },
-            {
-                "id": "shortcut-group",
-                "type": "shortcut",
-                "data": {"shortcut_name": "Pump Group", "col": 4}
-            },
-            {
-                "id": "shortcut-nozzle",
-                "type": "shortcut",
-                "data": {"shortcut_name": "Pump Nozzle", "col": 4}
-            },
-            {
-                "id": "shortcut-cards",
-                "type": "shortcut",
-                "data": {"shortcut_name": "Fleet Card", "col": 4}
-            },
-            {
-                "id": "shortcut-settings",
-                "type": "shortcut",
-                "data": {"shortcut_name": "Fuel Management Settings", "col": 4}
-            }
-        ])
+        doc.append("links", {
+            "label": "Reports",
+            "type": "Card Break"
+        })
+        doc.append("links", {
+            "label": "Monthly Volume Report",
+            "type": "Link",
+            "link_type": "Report",
+            "link_to": "Monthly Volume Report"
+        })
         
         doc.insert(ignore_permissions=True)
         frappe.db.commit()
