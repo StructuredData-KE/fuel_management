@@ -10,9 +10,11 @@ frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
 
 function setup_tabs(wrapper) {
     const $wrapper = $(wrapper);
-    $wrapper.find('.nav-tab').on('click', function() {
+    $wrapper.find('.nav-item').on('click', function(e) {
+        e.preventDefault();
+        
         // Remove active class from all tabs and panes
-        $wrapper.find('.nav-tab').removeClass('active');
+        $wrapper.find('.nav-item').removeClass('active');
         $wrapper.find('.tab-pane').removeClass('active');
         
         // Add active class to clicked tab and target pane
