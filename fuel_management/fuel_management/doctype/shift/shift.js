@@ -1,4 +1,24 @@
 frappe.ui.form.on('Shift', {
+    setup(frm) {
+        // Dynamic Dropdown Filtering for CSA
+        let csa_query = function(doc, cdt, cdn) {
+            let csas = (doc.assigned_csas || []).map(r => r.csa).filter(c => c);
+            if(csas.length > 0) {
+                return {
+                    filters: {
+                        'name': ['in', csas]
+                    }
+                };
+            }
+            return {};
+        };
+        
+        frm.set_query("csa", "inventory_sales", csa_query);
+        frm.set_query("csa", "invoices", csa_query);
+        frm.set_query("csa", "mpesa_payments", csa_query);
+        frm.set_query("csa", "card_payments", csa_query);
+        frm.set_query("csa", "shift_expenses", csa_query);
+    },
     actual_cash: function(frm) {
         if (frm.doc.expected_cash !== undefined && frm.doc.expected_cash !== null) {
             let variance = flt(frm.doc.actual_cash) - flt(frm.doc.expected_cash);

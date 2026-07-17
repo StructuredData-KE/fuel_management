@@ -1,4 +1,5 @@
 import frappe
+from frappe.modules.export_file import export_to_files
 
 def create_doctype(name, module, fields, is_submittable=0, istable=0, naming_rule="Expression", autoname=None, permissions=None):
     if not frappe.db.exists("DocType", name):
@@ -24,12 +25,11 @@ def create_doctype(name, module, fields, is_submittable=0, istable=0, naming_rul
         try:
             doc.insert(ignore_permissions=True)
             print(f"Created {name}")
+            export_to_files(record_list=[['DocType', name]], record_module=module)
         except Exception as e:
             print(f"Failed {name}: {str(e)}")
 
 def execute():
-    frappe.flags.in_import = True # Suppress developer mode errors occasionally
-
     # 1. Shift Assigned CSA
     create_doctype("Shift Assigned CSA", "Fuel Management", [
         {"fieldname": "csa", "label": "CSA", "fieldtype": "Link", "options": "User", "reqd": 1, "in_list_view": 1},
