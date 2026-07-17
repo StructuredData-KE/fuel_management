@@ -17,6 +17,10 @@ def execute():
         doc.icon = "indicator-blue"
         
         doc.append("links", {
+            "label": "Daily Operations",
+            "type": "Card Break"
+        })
+        doc.append("links", {
             "label": "Shift Operations",
             "type": "Link",
             "link_type": "DocType",
@@ -88,6 +92,34 @@ def execute():
             "link_type": "Report",
             "link_to": "Monthly Volume Report"
         })
+        
+        doc.content = json.dumps([
+            {
+                "id": "header-main",
+                "type": "header",
+                "data": {"text": "Fuel Management System", "level": 2}
+            },
+            {
+                "id": "card-ops",
+                "type": "card",
+                "data": {"card_name": "Daily Operations", "col": 6}
+            },
+            {
+                "id": "card-setup",
+                "type": "card",
+                "data": {"card_name": "Station Setup", "col": 6}
+            },
+            {
+                "id": "card-admin",
+                "type": "card",
+                "data": {"card_name": "Administration", "col": 6}
+            },
+            {
+                "id": "card-reports",
+                "type": "card",
+                "data": {"card_name": "Reports", "col": 6}
+            }
+        ])
         
         doc.insert(ignore_permissions=True)
         frappe.db.commit()
