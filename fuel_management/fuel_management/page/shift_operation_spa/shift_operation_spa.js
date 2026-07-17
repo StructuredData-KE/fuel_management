@@ -19,6 +19,10 @@ function setup_tabs(wrapper) {
         $(this).addClass('active');
         const target = $(this).attr('data-target');
         $wrapper.find('#' + target).addClass('active');
+        
+        // Update topbar title
+        const tabName = $(this).find('span').text();
+        $wrapper.find('#current-module-title').text(tabName);
     });
 }
 

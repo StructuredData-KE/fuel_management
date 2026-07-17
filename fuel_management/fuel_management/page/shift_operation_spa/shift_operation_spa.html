@@ -1,144 +1,303 @@
-<div class="spa-wrapper">
-    <div class="spa-glass-container">
-        <header class="spa-header">
-            <div class="header-content">
-                <h1>Shift Operations Console</h1>
-                <span id="active-shift-badge" class="badge">No Active Shift</span>
-            </div>
-            <nav class="spa-nav">
-                <button class="nav-tab active" data-target="tab-start">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                    <span>Start Shift</span>
-                </button>
-                <button class="nav-tab" data-target="tab-wetstock">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
-                    <span>Wetstock</span>
-                </button>
-                <button class="nav-tab" data-target="tab-cash">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 17v-4a4 4 0 0 0-8 0v4"/><circle cx="12" cy="11" r="1"/></svg>
-                    <span>Cash & Drops</span>
-                </button>
-                <button class="nav-tab" data-target="tab-reconcile">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    <span>Reconcile</span>
-                </button>
-            </nav>
-        </header>
+<div class="dashboard-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-circle">F</div>
+            <span class="logo-text">FuelOps</span>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <div class="nav-section-title">SHIFT MODULES</div>
+            
+            <a href="#" class="nav-item active" data-target="tab-start">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span>Start Shift</span>
+            </a>
+            
+            <a href="#" class="nav-item" data-target="tab-wetstock">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                <span>Wetstock (Meters)</span>
+            </a>
+            
+            <a href="#" class="nav-item" data-target="tab-mpesa">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 17v-4a4 4 0 0 0-8 0v4"/><circle cx="12" cy="11" r="1"/></svg>
+                <span>M-Pesa Drops</span>
+            </a>
+            
+            <a href="#" class="nav-item" data-target="tab-cards">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                <span>Fleet Cards</span>
+            </a>
+            
+            <a href="#" class="nav-item" data-target="tab-invoices">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span>Credit Sales</span>
+            </a>
 
-        <main class="spa-content">
-            <!-- START SHIFT TAB -->
+            <a href="#" class="nav-item" data-target="tab-expenses">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span>Expenses</span>
+            </a>
+            
+            <div class="nav-section-title mt-4">CLOSURE</div>
+            
+            <a href="#" class="nav-item" data-target="tab-reconcile">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <span>Reconcile Shift</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <h2 id="current-module-title">Start Shift</h2>
+            </div>
+            <div class="topbar-right">
+                <div class="search-bar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" placeholder="Search...">
+                </div>
+                <div class="notification-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div class="shift-badge-container">
+                    <span id="active-shift-badge" class="badge">No Active Shift</span>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Tab Panes -->
+        <div class="content-area">
+            
+            <!-- START SHIFT -->
             <section id="tab-start" class="tab-pane active">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Fuel Station</label>
-                        <select id="select-station" class="spa-input"></select>
-                    </div>
-                    <div class="form-group">
-                        <label>Head CSA</label>
-                        <select id="select-head-csa" class="spa-input"></select>
-                    </div>
-                    <div class="form-group full-width">
-                        <label>Assigned CSAs</label>
-                        <div id="csa-tags" class="tags-input-container">
-                            <input type="text" id="add-csa-input" placeholder="Search CSA..." class="spa-input">
-                            <div id="csa-tag-list" class="tag-list"></div>
+                <div class="dashboard-cards-grid">
+                    <!-- Overview Card -->
+                    <div class="dash-card main-highlight-card">
+                        <h3>Shift Initialization</h3>
+                        <div class="highlight-stats">
+                            <div class="stat-number">Step 1</div>
+                            <div class="stat-desc">Select station & assign staff</div>
                         </div>
                     </div>
-                    <div class="form-actions full-width">
-                        <button id="btn-start-shift" class="btn-primary">
-                            <span class="spinner hidden"></span> Start New Shift
-                        </button>
+                    
+                    <!-- Form Card -->
+                    <div class="dash-card span-2">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Fuel Station</label>
+                                <select id="select-station" class="spa-input"></select>
+                            </div>
+                            <div class="form-group">
+                                <label>Head CSA</label>
+                                <select id="select-head-csa" class="spa-input"></select>
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Assigned CSAs</label>
+                                <div id="csa-tags" class="tags-input-container">
+                                    <input type="text" id="add-csa-input" placeholder="Search CSA..." class="spa-input">
+                                    <div id="csa-tag-list" class="tag-list"></div>
+                                </div>
+                            </div>
+                            <div class="form-actions full-width">
+                                <button id="btn-start-shift" class="btn-primary">
+                                    <span class="spinner hidden"></span> Start New Shift
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- WETSTOCK TAB -->
+            <!-- WETSTOCK -->
             <section id="tab-wetstock" class="tab-pane">
-                <h2>Pump Meter Readings</h2>
-                <div id="meters-container" class="cards-grid">
-                    <!-- Dynamic meter cards will be injected here -->
+                <div class="dash-card full-width-card mb-4">
+                    <div class="card-header-flex">
+                        <h3>Pump Meter Readings</h3>
+                        <button id="btn-save-wetstock" class="btn-secondary btn-sm">Save Readings</button>
+                    </div>
+                    <div id="meters-container" class="data-grid">
+                        <!-- Dynamic meter cards will be injected here -->
+                    </div>
                 </div>
                 
-                <h2 class="mt-4">Dip Stick Readings</h2>
-                <div id="dips-container" class="cards-grid">
-                    <!-- Dynamic dip cards will be injected here -->
-                </div>
-                <div class="form-actions right">
-                    <button id="btn-save-wetstock" class="btn-secondary">Save Readings</button>
+                <div class="dash-card full-width-card">
+                    <h3>Dip Stick Readings</h3>
+                    <div id="dips-container" class="data-grid">
+                        <!-- Dynamic dip cards will be injected here -->
+                    </div>
                 </div>
             </section>
 
-            <!-- CASH & DROPS TAB -->
-            <section id="tab-cash" class="tab-pane">
-                <div class="cards-grid">
-                    <div class="glass-card">
-                        <h3>M-Pesa Drops</h3>
-                        <div class="drop-inputs">
-                            <input type="number" id="mpesa-amount" placeholder="Amount" class="spa-input">
-                            <input type="text" id="mpesa-ref" placeholder="Reference No" class="spa-input">
-                            <button class="btn-icon" id="btn-add-mpesa">+</button>
+            <!-- M-PESA DROPS -->
+            <section id="tab-mpesa" class="tab-pane">
+                <div class="dashboard-cards-grid">
+                    <div class="dash-card">
+                        <h3>Log M-Pesa Drop</h3>
+                        <div class="form-group">
+                            <label>Amount (KES)</label>
+                            <input type="number" id="mpesa-amount" class="spa-input" placeholder="0.00">
                         </div>
-                        <ul id="list-mpesa" class="drop-list"></ul>
-                    </div>
-                    
-                    <div class="glass-card">
-                        <h3>Invoices (Credit Sales)</h3>
-                        <div class="drop-inputs">
-                            <select id="invoice-customer" class="spa-input"></select>
-                            <input type="number" id="invoice-amount" placeholder="Amount" class="spa-input">
-                            <button class="btn-icon" id="btn-add-invoice">+</button>
+                        <div class="form-group">
+                            <label>Reference Code</label>
+                            <input type="text" id="mpesa-ref" class="spa-input" placeholder="e.g. QWE123RTY">
                         </div>
-                        <ul id="list-invoice" class="drop-list"></ul>
+                        <button class="btn-primary mt-2" id="btn-add-mpesa">Add Drop</button>
                     </div>
-                    
-                    <div class="glass-card">
-                        <h3>Fleet Cards</h3>
-                        <div class="drop-inputs">
+                    <div class="dash-card span-2">
+                        <h3>M-Pesa Drop History</h3>
+                        <div class="table-responsive">
+                            <table class="dash-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Reference</th>
+                                        <th>Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="list-mpesa"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- FLEET CARDS -->
+            <section id="tab-cards" class="tab-pane">
+                <div class="dashboard-cards-grid">
+                    <div class="dash-card">
+                        <h3>Log Fleet Card Drop</h3>
+                        <div class="form-group">
+                            <label>Fleet Card</label>
                             <select id="fleet-card-select" class="spa-input"></select>
-                            <input type="number" id="fleet-card-closing" placeholder="Closing Bal" class="spa-input">
-                            <button class="btn-icon" id="btn-add-fleet">+</button>
                         </div>
-                        <ul id="list-fleet" class="drop-list"></ul>
-                    </div>
-                    
-                    <div class="glass-card">
-                        <h3>Expenses</h3>
-                        <div class="drop-inputs">
-                            <input type="text" id="expense-reason" placeholder="Reason" class="spa-input">
-                            <input type="number" id="expense-amount" placeholder="Amount" class="spa-input">
-                            <button class="btn-icon" id="btn-add-expense">+</button>
+                        <div class="form-group">
+                            <label>Amount (KES)</label>
+                            <input type="number" id="fleet-card-amount" class="spa-input" placeholder="0.00">
                         </div>
-                        <ul id="list-expense" class="drop-list"></ul>
+                        <button class="btn-primary mt-2" id="btn-add-fleet">Add Card Drop</button>
                     </div>
-                </div>
-                <div class="form-actions right mt-4">
-                    <button id="btn-save-cash" class="btn-secondary">Sync Drops to Shift</button>
+                    <div class="dash-card span-2">
+                        <h3>Fleet Card History</h3>
+                        <div class="table-responsive">
+                            <table class="dash-table">
+                                <thead>
+                                    <tr>
+                                        <th>Card</th>
+                                        <th>Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="list-fleet"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </section>
 
-            <!-- RECONCILE TAB -->
-            <section id="tab-reconcile" class="tab-pane">
-                <div class="reconcile-card">
-                    <div class="reconcile-row">
-                        <span>Expected Cash</span>
-                        <h3 id="expected-cash-val">KES 0.00</h3>
+            <!-- INVOICES -->
+            <section id="tab-invoices" class="tab-pane">
+                <div class="dashboard-cards-grid">
+                    <div class="dash-card">
+                        <h3>Log Credit Sale</h3>
+                        <div class="form-group">
+                            <label>Customer</label>
+                            <select id="invoice-customer" class="spa-input"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Amount (KES)</label>
+                            <input type="number" id="invoice-amount" class="spa-input" placeholder="0.00">
+                        </div>
+                        <button class="btn-primary mt-2" id="btn-add-invoice">Add Invoice</button>
                     </div>
-                    <div class="reconcile-row actual-row">
-                        <label>Actual Physical Cash</label>
+                    <div class="dash-card span-2">
+                        <h3>Invoice History</h3>
+                        <div class="table-responsive">
+                            <table class="dash-table">
+                                <thead>
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="list-invoice"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- EXPENSES -->
+            <section id="tab-expenses" class="tab-pane">
+                <div class="dashboard-cards-grid">
+                    <div class="dash-card">
+                        <h3>Log Expense</h3>
+                        <div class="form-group">
+                            <label>Reason / Description</label>
+                            <input type="text" id="expense-reason" class="spa-input" placeholder="e.g. Staff Meals">
+                        </div>
+                        <div class="form-group">
+                            <label>Amount (KES)</label>
+                            <input type="number" id="expense-amount" class="spa-input" placeholder="0.00">
+                        </div>
+                        <button class="btn-primary mt-2" id="btn-add-expense">Add Expense</button>
+                    </div>
+                    <div class="dash-card span-2">
+                        <h3>Expense History</h3>
+                        <div class="table-responsive">
+                            <table class="dash-table">
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th>Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="list-expense"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RECONCILE -->
+            <section id="tab-reconcile" class="tab-pane">
+                <div class="dashboard-cards-grid">
+                    <div class="dash-card main-highlight-card">
+                        <h3>Expected Cash</h3>
+                        <div class="highlight-stats">
+                            <div class="stat-number" id="expected-cash-val">KES 0.00</div>
+                            <div class="stat-desc">Calculated from meters & drops</div>
+                        </div>
+                    </div>
+                    
+                    <div class="dash-card">
+                        <h3>Actual Cash Declared</h3>
                         <input type="number" id="actual-cash-input" class="spa-input huge-input" placeholder="0.00">
                     </div>
-                    <div class="reconcile-row variance-row">
-                        <span>Variance</span>
-                        <h3 id="variance-val">KES 0.00</h3>
-                    </div>
-                    <div class="form-actions center mt-4">
-                        <button id="btn-close-shift" class="btn-danger">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                            Close Shift & Lock
-                        </button>
+                    
+                    <div class="dash-card">
+                        <h3>Variance</h3>
+                        <div class="highlight-stats">
+                            <div class="stat-number" id="variance-val">KES 0.00</div>
+                            <div class="stat-desc">Difference</div>
+                        </div>
                     </div>
                 </div>
+                
+                <div class="dash-card full-width-card mt-4 center-content">
+                    <button id="btn-close-shift" class="btn-danger btn-lg">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        Close Shift & Lock
+                    </button>
+                </div>
             </section>
-        </main>
+            
+        </div>
     </div>
 </div>
