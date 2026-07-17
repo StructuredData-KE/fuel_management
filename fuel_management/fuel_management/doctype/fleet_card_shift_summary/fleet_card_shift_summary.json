@@ -1,0 +1,181 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:FCS-{fleet_card}-{YYYY}-{MM}-{DD}-{####}",
+ "creation": "2026-07-17 09:50:15.437648",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "shift",
+  "fleet_card",
+  "sb_1",
+  "opening_balance",
+  "top_ups",
+  "closing_balance",
+  "cb_1",
+  "amount_used",
+  "discounted_price",
+  "liters_sold",
+  "sb_2",
+  "csa_drops",
+  "sb_3",
+  "real_fuel_price",
+  "expected_cash",
+  "total_csa_drops",
+  "variance",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "shift",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shift",
+   "options": "Shift",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fleet_card",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Fleet Card",
+   "options": "Fleet Card",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sb_1",
+   "fieldtype": "Section Break",
+   "label": "Card Balances"
+  },
+  {
+   "fieldname": "opening_balance",
+   "fieldtype": "Currency",
+   "label": "Opening Balance",
+   "read_only": 1
+  },
+  {
+   "fieldname": "top_ups",
+   "fieldtype": "Currency",
+   "label": "Top-Ups"
+  },
+  {
+   "fieldname": "closing_balance",
+   "fieldtype": "Currency",
+   "label": "Closing Balance"
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "amount_used",
+   "fieldtype": "Currency",
+   "label": "Total Amount Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discounted_price",
+   "fieldtype": "Currency",
+   "label": "Discounted Price",
+   "read_only": 1
+  },
+  {
+   "fieldname": "liters_sold",
+   "fieldtype": "Float",
+   "label": "Liters Sold",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_2",
+   "fieldtype": "Section Break",
+   "label": "CSA Cash Drops"
+  },
+  {
+   "fieldname": "csa_drops",
+   "fieldtype": "Table",
+   "label": "CSA Drops",
+   "options": "Fleet Card CSA Drop"
+  },
+  {
+   "fieldname": "sb_3",
+   "fieldtype": "Section Break",
+   "label": "Variance"
+  },
+  {
+   "fieldname": "real_fuel_price",
+   "fieldtype": "Currency",
+   "label": "Real Fuel Price",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_cash",
+   "fieldtype": "Currency",
+   "label": "Expected Cash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_csa_drops",
+   "fieldtype": "Currency",
+   "label": "Total Drops",
+   "read_only": 1
+  },
+  {
+   "fieldname": "variance",
+   "fieldtype": "Currency",
+   "label": "Variance",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Fleet Card Shift Summary",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-07-17 09:50:15.437648",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "Fleet Card Shift Summary",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Fleet Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

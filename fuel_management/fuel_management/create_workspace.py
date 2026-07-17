@@ -11,18 +11,68 @@ def execute():
         doc.name = "Fuel Management"
         doc.label = "Fuel Management"
         doc.title = "Fuel Management"
-        doc.module = "Fuel Management"
-        doc.icon = "indicator-blue"
-        doc.is_standard = 1
-        doc.public = 1
-        
-        doc.append("links", {"type": "Link", "label": "Shift", "link_to": "Shift", "link_type": "DocType"})
-        doc.append("links", {"type": "Link", "label": "Fuel Station", "link_to": "Fuel Station", "link_type": "DocType"})
-        doc.append("links", {"type": "Link", "label": "Fuel Tank", "link_to": "Fuel Tank", "link_type": "DocType"})
-        doc.append("links", {"type": "Link", "label": "Pump Group", "link_to": "Pump Group", "link_type": "DocType"})
-        doc.append("links", {"type": "Link", "label": "Pump Nozzle", "link_to": "Pump Nozzle", "link_type": "DocType"})
-        doc.append("links", {"type": "Link", "label": "Fleet Card", "link_to": "Fleet Card", "link_type": "DocType"})
-        doc.append("links", {"type": "Link", "label": "Fuel Management Settings", "link_to": "Fuel Management Settings", "link_type": "DocType"})
+        doc.append("links", {
+            "label": "Shift Operations",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Shift"
+        })
+        doc.append("links", {
+            "label": "Fleet Card Shifts",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Fleet Card Shift Summary"
+        })
+        doc.append("links", {
+            "label": "Station Setup",
+            "type": "Card Break"
+        })
+        doc.append("links", {
+            "label": "Station Opening Balance",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Station Opening Balance"
+        })
+        doc.append("links", {
+            "label": "Fuel Station",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Fuel Station"
+        })
+        doc.append("links", {
+            "label": "Fuel Tank",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Fuel Tank"
+        })
+        doc.append("links", {
+            "label": "Pump Group",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Pump Group"
+        })
+        doc.append("links", {
+            "label": "Pump Nozzle",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Pump Nozzle"
+        })
+        doc.append("links", {
+            "label": "Administration",
+            "type": "Card Break"
+        })
+        doc.append("links", {
+            "label": "Staff Liability Ledger",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Staff Liability Ledger"
+        })
+        doc.append("links", {
+            "label": "Fleet Card",
+            "type": "Link",
+            "link_type": "DocType",
+            "link_to": "Fleet Card"
+        })
         
         doc.content = json.dumps([
             {
