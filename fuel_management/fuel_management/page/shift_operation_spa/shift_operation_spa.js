@@ -230,4 +230,37 @@ function setup_actions(wrapper) {
             }
         });
     });
+
+    // Close Shift Logic
+    $wrapper.find('#btn-close-shift').on('click', function() {
+        if(!window.ACTIVE_SHIFT) return;
+        
+        const cashCaptured = $wrapper.find('#chk-cash-captured').is(':checked');
+        const reportsPrinted = $wrapper.find('#chk-reports-printed').is(':checked');
+        
+        if(!cashCaptured || !reportsPrinted) {
+            frappe.show_alert({message: "You must complete the entire Pre-Close Checklist before closing.", indicator: "red"});
+            return;
+        }
+        
+        frappe.confirm('Are you absolutely sure you want to close this shift? This will permanently lock the data and generate accounting entries.', () => {
+            frappe.call({
+                method: "frappe.client.set_value",
+                args: {
+                    doctype: "Shift",
+                    name: window.ACTIVE_SHIFT.name,
+                    fieldname: "status",
+                    value: "Closed"
+                },
+                callback: function(r) {
+                    if(r.message) {
+                        frappe.show_alert({message: "Shift Closed successfully!", indicator: "green"});
+                        setTimeout(() => {
+                            location.reload();
+                        }, 2000);
+                    }
+                }
+            });
+        });
+    });
 }
