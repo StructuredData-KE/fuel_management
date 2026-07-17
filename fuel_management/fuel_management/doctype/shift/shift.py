@@ -63,6 +63,32 @@ class Shift(Document):
 
     def on_update(self):
         self.create_stock_entry_on_close()
+        self.post_cash_variance_to_liability_ledger()
+
+    def post_cash_variance_to_liability_ledger(self):
+        if self.status == "Closed" and self.cash_variance and self.cash_variance < 0:
+            # We must assign this variance to the shift CSAs. 
+            # If multiple CSAs, we could split it, but usually Head CSA takes the hit or it's distributed.
+            # We'll create one ledger entry per assigned CSA splitting the variance.
+            
+            csas = [row.csa for row in (self.assigned_csas or []) if row.csa]
+            if not csas:
+                return
+                
+            split_amount = abs(self.cash_variance) / len(csas)
+            
+            for csa in csas:
+                existing = frappe.db.exists("Staff Liability Ledger", {"shift": self.name, "employee": csa})
+                if not existing:
+                    ledger = frappe.new_doc("Staff Liability Ledger")
+                    ledger.employee = csa
+                    ledger.date = self.date
+                    ledger.shift = self.name
+                    ledger.amount = split_amount
+                    ledger.reason = f"Cash Variance Shortfall for Shift {self.name}"
+                    ledger.insert(ignore_permissions=True)
+                    ledger.submit()
+                    frappe.msgprint(f"Staff Liability Ledger created for CSA {csa} for shortfall of {split_amount}")
 
     def lock_shift_if_closed_for_csa(self):
         if not self.is_new():

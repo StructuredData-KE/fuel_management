@@ -1,4 +1,10 @@
 frappe.ui.form.on('Shift', {
+    before_save(frm) {
+        frappe.show_alert({message: __('Calculating reconciliations... Please wait.'), indicator: 'orange'});
+    },
+    after_save(frm) {
+        frappe.show_alert({message: __('Shift Data Synced and Reconciled Successfully!'), indicator: 'green'});
+    },
     setup(frm) {
         // Dynamic Dropdown Filtering for CSA
         let csa_query = function(doc, cdt, cdn) {
