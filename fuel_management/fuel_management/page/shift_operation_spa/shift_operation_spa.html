@@ -101,10 +101,27 @@
                                 <select id="select-head-csa" class="spa-input"></select>
                             </div>
                             <div class="form-group full-width">
-                                <label>Assigned CSAs</label>
-                                <div id="csa-tags" class="tags-input-container">
-                                    <input type="text" id="add-csa-input" placeholder="Search CSA..." class="spa-input">
-                                    <div id="csa-tag-list" class="tag-list"></div>
+                                <label>Assigned CSAs & Pump Groups</label>
+                                <div class="table-responsive">
+                                    <table class="dash-table" id="csa-assignment-table">
+                                        <thead>
+                                            <tr>
+                                                <th>CSA</th>
+                                                <th>Pump Group</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="csa-assignment-body">
+                                            <!-- Dynamic rows -->
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colspan="3">
+                                                    <button class="btn-secondary btn-sm" id="btn-add-csa-row">+ Add CSA Assignment</button>
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
                                 </div>
                             </div>
                             <div class="form-actions full-width">

@@ -1,4 +1,6 @@
 window.ACTIVE_SHIFT = null;
+window.USERS_LIST = [];
+window.PUMP_GROUPS_LIST = [];
 
 frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     // Render custom HTML structure
@@ -170,7 +172,21 @@ function load_dropdowns(wrapper) {
         }
     });
 
-    // Fetch Head CSAs (Users with Role = Head CSA or just all for now)
+    // Fetch Pump Groups
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Pump Group",
+            fields: ["name"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.PUMP_GROUPS_LIST = r.message;
+            }
+        }
+    });
+
+    // Fetch Head CSAs and normal CSAs (Users with enabled: 1)
     frappe.call({
         method: "frappe.client.get_list",
         args: {
@@ -180,6 +196,7 @@ function load_dropdowns(wrapper) {
         },
         callback: function(r) {
             if(r.message) {
+                window.USERS_LIST = r.message;
                 let options = '<option value="">Select Head CSA...</option>';
                 r.message.forEach(u => {
                     options += `<option value="${u.name}">${u.full_name}</option>`;
@@ -193,13 +210,50 @@ function load_dropdowns(wrapper) {
 function setup_actions(wrapper) {
     const $wrapper = $(wrapper);
     
+    // Dynamic Row for CSA Assignments
+    $wrapper.find('#btn-add-csa-row').on('click', function(e) {
+        e.preventDefault();
+        
+        let csaOptions = '<option value="">Select CSA...</option>';
+        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
+        
+        let pgOptions = '<option value="">Select Pump Group...</option>';
+        window.PUMP_GROUPS_LIST.forEach(pg => { pgOptions += `<option value="${pg.name}">${pg.name}</option>`; });
+        
+        let rowHtml = `
+            <tr>
+                <td><select class="spa-input csa-select">${csaOptions}</select></td>
+                <td><select class="spa-input pg-select">${pgOptions}</select></td>
+                <td><button class="btn-danger btn-sm btn-remove-csa-row">Remove</button></td>
+            </tr>
+        `;
+        $wrapper.find('#csa-assignment-body').append(rowHtml);
+    });
+
+    $wrapper.on('click', '.btn-remove-csa-row', function(e) {
+        e.preventDefault();
+        $(this).closest('tr').remove();
+    });
+    
     // Start Shift Logic
     $wrapper.find('#btn-start-shift').on('click', function() {
         const station = $wrapper.find('#select-station').val();
         const head_csa = $wrapper.find('#select-head-csa').val();
         
-        if(!station || !head_csa) {
-            frappe.show_alert({message: "Please select Station and Head CSA", indicator: "red"});
+        let assigned_csas = [];
+        $wrapper.find('#csa-assignment-body tr').each(function() {
+            let csa = $(this).find('.csa-select').val();
+            let pg = $(this).find('.pg-select').val();
+            if(csa) {
+                assigned_csas.push({
+                    "csa": csa,
+                    "pump_group": pg
+                });
+            }
+        });
+        
+        if(!station || !head_csa || assigned_csas.length === 0) {
+            frappe.show_alert({message: "Please select Station, Head CSA, and assign at least one CSA to a pump group.", indicator: "red"});
             return;
         }
         
@@ -215,7 +269,8 @@ function setup_actions(wrapper) {
                     station: station,
                     head_csa: head_csa,
                     status: "Open",
-                    start_time: frappe.datetime.now_datetime()
+                    start_time: frappe.datetime.now_datetime(),
+                    assigned_csas: assigned_csas
                 }
             },
             callback: function(r) {
