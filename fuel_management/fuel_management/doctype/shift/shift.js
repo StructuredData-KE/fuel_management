@@ -25,6 +25,21 @@ frappe.ui.form.on('Shift', {
         frm.set_query("csa", "card_payments", csa_query);
         frm.set_query("csa", "shift_expenses", csa_query);
     },
+    refresh(frm) {
+        if(frm.doc.status === "Closed" && frappe.user.has_role("System Manager")) {
+            frm.add_custom_button('Cancel & Reopen', () => {
+                frappe.confirm('Are you sure you want to reopen this shift? All related Stock Entries and Ledgers will be cancelled.', () => {
+                    frappe.call({
+                        method: "fuel_management.fuel_management.doctype.shift.shift.reopen_shift",
+                        args: { shift_name: frm.doc.name },
+                        callback: function(r) {
+                            frm.reload_doc();
+                        }
+                    });
+                });
+            });
+        }
+    },
     actual_cash: function(frm) {
         if (frm.doc.expected_cash !== undefined && frm.doc.expected_cash !== null) {
             let variance = flt(frm.doc.actual_cash) - flt(frm.doc.expected_cash);

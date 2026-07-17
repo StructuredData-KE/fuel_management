@@ -1,3 +1,5 @@
+window.ACTIVE_SHIFT = null;
+
 frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     // Render custom HTML structure
     $(wrapper).html(frappe.render_template("shift_operation_spa", {}));
@@ -6,6 +8,127 @@ frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     setup_tabs(wrapper);
     load_dropdowns(wrapper);
     setup_actions(wrapper);
+    
+    // Initialize State
+    fetch_active_shift(wrapper);
+}
+
+function fetch_active_shift(wrapper) {
+    const $wrapper = $(wrapper);
+    // Find open shift for the logged-in user
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Shift",
+            filters: { status: "Open", owner: frappe.session.user },
+            fields: ["name", "station", "head_csa"],
+            limit_page_length: 1
+        },
+        callback: function(r) {
+            if(r.message && r.message.length > 0) {
+                window.ACTIVE_SHIFT = r.message[0];
+                lock_ui_for_active_shift($wrapper);
+            } else {
+                window.ACTIVE_SHIFT = null;
+                lock_ui_for_no_shift($wrapper);
+            }
+        }
+    });
+}
+
+function lock_ui_for_no_shift($wrapper) {
+    $wrapper.find('.nav-item:not([data-target="tab-start"])').css({
+        'opacity': '0.5',
+        'pointer-events': 'none'
+    });
+    $wrapper.find('#active-shift-badge').removeClass('active-shift').text('No Active Shift');
+    
+    // Switch to Start Shift tab
+    $wrapper.find('.nav-item[data-target="tab-start"]').click();
+}
+
+function lock_ui_for_active_shift($wrapper) {
+    $wrapper.find('.nav-item').css({
+        'opacity': '1',
+        'pointer-events': 'auto'
+    });
+    // Lock Start Shift module
+    $wrapper.find('.nav-item[data-target="tab-start"]').css({
+        'opacity': '0.5',
+        'pointer-events': 'none'
+    });
+    
+    // Update Badge
+    $wrapper.find('#active-shift-badge').addClass('active-shift').text('Active: ' + window.ACTIVE_SHIFT.name);
+    
+    // Switch to Wetstock tab automatically
+    $wrapper.find('.nav-item[data-target="tab-wetstock"]').click();
+    
+    // Pre-fill Start Shift form just for viewing
+    $wrapper.find('#select-station').val(window.ACTIVE_SHIFT.station).prop('disabled', true);
+    $wrapper.find('#select-head-csa').val(window.ACTIVE_SHIFT.head_csa).prop('disabled', true);
+    $wrapper.find('#btn-start-shift').hide();
+    
+    // Trigger loading of grid data (Meters, Dips, etc)
+    load_shift_data($wrapper);
+}
+
+function load_shift_data($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+    
+    frappe.call({
+        method: "frappe.client.get",
+        args: {
+            doctype: "Shift",
+            name: window.ACTIVE_SHIFT.name
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.SHIFT_DOC = r.message;
+                render_meters($wrapper);
+                render_dips($wrapper);
+            }
+        }
+    });
+}
+
+function render_meters($wrapper) {
+    let html = '';
+    (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
+        html += `
+            <div class="dash-card">
+                <h4>Nozzle: ${row.pump_nozzle}</h4>
+                <div class="form-group">
+                    <label>Closing Electronic</label>
+                    <input type="number" class="spa-input meter-input" data-field="closing_electronic_meter" data-name="${row.name}" value="${row.closing_electronic_meter || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Closing Manual</label>
+                    <input type="number" class="spa-input meter-input" data-field="closing_manual_meter" data-name="${row.name}" value="${row.closing_manual_meter || ''}">
+                </div>
+                <p style="font-size: 0.8rem; color: #64748b;">Opening Elec: ${row.opening_electronic_meter}</p>
+            </div>
+        `;
+    });
+    $wrapper.find('#meters-container').html(html);
+}
+
+function render_dips($wrapper) {
+    let html = '';
+    (window.SHIFT_DOC.dip_stick_readings || []).forEach(row => {
+        html += `
+            <div class="dash-card">
+                <h4>Tank: ${row.fuel_tank}</h4>
+                <div class="form-group">
+                    <label>Closing Dip (Liters)</label>
+                    <input type="number" class="spa-input dip-input" data-name="${row.name}" value="${row.closing_dip || ''}">
+                </div>
+                <p style="font-size: 0.8rem; color: #64748b;">Opening Dip: ${row.opening_dip || 0}</p>
+                <p style="font-size: 0.8rem; color: #64748b;">Expected Stock: ${row.expected_stock || 0}</p>
+            </div>
+        `;
+    });
+    $wrapper.find('#dips-container').html(html);
 }
 
 function setup_tabs(wrapper) {
@@ -101,12 +224,8 @@ function setup_actions(wrapper) {
                 
                 if(r.message) {
                     frappe.show_alert({message: "Shift Started Successfully!", indicator: "green"});
-                    $wrapper.find('#active-shift-badge')
-                        .addClass('active-shift')
-                        .text(r.message.name);
-                    
-                    // Move to Wetstock Tab
-                    $wrapper.find('[data-target="tab-wetstock"]').click();
+                    window.ACTIVE_SHIFT = r.message;
+                    lock_ui_for_active_shift($wrapper);
                 }
             }
         });

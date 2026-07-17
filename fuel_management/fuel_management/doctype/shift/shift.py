@@ -185,3 +185,26 @@ class Shift(Document):
 
             self.db_set("stock_entry_reference", se.name)
             frappe.msgprint(f"Stock Entry {se.name} automatically created to deduct fuel sales.")
+
+@frappe.whitelist()
+def reopen_shift(shift_name):
+    shift = frappe.get_doc("Shift", shift_name)
+    if shift.status != "Closed": return
+    
+    # Cancel Stock Entry
+    if shift.stock_entry_reference:
+        se = frappe.get_doc("Stock Entry", shift.stock_entry_reference)
+        if se.docstatus == 1:
+            se.cancel()
+        shift.db_set("stock_entry_reference", None)
+        
+    # Cancel Ledgers
+    ledgers = frappe.get_all("Staff Liability Ledger", filters={"shift": shift_name})
+    for l in ledgers:
+        doc = frappe.get_doc("Staff Liability Ledger", l.name)
+        if doc.docstatus == 1:
+            doc.cancel()
+            
+    shift.db_set("status", "Open")
+    frappe.msgprint("Shift reopened successfully. Accounting records cancelled.")
+
