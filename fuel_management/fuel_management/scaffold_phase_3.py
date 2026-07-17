@@ -35,7 +35,13 @@ def execute():
                 "in_list_view": 1
             }
         ]
-        doc.permissions = [{"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}]
+        doc.append("permissions", {
+            "role": "System Manager",
+            "read": 1,
+            "write": 1,
+            "create": 1,
+            "delete": 1
+        })
         doc.insert(ignore_permissions=True)
         print("Created Fuel Shift Template Doctype")
 
@@ -45,9 +51,11 @@ def execute():
         {"template_name": "Night Shift", "start_time": "18:00:00", "end_time": "06:00:00"}
     ]
     for t in templates:
-        if not frappe.db.exists("Fuel Shift Template", t["template_name"]):
+        if not frappe.db.exists("Fuel Shift Template", {"template_name": t["template_name"]}):
             doc = frappe.new_doc("Fuel Shift Template")
-            doc.update(t)
+            doc.template_name = t["template_name"]
+            doc.start_time = t["start_time"]
+            doc.end_time = t["end_time"]
             doc.insert(ignore_permissions=True)
             print(f"Bootstrapped Template: {t['template_name']}")
 
