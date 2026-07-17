@@ -9,7 +9,7 @@ def execute():
         doc.title = "Shift Operations Console"
         doc.module = "Fuel Management"
         doc.standard = "Yes"
-        doc.roles = [{"role": "System Manager"}]
+        doc.append("roles", {"role": "System Manager"})
         doc.insert(ignore_permissions=True)
         export_to_files(record_list=[['Page', page_name]], record_module="Fuel Management")
         print(f"Created Page {page_name}")
