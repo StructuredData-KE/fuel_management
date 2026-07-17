@@ -81,6 +81,53 @@
             "fieldtype": "Section Break"
         },
         {
+            "fieldname": "shift_expenses",
+            "label": "Shift Expenses",
+            "fieldtype": "Table",
+            "options": "Shift Expense"
+        },
+        {
+            "fieldname": "invoices",
+            "label": "Credit Sales (Invoices)",
+            "fieldtype": "Table",
+            "options": "Shift Invoice"
+        },
+        {
+            "fieldname": "card_payments",
+            "label": "Card Payments",
+            "fieldtype": "Table",
+            "options": "Shift Card Payment"
+        },
+        {
+            "fieldname": "mpesa_payments",
+            "label": "M-Pesa Payments",
+            "fieldtype": "Table",
+            "options": "Shift M Pesa Payment"
+        },
+        {
+            "fieldname": "inventory_sales",
+            "label": "Dry Stock (Inventory) Sales",
+            "fieldtype": "Table",
+            "options": "Shift Inventory Sale"
+        },
+        {
+            "fieldname": "procurement",
+            "label": "Procurement / Petty Cash Purchases",
+            "fieldtype": "Table",
+            "options": "Shift Procurement"
+        },
+        {
+            "fieldname": "return_to_tank",
+            "label": "Return to Tank (RTT)",
+            "fieldtype": "Table",
+            "options": "Shift Return To Tank"
+        },
+        {
+            "fieldname": "section_break_system",
+            "label": "System Details",
+            "fieldtype": "Section Break"
+        },
+        {
             "fieldname": "stock_entry_reference",
             "label": "Stock Entry Reference",
             "fieldtype": "Link",
