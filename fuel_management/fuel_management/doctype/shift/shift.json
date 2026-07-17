@@ -47,6 +47,13 @@
             "fieldtype": "Datetime"
         },
         {
+            "fieldname": "assigned_csas",
+            "label": "Assigned CSAs",
+            "fieldtype": "Table",
+            "options": "Shift Assigned CSA",
+            "reqd": 1
+        },
+        {
             "fieldname": "section_break_meters",
             "label": "Pump Meter Readings",
             "fieldtype": "Section Break"
