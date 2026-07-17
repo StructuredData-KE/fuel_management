@@ -3,6 +3,7 @@ from frappe.model.document import Document
 
 class Shift(Document):
     def validate(self):
+        self.auto_set_shift_display()
         self.validate_future_date()
         self.lock_shift_if_closed_for_csa()
         self.lock_active_shift_overlap()
@@ -10,9 +11,15 @@ class Shift(Document):
         self.calculate_expected_stock()
         self.calculate_expected_cash()
 
+    def auto_set_shift_display(self):
+        from frappe.utils import getdate
+        if self.shift_date and self.shift_template:
+            day_name = getdate(self.shift_date).strftime('%A')
+            self.shift_name_display = f"{day_name} {self.shift_template}"
+
     def validate_future_date(self):
         from frappe.utils import getdate, today
-        if getdate(self.date) > getdate(today()):
+        if getdate(self.shift_date) > getdate(today()):
             frappe.throw("Shift Date cannot be in the future.")
 
     def lock_active_shift_overlap(self):
@@ -34,7 +41,7 @@ class Shift(Document):
                         if item_code:
                             # Pricing Engine: Fetch historical price where Valid From <= Shift Date
                             price_record = frappe.get_all("Item Price", 
-                                filters={"item_code": item_code, "price_list": "Standard Selling", "valid_from": ("<=", self.date)},
+                                filters={"item_code": item_code, "price_list": "Standard Selling", "valid_from": ("<=", self.shift_date)},
                                 fields=["price_list_rate"],
                                 order_by="valid_from desc",
                                 limit=1
@@ -66,7 +73,7 @@ class Shift(Document):
         self.post_cash_variance_to_liability_ledger()
 
     def post_cash_variance_to_liability_ledger(self):
-        if self.status == "Closed" and self.cash_variance and self.cash_variance < 0:
+        if self.status == "Closed" and getattr(self, "cash_variance", 0) and self.cash_variance < 0:
             # We must assign this variance to the shift CSAs. 
             # If multiple CSAs, we could split it, but usually Head CSA takes the hit or it's distributed.
             # We'll create one ledger entry per assigned CSA splitting the variance.
@@ -82,7 +89,7 @@ class Shift(Document):
                 if not existing:
                     ledger = frappe.new_doc("Staff Liability Ledger")
                     ledger.employee = csa
-                    ledger.date = self.date
+                    ledger.date = self.shift_date
                     ledger.shift = self.name
                     ledger.amount = split_amount
                     ledger.reason = f"Cash Variance Shortfall for Shift {self.name}"

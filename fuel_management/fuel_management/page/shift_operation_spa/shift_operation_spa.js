@@ -1,6 +1,7 @@
 window.ACTIVE_SHIFT = null;
 window.USERS_LIST = [];
 window.PUMP_GROUPS_LIST = [];
+window.SHIFT_TEMPLATES = [];
 
 frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     // Render custom HTML structure
@@ -67,6 +68,8 @@ function lock_ui_for_active_shift($wrapper) {
     $wrapper.find('.nav-item[data-target="tab-wetstock"]').click();
     
     // Pre-fill Start Shift form just for viewing
+    $wrapper.find('#input-shift-date').val(window.ACTIVE_SHIFT.shift_date).prop('disabled', true);
+    $wrapper.find('#select-shift-template').val(window.ACTIVE_SHIFT.shift_template).prop('disabled', true);
     $wrapper.find('#select-station').val(window.ACTIVE_SHIFT.station).prop('disabled', true);
     $wrapper.find('#select-head-csa').val(window.ACTIVE_SHIFT.head_csa).prop('disabled', true);
     $wrapper.find('#btn-start-shift').hide();
@@ -172,6 +175,73 @@ function load_dropdowns(wrapper) {
         }
     });
 
+    // Fetch Fuel Shift Templates
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Fuel Shift Template",
+            fields: ["name", "start_time", "end_time"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.SHIFT_TEMPLATES = r.message;
+                let options = '<option value="">Select Template...</option>';
+                r.message.forEach(t => {
+                    options += `<option value="${t.name}">${t.name} (${t.start_time} - ${t.end_time})</option>`;
+                });
+                $(wrapper).find('#select-shift-template').html(options);
+                auto_suggest_shift($(wrapper));
+            }
+        }
+    });
+
+    function auto_suggest_shift($w) {
+        if (!window.SHIFT_TEMPLATES || window.SHIFT_TEMPLATES.length === 0) return;
+        
+        let now = frappe.datetime.now_datetime(); // e.g. "2024-07-17 08:30:00"
+        let timeParts = now.split(' ')[1].split(':');
+        let currentHour = parseInt(timeParts[0]);
+        
+        // Find suitable template
+        // Simple logic: if current time is between start and end, select it.
+        // For night shifts (e.g. 18:00 to 06:00), if current time >= 18 or < 6, select it.
+        let selectedTemplate = null;
+        let isPastMidnight = false;
+        
+        for (let t of window.SHIFT_TEMPLATES) {
+            let startH = parseInt(t.start_time.split(':')[0]);
+            let endH = parseInt(t.end_time.split(':')[0]);
+            
+            if (startH < endH) {
+                // Day shift e.g. 06 to 18
+                if (currentHour >= startH && currentHour < endH) {
+                    selectedTemplate = t.name;
+                    break;
+                }
+            } else {
+                // Night shift e.g. 18 to 06
+                if (currentHour >= startH || currentHour < endH) {
+                    selectedTemplate = t.name;
+                    if (currentHour < endH) {
+                        isPastMidnight = true;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        if (!selectedTemplate) selectedTemplate = window.SHIFT_TEMPLATES[0].name;
+        
+        let suggestedDate = frappe.datetime.get_today();
+        if (isPastMidnight) {
+            // Subtract one day logically
+            suggestedDate = frappe.datetime.add_days(suggestedDate, -1);
+        }
+        
+        $w.find('#input-shift-date').val(suggestedDate);
+        $w.find('#select-shift-template').val(selectedTemplate);
+    }
+
     // Fetch Pump Groups
     frappe.call({
         method: "frappe.client.get_list",
@@ -239,6 +309,8 @@ function setup_actions(wrapper) {
     $wrapper.find('#btn-start-shift').on('click', function() {
         const station = $wrapper.find('#select-station').val();
         const head_csa = $wrapper.find('#select-head-csa').val();
+        const shift_date = $wrapper.find('#input-shift-date').val();
+        const shift_template = $wrapper.find('#select-shift-template').val();
         
         let assigned_csas = [];
         $wrapper.find('#csa-assignment-body tr').each(function() {
@@ -252,37 +324,41 @@ function setup_actions(wrapper) {
             }
         });
         
-        if(!station || !head_csa || assigned_csas.length === 0) {
-            frappe.show_alert({message: "Please select Station, Head CSA, and assign at least one CSA to a pump group.", indicator: "red"});
+        if(!station || !head_csa || assigned_csas.length === 0 || !shift_date || !shift_template) {
+            frappe.show_alert({message: "Please fill all fields (Date, Template, Station, Head CSA) and assign at least one CSA.", indicator: "red"});
             return;
         }
         
-        let $btn = $(this);
-        $btn.find('.spinner').removeClass('hidden');
-        $btn.prop('disabled', true);
-        
-        frappe.call({
-            method: "frappe.client.insert",
-            args: {
-                doc: {
-                    doctype: "Shift",
-                    station: station,
-                    head_csa: head_csa,
-                    status: "Open",
-                    start_time: frappe.datetime.now_datetime(),
-                    assigned_csas: assigned_csas
+        frappe.confirm(`You are starting a <b>${shift_template}</b> for Date <b>${shift_date}</b>. Is this correct?`, () => {
+            let $btn = $(this);
+            $btn.find('.spinner').removeClass('hidden');
+            $btn.prop('disabled', true);
+            
+            frappe.call({
+                method: "frappe.client.insert",
+                args: {
+                    doc: {
+                        doctype: "Shift",
+                        shift_date: shift_date,
+                        shift_template: shift_template,
+                        station: station,
+                        head_csa: head_csa,
+                        status: "Open",
+                        start_time: frappe.datetime.now_datetime(),
+                        assigned_csas: assigned_csas
+                    }
+                },
+                callback: function(r) {
+                    $btn.find('.spinner').addClass('hidden');
+                    $btn.prop('disabled', false);
+                    
+                    if(r.message) {
+                        frappe.show_alert({message: "Shift Started Successfully!", indicator: "green"});
+                        window.ACTIVE_SHIFT = r.message;
+                        lock_ui_for_active_shift($wrapper);
+                    }
                 }
-            },
-            callback: function(r) {
-                $btn.find('.spinner').addClass('hidden');
-                $btn.prop('disabled', false);
-                
-                if(r.message) {
-                    frappe.show_alert({message: "Shift Started Successfully!", indicator: "green"});
-                    window.ACTIVE_SHIFT = r.message;
-                    lock_ui_for_active_shift($wrapper);
-                }
-            }
+            });
         });
     });
 
