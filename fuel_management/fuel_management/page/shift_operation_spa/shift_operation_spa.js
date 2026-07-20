@@ -283,7 +283,7 @@ function load_dropdowns(wrapper) {
         if(!window.USERS_LIST || window.USERS_LIST.length === 0) return;
         if(!window.PUMP_GROUPS_LIST || window.PUMP_GROUPS_LIST.length === 0) return;
         
-        let csaOptions = '<option value="">Select CSA (Optional)...</option>';
+        let csaOptions = '<option value="">Select CSA...</option>';
         window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
         
         let html = '';
@@ -310,6 +310,7 @@ function setup_actions(wrapper) {
         const shift_template = $wrapper.find('#select-shift-template').val();
         
         let assigned_csas = [];
+        let unassigned_pgs = [];
         $wrapper.find('#csa-assignment-body tr').each(function() {
             let csa = $(this).find('.csa-select').val();
             let pg = $(this).attr('data-pg');
@@ -318,11 +319,18 @@ function setup_actions(wrapper) {
                     "csa": csa,
                     "pump_group": pg
                 });
+            } else {
+                unassigned_pgs.push(pg);
             }
         });
         
-        if(!station || !head_csa || assigned_csas.length === 0 || !shift_date || !shift_template) {
-            frappe.show_alert({message: "Please fill all fields (Date, Template, Station, Head CSA) and assign at least one CSA.", indicator: "red"});
+        if(unassigned_pgs.length > 0) {
+            frappe.show_alert({message: `You must assign a CSA to all Pump Groups. Missing: ${unassigned_pgs.join(", ")}`, indicator: "red"});
+            return;
+        }
+        
+        if(!station || !head_csa || !shift_date || !shift_template) {
+            frappe.show_alert({message: "Please fill all fields (Date, Template, Station, Head CSA).", indicator: "red"});
             return;
         }
         
