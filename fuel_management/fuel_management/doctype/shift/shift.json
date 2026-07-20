@@ -125,7 +125,7 @@
             "fieldname": "mpesa_payments",
             "label": "M-Pesa Payments",
             "fieldtype": "Table",
-            "options": "Shift M Pesa Payment"
+            "options": "Shift M-Pesa Payment"
         },
         {
             "fieldname": "inventory_sales",
