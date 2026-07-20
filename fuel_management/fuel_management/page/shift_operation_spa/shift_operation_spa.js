@@ -252,6 +252,7 @@ function load_dropdowns(wrapper) {
         callback: function(r) {
             if(r.message) {
                 window.PUMP_GROUPS_LIST = r.message;
+                render_pump_group_rows($(wrapper));
             }
         }
     });
@@ -269,41 +270,37 @@ function load_dropdowns(wrapper) {
                 window.USERS_LIST = r.message;
                 let options = '<option value="">Select Head CSA...</option>';
                 r.message.forEach(u => {
-                    options += `<option value="${u.name}">${u.full_name}</option>`;
+                    let selected = (u.name === frappe.session.user) ? 'selected' : '';
+                    options += `<option value="${u.name}" ${selected}>${u.full_name}</option>`;
                 });
                 $(wrapper).find('#select-head-csa').html(options);
+                render_pump_group_rows($(wrapper));
             }
         }
     });
+
+    function render_pump_group_rows($w) {
+        if(!window.USERS_LIST || window.USERS_LIST.length === 0) return;
+        if(!window.PUMP_GROUPS_LIST || window.PUMP_GROUPS_LIST.length === 0) return;
+        
+        let csaOptions = '<option value="">Select CSA (Optional)...</option>';
+        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
+        
+        let html = '';
+        window.PUMP_GROUPS_LIST.forEach(pg => {
+            html += `
+             <tr data-pg="${pg.name}">
+                 <td style="font-weight: bold; color: #1e293b;">${pg.name}</td>
+                 <td><select class="spa-input csa-select">${csaOptions}</select></td>
+             </tr>
+            `;
+        });
+        $w.find('#csa-assignment-body').html(html);
+    }
 }
 
 function setup_actions(wrapper) {
     const $wrapper = $(wrapper);
-    
-    // Dynamic Row for CSA Assignments
-    $wrapper.find('#btn-add-csa-row').on('click', function(e) {
-        e.preventDefault();
-        
-        let csaOptions = '<option value="">Select CSA...</option>';
-        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
-        
-        let pgOptions = '<option value="">Select Pump Group...</option>';
-        window.PUMP_GROUPS_LIST.forEach(pg => { pgOptions += `<option value="${pg.name}">${pg.name}</option>`; });
-        
-        let rowHtml = `
-            <tr>
-                <td><select class="spa-input csa-select">${csaOptions}</select></td>
-                <td><select class="spa-input pg-select">${pgOptions}</select></td>
-                <td><button class="btn-danger btn-sm btn-remove-csa-row">Remove</button></td>
-            </tr>
-        `;
-        $wrapper.find('#csa-assignment-body').append(rowHtml);
-    });
-
-    $wrapper.on('click', '.btn-remove-csa-row', function(e) {
-        e.preventDefault();
-        $(this).closest('tr').remove();
-    });
     
     // Start Shift Logic
     $wrapper.find('#btn-start-shift').on('click', function() {
@@ -315,7 +312,7 @@ function setup_actions(wrapper) {
         let assigned_csas = [];
         $wrapper.find('#csa-assignment-body tr').each(function() {
             let csa = $(this).find('.csa-select').val();
-            let pg = $(this).find('.pg-select').val();
+            let pg = $(this).attr('data-pg');
             if(csa) {
                 assigned_csas.push({
                     "csa": csa,
