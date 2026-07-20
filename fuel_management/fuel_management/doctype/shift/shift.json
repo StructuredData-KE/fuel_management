@@ -49,7 +49,7 @@
             "fieldname": "status",
             "label": "Status",
             "fieldtype": "Select",
-            "options": "Open\\nClosed",
+            "options": "Open\nClosed",
             "default": "Open",
             "in_list_view": 1
         },
