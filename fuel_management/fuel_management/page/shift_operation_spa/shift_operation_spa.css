@@ -435,5 +435,36 @@
     padding: 0.2rem 0.5rem;
     border-radius: 4px;
     border: 1px solid var(--danger);
+/* Meters Table Visual Enhancements */
+.meters-table {
+    border: 1px solid #cbd5e1;
 }
-
+.meters-table th {
+    text-align: center;
+    background: #f8fafc;
+    border-bottom: 2px solid #cbd5e1;
+    border-right: 1px solid #e2e8f0;
+    font-weight: 600;
+}
+.meters-table td {
+    border-right: 1px solid #e2e8f0;
+    text-align: center;
+    vertical-align: middle;
+}
+.meters-table td:first-child, .meters-table th:first-child {
+    text-align: left;
+}
+/* Electronic section slight green tint */
+.meters-table td:nth-child(2), .meters-table td:nth-child(3),
+.meters-table th:nth-child(2), .meters-table th:nth-child(3) {
+    background-color: #f8fafc;
+}
+/* Manual section slight blue tint */
+.meters-table td:nth-child(4), .meters-table td:nth-child(5),
+.meters-table th:nth-child(4), .meters-table th:nth-child(5) {
+    background-color: #fdf8f6;
+}
+.meters-table input.spa-input {
+    text-align: center;
+    margin: 0 auto;
+}

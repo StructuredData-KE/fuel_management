@@ -261,13 +261,14 @@ function render_mpesa($wrapper) {
         let transfers = parseFloat($row.find('.mpesa-transfers').val()) || 0;
         
         let $closingInput = $row.find('.mpesa-closing');
-        if (!isNaN(closing) && closing > 0 && closing < opening) {
+        let collected = (isNaN(closing) ? 0 : closing) - opening + transfers;
+        
+        if (!isNaN(closing) && collected < 0) {
             $closingInput.addClass('error-input');
             $row.find('.mpesa-collected').text('ERR').css('color', 'var(--danger)');
         } else {
             $closingInput.removeClass('error-input');
-            let collected = (isNaN(closing) ? 0 : closing) - opening + transfers;
-            $row.find('.mpesa-collected').text(collected.toFixed(2)).css('color', 'var(--text-primary)');
+            $row.find('.mpesa-collected').text(collected.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})).css('color', 'var(--text-primary)');
         }
     }
     
