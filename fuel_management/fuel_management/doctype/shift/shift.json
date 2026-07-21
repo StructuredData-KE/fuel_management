@@ -104,6 +104,27 @@
             "fieldtype": "Section Break"
         },
         {
+            "fieldname": "expected_cash",
+            "label": "Expected Cash",
+            "fieldtype": "Currency",
+            "read_only": 1
+        },
+        {
+            "fieldname": "actual_cash",
+            "label": "Actual Cash",
+            "fieldtype": "Currency"
+        },
+        {
+            "fieldname": "cash_variance",
+            "label": "Cash Variance",
+            "fieldtype": "Currency",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_accounting",
+            "fieldtype": "Column Break"
+        },
+        {
             "fieldname": "shift_expenses",
             "label": "Shift Expenses",
             "fieldtype": "Table",

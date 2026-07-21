@@ -65,7 +65,7 @@ class Shift(Document):
 
         self.expected_cash = (total_fuel_amount + total_dry_stock_amount) - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops)
 
-        if self.actual_cash is not None:
+        if getattr(self, "actual_cash", None) is not None:
             self.cash_variance = flt(self.actual_cash) - flt(self.expected_cash)
 
     def on_update(self):
