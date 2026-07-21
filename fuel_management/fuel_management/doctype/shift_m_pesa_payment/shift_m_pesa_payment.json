@@ -6,22 +6,51 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "transaction_id",
+  "mpesa_till",
+  "opening_balance",
+  "closing_balance",
+  "transfers_made",
   "amount"
  ],
  "fields": [
   {
-   "fieldname": "transaction_id",
-   "fieldtype": "Data",
+   "fieldname": "mpesa_till",
+   "fieldtype": "Link",
+   "options": "M-Pesa Till",
    "in_list_view": 1,
-   "label": "Transaction ID",
+   "label": "M-Pesa Till",
+   "reqd": 1
+  },
+  {
+   "fieldname": "opening_balance",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Opening Balance",
+   "default": "0",
+   "reqd": 1
+  },
+  {
+   "fieldname": "closing_balance",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Closing Balance",
+   "default": "0",
+   "reqd": 1
+  },
+  {
+   "fieldname": "transfers_made",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Transfers Made",
+   "default": "0",
    "reqd": 1
   },
   {
    "fieldname": "amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Amount",
+   "label": "Amount Collected",
+   "read_only": 1,
    "reqd": 1
   }
  ],

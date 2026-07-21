@@ -50,7 +50,13 @@ class Shift(Document):
                             total_fuel_amount += (row.sales_quantity_electronic * price)
 
         total_dry_stock_amount = sum(flt(row.amount) for row in (self.inventory_sales or []))
-        total_mpesa = sum(flt(row.amount) for row in (self.mpesa_payments or []))
+        
+        total_mpesa = 0.0
+        if self.mpesa_payments:
+            for row in self.mpesa_payments:
+                row.amount = flt(row.closing_balance) - flt(row.opening_balance) + flt(row.transfers_made)
+                total_mpesa += row.amount
+
         total_cards = sum(flt(row.amount) for row in (self.card_payments or []))
         total_invoices = sum(flt(row.amount) for row in (self.invoices or []))
         total_expenses = sum(flt(row.amount) for row in (self.shift_expenses or []))
@@ -105,12 +111,15 @@ class Shift(Document):
                     frappe.throw("Closed Shifts cannot be modified. Please contact an Administrator.")
 
     def auto_fetch_opening_readings(self):
+        last_shift_doc = None
+        if self.station:
+            last_shift = frappe.get_all("Shift", filters={"station": self.station, "status": "Closed", "name": ("!=", self.name)}, order_by="end_time desc", limit=1)
+            if last_shift:
+                last_shift_doc = frappe.get_doc("Shift", last_shift[0].name)
+
         if not self.pump_meter_readings and self.station:
             pump_groups = frappe.get_all("Pump Group", filters={"station": self.station}, pluck="name")
             nozzles = frappe.get_all("Pump Nozzle", filters={"pump_group": ["in", pump_groups]}, fields=["name"]) if pump_groups else []
-            
-            last_shift = frappe.get_all("Shift", filters={"station": self.station, "status": "Closed", "name": ("!=", self.name)}, order_by="end_time desc", limit=1)
-            last_shift_doc = frappe.get_doc("Shift", last_shift[0].name) if last_shift else None
             
             for nozzle in nozzles:
                 opening_elec = 0
@@ -133,6 +142,22 @@ class Shift(Document):
             for tank in tanks:
                 self.append("dip_stick_readings", {
                     "fuel_tank": tank.name
+                })
+
+        if not self.mpesa_payments and self.station:
+            tills = frappe.get_all("M-Pesa Till", filters={"station": self.station, "is_active": 1}, fields=["name"])
+            for till in tills:
+                opening_bal = 0
+                if last_shift_doc:
+                    for row in (last_shift_doc.mpesa_payments or []):
+                        if getattr(row, "mpesa_till", None) == till.name:
+                            opening_bal = row.closing_balance or 0
+                            break
+                self.append("mpesa_payments", {
+                    "mpesa_till": till.name,
+                    "opening_balance": opening_bal,
+                    "closing_balance": 0,
+                    "transfers_made": 0
                 })
 
     def calculate_expected_stock(self):

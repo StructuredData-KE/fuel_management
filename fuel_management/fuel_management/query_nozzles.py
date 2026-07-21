@@ -35,4 +35,34 @@ def execute():
         doc.insert(ignore_permissions=True)
         print("Created M-Pesa Till")
 
-
+    # Create Mock Till
+    if not frappe.db.exists("M-Pesa Till", "Main Till 123456"):
+        doc = frappe.get_doc({
+            "doctype": "M-Pesa Till",
+            "till_name": "Main Till 123456",
+            "till_number": "123456",
+            "station": "RUBIS POA PLACE"
+        })
+        doc.insert(ignore_permissions=True)
+    
+    active_shifts = frappe.get_all("Shift", filters={"status": "Open"}, pluck="name")
+    for s in active_shifts: frappe.delete_doc("Shift", s, ignore_permissions=True, force=1)
+    
+    shift = frappe.get_doc({
+        "doctype": "Shift",
+        "shift_date": "2026-07-21",
+        "shift_template": "Day Shift",
+        "station": "RUBIS POA PLACE",
+        "head_csa": "Administrator",
+        "status": "Open",
+        "start_time": "2026-07-21 10:09:58",
+        "assigned_csas": [{"csa":"antony@gmail.com","pump_group":"PUMP 1"}]
+    })
+    shift.insert(ignore_permissions=True)
+    print(f"CREATED: {shift.name}")
+    print("NOZZLES:")
+    for row in shift.pump_meter_readings:
+        print(f" - {row.pump_nozzle}")
+    print("MPESA TILLS:")
+    for row in shift.mpesa_payments:
+        print(f" - {row.mpesa_till} (Opening: {row.opening_balance})")
