@@ -106,7 +106,8 @@ class Shift(Document):
 
     def auto_fetch_opening_readings(self):
         if not self.pump_meter_readings and self.station:
-            nozzles = frappe.get_all("Pump Nozzle", filters={"station": self.station}, fields=["name"])
+            pump_groups = frappe.get_all("Pump Group", filters={"station": self.station}, pluck="name")
+            nozzles = frappe.get_all("Pump Nozzle", filters={"pump_group": ["in", pump_groups]}, fields=["name"]) if pump_groups else []
             
             last_shift = frappe.get_all("Shift", filters={"station": self.station, "status": "Closed", "name": ("!=", self.name)}, order_by="end_time desc", limit=1)
             last_shift_doc = frappe.get_doc("Shift", last_shift[0].name) if last_shift else None
