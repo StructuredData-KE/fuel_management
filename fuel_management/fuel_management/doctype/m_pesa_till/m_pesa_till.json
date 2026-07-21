@@ -1,0 +1,81 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:till_name",
+ "creation": "2026-07-21 11:25:26.320324",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "till_name",
+  "till_number",
+  "station",
+  "is_active",
+  "pump_groups"
+ ],
+ "fields": [
+  {
+   "fieldname": "till_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Till Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "till_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Till Number",
+   "reqd": 1
+  },
+  {
+   "fieldname": "station",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Fuel Station",
+   "options": "Fuel Station",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "pump_groups",
+   "fieldtype": "Table",
+   "label": "Pump Groups",
+   "options": "M-Pesa Till Pump Group"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-21 13:25:28.286000",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "M-Pesa Till",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
