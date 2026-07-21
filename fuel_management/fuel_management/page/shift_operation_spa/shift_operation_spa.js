@@ -147,31 +147,40 @@ function render_meters($wrapper) {
                         let csa_text = csa_name ? ` &nbsp;|&nbsp; <span style="color: #64748b; font-weight: 500;">CSA: ${csa_name}</span>` : "";
 
                         html += `
-                            <tr>
-                                <td colspan="7" class="group-header">${pg}${csa_text}</td>
-                            </tr>
+                            <div class="pump-group-card">
+                                <div class="pump-group-header">${pg}${csa_text}</div>
+                                <div class="pump-nozzles-list">
                         `;
                         rows.forEach(row => {
                             let price = nozzle_prices[row.pump_nozzle] || 0.0;
                             html += `
-                                <tr data-name="${row.name}">
-                                    <td style="font-weight: 600; color: var(--text-primary); padding-left: 2rem;">${row.pump_nozzle}</td>
-                                    <td class="elec-col">
-                                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.2rem;">Open: <span class="read-only-cell" style="padding: 0.1rem 0.3rem; min-width: auto; font-size: 0.75rem;">${row.opening_electronic_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="0.00">
-                                    </td>
-                                    <td class="meter-sales-elec font-weight-bold elec-col">0.00</td>
+                                <div class="meter-row" data-name="${row.name}">
+                                    <div class="nozzle-col">
+                                        <div class="nozzle-name">${row.pump_nozzle}</div>
+                                    </div>
                                     
-                                    <td class="manual-col">
-                                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.2rem;">Open: <span class="read-only-cell" style="padding: 0.1rem 0.3rem; min-width: auto; font-size: 0.75rem;">${row.opening_manual_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-field="closing_manual_meter" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="0.00">
-                                    </td>
-                                    <td class="meter-sales-manual font-weight-bold manual-col">0.00</td>
-                                    <td class="meter-variance font-weight-bold">0.00</td>
-                                    <td class="meter-total-value font-weight-bold" style="color: var(--accent);">0.00</td>
-                                </tr>
+                                    <div class="elec-col">
+                                        <div class="col-title">Electronic</div>
+                                        <div class="reading-label">Open: <span class="read-only-cell">${row.opening_electronic_meter}</span></div>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Enter Closing">
+                                        <div class="sales-value">Sales: <span class="meter-sales-elec font-weight-bold">0.00</span></div>
+                                    </div>
+                                    
+                                    <div class="manual-col">
+                                        <div class="col-title">Manual</div>
+                                        <div class="reading-label">Open: <span class="read-only-cell">${row.opening_manual_meter}</span></div>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-field="closing_manual_meter" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Enter Closing">
+                                        <div class="sales-value">Sales: <span class="meter-sales-manual font-weight-bold">0.00</span></div>
+                                    </div>
+                                    
+                                    <div class="summary-col">
+                                        <div class="variance-box">Variance: <span class="meter-variance font-weight-bold">0.00</span></div>
+                                        <div class="total-box">Value: <span class="meter-total-value font-weight-bold">0.00</span></div>
+                                    </div>
+                                </div>
                             `;
                         });
+                        html += `</div></div>`;
                     }
                     
                     $wrapper.find('#meters-container').html(html);
@@ -185,7 +194,7 @@ function render_meters($wrapper) {
 
                     // Live Math & Validation
                     function calc_row() {
-                        let $row = $(this).closest('tr');
+                        let $row = $(this).closest('.meter-row');
                         let closing_elec = parseFloat($row.find('.meter-closing-elec').val());
                         let opening_elec = parseFloat($row.find('.meter-closing-elec').attr('data-opening')) || 0;
                         let price = parseFloat($row.find('.meter-closing-elec').attr('data-price')) || 0;
@@ -540,7 +549,7 @@ function setup_actions(wrapper) {
         
         let has_empty = false;
         let rows_data = [];
-        $wrapper.find('#meters-container tr[data-name]').each(function() {
+        $wrapper.find('#meters-container .meter-row[data-name]').each(function() {
             let row_name = $(this).attr('data-name');
             let elec_input = $(this).find('.meter-closing-elec');
             let man_input = $(this).find('.meter-closing-manual');

@@ -442,38 +442,106 @@
     border-radius: 4px;
     border: 1px solid var(--danger);
 }
-/* Meters Table Visual Enhancements */
-.meters-table {
-    border: 1px solid #94a3b8;
-    border-collapse: collapse;
+/* Meters Card Visual Enhancements */
+.meters-cards-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-bottom: 2rem;
 }
-.meters-table th {
-    text-align: center;
+.pump-group-card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+.pump-group-header {
     background: var(--sidebar-bg);
     color: white;
-    border-bottom: 2px solid var(--sidebar-hover);
-    border-right: 1px solid #336159;
+    padding: 0.75rem 1.25rem;
     font-weight: 600;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    font-size: 1.1rem;
+    border-bottom: 2px solid var(--sidebar-hover);
 }
-.meters-table td {
-    border-right: 1px solid #94a3b8;
-    border-bottom: 1px solid #94a3b8;
-    text-align: center;
-    vertical-align: middle;
+.pump-nozzles-list {
+    display: flex;
+    flex-direction: column;
 }
-.meters-table td:first-child, .meters-table th:first-child {
-    text-align: left;
+.meter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    border-bottom: 1px solid #e2e8f0;
 }
-/* Electronic section slight green tint (only in tbody) */
-.meters-table tbody .elec-col {
-    background-color: #f0fdf4 !important;
+.meter-row:last-child {
+    border-bottom: none;
 }
-/* Manual section slight blue tint (only in tbody) */
-.meters-table tbody .manual-col {
-    background-color: #eff6ff !important;
+.meter-row > div {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.nozzle-col {
+    flex: 1;
+    min-width: 120px;
+    border-right: 1px solid #e2e8f0;
+}
+.nozzle-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+.elec-col, .manual-col {
+    flex: 2;
+    min-width: 200px;
+    border-right: 1px solid #e2e8f0;
+}
+.elec-col {
+    background-color: #f0fdf4;
+}
+.manual-col {
+    background-color: #eff6ff;
+}
+.col-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.reading-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+}
+.sales-value {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+.summary-col {
+    flex: 1.5;
+    min-width: 150px;
+    background-color: #f8fafc;
+    justify-content: center;
+    gap: 0.5rem;
+}
+.variance-box {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+}
+.total-box {
+    font-size: 1.05rem;
+    color: var(--text-primary);
+}
+.meters-cards-container input.spa-input {
+    font-size: 1.1rem !important;
+    padding: 0.6rem !important;
+    text-align: right;
+    font-weight: 600;
 }
 .meters-table input.spa-input {
     text-align: center;
