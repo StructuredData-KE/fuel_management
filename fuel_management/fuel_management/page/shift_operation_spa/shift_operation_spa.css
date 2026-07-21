@@ -15,11 +15,11 @@
     --danger: #ef4444;
 }
 
-/* Frappe overrides */
-.page-head { display: none !important; }
-.page-body { margin: 0 !important; padding: 0 !important; }
-.layout-main-section { padding: 0 !important; }
-.frappe-card { margin: 0 !important; padding: 0 !important; border: none !important; }
+/* Frappe overrides scoped to SPA */
+[data-page-route="shift_operation_spa"] .page-head { display: none !important; }
+[data-page-route="shift_operation_spa"] .page-body { margin: 0 !important; padding: 0 !important; }
+[data-page-route="shift_operation_spa"] .layout-main-section { padding: 0 !important; }
+[data-page-route="shift_operation_spa"] .frappe-card { margin: 0 !important; padding: 0 !important; border: none !important; }
 
 .dashboard-wrapper {
     font-family: 'Inter', sans-serif;
