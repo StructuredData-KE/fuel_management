@@ -16,12 +16,7 @@
             
             <a href="#" class="nav-item" data-target="tab-wetstock">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
-                <span>Wetstock (Meters)</span>
-            </a>
-            
-            <a href="#" class="nav-item" data-target="tab-mpesa">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 17v-4a4 4 0 0 0-8 0v4"/><circle cx="12" cy="11" r="1"/></svg>
-                <span>M-Pesa Drops</span>
+                <span>Meters Data Entry</span>
             </a>
             
             <a href="#" class="nav-item" data-target="tab-cards">
@@ -124,54 +119,84 @@
                 </div>
             </section>
 
-            <!-- WETSTOCK -->
+            <!-- METERS DATA ENTRY -->
             <section id="tab-wetstock" class="tab-pane">
-                <div class="dash-card full-width-card mb-4">
-                    <div class="card-header-flex">
-                        <h3>Pump Meter Readings</h3>
-                        <button id="btn-save-wetstock" class="btn-secondary btn-sm">Save Readings</button>
-                    </div>
-                    <div id="meters-container" class="data-grid">
-                        <!-- Dynamic meter cards will be injected here -->
+                <div class="meters-tabs-header">
+                    <button class="meter-tab-btn active" data-meter="fuel">⛽ Fuel Nozzles</button>
+                    <button class="meter-tab-btn" data-meter="dips">📏 Dip Sticks</button>
+                    <button class="meter-tab-btn" data-meter="mpesa">📱 M-Pesa Tills</button>
+                </div>
+                
+                <!-- Fuel Nozzles Tab -->
+                <div id="meter-fuel" class="meter-tab-content active">
+                    <div class="dash-card full-width-card mb-4">
+                        <div class="card-header-flex">
+                            <h3>Fuel Nozzles</h3>
+                            <button id="btn-save-wetstock" class="btn-secondary btn-sm">Save Readings</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="dash-table meters-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nozzle</th>
+                                        <th>Opening</th>
+                                        <th>Closing</th>
+                                        <th>Sales Qty</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="meters-container">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="dash-card full-width-card">
-                    <h3>Dip Stick Readings</h3>
-                    <div id="dips-container" class="data-grid">
-                        <!-- Dynamic dip cards will be injected here -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- M-PESA DROPS -->
-            <section id="tab-mpesa" class="tab-pane">
-                <div class="dashboard-cards-grid">
-                    <div class="dash-card">
-                        <h3>Log M-Pesa Drop</h3>
-                        <div class="form-group">
-                            <label>Amount (KES)</label>
-                            <input type="number" id="mpesa-amount" class="spa-input" placeholder="0.00">
+                <!-- Dip Sticks Tab -->
+                <div id="meter-dips" class="meter-tab-content hidden">
+                    <div class="dash-card full-width-card mb-4">
+                        <div class="card-header-flex">
+                            <h3>Dip Sticks</h3>
+                            <button id="btn-save-dips" class="btn-secondary btn-sm">Save Dips</button>
                         </div>
-                        <div class="form-group">
-                            <label>Reference Code</label>
-                            <input type="text" id="mpesa-ref" class="spa-input" placeholder="e.g. QWE123RTY">
-                        </div>
-                        <button class="btn-primary mt-2" id="btn-add-mpesa">Add Drop</button>
-                    </div>
-                    <div class="dash-card span-2">
-                        <h3>M-Pesa Drop History</h3>
                         <div class="table-responsive">
-                            <table class="dash-table">
+                            <table class="dash-table meters-table">
                                 <thead>
                                     <tr>
-                                        <th>Time</th>
-                                        <th>Reference</th>
-                                        <th>Amount</th>
-                                        <th>Action</th>
+                                        <th>Fuel Tank</th>
+                                        <th>Opening Dip</th>
+                                        <th>Closing Dip</th>
                                     </tr>
                                 </thead>
-                                <tbody id="list-mpesa"></tbody>
+                                <tbody id="dips-container">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- M-Pesa Tills Tab -->
+                <div id="meter-mpesa" class="meter-tab-content hidden">
+                    <div class="dash-card full-width-card mb-4">
+                        <div class="card-header-flex">
+                            <h3>M-Pesa Tills</h3>
+                            <button id="btn-save-mpesa" class="btn-secondary btn-sm">Save Tills</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="dash-table meters-table">
+                                <thead>
+                                    <tr>
+                                        <th>Till Name</th>
+                                        <th>Opening Bal.</th>
+                                        <th>Bank Transfers</th>
+                                        <th>Closing Bal.</th>
+                                        <th>Amount Collected</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mpesa-tills-container">
+                                    <!-- Dynamic rows -->
+                                </tbody>
                             </table>
                         </div>
                     </div>

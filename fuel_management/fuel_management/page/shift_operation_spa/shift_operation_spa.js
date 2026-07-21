@@ -92,6 +92,7 @@ function load_shift_data($wrapper) {
                 window.SHIFT_DOC = r.message;
                 render_meters($wrapper);
                 render_dips($wrapper);
+                render_mpesa($wrapper);
             }
         }
     });
@@ -101,39 +102,95 @@ function render_meters($wrapper) {
     let html = '';
     (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
         html += `
-            <div class="dash-card">
-                <h4>Nozzle: ${row.pump_nozzle}</h4>
-                <div class="form-group">
-                    <label>Closing Electronic</label>
-                    <input type="number" class="spa-input meter-input" data-field="closing_electronic_meter" data-name="${row.name}" value="${row.closing_electronic_meter || ''}">
-                </div>
-                <div class="form-group">
-                    <label>Closing Manual</label>
-                    <input type="number" class="spa-input meter-input" data-field="closing_manual_meter" data-name="${row.name}" value="${row.closing_manual_meter || ''}">
-                </div>
-                <p style="font-size: 0.8rem; color: #64748b;">Opening Elec: ${row.opening_electronic_meter}</p>
-            </div>
+            <tr data-name="${row.name}">
+                <td style="font-weight: 600; color: var(--text-primary);">${row.pump_nozzle}</td>
+                <td class="text-secondary">${row.opening_electronic_meter}</td>
+                <td>
+                    <input type="number" class="spa-input meter-closing" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" value="${row.closing_electronic_meter || ''}" placeholder="0.00">
+                </td>
+                <td class="meter-sales font-weight-bold">0.00</td>
+            </tr>
         `;
     });
     $wrapper.find('#meters-container').html(html);
+
+    // Add Live Math & Validation
+    $wrapper.find('.meter-closing').on('input', function() {
+        let closing = parseFloat($(this).val());
+        let opening = parseFloat($(this).attr('data-opening')) || 0;
+        
+        let $row = $(this).closest('tr');
+        if (!isNaN(closing) && closing > 0 && closing < opening) {
+            $(this).addClass('error-input');
+            $row.find('.meter-sales').text('ERR').css('color', 'var(--danger)');
+        } else {
+            $(this).removeClass('error-input');
+            let sales = isNaN(closing) ? 0 : (closing - opening);
+            $row.find('.meter-sales').text(sales.toFixed(2)).css('color', 'var(--text-primary)');
+        }
+    });
+    // Trigger initial calculation
+    $wrapper.find('.meter-closing').trigger('input');
 }
 
 function render_dips($wrapper) {
     let html = '';
     (window.SHIFT_DOC.dip_stick_readings || []).forEach(row => {
         html += `
-            <div class="dash-card">
-                <h4>Tank: ${row.fuel_tank}</h4>
-                <div class="form-group">
-                    <label>Closing Dip (Liters)</label>
-                    <input type="number" class="spa-input dip-input" data-name="${row.name}" value="${row.closing_dip || ''}">
-                </div>
-                <p style="font-size: 0.8rem; color: #64748b;">Opening Dip: ${row.opening_dip || 0}</p>
-                <p style="font-size: 0.8rem; color: #64748b;">Expected Stock: ${row.expected_stock || 0}</p>
-            </div>
+            <tr data-name="${row.name}">
+                <td style="font-weight: 600; color: var(--text-primary);">${row.fuel_tank}</td>
+                <td>
+                    <input type="number" class="spa-input dip-opening" data-field="opening_dip" value="${row.opening_dip || ''}" placeholder="0.00">
+                </td>
+                <td>
+                    <input type="number" class="spa-input dip-closing" data-field="closing_dip" value="${row.closing_dip || ''}" placeholder="0.00">
+                </td>
+            </tr>
         `;
     });
     $wrapper.find('#dips-container').html(html);
+}
+
+function render_mpesa($wrapper) {
+    let html = '';
+    (window.SHIFT_DOC.mpesa_payments || []).forEach(row => {
+        html += `
+            <tr data-name="${row.name}">
+                <td style="font-weight: 600; color: var(--text-primary);">${row.mpesa_till}</td>
+                <td class="text-secondary">${row.opening_balance || 0}</td>
+                <td>
+                    <input type="number" class="spa-input mpesa-transfers" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="0.00">
+                </td>
+                <td>
+                    <input type="number" class="spa-input mpesa-closing" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance || ''}" placeholder="0.00">
+                </td>
+                <td class="mpesa-collected font-weight-bold">0.00</td>
+            </tr>
+        `;
+    });
+    $wrapper.find('#mpesa-tills-container').html(html);
+
+    // Add Live Math
+    function calc_mpesa() {
+        let $row = $(this).closest('tr');
+        let closing = parseFloat($row.find('.mpesa-closing').val());
+        let opening = parseFloat($row.find('.mpesa-closing').attr('data-opening')) || 0;
+        let transfers = parseFloat($row.find('.mpesa-transfers').val()) || 0;
+        
+        let $closingInput = $row.find('.mpesa-closing');
+        if (!isNaN(closing) && closing > 0 && closing < opening) {
+            $closingInput.addClass('error-input');
+            $row.find('.mpesa-collected').text('ERR').css('color', 'var(--danger)');
+        } else {
+            $closingInput.removeClass('error-input');
+            let collected = (isNaN(closing) ? 0 : closing) - opening + transfers;
+            $row.find('.mpesa-collected').text(collected.toFixed(2)).css('color', 'var(--text-primary)');
+        }
+    }
+    
+    $wrapper.find('.mpesa-closing, .mpesa-transfers').on('input', calc_mpesa);
+    // Trigger initial
+    $wrapper.find('.mpesa-closing').trigger('input');
 }
 
 function setup_tabs(wrapper) {
@@ -153,6 +210,18 @@ function setup_tabs(wrapper) {
         // Update topbar title
         const tabName = $(this).find('span').text();
         $wrapper.find('#current-module-title').text(tabName);
+    });
+
+    // Sub-Tabs for Meters
+    $wrapper.find('.meter-tab-btn').on('click', function(e) {
+        e.preventDefault();
+        
+        $wrapper.find('.meter-tab-btn').removeClass('active');
+        $wrapper.find('.meter-tab-content').addClass('hidden').removeClass('active');
+        
+        $(this).addClass('active');
+        const target = $(this).attr('data-meter');
+        $wrapper.find('#meter-' + target).removeClass('hidden').addClass('active');
     });
 }
 
@@ -366,6 +435,70 @@ function setup_actions(wrapper) {
             });
         });
     });
+
+    // Save Meters Data (Fuel, Dips, M-Pesa)
+    $wrapper.find('#btn-save-wetstock').on('click', function() {
+        let readings = [];
+        $wrapper.find('#meters-container tr').each(function() {
+            readings.push({
+                name: $(this).attr('data-name'),
+                closing_electronic_meter: $(this).find('.meter-closing').val()
+            });
+        });
+        save_child_table("pump_meter_readings", readings, "Fuel Nozzles saved!");
+    });
+    
+    $wrapper.find('#btn-save-dips').on('click', function() {
+        let readings = [];
+        $wrapper.find('#dips-container tr').each(function() {
+            readings.push({
+                name: $(this).attr('data-name'),
+                opening_dip: $(this).find('.dip-opening').val(),
+                closing_dip: $(this).find('.dip-closing').val()
+            });
+        });
+        save_child_table("dip_stick_readings", readings, "Dip Sticks saved!");
+    });
+    
+    $wrapper.find('#btn-save-mpesa').on('click', function() {
+        let readings = [];
+        $wrapper.find('#mpesa-tills-container tr').each(function() {
+            readings.push({
+                name: $(this).attr('data-name'),
+                transfers_made: $(this).find('.mpesa-transfers').val(),
+                closing_balance: $(this).find('.mpesa-closing').val()
+            });
+        });
+        save_child_table("mpesa_payments", readings, "M-Pesa Tills saved!");
+    });
+    
+    function save_child_table(table_name, rows_data, success_msg) {
+        frappe.call({
+            method: "frappe.client.get",
+            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+            callback: function(r) {
+                if(r.message) {
+                    let doc = r.message;
+                    rows_data.forEach(updated_row => {
+                        let existing = doc[table_name].find(d => d.name === updated_row.name);
+                        if(existing) {
+                            Object.assign(existing, updated_row);
+                        }
+                    });
+                    
+                    frappe.call({
+                        method: "frappe.client.save",
+                        args: { doc: doc },
+                        callback: function(r2) {
+                            if(r2.message) {
+                                frappe.show_alert({message: success_msg, indicator: "green"});
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    }
 
     // Close Shift Logic
     $wrapper.find('#btn-close-shift').on('click', function() {

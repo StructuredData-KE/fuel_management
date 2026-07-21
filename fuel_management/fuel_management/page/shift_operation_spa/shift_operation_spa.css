@@ -366,3 +366,59 @@
     .topbar { padding: 1rem; }
     .search-bar { display: none; }
 }
+
+/* Meter Sub-Tabs */
+.meters-tabs-header {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+}
+
+.meter-tab-btn {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.meter-tab-btn:hover {
+    background: #e2e8f0;
+    color: var(--text-primary);
+}
+
+.meter-tab-btn.active {
+    background: var(--sidebar-bg);
+    color: white;
+}
+
+.meter-tab-content {
+    display: none;
+    animation: fadeIn 0.3s;
+}
+
+.meter-tab-content.active {
+    display: block;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Meters Table Inputs */
+.meters-table th, .meters-table td {
+    vertical-align: middle;
+}
+.meters-table .spa-input {
+    width: 150px;
+}
+.meters-table .error-input {
+    border-color: var(--danger) !important;
+    background: #fef2f2 !important;
+}
