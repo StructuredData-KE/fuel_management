@@ -129,9 +129,26 @@ function render_meters($wrapper) {
                     
                     let html = '';
                     for(const [pg, rows] of Object.entries(grouped)) {
+                        let assigned_csa_id = "";
+                        if (window.SHIFT_DOC.assigned_csas) {
+                            let assignment = window.SHIFT_DOC.assigned_csas.find(a => a.pump_group === pg);
+                            if (assignment) {
+                                assigned_csa_id = assignment.csa;
+                            }
+                        }
+                        
+                        let csa_name = assigned_csa_id;
+                        if (window.USERS_LIST) {
+                            let user = window.USERS_LIST.find(u => u.name === assigned_csa_id);
+                            if (user) {
+                                csa_name = user.full_name;
+                            }
+                        }
+                        let csa_text = csa_name ? ` &nbsp;|&nbsp; <span style="color: #64748b; font-weight: 500;">CSA: ${csa_name}</span>` : "";
+
                         html += `
                             <tr>
-                                <td colspan="9" class="group-header">${pg}</td>
+                                <td colspan="7" class="group-header">${pg}${csa_text}</td>
                             </tr>
                         `;
                         rows.forEach(row => {
