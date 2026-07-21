@@ -6,16 +6,16 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "account",
+  "mpesa_till",
   "opening_balance"
  ],
  "fields": [
   {
-   "fieldname": "account",
+   "fieldname": "mpesa_till",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Account",
-   "options": "Account",
+   "label": "M-Pesa Till",
+   "options": "M-Pesa Till",
    "reqd": 1
   },
   {

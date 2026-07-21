@@ -112,10 +112,15 @@ class Shift(Document):
 
     def auto_fetch_opening_readings(self):
         last_shift_doc = None
+        station_opening = None
         if self.station:
             last_shift = frappe.get_all("Shift", filters={"station": self.station, "status": "Closed", "name": ("!=", self.name)}, order_by="end_time desc", limit=1)
             if last_shift:
                 last_shift_doc = frappe.get_doc("Shift", last_shift[0].name)
+                
+            sob = frappe.get_all("Station Opening Balance", filters={"station": self.station, "docstatus": 1}, order_by="date desc, creation desc", limit=1)
+            if sob:
+                station_opening = frappe.get_doc("Station Opening Balance", sob[0].name)
 
         if not self.pump_meter_readings and self.station:
             pump_groups = frappe.get_all("Pump Group", filters={"station": self.station}, pluck="name")
@@ -124,11 +129,20 @@ class Shift(Document):
             for nozzle in nozzles:
                 opening_elec = 0
                 opening_manual = 0
+                found = False
                 if last_shift_doc:
                     for row in last_shift_doc.pump_meter_readings:
                         if row.pump_nozzle == nozzle.name:
                             opening_elec = row.closing_electronic_meter
                             opening_manual = row.closing_manual_meter
+                            found = True
+                            break
+                            
+                if not found and station_opening:
+                    for row in station_opening.nozzle_balances:
+                        if getattr(row, "pump_nozzle", None) == nozzle.name:
+                            opening_elec = row.opening_electronic_meter
+                            opening_manual = row.opening_manual_meter
                             break
                             
                 self.append("pump_meter_readings", {
@@ -148,10 +162,18 @@ class Shift(Document):
             tills = frappe.get_all("M-Pesa Till", filters={"station": self.station, "is_active": 1}, fields=["name"])
             for till in tills:
                 opening_bal = 0
+                found = False
                 if last_shift_doc:
                     for row in (last_shift_doc.mpesa_payments or []):
                         if getattr(row, "mpesa_till", None) == till.name:
                             opening_bal = row.closing_balance or 0
+                            found = True
+                            break
+                            
+                if not found and station_opening:
+                    for row in (station_opening.mpesa_balances or []):
+                        if getattr(row, "mpesa_till", None) == till.name:
+                            opening_bal = row.opening_balance or 0
                             break
                 self.append("mpesa_payments", {
                     "mpesa_till": till.name,
