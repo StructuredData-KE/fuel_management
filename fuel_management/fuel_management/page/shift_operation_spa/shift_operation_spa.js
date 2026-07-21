@@ -139,14 +139,14 @@ function render_meters($wrapper) {
                             html += `
                                 <tr data-name="${row.name}">
                                     <td style="font-weight: 600; color: var(--text-primary); padding-left: 2rem;">${row.pump_nozzle}</td>
-                                    <td><span class="read-only-cell">${row.opening_electronic_meter}</span></td>
                                     <td>
+                                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.2rem;">Open: <span class="read-only-cell" style="padding: 0.1rem 0.3rem; min-width: auto; font-size: 0.75rem;">${row.opening_electronic_meter}</span></div>
                                         <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="0.00">
                                     </td>
                                     <td class="meter-sales-elec font-weight-bold">0.00</td>
                                     
-                                    <td><span class="read-only-cell">${row.opening_manual_meter}</span></td>
                                     <td>
+                                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.2rem;">Open: <span class="read-only-cell" style="padding: 0.1rem 0.3rem; min-width: auto; font-size: 0.75rem;">${row.opening_manual_meter}</span></div>
                                         <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-field="closing_manual_meter" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="0.00">
                                     </td>
                                     <td class="meter-sales-manual font-weight-bold">0.00</td>
