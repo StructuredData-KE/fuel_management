@@ -367,40 +367,46 @@
     .search-bar { display: none; }
 }
 
-/* Meter Sub-Tabs */
-.meters-tabs-header {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 0.5rem;
+/* Meter Center Cards */
+.center-card {
+    max-width: 900px;
+    margin: 0 auto;
 }
 
-.meter-tab-btn {
-    background: none;
-    border: none;
-    font-size: 1rem;
+/* Group Headers */
+.group-header {
+    background-color: var(--bg-color);
+    font-size: 0.95rem;
     font-weight: 600;
-    color: var(--text-secondary);
-    padding: 0.5rem 1rem;
-    cursor: pointer;
-    border-radius: 8px;
-    transition: all 0.2s;
-}
-
-.meter-tab-btn:hover {
-    background: #e2e8f0;
     color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-.meter-tab-btn.active {
-    background: var(--sidebar-bg);
-    color: white;
+/* Read-Only inputs */
+.read-only-cell {
+    background-color: #f1f5f9;
+    color: #64748b;
+    font-weight: 500;
+    text-align: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    display: inline-block;
+    min-width: 80px;
 }
 
-.meter-tab-content {
-    display: none;
-    animation: fadeIn 0.3s;
+/* Highlight Inputs */
+.highlight-input {
+    background-color: #ffffff;
+    border: 1px solid #94a3b8;
+    transition: all 0.2s ease;
+}
+
+.highlight-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+    outline: none;
 }
 
 .meter-tab-content.active {

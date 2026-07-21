@@ -64,8 +64,8 @@ function lock_ui_for_active_shift($wrapper) {
     // Update Badge
     $wrapper.find('#active-shift-badge').addClass('active-shift').text('Active: ' + window.ACTIVE_SHIFT.name);
     
-    // Switch to Wetstock tab automatically
-    $wrapper.find('.nav-item[data-target="tab-wetstock"]').click();
+    // Switch to Fuel tab automatically
+    $wrapper.find('.nav-item[data-target="tab-fuel"]').click();
     
     // Pre-fill Start Shift form just for viewing
     $wrapper.find('#input-shift-date').val(window.ACTIVE_SHIFT.shift_date).prop('disabled', true);
@@ -99,38 +99,69 @@ function load_shift_data($wrapper) {
 }
 
 function render_meters($wrapper) {
-    let html = '';
-    (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
-        html += `
-            <tr data-name="${row.name}">
-                <td style="font-weight: 600; color: var(--text-primary);">${row.pump_nozzle}</td>
-                <td class="text-secondary">${row.opening_electronic_meter}</td>
-                <td>
-                    <input type="number" class="spa-input meter-closing" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" value="${row.closing_electronic_meter || ''}" placeholder="0.00">
-                </td>
-                <td class="meter-sales font-weight-bold">0.00</td>
-            </tr>
-        `;
-    });
-    $wrapper.find('#meters-container').html(html);
+    // Fetch nozzle pump group mappings
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Pump Nozzle",
+            fields: ["name", "pump_group"],
+            limit_page_length: 500
+        },
+        callback: function(r) {
+            let nozzle_to_pg = {};
+            if(r.message) {
+                r.message.forEach(n => { nozzle_to_pg[n.name] = n.pump_group || "Ungrouped"; });
+            }
+            
+            let grouped = {};
+            (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
+                let pg = nozzle_to_pg[row.pump_nozzle] || "Ungrouped";
+                if(!grouped[pg]) grouped[pg] = [];
+                grouped[pg].push(row);
+            });
+            
+            let html = '';
+            for(const [pg, rows] of Object.entries(grouped)) {
+                html += `
+                    <tr>
+                        <td colspan="4" class="group-header">${pg}</td>
+                    </tr>
+                `;
+                rows.forEach(row => {
+                    html += `
+                        <tr data-name="${row.name}">
+                            <td style="font-weight: 600; color: var(--text-primary); padding-left: 2rem;">${row.pump_nozzle}</td>
+                            <td><span class="read-only-cell">${row.opening_electronic_meter}</span></td>
+                            <td>
+                                <input type="number" class="spa-input meter-closing highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" value="${row.closing_electronic_meter || ''}" placeholder="Enter Closing">
+                            </td>
+                            <td class="meter-sales font-weight-bold">0.00</td>
+                        </tr>
+                    `;
+                });
+            }
+            
+            $wrapper.find('#meters-container').html(html);
 
-    // Add Live Math & Validation
-    $wrapper.find('.meter-closing').on('input', function() {
-        let closing = parseFloat($(this).val());
-        let opening = parseFloat($(this).attr('data-opening')) || 0;
-        
-        let $row = $(this).closest('tr');
-        if (!isNaN(closing) && closing > 0 && closing < opening) {
-            $(this).addClass('error-input');
-            $row.find('.meter-sales').text('ERR').css('color', 'var(--danger)');
-        } else {
-            $(this).removeClass('error-input');
-            let sales = isNaN(closing) ? 0 : (closing - opening);
-            $row.find('.meter-sales').text(sales.toFixed(2)).css('color', 'var(--text-primary)');
+            // Add Live Math & Validation
+            $wrapper.find('.meter-closing').on('input', function() {
+                let closing = parseFloat($(this).val());
+                let opening = parseFloat($(this).attr('data-opening')) || 0;
+                
+                let $row = $(this).closest('tr');
+                if (!isNaN(closing) && closing > 0 && closing < opening) {
+                    $(this).addClass('error-input');
+                    $row.find('.meter-sales').text('ERR').css('color', 'var(--danger)');
+                } else {
+                    $(this).removeClass('error-input');
+                    let sales = isNaN(closing) ? 0 : (closing - opening);
+                    $row.find('.meter-sales').text(sales.toFixed(2)).css('color', 'var(--text-primary)');
+                }
+            });
+            // Trigger initial calculation
+            $wrapper.find('.meter-closing').trigger('input');
         }
     });
-    // Trigger initial calculation
-    $wrapper.find('.meter-closing').trigger('input');
 }
 
 function render_dips($wrapper) {
@@ -139,11 +170,9 @@ function render_dips($wrapper) {
         html += `
             <tr data-name="${row.name}">
                 <td style="font-weight: 600; color: var(--text-primary);">${row.fuel_tank}</td>
+                <td><span class="read-only-cell">${row.opening_dip || 0}</span></td>
                 <td>
-                    <input type="number" class="spa-input dip-opening" data-field="opening_dip" value="${row.opening_dip || ''}" placeholder="0.00">
-                </td>
-                <td>
-                    <input type="number" class="spa-input dip-closing" data-field="closing_dip" value="${row.closing_dip || ''}" placeholder="0.00">
+                    <input type="number" class="spa-input dip-closing highlight-input" data-field="closing_dip" value="${row.closing_dip || ''}" placeholder="Enter Closing">
                 </td>
             </tr>
         `;
@@ -157,12 +186,12 @@ function render_mpesa($wrapper) {
         html += `
             <tr data-name="${row.name}">
                 <td style="font-weight: 600; color: var(--text-primary);">${row.mpesa_till}</td>
-                <td class="text-secondary">${row.opening_balance || 0}</td>
+                <td><span class="read-only-cell">${row.opening_balance || 0}</span></td>
                 <td>
-                    <input type="number" class="spa-input mpesa-transfers" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="0.00">
+                    <input type="number" class="spa-input mpesa-transfers highlight-input" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="Enter Transfers">
                 </td>
                 <td>
-                    <input type="number" class="spa-input mpesa-closing" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance || ''}" placeholder="0.00">
+                    <input type="number" class="spa-input mpesa-closing highlight-input" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance || ''}" placeholder="Enter Closing">
                 </td>
                 <td class="mpesa-collected font-weight-bold">0.00</td>
             </tr>
@@ -210,18 +239,6 @@ function setup_tabs(wrapper) {
         // Update topbar title
         const tabName = $(this).find('span').text();
         $wrapper.find('#current-module-title').text(tabName);
-    });
-
-    // Sub-Tabs for Meters
-    $wrapper.find('.meter-tab-btn').on('click', function(e) {
-        e.preventDefault();
-        
-        $wrapper.find('.meter-tab-btn').removeClass('active');
-        $wrapper.find('.meter-tab-content').addClass('hidden').removeClass('active');
-        
-        $(this).addClass('active');
-        const target = $(this).attr('data-meter');
-        $wrapper.find('#meter-' + target).removeClass('hidden').addClass('active');
     });
 }
 

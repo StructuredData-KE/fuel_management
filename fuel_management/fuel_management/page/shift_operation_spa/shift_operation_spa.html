@@ -14,9 +14,19 @@
                 <span>Start Shift</span>
             </a>
             
-            <a href="#" class="nav-item" data-target="tab-wetstock">
+            <a href="#" class="nav-item" data-target="tab-fuel">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
-                <span>Meters Data Entry</span>
+                <span>Meter Readings</span>
+            </a>
+            
+            <a href="#" class="nav-item" data-target="tab-dips">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span>Dip Sticks</span>
+            </a>
+            
+            <a href="#" class="nav-item" data-target="tab-mpesa">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                <span>M-Pesa Tills</span>
             </a>
             
             <a href="#" class="nav-item" data-target="tab-cards">
@@ -119,21 +129,13 @@
                 </div>
             </section>
 
-            <!-- METERS DATA ENTRY -->
-            <section id="tab-wetstock" class="tab-pane">
-                <div class="meters-tabs-header">
-                    <button class="meter-tab-btn active" data-meter="fuel">⛽ Fuel Nozzles</button>
-                    <button class="meter-tab-btn" data-meter="dips">📏 Dip Sticks</button>
-                    <button class="meter-tab-btn" data-meter="mpesa">📱 M-Pesa Tills</button>
-                </div>
-                
-                <!-- Fuel Nozzles Tab -->
-                <div id="meter-fuel" class="meter-tab-content active">
-                    <div class="dash-card full-width-card mb-4">
-                        <div class="card-header-flex">
-                            <h3>Fuel Nozzles</h3>
-                            <button id="btn-save-wetstock" class="btn-secondary btn-sm">Save Readings</button>
-                        </div>
+            <!-- METER READINGS (FUEL NOZZLES) -->
+            <section id="tab-fuel" class="tab-pane">
+                <div class="dash-card center-card mb-4">
+                    <div class="card-header-flex">
+                        <h3>Meter Readings</h3>
+                        <button id="btn-save-wetstock" class="btn-secondary btn-sm">Save Readings</button>
+                    </div>
                         <div class="table-responsive">
                             <table class="dash-table meters-table">
                                 <thead>
@@ -150,15 +152,15 @@
                             </table>
                         </div>
                     </div>
-                </div>
+            </section>
                 
-                <!-- Dip Sticks Tab -->
-                <div id="meter-dips" class="meter-tab-content hidden">
-                    <div class="dash-card full-width-card mb-4">
-                        <div class="card-header-flex">
-                            <h3>Dip Sticks</h3>
-                            <button id="btn-save-dips" class="btn-secondary btn-sm">Save Dips</button>
-                        </div>
+            <!-- DIP STICKS -->
+            <section id="tab-dips" class="tab-pane">
+                <div class="dash-card center-card mb-4">
+                    <div class="card-header-flex">
+                        <h3>Dip Sticks</h3>
+                        <button id="btn-save-dips" class="btn-secondary btn-sm">Save Dips</button>
+                    </div>
                         <div class="table-responsive">
                             <table class="dash-table meters-table">
                                 <thead>
@@ -174,15 +176,15 @@
                             </table>
                         </div>
                     </div>
-                </div>
+            </section>
                 
-                <!-- M-Pesa Tills Tab -->
-                <div id="meter-mpesa" class="meter-tab-content hidden">
-                    <div class="dash-card full-width-card mb-4">
-                        <div class="card-header-flex">
-                            <h3>M-Pesa Tills</h3>
-                            <button id="btn-save-mpesa" class="btn-secondary btn-sm">Save Tills</button>
-                        </div>
+            <!-- M-PESA TILLS -->
+            <section id="tab-mpesa" class="tab-pane">
+                <div class="dash-card center-card mb-4">
+                    <div class="card-header-flex">
+                        <h3>M-Pesa Tills</h3>
+                        <button id="btn-save-mpesa" class="btn-secondary btn-sm">Save Tills</button>
+                    </div>
                         <div class="table-responsive">
                             <table class="dash-table meters-table">
                                 <thead>
@@ -200,7 +202,6 @@
                             </table>
                         </div>
                     </div>
-                </div>
             </section>
             
             <!-- FLEET CARDS -->
