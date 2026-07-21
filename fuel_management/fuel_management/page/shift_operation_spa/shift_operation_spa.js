@@ -530,19 +530,47 @@ function setup_actions(wrapper) {
         });
     });
 
-    // Save Meters Data (Fuel, Dips, M-Pesa)
-    $wrapper.find('#btn-save-wetstock').on('click', function() {
-        let readings = [];
-        $wrapper.find('#meters-container tr').each(function() {
-            if($(this).attr('data-name')) {
-                readings.push({
-                    name: $(this).attr('data-name'),
-                    closing_electronic_meter: $(this).find('.meter-closing-elec').val(),
-                    closing_manual_meter: $(this).find('.meter-closing-manual').val()
-                });
+    // ---------------------------------------------------
+    // Save Handlers
+    // ---------------------------------------------------
+    $wrapper.on('click', '#btn-save-wetstock', function() {
+        let btn = $(this);
+        let originalText = btn.text();
+        btn.prop('disabled', true).text('Saving...');
+        
+        let has_empty = false;
+        let rows_data = [];
+        $wrapper.find('#meters-container tr[data-name]').each(function() {
+            let row_name = $(this).attr('data-name');
+            let elec_input = $(this).find('.meter-closing-elec');
+            let man_input = $(this).find('.meter-closing-manual');
+            
+            let elec_val = elec_input.val();
+            let man_val = man_input.val();
+            
+            if (elec_val === "" || elec_val === null || man_val === "" || man_val === null) {
+                has_empty = true;
+                if (elec_val === "" || elec_val === null) elec_input.addClass('error-input');
+                if (man_val === "" || man_val === null) man_input.addClass('error-input');
             }
+            
+            rows_data.push({
+                name: row_name,
+                closing_electronic_meter: elec_val ? parseFloat(elec_val) : 0,
+                closing_manual_meter: man_val ? parseFloat(man_val) : 0
+            });
         });
-        save_child_table("pump_meter_readings", readings, "Fuel Nozzles saved!");
+        
+        if (has_empty) {
+            frappe.msgprint({
+                title: __('Validation Error'),
+                indicator: 'red',
+                message: __('Please enter all closing meter readings before saving. Fields cannot be empty.')
+            });
+            btn.prop('disabled', false).text(originalText);
+            return;
+        }
+        save_child_table("pump_meter_readings", rows_data, "Meter Readings saved!", btn, originalText);
     });
     
     $wrapper.find('#btn-save-dips').on('click', function() {
@@ -569,7 +597,7 @@ function setup_actions(wrapper) {
         save_child_table("mpesa_payments", readings, "M-Pesa Tills saved!");
     });
     
-    function save_child_table(table_name, rows_data, success_msg) {
+    function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null) {
         frappe.call({
             method: "frappe.client.get",
             args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
@@ -590,8 +618,11 @@ function setup_actions(wrapper) {
                             if(r2.message) {
                                 frappe.show_alert({message: success_msg, indicator: "green"});
                             }
+                            if(btn) btn.prop('disabled', false).text(originalText);
                         }
                     });
+                } else {
+                    if(btn) btn.prop('disabled', false).text(originalText);
                 }
             }
         });
