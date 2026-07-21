@@ -438,29 +438,32 @@
 }
 /* Meters Table Visual Enhancements */
 .meters-table {
-    border: 1px solid #cbd5e1;
+    border: 1px solid #94a3b8;
+    border-collapse: collapse;
 }
 .meters-table th {
     text-align: center;
-    background: #f8fafc;
-    border-bottom: 2px solid #cbd5e1;
-    border-right: 1px solid #e2e8f0;
+    background: var(--sidebar-bg);
+    color: white;
+    border-bottom: 2px solid var(--sidebar-hover);
+    border-right: 1px solid #336159;
     font-weight: 600;
 }
 .meters-table td {
-    border-right: 1px solid #e2e8f0;
+    border-right: 1px solid #94a3b8;
+    border-bottom: 1px solid #94a3b8;
     text-align: center;
     vertical-align: middle;
 }
 .meters-table td:first-child, .meters-table th:first-child {
     text-align: left;
 }
-/* Electronic section slight green tint */
-.meters-table .elec-col {
+/* Electronic section slight green tint (only in tbody) */
+.meters-table tbody .elec-col {
     background-color: #f0fdf4 !important;
 }
-/* Manual section slight blue tint */
-.meters-table .manual-col {
+/* Manual section slight blue tint (only in tbody) */
+.meters-table tbody .manual-col {
     background-color: #eff6ff !important;
 }
 .meters-table input.spa-input {
