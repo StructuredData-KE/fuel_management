@@ -455,14 +455,14 @@
     text-align: left;
 }
 /* Electronic section slight green tint */
-.meters-table td:nth-child(2), .meters-table td:nth-child(3),
-.meters-table th:nth-child(2), .meters-table th:nth-child(3) {
-    background-color: #f8fafc;
+.meters-table tbody tr[data-name] td:nth-child(2), .meters-table tbody tr[data-name] td:nth-child(3),
+.meters-table thead th:nth-child(2), .meters-table thead th:nth-child(3) {
+    background-color: #f0fdf4;
 }
 /* Manual section slight blue tint */
-.meters-table td:nth-child(4), .meters-table td:nth-child(5),
-.meters-table th:nth-child(4), .meters-table th:nth-child(5) {
-    background-color: #fdf8f6;
+.meters-table tbody tr[data-name] td:nth-child(4), .meters-table tbody tr[data-name] td:nth-child(5),
+.meters-table thead th:nth-child(4), .meters-table thead th:nth-child(5) {
+    background-color: #eff6ff;
 }
 .meters-table input.spa-input {
     text-align: center;

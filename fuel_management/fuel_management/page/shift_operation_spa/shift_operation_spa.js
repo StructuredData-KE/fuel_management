@@ -310,7 +310,11 @@ function setup_tabs(wrapper) {
         
         // Update topbar title
         const tabName = $(this).find('span').text();
-        $wrapper.find('#current-module-title').text(tabName);
+        let displayTitle = tabName;
+        if(window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.name) {
+            displayTitle += ` - ${window.ACTIVE_SHIFT.name}`;
+        }
+        $wrapper.find('#current-module-title').text(displayTitle);
     });
 }
 
