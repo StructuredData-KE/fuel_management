@@ -455,14 +455,12 @@
     text-align: left;
 }
 /* Electronic section slight green tint */
-.meters-table tbody tr[data-name] td:nth-child(2), .meters-table tbody tr[data-name] td:nth-child(3),
-.meters-table thead th:nth-child(2), .meters-table thead th:nth-child(3) {
-    background-color: #f0fdf4;
+.meters-table .elec-col {
+    background-color: #f0fdf4 !important;
 }
 /* Manual section slight blue tint */
-.meters-table tbody tr[data-name] td:nth-child(4), .meters-table tbody tr[data-name] td:nth-child(5),
-.meters-table thead th:nth-child(4), .meters-table thead th:nth-child(5) {
-    background-color: #eff6ff;
+.meters-table .manual-col {
+    background-color: #eff6ff !important;
 }
 .meters-table input.spa-input {
     text-align: center;

@@ -24,7 +24,7 @@ function fetch_active_shift(wrapper) {
         args: {
             doctype: "Shift",
             filters: { status: "Open", owner: frappe.session.user },
-            fields: ["name", "station", "head_csa"],
+            fields: ["name", "station", "head_csa", "shift_template"],
             limit_page_length: 1
         },
         callback: function(r) {
@@ -156,17 +156,17 @@ function render_meters($wrapper) {
                             html += `
                                 <tr data-name="${row.name}">
                                     <td style="font-weight: 600; color: var(--text-primary); padding-left: 2rem;">${row.pump_nozzle}</td>
-                                    <td>
+                                    <td class="elec-col">
                                         <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.2rem;">Open: <span class="read-only-cell" style="padding: 0.1rem 0.3rem; min-width: auto; font-size: 0.75rem;">${row.opening_electronic_meter}</span></div>
                                         <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="0.00">
                                     </td>
-                                    <td class="meter-sales-elec font-weight-bold">0.00</td>
+                                    <td class="meter-sales-elec font-weight-bold elec-col">0.00</td>
                                     
-                                    <td>
+                                    <td class="manual-col">
                                         <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.2rem;">Open: <span class="read-only-cell" style="padding: 0.1rem 0.3rem; min-width: auto; font-size: 0.75rem;">${row.opening_manual_meter}</span></div>
                                         <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-field="closing_manual_meter" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="0.00">
                                     </td>
-                                    <td class="meter-sales-manual font-weight-bold">0.00</td>
+                                    <td class="meter-sales-manual font-weight-bold manual-col">0.00</td>
                                     <td class="meter-variance font-weight-bold">0.00</td>
                                     <td class="meter-total-value font-weight-bold" style="color: var(--accent);">0.00</td>
                                 </tr>
@@ -312,7 +312,8 @@ function setup_tabs(wrapper) {
         const tabName = $(this).find('span').text();
         let displayTitle = tabName;
         if(window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.name) {
-            displayTitle += ` - ${window.ACTIVE_SHIFT.name}`;
+            let template = window.ACTIVE_SHIFT.shift_template ? ` (${window.ACTIVE_SHIFT.shift_template})` : '';
+            displayTitle += ` - ${window.ACTIVE_SHIFT.name}${template}`;
         }
         $wrapper.find('#current-module-title').text(displayTitle);
     });
