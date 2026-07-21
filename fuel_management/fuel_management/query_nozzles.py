@@ -1,12 +1,8 @@
 import frappe
-
 def execute():
-    nozzles = frappe.get_all("Pump Nozzle", fields=["name", "pump_group"])
-    print("ALL NOZZLES IN DB:")
-    for n in nozzles:
-        print(f" - {n.name} (Group: {n.pump_group})")
-        
-    pgs = frappe.get_all("Pump Group", fields=["name", "station"])
-    print("\nALL PUMP GROUPS:")
-    for p in pgs:
-        print(f" - {p.name} (Station: {p.station})")
+    shift = frappe.get_all("Shift", limit=1, order_by="creation desc")[0].name
+    doc = frappe.get_doc("Shift", shift)
+    print(f"SHIFT: {shift}")
+    print("NOZZLES IN SHIFT:")
+    for row in doc.pump_meter_readings:
+        print(f" - {row.pump_nozzle}")
