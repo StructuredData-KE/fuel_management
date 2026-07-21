@@ -206,7 +206,7 @@ function render_meters($wrapper) {
                         }
                         
                         let total_value = sales_elec * price;
-                        $row.find('.meter-total-value').text(total_value.toFixed(2));
+                        $row.find('.meter-total-value').text(total_value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
                     }
                     
                     $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('input', calc_row);
