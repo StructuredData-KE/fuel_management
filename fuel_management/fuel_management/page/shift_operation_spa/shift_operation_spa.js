@@ -107,59 +107,113 @@ function render_meters($wrapper) {
             fields: ["name", "pump_group"],
             limit_page_length: 500
         },
-        callback: function(r) {
+        callback: function(r1) {
             let nozzle_to_pg = {};
-            if(r.message) {
-                r.message.forEach(n => { nozzle_to_pg[n.name] = n.pump_group || "Ungrouped"; });
+            if(r1.message) {
+                r1.message.forEach(n => { nozzle_to_pg[n.name] = n.pump_group || "Ungrouped"; });
             }
             
-            let grouped = {};
-            (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
-                let pg = nozzle_to_pg[row.pump_nozzle] || "Ungrouped";
-                if(!grouped[pg]) grouped[pg] = [];
-                grouped[pg].push(row);
-            });
-            
-            let html = '';
-            for(const [pg, rows] of Object.entries(grouped)) {
-                html += `
-                    <tr>
-                        <td colspan="4" class="group-header">${pg}</td>
-                    </tr>
-                `;
-                rows.forEach(row => {
-                    html += `
-                        <tr data-name="${row.name}">
-                            <td style="font-weight: 600; color: var(--text-primary); padding-left: 2rem;">${row.pump_nozzle}</td>
-                            <td><span class="read-only-cell">${row.opening_electronic_meter}</span></td>
-                            <td>
-                                <input type="number" class="spa-input meter-closing highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" value="${row.closing_electronic_meter || ''}" placeholder="Enter Closing">
-                            </td>
-                            <td class="meter-sales font-weight-bold">0.00</td>
-                        </tr>
-                    `;
-                });
-            }
-            
-            $wrapper.find('#meters-container').html(html);
+            // Fetch Prices
+            frappe.call({
+                method: "fuel_management.fuel_management.doctype.shift.shift.get_nozzle_prices",
+                args: { station: window.SHIFT_DOC.station, shift_date: window.SHIFT_DOC.shift_date },
+                callback: function(r2) {
+                    let nozzle_prices = r2.message || {};
+                    
+                    let grouped = {};
+                    (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
+                        let pg = nozzle_to_pg[row.pump_nozzle] || "Ungrouped";
+                        if(!grouped[pg]) grouped[pg] = [];
+                        grouped[pg].push(row);
+                    });
+                    
+                    let html = '';
+                    for(const [pg, rows] of Object.entries(grouped)) {
+                        html += `
+                            <tr>
+                                <td colspan="9" class="group-header">${pg}</td>
+                            </tr>
+                        `;
+                        rows.forEach(row => {
+                            let price = nozzle_prices[row.pump_nozzle] || 0.0;
+                            html += `
+                                <tr data-name="${row.name}">
+                                    <td style="font-weight: 600; color: var(--text-primary); padding-left: 2rem;">${row.pump_nozzle}</td>
+                                    <td><span class="read-only-cell">${row.opening_electronic_meter}</span></td>
+                                    <td>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="0.00">
+                                    </td>
+                                    <td class="meter-sales-elec font-weight-bold">0.00</td>
+                                    
+                                    <td><span class="read-only-cell">${row.opening_manual_meter}</span></td>
+                                    <td>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-field="closing_manual_meter" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="0.00">
+                                    </td>
+                                    <td class="meter-sales-manual font-weight-bold">0.00</td>
+                                    <td class="meter-variance font-weight-bold">0.00</td>
+                                    <td class="meter-total-value font-weight-bold" style="color: var(--accent);">0.00</td>
+                                </tr>
+                            `;
+                        });
+                    }
+                    
+                    $wrapper.find('#meters-container').html(html);
 
-            // Add Live Math & Validation
-            $wrapper.find('.meter-closing').on('input', function() {
-                let closing = parseFloat($(this).val());
-                let opening = parseFloat($(this).attr('data-opening')) || 0;
-                
-                let $row = $(this).closest('tr');
-                if (!isNaN(closing) && closing > 0 && closing < opening) {
-                    $(this).addClass('error-input');
-                    $row.find('.meter-sales').text('ERR').css('color', 'var(--danger)');
-                } else {
-                    $(this).removeClass('error-input');
-                    let sales = isNaN(closing) ? 0 : (closing - opening);
-                    $row.find('.meter-sales').text(sales.toFixed(2)).css('color', 'var(--text-primary)');
+                    // Format to 2 decimal places on blur
+                    $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('blur', function() {
+                        if($(this).val()) {
+                            $(this).val(parseFloat($(this).val()).toFixed(2));
+                        }
+                    });
+
+                    // Live Math & Validation
+                    function calc_row() {
+                        let $row = $(this).closest('tr');
+                        let closing_elec = parseFloat($row.find('.meter-closing-elec').val());
+                        let opening_elec = parseFloat($row.find('.meter-closing-elec').attr('data-opening')) || 0;
+                        let price = parseFloat($row.find('.meter-closing-elec').attr('data-price')) || 0;
+                        
+                        let closing_manual = parseFloat($row.find('.meter-closing-manual').val());
+                        let opening_manual = parseFloat($row.find('.meter-closing-manual').attr('data-opening')) || 0;
+                        
+                        let sales_elec = 0;
+                        if (!isNaN(closing_elec) && closing_elec >= opening_elec) {
+                            sales_elec = closing_elec - opening_elec;
+                            $row.find('.meter-sales-elec').text(sales_elec.toFixed(2)).css('color', 'var(--text-primary)');
+                            $row.find('.meter-closing-elec').removeClass('error-input');
+                        } else if(!isNaN(closing_elec)) {
+                            $row.find('.meter-sales-elec').text('ERR').css('color', 'var(--danger)');
+                            $row.find('.meter-closing-elec').addClass('error-input');
+                        }
+                        
+                        let sales_manual = 0;
+                        if (!isNaN(closing_manual) && closing_manual >= opening_manual) {
+                            sales_manual = closing_manual - opening_manual;
+                            $row.find('.meter-sales-manual').text(sales_manual.toFixed(2)).css('color', 'var(--text-primary)');
+                            $row.find('.meter-closing-manual').removeClass('error-input');
+                        } else if(!isNaN(closing_manual)) {
+                            $row.find('.meter-sales-manual').text('ERR').css('color', 'var(--danger)');
+                            $row.find('.meter-closing-manual').addClass('error-input');
+                        }
+                        
+                        let variance = Math.abs(sales_elec - sales_manual);
+                        $row.find('.meter-variance').text(variance.toFixed(2));
+                        
+                        if (variance > 2.0 && sales_manual > 0) {
+                            $row.find('.meter-variance').addClass('variance-alert');
+                        } else {
+                            $row.find('.meter-variance').removeClass('variance-alert');
+                        }
+                        
+                        let total_value = sales_elec * price;
+                        $row.find('.meter-total-value').text(total_value.toFixed(2));
+                    }
+                    
+                    $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('input', calc_row);
+                    // Trigger initial
+                    $wrapper.find('.meter-closing-elec').each(calc_row);
                 }
             });
-            // Trigger initial calculation
-            $wrapper.find('.meter-closing').trigger('input');
         }
     });
 }
@@ -457,10 +511,13 @@ function setup_actions(wrapper) {
     $wrapper.find('#btn-save-wetstock').on('click', function() {
         let readings = [];
         $wrapper.find('#meters-container tr').each(function() {
-            readings.push({
-                name: $(this).attr('data-name'),
-                closing_electronic_meter: $(this).find('.meter-closing').val()
-            });
+            if($(this).attr('data-name')) {
+                readings.push({
+                    name: $(this).attr('data-name'),
+                    closing_electronic_meter: $(this).find('.meter-closing-elec').val(),
+                    closing_manual_meter: $(this).find('.meter-closing-manual').val()
+                });
+            }
         });
         save_child_table("pump_meter_readings", readings, "Fuel Nozzles saved!");
     });

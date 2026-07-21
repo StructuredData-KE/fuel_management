@@ -263,3 +263,52 @@ def reopen_shift(shift_name):
     shift.db_set("status", "Open")
     frappe.msgprint("Shift reopened successfully. Accounting records cancelled.")
 
+
+@frappe.whitelist()
+def get_nozzle_prices(station, shift_date):
+    """
+    Returns a dictionary mapping nozzle names to their current item prices.
+    Format: { "Nozzle Name": price, ... }
+    """
+    from frappe.utils import flt
+    nozzle_prices = {}
+    
+    # 1. Get all Pump Groups for the station
+    pump_groups = frappe.get_all("Pump Group", filters={"station": station}, pluck="name")
+    if not pump_groups:
+        return nozzle_prices
+        
+    # 2. Get all Nozzles in those groups
+    nozzles = frappe.get_all("Pump Nozzle", filters={"pump_group": ["in", pump_groups]}, fields=["name", "fuel_tank"])
+    
+    # Cache to avoid duplicate queries for same fuel_product
+    product_price_cache = {}
+    
+    for nozzle in nozzles:
+        if not nozzle.fuel_tank:
+            nozzle_prices[nozzle.name] = 0.0
+            continue
+            
+        fuel_product = frappe.db.get_value("Fuel Tank", nozzle.fuel_tank, "fuel_product")
+        if not fuel_product:
+            nozzle_prices[nozzle.name] = 0.0
+            continue
+            
+        if fuel_product in product_price_cache:
+            nozzle_prices[nozzle.name] = product_price_cache[fuel_product]
+        else:
+            price_record = frappe.get_all("Item Price", 
+                filters={
+                    "item_code": fuel_product, 
+                    "price_list": "Standard Selling", 
+                    "valid_from": ("<=", shift_date)
+                },
+                fields=["price_list_rate"],
+                order_by="valid_from desc",
+                limit=1
+            )
+            price = flt(price_record[0].price_list_rate) if price_record else 0.0
+            product_price_cache[fuel_product] = price
+            nozzle_prices[nozzle.name] = price
+            
+    return nozzle_prices

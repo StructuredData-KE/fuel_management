@@ -428,3 +428,12 @@
     border-color: var(--danger) !important;
     background: #fef2f2 !important;
 }
+
+.variance-alert {
+    color: var(--danger) !important;
+    background-color: #fef2f2;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--danger);
+}
+
