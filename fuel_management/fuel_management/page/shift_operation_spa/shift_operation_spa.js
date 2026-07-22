@@ -62,7 +62,8 @@ function lock_ui_for_active_shift($wrapper) {
     });
     
     // Update Badge
-    $wrapper.find('#active-shift-badge').addClass('active-shift').text('Active: ' + window.ACTIVE_SHIFT.name);
+    let bShiftName = window.ACTIVE_SHIFT.shift_template ? window.ACTIVE_SHIFT.shift_template : "Shift";
+    $wrapper.find('#active-shift-badge').addClass('active-shift').text(`Active: ${bShiftName} - ${window.ACTIVE_SHIFT.name}`);
     
     // Switch to Fuel tab automatically
     $wrapper.find('.nav-item[data-target="tab-fuel"]').click();

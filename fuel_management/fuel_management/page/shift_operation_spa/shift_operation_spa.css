@@ -120,22 +120,19 @@
 
 /* Topbar */
 .topbar {
-    background: #1e293b;
+    background: #dcfce7;
     padding: 1rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #0f172a;
+    border-bottom: 1px solid #bbf7d0;
     position: sticky;
     top: 0;
     z-index: 1000;
 }
 
 .topbar-left h2 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #ffffff;
+    display: none;
 }
 
 .topbar-right {
