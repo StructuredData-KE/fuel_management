@@ -245,13 +245,22 @@ class Shift(Document):
                 frappe.throw("Cannot deduct stock: Fuel Station missing Default Forecourt Warehouse.")
 
             sales_per_item = {}
+            
+            # Deduct Fuel Meter Sales
             for row in self.pump_meter_readings:
-                if row.sales_quantity_electronic and row.sales_quantity_electronic > 0:
+                if getattr(row, "sales_quantity_electronic", 0) and row.sales_quantity_electronic > 0:
                     tank_name = frappe.db.get_value("Pump Nozzle", row.pump_nozzle, "fuel_tank")
                     if tank_name:
                         item_code = frappe.db.get_value("Fuel Tank", tank_name, "fuel_product")
                         if item_code:
                             sales_per_item[item_code] = sales_per_item.get(item_code, 0) + row.sales_quantity_electronic
+
+            # Deduct Dry Stock / Inventory Sales
+            for row in (self.inventory_sales or []):
+                if getattr(row, "item", None) and getattr(row, "quantity", 0) and row.quantity > 0:
+                    # Use total_volume as the base quantity if available, else fallback to quantity
+                    qty = row.total_volume if getattr(row, "total_volume", 0) else row.quantity
+                    sales_per_item[row.item] = sales_per_item.get(row.item, 0) + qty
 
             if not sales_per_item:
                 return
@@ -274,7 +283,7 @@ class Shift(Document):
             se.submit()
 
             self.db_set("stock_entry_reference", se.name)
-            frappe.msgprint(f"Stock Entry {se.name} automatically created to deduct fuel sales.")
+            frappe.msgprint(f"Stock Entry {se.name} automatically created to deduct fuel and inventory sales.")
 
 @frappe.whitelist()
 def reopen_shift(shift_name):
