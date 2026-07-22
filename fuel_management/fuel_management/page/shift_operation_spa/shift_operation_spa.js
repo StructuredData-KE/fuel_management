@@ -428,6 +428,19 @@ function refresh_drystock_cart($wrapper) {
 
 function setup_tabs(wrapper) {
     const $wrapper = $(wrapper);
+    $wrapper.on('click', '.seg-btn', function() {
+        let $btn = $(this);
+        let view = $btn.attr('data-view');
+        let $tab = $btn.closest('.tab-pane');
+        
+        $tab.find('.seg-btn').removeClass('active');
+        $btn.addClass('active');
+        
+        $tab.find('.view-pane').removeClass('active');
+        $tab.find('.view-pane[id$="-' + view + '-view"]').addClass('active');
+    });
+    
+    const $wrapper = $(wrapper);
     $wrapper.find('.nav-item').on('click', function(e) {
         e.preventDefault();
         

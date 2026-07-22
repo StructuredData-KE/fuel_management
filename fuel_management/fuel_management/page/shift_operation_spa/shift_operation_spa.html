@@ -194,8 +194,15 @@
             
             <!-- FLEET CARDS -->
             <section id="tab-cards" class="tab-pane">
-                <div class="dashboard-cards-grid">
-                    <div class="dash-card">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="entry">Entry View</button>
+            <button class="seg-btn" data-view="history">Historical View</button>
+        </div>
+    </div>
+    
+    <div class="view-pane active" id="cards-entry-view">
+        <div class="dash-card center-card" style="max-width: 600px;">
                         <h3>Log Fleet Card Drop</h3>
                         <div class="form-group">
                             <label>Fleet Card</label>
@@ -207,8 +214,11 @@
                         </div>
                         <button class="btn-primary mt-2" id="btn-add-fleet">Add Card Drop</button>
                     </div>
-                    <div class="dash-card span-2">
-                        <h3>Fleet Card History</h3>
+    </div>
+    
+    <div class="view-pane" id="cards-history-view">
+        <div class="dash-card full-width-card">
+            <h3>Fleet Card History</h3>
                         <div class="table-responsive">
                             <table class="dash-table">
                                 <thead>
@@ -221,14 +231,21 @@
                                 <tbody id="list-fleet"></tbody>
                             </table>
                         </div>
-                    </div>
-                </div>
-            </section>
+        </div>
+    </div>
+</section>
 
             <!-- INVOICES -->
             <section id="tab-invoices" class="tab-pane">
-                <div class="dashboard-cards-grid">
-                    <div class="dash-card">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="entry">Entry View</button>
+            <button class="seg-btn" data-view="history">Historical View</button>
+        </div>
+    </div>
+    
+    <div class="view-pane active" id="invoices-entry-view">
+        <div class="dash-card center-card" style="max-width: 600px;">
                         <h3>Log Credit Sale</h3>
                         <div class="form-group">
                             <label>Customer</label>
@@ -240,8 +257,11 @@
                         </div>
                         <button class="btn-primary mt-2" id="btn-add-invoice">Add Invoice</button>
                     </div>
-                    <div class="dash-card span-2">
-                        <h3>Invoice History</h3>
+    </div>
+    
+    <div class="view-pane" id="invoices-history-view">
+        <div class="dash-card full-width-card">
+            <h3>Invoice History</h3>
                         <div class="table-responsive">
                             <table class="dash-table">
                                 <thead>
@@ -254,14 +274,21 @@
                                 <tbody id="list-invoice"></tbody>
                             </table>
                         </div>
-                    </div>
-                </div>
-            </section>
+        </div>
+    </div>
+</section>
             
             <!-- DRY STOCK -->
             <section id="tab-drystock" class="tab-pane">
-                <div class="dashboard-cards-grid">
-                    <div class="dash-card">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="entry">Entry View</button>
+            <button class="seg-btn" data-view="history">Historical View</button>
+        </div>
+    </div>
+    
+    <div class="view-pane active" id="drystock-entry-view">
+        <div class="dash-card center-card" style="max-width: 600px;">
                         <h3>Log Inventory Sale</h3>
                         <div style="margin-bottom:1rem; font-size:0.9rem; color:var(--text-secondary);">
                             <span>Shift: <strong id="drystock-shift-name"></strong></span>
@@ -301,9 +328,11 @@
                         </div>
                         <button class="btn-primary mt-2" id="btn-add-drystock">Add to Cart</button>
                     </div>
-                    
-                    <div class="dash-card span-2">
-                        <h3>Inventory Cart / History</h3>
+    </div>
+    
+    <div class="view-pane" id="drystock-history-view">
+        <div class="dash-card full-width-card">
+            <h3>Inventory Cart / History</h3>
                         <div class="table-responsive">
                             <table class="dash-table">
                                 <thead>
@@ -322,14 +351,21 @@
                             </table>
                         </div>
                         <button class="btn-primary" id="btn-save-drystock" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Save Inventory Sales</button>
-                    </div>
-                </div>
-            </section>
+        </div>
+    </div>
+</section>
 
             <!-- EXPENSES -->
             <section id="tab-expenses" class="tab-pane">
-                <div class="dashboard-cards-grid">
-                    <div class="dash-card">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="entry">Entry View</button>
+            <button class="seg-btn" data-view="history">Historical View</button>
+        </div>
+    </div>
+    
+    <div class="view-pane active" id="expenses-entry-view">
+        <div class="dash-card center-card" style="max-width: 600px;">
                         <h3>Log Expense</h3>
                         <div class="form-group">
                             <label>Reason / Description</label>
@@ -341,8 +377,11 @@
                         </div>
                         <button class="btn-primary mt-2" id="btn-add-expense">Add Expense</button>
                     </div>
-                    <div class="dash-card span-2">
-                        <h3>Expense History</h3>
+    </div>
+    
+    <div class="view-pane" id="expenses-history-view">
+        <div class="dash-card full-width-card">
+            <h3>Expense History</h3>
                         <div class="table-responsive">
                             <table class="dash-table">
                                 <thead>
@@ -355,9 +394,9 @@
                                 <tbody id="list-expense"></tbody>
                             </table>
                         </div>
-                    </div>
-                </div>
-            </section>
+        </div>
+    </div>
+</section>
 
             <!-- RECONCILE -->
             <section id="tab-reconcile" class="tab-pane">
