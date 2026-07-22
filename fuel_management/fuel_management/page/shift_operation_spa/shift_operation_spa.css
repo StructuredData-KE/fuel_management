@@ -391,11 +391,11 @@
 
 /* Read-Only inputs */
 .read-only-cell {
-    background-color: #f1f5f9;
-    color: #64748b;
-    font-weight: 500;
+    background-color: #e2e8f0;
+    color: #1e293b;
+    font-weight: 600;
     text-align: center;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 4px;
     padding: 0.4rem 0.75rem;
     display: inline-block;
@@ -516,8 +516,9 @@
     letter-spacing: 0.05em;
 }
 .reading-label {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    font-weight: 500;
     margin-bottom: 0.4rem;
 }
 .sales-value {
