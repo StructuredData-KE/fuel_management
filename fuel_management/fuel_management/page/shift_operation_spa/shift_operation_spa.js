@@ -309,15 +309,32 @@ function render_mpesa($wrapper) {
 
 
 function render_drystock($wrapper) {
+    if (!window.ACTIVE_SHIFT) return;
     $wrapper.find('#drystock-shift-name').text(window.ACTIVE_SHIFT.name);
     $wrapper.find('#drystock-shift-date').text(window.ACTIVE_SHIFT.shift_date);
+
+    // Calculate Liability CSA
+    let lubes_assignment = (window.ACTIVE_SHIFT.csa_assignments || []).find(a => a.pump_group.toLowerCase().includes('lube'));
+    if (lubes_assignment) {
+        let u = window.USERS_LIST.find(u => u.name === lubes_assignment.csa);
+        let name = u ? u.full_name : lubes_assignment.csa;
+        $wrapper.find('#drystock-liability-csa').text(name + " (Assigned)");
+    } else {
+        $wrapper.find('#drystock-liability-csa').text("Select Sold By (Fallback)");
+    }
 
     // Populate CSA dropdown
     let csaOptions = '<option value="">Select CSA...</option>';
     if (window.USERS_LIST) {
         window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
     }
-    $wrapper.find('#drystock-csa').html(csaOptions);
+    $wrapper.find('#drystock-csa').html(csaOptions).off('change').on('change', function() {
+        if (!lubes_assignment) {
+            let u = window.USERS_LIST.find(u => u.name === $(this).val());
+            let name = u ? u.full_name : "Whoever sells it";
+            $wrapper.find('#drystock-liability-csa').text(name + " (Fallback)");
+        }
+    });
 
     // Event listeners for calculating
     function calc_drystock() {
@@ -329,24 +346,44 @@ function render_drystock($wrapper) {
         $wrapper.find('#drystock-total').val((qty * price).toFixed(2));
     }
 
-    $wrapper.find('#drystock-item').on('change', function() {
-        let price = $(this).find('option:selected').attr('data-price') || 0;
-        $wrapper.find('#drystock-price').val(parseFloat(price).toFixed(2));
+    $wrapper.find('#drystock-item-input').off('change').on('change', function() {
+        let val = $(this).val();
+        let item = window.DRYSTOCK_ITEMS.find(i => `${i.item_name} - ${i.item_code}` === val);
+        if(item) {
+            $wrapper.find('#drystock-price').val(parseFloat(item.price_list_rate).toFixed(2));
+            
+            // Regex to extract multiplier (e.g. 1L, 4L, 500ML, 0.5KG)
+            let mult = 1;
+            let m = item.item_name.match(/(\d+(?:\.\d+)?)\s*(L|ML|KG|G|LITRE|LTR)s?\b/i);
+            if(m) {
+                mult = parseFloat(m[1]);
+                let unit = m[2].toUpperCase();
+                if (unit === 'ML' || unit === 'G') {
+                    mult = mult / 1000.0;
+                }
+            }
+            $wrapper.find('#drystock-uom').val(mult);
+        } else {
+            $wrapper.find('#drystock-price').val('0.00');
+            $wrapper.find('#drystock-uom').val('0');
+        }
         calc_drystock();
     });
 
-    $wrapper.find('#drystock-qty, #drystock-uom').on('input', calc_drystock);
+    $wrapper.find('#drystock-qty, #drystock-uom').off('input').on('input', calc_drystock);
 
     // Add to Cart
     $wrapper.find('#btn-add-drystock').off('click').on('click', function() {
         let csa = $wrapper.find('#drystock-csa').val();
-        let item = $wrapper.find('#drystock-item').val();
+        let item_val = $wrapper.find('#drystock-item-input').val();
+        let item = window.DRYSTOCK_ITEMS.find(i => `${i.item_name} - ${i.item_code}` === item_val);
+        
         let qty = parseFloat($wrapper.find('#drystock-qty').val()) || 0;
         let uom = parseFloat($wrapper.find('#drystock-uom').val()) || 0;
         let price = parseFloat($wrapper.find('#drystock-price').val()) || 0;
         
         if (!csa || !item || qty <= 0) {
-            frappe.show_alert({message: "Please select CSA, Item, and enter a valid quantity.", indicator: "red"});
+            frappe.show_alert({message: "Please select CSA, search for a valid Item, and enter quantity.", indicator: "red"});
             return;
         }
 
@@ -355,11 +392,10 @@ function render_drystock($wrapper) {
 
         if (!window.SHIFT_DOC.inventory_sales) window.SHIFT_DOC.inventory_sales = [];
         
-        // Push a new row
         let new_row = {
             doctype: "Shift Inventory Sale",
             sold_by: csa,
-            item: item,
+            item: item.item_code,
             quantity: qty,
             uom_multiplier: uom,
             total_volume: volume,
@@ -370,8 +406,12 @@ function render_drystock($wrapper) {
         window.SHIFT_DOC.inventory_sales.push(new_row);
         
         // Reset form
+        $wrapper.find('#drystock-item-input').val('');
         $wrapper.find('#drystock-qty').val('');
         $wrapper.find('#drystock-uom').val('');
+        $wrapper.find('#drystock-price').val('0.00');
+        $wrapper.find('#drystock-volume').val('0.00');
+        $wrapper.find('#drystock-total').val('0.00');
         calc_drystock();
         
         refresh_drystock_cart($wrapper);
@@ -477,11 +517,12 @@ function load_dropdowns(wrapper) {
         callback: function(r) {
             if(r.message) {
                 window.DRYSTOCK_ITEMS = r.message;
-                let options = '<option value="">Select Item...</option>';
+                let options = '';
                 r.message.forEach(item => {
-                    options += `<option value="${item.item_code}" data-price="${item.price_list_rate}">${item.item_name} - ${item.item_code}</option>`;
+                    // Populate datalist with name - code so it's readable but parseable
+                    options += `<option value="${item.item_name} - ${item.item_code}"></option>`;
                 });
-                $(wrapper).find('#drystock-item').html(options);
+                $(wrapper).find('#drystock-items-list').html(options);
             }
         }
     });

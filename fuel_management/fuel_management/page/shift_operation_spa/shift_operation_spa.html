@@ -202,7 +202,7 @@
     </div>
     
     <div class="view-pane active" id="cards-entry-view">
-        <div class="dash-card center-card" style="max-width: 600px;">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
                         <h3>Log Fleet Card Drop</h3>
                         <div class="form-group">
                             <label>Fleet Card</label>
@@ -245,7 +245,7 @@
     </div>
     
     <div class="view-pane active" id="invoices-entry-view">
-        <div class="dash-card center-card" style="max-width: 600px;">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
                         <h3>Log Credit Sale</h3>
                         <div class="form-group">
                             <label>Customer</label>
@@ -288,45 +288,63 @@
     </div>
     
     <div class="view-pane active" id="drystock-entry-view">
-        <div class="dash-card center-card" style="max-width: 600px;">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
                         <h3>Log Inventory Sale</h3>
-                        <div style="margin-bottom:1rem; font-size:0.9rem; color:var(--text-secondary);">
-                            <span>Shift: <strong id="drystock-shift-name"></strong></span>
-                            <span style="margin-left:1rem;">Date: <strong id="drystock-shift-date"></strong></span>
+                        
+                        <div class="shift-context-box">
+                            <div class="context-detail">
+                                <span class="label">Shift:</span> <strong id="drystock-shift-name"></strong>
+                            </div>
+                            <div class="context-detail">
+                                <span class="label">Date:</span> <strong id="drystock-shift-date"></strong>
+                            </div>
+                            <div class="context-detail liability-box">
+                                <span class="label">Cash Liability:</span> <strong id="drystock-liability-csa">Calculating...</strong>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Sold By (CSA)</label>
+
+                        <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
+                            <label>Performance Tracking (Sold By)</label>
                             <select id="drystock-csa" class="spa-input"></select>
+                            <small style="color: #64748b;">Select the CSA who pitched this item for performance tracking.</small>
                         </div>
-                        <div class="form-group">
-                            <label>Item</label>
-                            <select id="drystock-item" class="spa-input"></select>
-                        </div>
-                        <div style="display:flex; gap:1rem;">
-                            <div class="form-group" style="flex:1;">
-                                <label>Quantity</label>
+
+                        <div class="pos-inline-row">
+                            <div class="form-group pos-item-search">
+                                <label>Search Item</label>
+                                <input list="drystock-items-list" id="drystock-item-input" class="spa-input" placeholder="Start typing item name...">
+                                <datalist id="drystock-items-list"></datalist>
+                            </div>
+                            
+                            <div class="form-group pos-small">
+                                <label>Qty</label>
                                 <input type="number" id="drystock-qty" class="spa-input" placeholder="0">
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label>UOM Multiplier</label>
-                                <input type="number" id="drystock-uom" class="spa-input" placeholder="e.g. 0.5" step="0.01">
+                            
+                            <div class="form-group pos-small">
+                                <label>UOM</label>
+                                <input type="number" id="drystock-uom" class="spa-input" placeholder="0" step="0.01" readonly>
                             </div>
-                        </div>
-                        <div style="display:flex; gap:1rem;">
-                            <div class="form-group" style="flex:1;">
-                                <label>Total Volume</label>
-                                <input type="text" id="drystock-volume" class="spa-input" placeholder="0.0" readonly>
+                            
+                            <div class="form-group pos-small">
+                                <label>Vol.</label>
+                                <input type="text" id="drystock-volume" class="spa-input" placeholder="0" readonly>
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label>Price (Read-only)</label>
+                            
+                            <div class="form-group pos-med">
+                                <label>Price</label>
                                 <input type="text" id="drystock-price" class="spa-input" placeholder="0.00" readonly>
                             </div>
+                            
+                            <div class="form-group pos-med">
+                                <label>Total</label>
+                                <input type="text" id="drystock-total" class="spa-input" placeholder="0.00" readonly>
+                            </div>
+                            
+                            <div class="form-group pos-btn">
+                                <button class="btn-primary" id="btn-add-drystock" style="height: 42px; margin-top: 24px;">+ Add</button>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>Total Amount</label>
-                            <input type="text" id="drystock-total" class="spa-input" placeholder="0.00" readonly>
-                        </div>
-                        <button class="btn-primary mt-2" id="btn-add-drystock">Add to Cart</button>
                     </div>
     </div>
     
@@ -365,7 +383,7 @@
     </div>
     
     <div class="view-pane active" id="expenses-entry-view">
-        <div class="dash-card center-card" style="max-width: 600px;">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
                         <h3>Log Expense</h3>
                         <div class="form-group">
                             <label>Reason / Description</label>

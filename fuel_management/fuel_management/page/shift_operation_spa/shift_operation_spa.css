@@ -594,3 +594,64 @@
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* POS Inline Row Styles */
+.shift-context-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+}
+.context-detail {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.context-detail .label {
+    color: #64748b;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+.liability-box {
+    background: #eef2ff;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #c7d2fe;
+}
+.liability-box .label {
+    color: #4f46e5;
+}
+
+.pos-inline-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-start;
+    background: #ffffff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+.pos-inline-row .form-group {
+    margin-bottom: 0;
+}
+.pos-item-search { flex: 3; min-width: 250px; }
+.pos-small { flex: 1; min-width: 60px; }
+.pos-med { flex: 1.5; min-width: 90px; }
+.pos-btn { flex: 0.5; min-width: 80px; }
+
+@media (max-width: 768px) {
+    .pos-inline-row {
+        flex-direction: column;
+    }
+    .pos-inline-row > div {
+        width: 100%;
+        flex: none;
+    }
+}
