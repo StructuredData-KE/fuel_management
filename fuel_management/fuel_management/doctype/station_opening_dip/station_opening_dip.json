@@ -1,0 +1,32 @@
+{
+    "creation": "2026-07-22 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "fields": [
+        {
+            "fieldname": "fuel_tank",
+            "fieldtype": "Link",
+            "label": "Fuel Tank",
+            "options": "Fuel Tank",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "opening_dip",
+            "fieldtype": "Float",
+            "label": "Opening Dip",
+            "in_list_view": 1
+        }
+    ],
+    "istable": 1,
+    "module": "Fuel Management",
+    "name": "Station Opening Dip",
+    "naming_rule": "Random",
+    "autoname": "hash",
+    "owner": "Administrator",
+    "permissions": [],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1,
+    "custom": 0
+}

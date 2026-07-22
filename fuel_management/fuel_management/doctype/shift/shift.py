@@ -154,8 +154,24 @@ class Shift(Document):
         if not self.dip_stick_readings and self.station:
             tanks = frappe.get_all("Fuel Tank", filters={"station": self.station}, fields=["name"])
             for tank in tanks:
+                opening_dip = 0.0
+                found = False
+                if last_shift_doc:
+                    for row in (last_shift_doc.dip_stick_readings or []):
+                        if getattr(row, "fuel_tank", None) == tank.name:
+                            opening_dip = row.closing_dip or 0.0
+                            found = True
+                            break
+                            
+                if not found and station_opening:
+                    for row in (station_opening.get("dip_balances") or []):
+                        if getattr(row, "fuel_tank", None) == tank.name:
+                            opening_dip = row.opening_dip or 0.0
+                            break
+                            
                 self.append("dip_stick_readings", {
-                    "fuel_tank": tank.name
+                    "fuel_tank": tank.name,
+                    "opening_dip": opening_dip
                 })
 
         if not self.mpesa_payments and self.station:

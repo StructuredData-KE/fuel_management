@@ -1,109 +1,120 @@
 {
- "actions": [],
- "allow_rename": 1,
- "autoname": "format:SOB-{station}-{YYYY}-{MM}-{DD}",
- "creation": "2026-07-17 09:50:14.818636",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "station",
-  "date",
-  "sb_meters",
-  "nozzle_balances",
-  "sb_mpesa",
-  "mpesa_balances",
-  "amended_from"
- ],
- "fields": [
-  {
-   "fieldname": "station",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Station",
-   "options": "Fuel Station",
-   "reqd": 1
-  },
-  {
-   "default": "Today",
-   "fieldname": "date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Date",
-   "reqd": 1
-  },
-  {
-   "fieldname": "sb_meters",
-   "fieldtype": "Section Break",
-   "label": "Pump Meters"
-  },
-  {
-   "fieldname": "nozzle_balances",
-   "fieldtype": "Table",
-   "label": "Nozzle Balances",
-   "options": "Station Opening Nozzle"
-  },
-  {
-   "fieldname": "sb_mpesa",
-   "fieldtype": "Section Break",
-   "label": "M-Pesa Tills"
-  },
-  {
-   "fieldname": "mpesa_balances",
-   "fieldtype": "Table",
-   "label": "M-Pesa Balances",
-   "options": "Station Opening M-Pesa"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Station Opening Balance",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
-  }
- ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
- "is_submittable": 1,
- "links": [],
- "modified": "2026-07-17 09:50:14.818636",
- "modified_by": "Administrator",
- "module": "Fuel Management",
- "name": "Station Opening Balance",
- "naming_rule": "Expression (old style)",
- "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Fleet Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "rows_threshold_for_grid_search": 20,
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "format:SOB-{station}-{YYYY}-{MM}-{DD}",
+    "creation": "2026-07-17 09:50:14.818636",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "station",
+        "date",
+        "sb_meters",
+        "nozzle_balances",
+        "sb_mpesa",
+        "mpesa_balances",
+        "amended_from"
+    ],
+    "fields": [
+        {
+            "fieldname": "station",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Station",
+            "options": "Fuel Station",
+            "reqd": 1
+        },
+        {
+            "default": "Today",
+            "fieldname": "date",
+            "fieldtype": "Date",
+            "in_list_view": 1,
+            "label": "Date",
+            "reqd": 1
+        },
+        {
+            "fieldname": "sb_meters",
+            "fieldtype": "Section Break",
+            "label": "Pump Meters"
+        },
+        {
+            "fieldname": "nozzle_balances",
+            "fieldtype": "Table",
+            "label": "Nozzle Balances",
+            "options": "Station Opening Nozzle"
+        },
+        {
+            "fieldname": "sb_mpesa",
+            "fieldtype": "Section Break",
+            "label": "M-Pesa Tills"
+        },
+        {
+            "fieldname": "mpesa_balances",
+            "fieldtype": "Table",
+            "label": "M-Pesa Balances",
+            "options": "Station Opening M-Pesa"
+        },
+        {
+            "fieldname": "amended_from",
+            "fieldtype": "Link",
+            "label": "Amended From",
+            "no_copy": 1,
+            "options": "Station Opening Balance",
+            "print_hide": 1,
+            "read_only": 1,
+            "search_index": 1
+        },
+        {
+            "fieldname": "section_break_dip",
+            "fieldtype": "Section Break",
+            "label": "Tank Dips"
+        },
+        {
+            "fieldname": "dip_balances",
+            "fieldtype": "Table",
+            "label": "Opening Dip Balances",
+            "options": "Station Opening Dip"
+        }
+    ],
+    "grid_page_length": 50,
+    "index_web_pages_for_search": 1,
+    "is_submittable": 1,
+    "links": [],
+    "modified": "2026-07-17 09:50:14.818636",
+    "modified_by": "Administrator",
+    "module": "Fuel Management",
+    "name": "Station Opening Balance",
+    "naming_rule": "Expression (old style)",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Fleet Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "row_format": "Dynamic",
+    "rows_threshold_for_grid_search": 20,
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": []
 }
