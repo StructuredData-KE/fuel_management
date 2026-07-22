@@ -2,7 +2,7 @@
     {
         "item_name": "EDGE 5W/40. 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 1260.0,
         "purchase_price": 811.0,
         "reorder_level": 5.0,
@@ -11,7 +11,7 @@
     {
         "item_name": "EDGE 5W/40. 4L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 5000.0,
         "purchase_price": 3812.0,
         "reorder_level": 5.0,
@@ -20,7 +20,7 @@
     {
         "item_name": "EDGE 5W/30. 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 1650.0,
         "purchase_price": 1141.0,
         "reorder_level": 5.0,
@@ -29,7 +29,7 @@
     {
         "item_name": "EDGE 5W/30. 4L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 6610.0,
         "purchase_price": 4324.0,
         "reorder_level": 5.0,
@@ -38,7 +38,7 @@
     {
         "item_name": "MAGNATEC 10W40 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 950.0,
         "purchase_price": 724.7,
         "reorder_level": 5.0,
@@ -47,7 +47,7 @@
     {
         "item_name": "MAGNATEC 10W40 4L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 3390.0,
         "purchase_price": 2575.34,
         "reorder_level": 5.0,
@@ -56,7 +56,7 @@
     {
         "item_name": "GTX 20W50 0.5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 330.0,
         "purchase_price": 236.5,
         "reorder_level": 5.0,
@@ -65,7 +65,7 @@
     {
         "item_name": "GTX 20W50 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 620.0,
         "purchase_price": 427.2,
         "reorder_level": 5.0,
@@ -74,7 +74,7 @@
     {
         "item_name": "GTX 20W50 4L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2460.0,
         "purchase_price": 1640.0,
         "reorder_level": 5.0,
@@ -83,7 +83,7 @@
     {
         "item_name": "MOTOR OIL SAE40 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 510.0,
         "purchase_price": 374.0,
         "reorder_level": 5.0,
@@ -92,7 +92,7 @@
     {
         "item_name": "MOTOR OIL SAE40 4L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 1820.0,
         "purchase_price": 1374.52,
         "reorder_level": 5.0,
@@ -101,7 +101,7 @@
     {
         "item_name": "TURBO 15W40 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 690.0,
         "purchase_price": 482.0,
         "reorder_level": 5.0,
@@ -110,7 +110,7 @@
     {
         "item_name": "TURBO 15W40 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 3370.0,
         "purchase_price": 2364.99,
         "reorder_level": 5.0,
@@ -119,7 +119,7 @@
     {
         "item_name": "TURBO 15W40 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 12300.0,
         "purchase_price": 8559.91,
         "reorder_level": 5.0,
@@ -128,7 +128,7 @@
     {
         "item_name": "MULTI 15W40 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 590.0,
         "purchase_price": 414.23,
         "reorder_level": 5.0,
@@ -137,7 +137,7 @@
     {
         "item_name": "MULTI 15W40 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2700.0,
         "purchase_price": 1904.98,
         "reorder_level": 5.0,
@@ -146,7 +146,7 @@
     {
         "item_name": "MULTI 15W40 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 10840.0,
         "purchase_price": 7408.91,
         "reorder_level": 5.0,
@@ -155,7 +155,7 @@
     {
         "item_name": "MONO SAE40 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 490.0,
         "purchase_price": 367.98,
         "reorder_level": 5.0,
@@ -164,7 +164,7 @@
     {
         "item_name": "MONO SAE40 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2250.0,
         "purchase_price": 1714.4,
         "reorder_level": 5.0,
@@ -173,7 +173,7 @@
     {
         "item_name": "MONO SAE40 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 9130.0,
         "purchase_price": 6760.0,
         "reorder_level": 1.0,
@@ -182,7 +182,7 @@
     {
         "item_name": "HYSPIN AWS 32 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2370.0,
         "purchase_price": 1676.54,
         "reorder_level": 5.0,
@@ -191,7 +191,7 @@
     {
         "item_name": "HYSPIN AWS 32 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 8450.0,
         "purchase_price": 5964.73,
         "reorder_level": 5.0,
@@ -200,7 +200,7 @@
     {
         "item_name": "HYSPIN AWS 68 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2630.0,
         "purchase_price": 1816.68,
         "reorder_level": 5.0,
@@ -209,7 +209,7 @@
     {
         "item_name": "HYSPIN AWS 68 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 8580.0,
         "purchase_price": 6118.35,
         "reorder_level": 5.0,
@@ -218,7 +218,7 @@
     {
         "item_name": "TRANSMAX MANUAL 85W-140 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 610.0,
         "purchase_price": 415.0,
         "reorder_level": 5.0,
@@ -227,7 +227,7 @@
     {
         "item_name": "TRANSMAX MANUAL 85W-140 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 3030.0,
         "purchase_price": 2048.4,
         "reorder_level": 5.0,
@@ -236,7 +236,7 @@
     {
         "item_name": "TRANSMAX MANUAL 85W-140 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 11340.0,
         "purchase_price": 7711.31,
         "reorder_level": 5.0,
@@ -245,7 +245,7 @@
     {
         "item_name": "TRANSMAX MANUAL 80W-90 0.5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 360.0,
         "purchase_price": 251.4,
         "reorder_level": 5.0,
@@ -254,7 +254,7 @@
     {
         "item_name": "TRANSMAX MANUAL 80W-90 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2840.0,
         "purchase_price": 1904.98,
         "reorder_level": 5.0,
@@ -263,7 +263,7 @@
     {
         "item_name": "TRANSMAX MANUAL 80W-90 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 11960.0,
         "purchase_price": 8059.95,
         "reorder_level": 2.0,
@@ -272,7 +272,7 @@
     {
         "item_name": "2T 0.5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 270.0,
         "purchase_price": 192.64,
         "reorder_level": 5.0,
@@ -281,7 +281,7 @@
     {
         "item_name": "2T 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2450.0,
         "purchase_price": 1694.98,
         "reorder_level": 2.0,
@@ -290,7 +290,7 @@
     {
         "item_name": "4T 20W50 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 500.0,
         "purchase_price": 379.05,
         "reorder_level": 5.0,
@@ -299,7 +299,7 @@
     {
         "item_name": "4T SAE 40 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 460.0,
         "purchase_price": 343.15,
         "reorder_level": 5.0,
@@ -308,7 +308,7 @@
     {
         "item_name": "EP140 KLUBE 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 540.0,
         "purchase_price": 0.0,
         "reorder_level": 5.0,
@@ -317,7 +317,7 @@
     {
         "item_name": "ATF 0.5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 400.0,
         "purchase_price": 233.29,
         "reorder_level": 5.0,
@@ -326,7 +326,7 @@
     {
         "item_name": "ATF 4L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2420.0,
         "purchase_price": 1776.25,
         "reorder_level": 5.0,
@@ -335,7 +335,7 @@
     {
         "item_name": "BRAKE FLUID 0.25L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 250.0,
         "purchase_price": 190.13,
         "reorder_level": 5.0,
@@ -344,7 +344,7 @@
     {
         "item_name": "BRAKE FLUID 0.5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 500.0,
         "purchase_price": 374.63,
         "reorder_level": 5.0,
@@ -353,7 +353,7 @@
     {
         "item_name": "BATTERY WATER 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 170.0,
         "purchase_price": 112.48,
         "reorder_level": 5.0,
@@ -362,7 +362,7 @@
     {
         "item_name": "BATTERY ACID 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 210.0,
         "purchase_price": 153.15,
         "reorder_level": 5.0,
@@ -371,7 +371,7 @@
     {
         "item_name": "WASHER FLUID 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 200.0,
         "purchase_price": 154.35,
         "reorder_level": 5.0,
@@ -380,7 +380,7 @@
     {
         "item_name": "RUBIS COOLANT 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 500.0,
         "purchase_price": 377.57,
         "reorder_level": 5.0,
@@ -389,7 +389,7 @@
     {
         "item_name": "RUBIS COOLANT 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2500.0,
         "purchase_price": 1755.0,
         "reorder_level": 5.0,
@@ -398,7 +398,7 @@
     {
         "item_name": "RUBIS ANTIFREEZE COOLANT 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 500.0,
         "purchase_price": 377.57,
         "reorder_level": 5.0,
@@ -407,7 +407,7 @@
     {
         "item_name": "RUBIS ANTIFREEZE COOLANT 5L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 2500.0,
         "purchase_price": 1755.0,
         "reorder_level": 2.0,
@@ -416,7 +416,7 @@
     {
         "item_name": "CVT FLUID 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 1510.0,
         "purchase_price": 1138.0,
         "reorder_level": 5.0,
@@ -425,7 +425,7 @@
     {
         "item_name": "CVT FLUID 4L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 5970.0,
         "purchase_price": 4171.99,
         "reorder_level": 2.0,
@@ -632,7 +632,7 @@
     {
         "item_name": "ATF 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 11000.0,
         "purchase_price": 8320.0,
         "reorder_level": 5.0,
@@ -641,7 +641,7 @@
     {
         "item_name": "HYSPIN AWS 46 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 9240.0,
         "purchase_price": 6516.49,
         "reorder_level": 5.0,
@@ -686,7 +686,7 @@
     {
         "item_name": "RUBIS ANTIFREEZE COOLANT 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 9500.0,
         "purchase_price": 6790.0,
         "reorder_level": 5.0,
@@ -695,7 +695,7 @@
     {
         "item_name": "HYSPIN AWS 46 210L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 91480.0,
         "purchase_price": 60060.37,
         "reorder_level": 5.0,
@@ -704,7 +704,7 @@
     {
         "item_name": "RUBIS COOLANT 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 9500.0,
         "purchase_price": 6790.0,
         "reorder_level": 5.0,
@@ -713,7 +713,7 @@
     {
         "item_name": "POWER1 4T 1L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 500.0,
         "purchase_price": 373.0,
         "reorder_level": 5.0,
@@ -722,7 +722,7 @@
     {
         "item_name": "GTX 20W50 20L",
         "item_group": "LUBES",
-        "stock_uom": "Liter",
+        "stock_uom": "Litre",
         "selling_price": 11100.0,
         "purchase_price": 8453.0,
         "reorder_level": 5.0,
