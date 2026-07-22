@@ -311,7 +311,8 @@ function render_mpesa($wrapper) {
 function render_drystock($wrapper) {
     if (!window.ACTIVE_SHIFT) return;
     let sDate = window.ACTIVE_SHIFT.shift_date || window.ACTIVE_SHIFT.creation || frappe.datetime.now_date();
-    $wrapper.find('#drystock-shift-name').text(window.ACTIVE_SHIFT.name);
+    let shiftName = window.ACTIVE_SHIFT.shift_template ? `${window.ACTIVE_SHIFT.shift_template}` : window.ACTIVE_SHIFT.name;
+    $wrapper.find('#drystock-shift-name').text(shiftName);
     $wrapper.find('#drystock-shift-date').text(sDate.split(" ")[0]);
 
     // Calculate Liability CSA
@@ -340,6 +341,7 @@ function render_drystock($wrapper) {
     // Event listeners for calculating
     function calc_drystock() {
         let qty = parseFloat($wrapper.find('#drystock-qty').val()) || 0;
+        if(qty < 0) { qty = 0; $wrapper.find('#drystock-qty').val(0); }
         let uom = parseFloat($wrapper.find('#drystock-uom').val()) || 0;
         let price = parseFloat($wrapper.find('#drystock-price').val()) || 0;
         
@@ -380,6 +382,7 @@ function render_drystock($wrapper) {
         let item = window.DRYSTOCK_ITEMS.find(i => `${i.item_name} - ${i.item_code}` === item_val);
         
         let qty = parseFloat($wrapper.find('#drystock-qty').val()) || 0;
+        if(qty < 0) { qty = 0; $wrapper.find('#drystock-qty').val(0); }
         let uom = parseFloat($wrapper.find('#drystock-uom').val()) || 0;
         let price = parseFloat($wrapper.find('#drystock-price').val()) || 0;
         
@@ -467,6 +470,69 @@ function refresh_drystock_cart($wrapper) {
     });
     
     $wrapper.find('#list-drystock').html(html);
+    
+    // Also render saved items
+    let html_saved = '';
+    (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
+        let csa_name = row.sold_by;
+        if (window.USERS_LIST) {
+            let u = window.USERS_LIST.find(u => u.name === row.sold_by);
+            if(u) csa_name = u.full_name;
+        }
+        let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Saved";
+        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
+        let del_btn = is_locked ? `<button class="btn btn-xs btn-danger" disabled>X</button>` : `<button class="btn btn-xs btn-danger btn-remove-saved" data-idx="${idx}">X</button>`;
+        
+        html_saved += `
+            <tr>
+                <td style="font-family: monospace; color: #64748b;">${entry_id}</td>
+                <td style="color: #64748b;">${time_val}</td>
+                <td>${csa_name || ''}</td>
+                <td>${row.item}</td>
+                <td>${row.quantity}</td>
+                <td>${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td>${del_btn}</td>
+            </tr>
+        `;
+    });
+    $wrapper.find('#list-drystock-saved').html(html_saved);
+    
+    $wrapper.find('.btn-remove-saved').off('click').on('click', function() {
+        if (is_locked) return;
+        let idx = parseInt($(this).attr('data-idx'));
+        window.SHIFT_DOC.inventory_sales.splice(idx, 1);
+        
+        // Auto-save the deletion immediately so the backend is in sync
+        frappe.call({
+            method: "frappe.client.get",
+            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+            callback: function(r) {
+                if(r.message) {
+                    let doc = r.message;
+                    doc.inventory_sales = window.SHIFT_DOC.inventory_sales.map(r => {
+                        return {
+                            name: r._is_new ? undefined : r.name,
+                            sold_by: r.sold_by,
+                            item: r.item,
+                            quantity: r.quantity,
+                            uom_multiplier: r.uom_multiplier,
+                            total_volume: r.total_volume,
+                            selling_price: r.selling_price,
+                            amount: r.amount
+                        };
+                    });
+                    frappe.call({
+                        method: "frappe.client.save",
+                        args: { doc: doc },
+                        callback: function(r2) {
+                            if(r2.message) window.SHIFT_DOC = r2.message;
+                            refresh_drystock_cart($wrapper);
+                        }
+                    });
+                }
+            }
+        });
+    });
     
     $wrapper.find('#drystock-total-qty').text(total_qty);
     $wrapper.find('#drystock-total-volume').text(total_volume.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
@@ -914,13 +980,16 @@ function setup_actions(wrapper) {
                                 frappe.show_alert({message: "Inventory Sales saved successfully!", indicator: "green"});
                                 window.SHIFT_DOC = r2.message; 
                                 window.PENDING_DRYSTOCK = [];
+                                $wrapper.find('#drystock-csa').val('');
                                 refresh_drystock_cart($wrapper);
                             }
                             btn.prop('disabled', false).html(originalHTML);
+btn.find('.spinner').addClass('hidden');
                         }
                     });
                 } else {
                     btn.prop('disabled', false).html(originalHTML);
+btn.find('.spinner').addClass('hidden');
                 }
             }
         });
