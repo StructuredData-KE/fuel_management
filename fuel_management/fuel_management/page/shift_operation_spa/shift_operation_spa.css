@@ -658,3 +658,24 @@
         flex: none;
     }
 }
+
+.spa-input[readonly] {
+    background-color: #f8fafc;
+    color: #64748b;
+    cursor: not-allowed;
+    border-color: #e2e8f0;
+}
+
+.pos-btn {
+    display: flex;
+    align-items: flex-end;
+}
+.pos-btn .btn-primary {
+    height: 38px;
+    margin-top: 0 !important;
+    padding: 0 1.5rem;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}

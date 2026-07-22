@@ -310,8 +310,9 @@ function render_mpesa($wrapper) {
 
 function render_drystock($wrapper) {
     if (!window.ACTIVE_SHIFT) return;
+    let sDate = window.ACTIVE_SHIFT.shift_date || window.ACTIVE_SHIFT.creation || frappe.datetime.now_date();
     $wrapper.find('#drystock-shift-name').text(window.ACTIVE_SHIFT.name);
-    $wrapper.find('#drystock-shift-date').text(window.ACTIVE_SHIFT.shift_date);
+    $wrapper.find('#drystock-shift-date').text(sDate.split(" ")[0]);
 
     // Calculate Liability CSA
     let lubes_assignment = (window.ACTIVE_SHIFT.csa_assignments || []).find(a => a.pump_group.toLowerCase().includes('lube'));
@@ -390,7 +391,7 @@ function render_drystock($wrapper) {
         let volume = qty * uom;
         let amount = qty * price;
 
-        if (!window.SHIFT_DOC.inventory_sales) window.SHIFT_DOC.inventory_sales = [];
+        if (!window.PENDING_DRYSTOCK) window.PENDING_DRYSTOCK = [];
         
         let new_row = {
             doctype: "Shift Inventory Sale",
@@ -403,7 +404,7 @@ function render_drystock($wrapper) {
             amount: amount,
             _is_new: true
         };
-        window.SHIFT_DOC.inventory_sales.push(new_row);
+        window.PENDING_DRYSTOCK.push(new_row);
         
         // Reset form
         $wrapper.find('#drystock-item-input').val('');
@@ -435,7 +436,7 @@ function refresh_drystock_cart($wrapper) {
     let total_volume = 0;
     let total_amount = 0;
 
-    (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
+    (window.PENDING_DRYSTOCK || []).forEach((row, idx) => {
         total_qty += row.quantity || 0;
         total_volume += row.total_volume || 0;
         total_amount += row.amount || 0;
@@ -474,7 +475,7 @@ function refresh_drystock_cart($wrapper) {
     $wrapper.find('.btn-remove-drystock').off('click').on('click', function() {
         if (is_locked) return;
         let idx = parseInt($(this).closest('tr').attr('data-idx'));
-        window.SHIFT_DOC.inventory_sales.splice(idx, 1);
+        window.PENDING_DRYSTOCK.splice(idx, 1);
         refresh_drystock_cart($wrapper);
     });
 }
@@ -527,6 +528,7 @@ function setup_tabs(wrapper) {
 }
 
 window.DRYSTOCK_ITEMS = [];
+window.PENDING_DRYSTOCK = [];
 function load_dropdowns(wrapper) {
     // Fetch Items for Dry Stock
     frappe.call({
@@ -870,11 +872,21 @@ function setup_actions(wrapper) {
             frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
             return;
         }
-        let btn = $(this);
-        let originalText = btn.text();
-        btn.prop('disabled', true); btn.find('.spinner').removeClass('hidden');
         
-        let rows_data = (window.SHIFT_DOC.inventory_sales || []).map(r => {
+        if (!window.PENDING_DRYSTOCK || window.PENDING_DRYSTOCK.length === 0) {
+            frappe.show_alert({message: "Cart is empty. Add items first.", indicator: "orange"});
+            return;
+        }
+        
+        let btn = $(this);
+        let originalHTML = btn.html();
+        btn.prop('disabled', true); 
+        btn.find('.spinner').removeClass('hidden');
+        
+        // Append pending items to existing items
+        let combined_rows = [...(window.SHIFT_DOC.inventory_sales || []), ...window.PENDING_DRYSTOCK];
+        
+        let rows_data = combined_rows.map(r => {
             return {
                 name: r._is_new ? undefined : r.name,
                 sold_by: r.sold_by,
@@ -899,15 +911,16 @@ function setup_actions(wrapper) {
                         args: { doc: doc },
                         callback: function(r2) {
                             if(r2.message) {
-                                frappe.show_alert({message: "Inventory Sales saved!", indicator: "green"});
+                                frappe.show_alert({message: "Inventory Sales saved successfully!", indicator: "green"});
                                 window.SHIFT_DOC = r2.message; 
+                                window.PENDING_DRYSTOCK = [];
                                 refresh_drystock_cart($wrapper);
                             }
-                            btn.prop('disabled', false).text(originalText);
+                            btn.prop('disabled', false).html(originalHTML);
                         }
                     });
                 } else {
-                    btn.prop('disabled', false).text(originalText);
+                    btn.prop('disabled', false).html(originalHTML);
                 }
             }
         });
