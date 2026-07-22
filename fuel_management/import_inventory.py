@@ -35,15 +35,18 @@ def execute():
             
         # Add Re-order level
         if row['reorder_level'] > 0:
-            item_doc = frappe.get_doc('Item', item_code)
-            has_reorder = any(r.material_request_type == 'Purchase' for r in item_doc.reorder_levels)
-            if not has_reorder:
-                item_doc.append('reorder_levels', {
-                    'material_request_type': 'Purchase',
-                    'reorder_level': row['reorder_level'],
-                    'reorder_qty': row['reorder_level'] * 2
-                })
-                item_doc.save(ignore_permissions=True)
+            warehouse = frappe.db.get_value('Warehouse', {'is_group': 0, 'company': 'Kilibetcore'}) or frappe.db.get_value('Warehouse', {'is_group': 0})
+            if warehouse:
+                item_doc = frappe.get_doc('Item', item_code)
+                has_reorder = any(r.material_request_type == 'Purchase' for r in item_doc.reorder_levels)
+                if not has_reorder:
+                    item_doc.append('reorder_levels', {
+                        'warehouse': warehouse,
+                        'material_request_type': 'Purchase',
+                        'reorder_level': row['reorder_level'],
+                        'reorder_qty': row['reorder_level'] * 2
+                    })
+                    item_doc.save(ignore_permissions=True)
                 
         # Create Selling Price
         if row['selling_price'] > 0:
@@ -72,9 +75,11 @@ def execute():
             'purpose': 'Opening Stock',
             'set_posting_time': 1,
         })
+        warehouse = frappe.db.get_value('Warehouse', {'is_group': 0, 'company': 'Kilibetcore'}) or frappe.db.get_value('Warehouse', {'is_group': 0})
         for item_code, vals in items_dict.items():
             recon.append('items', {
                 'item_code': item_code,
+                'warehouse': warehouse,
                 'qty': vals['qty'],
                 'valuation_rate': vals['rate'],
             })
