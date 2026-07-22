@@ -1,0 +1,2027 @@
+[
+    {
+        "item_name": "EDGE 5W/40. 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 1260.0,
+        "purchase_price": 811.0,
+        "reorder_level": 5.0,
+        "opening_stock": 60.0
+    },
+    {
+        "item_name": "EDGE 5W/40. 4L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 5000.0,
+        "purchase_price": 3812.0,
+        "reorder_level": 5.0,
+        "opening_stock": 36.0
+    },
+    {
+        "item_name": "EDGE 5W/30. 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 1650.0,
+        "purchase_price": 1141.0,
+        "reorder_level": 5.0,
+        "opening_stock": 67.0
+    },
+    {
+        "item_name": "EDGE 5W/30. 4L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 6610.0,
+        "purchase_price": 4324.0,
+        "reorder_level": 5.0,
+        "opening_stock": 30.0
+    },
+    {
+        "item_name": "MAGNATEC 10W40 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 950.0,
+        "purchase_price": 724.7,
+        "reorder_level": 5.0,
+        "opening_stock": 54.0
+    },
+    {
+        "item_name": "MAGNATEC 10W40 4L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 3390.0,
+        "purchase_price": 2575.34,
+        "reorder_level": 5.0,
+        "opening_stock": 32.0
+    },
+    {
+        "item_name": "GTX 20W50 0.5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 330.0,
+        "purchase_price": 236.5,
+        "reorder_level": 5.0,
+        "opening_stock": 231.0
+    },
+    {
+        "item_name": "GTX 20W50 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 620.0,
+        "purchase_price": 427.2,
+        "reorder_level": 5.0,
+        "opening_stock": 178.0
+    },
+    {
+        "item_name": "GTX 20W50 4L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2460.0,
+        "purchase_price": 1640.0,
+        "reorder_level": 5.0,
+        "opening_stock": 92.0
+    },
+    {
+        "item_name": "MOTOR OIL SAE40 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 510.0,
+        "purchase_price": 374.0,
+        "reorder_level": 5.0,
+        "opening_stock": 22.0
+    },
+    {
+        "item_name": "MOTOR OIL SAE40 4L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 1820.0,
+        "purchase_price": 1374.52,
+        "reorder_level": 5.0,
+        "opening_stock": 29.0
+    },
+    {
+        "item_name": "TURBO 15W40 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 690.0,
+        "purchase_price": 482.0,
+        "reorder_level": 5.0,
+        "opening_stock": 122.0
+    },
+    {
+        "item_name": "TURBO 15W40 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 3370.0,
+        "purchase_price": 2364.99,
+        "reorder_level": 5.0,
+        "opening_stock": 59.0
+    },
+    {
+        "item_name": "TURBO 15W40 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 12300.0,
+        "purchase_price": 8559.91,
+        "reorder_level": 5.0,
+        "opening_stock": 9.0
+    },
+    {
+        "item_name": "MULTI 15W40 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 590.0,
+        "purchase_price": 414.23,
+        "reorder_level": 5.0,
+        "opening_stock": 104.0
+    },
+    {
+        "item_name": "MULTI 15W40 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2700.0,
+        "purchase_price": 1904.98,
+        "reorder_level": 5.0,
+        "opening_stock": 127.0
+    },
+    {
+        "item_name": "MULTI 15W40 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 10840.0,
+        "purchase_price": 7408.91,
+        "reorder_level": 5.0,
+        "opening_stock": 15.0
+    },
+    {
+        "item_name": "MONO SAE40 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 490.0,
+        "purchase_price": 367.98,
+        "reorder_level": 5.0,
+        "opening_stock": 74.0
+    },
+    {
+        "item_name": "MONO SAE40 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2250.0,
+        "purchase_price": 1714.4,
+        "reorder_level": 5.0,
+        "opening_stock": 39.0
+    },
+    {
+        "item_name": "MONO SAE40 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 9130.0,
+        "purchase_price": 6760.0,
+        "reorder_level": 1.0,
+        "opening_stock": 15.0
+    },
+    {
+        "item_name": "HYSPIN AWS 32 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2370.0,
+        "purchase_price": 1676.54,
+        "reorder_level": 5.0,
+        "opening_stock": 10.0
+    },
+    {
+        "item_name": "HYSPIN AWS 32 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 8450.0,
+        "purchase_price": 5964.73,
+        "reorder_level": 5.0,
+        "opening_stock": 5.0
+    },
+    {
+        "item_name": "HYSPIN AWS 68 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2630.0,
+        "purchase_price": 1816.68,
+        "reorder_level": 5.0,
+        "opening_stock": 25.0
+    },
+    {
+        "item_name": "HYSPIN AWS 68 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 8580.0,
+        "purchase_price": 6118.35,
+        "reorder_level": 5.0,
+        "opening_stock": 13.0
+    },
+    {
+        "item_name": "TRANSMAX MANUAL 85W-140 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 610.0,
+        "purchase_price": 415.0,
+        "reorder_level": 5.0,
+        "opening_stock": 38.0
+    },
+    {
+        "item_name": "TRANSMAX MANUAL 85W-140 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 3030.0,
+        "purchase_price": 2048.4,
+        "reorder_level": 5.0,
+        "opening_stock": 25.0
+    },
+    {
+        "item_name": "TRANSMAX MANUAL 85W-140 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 11340.0,
+        "purchase_price": 7711.31,
+        "reorder_level": 5.0,
+        "opening_stock": 7.0
+    },
+    {
+        "item_name": "TRANSMAX MANUAL 80W-90 0.5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 360.0,
+        "purchase_price": 251.4,
+        "reorder_level": 5.0,
+        "opening_stock": 39.0
+    },
+    {
+        "item_name": "TRANSMAX MANUAL 80W-90 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2840.0,
+        "purchase_price": 1904.98,
+        "reorder_level": 5.0,
+        "opening_stock": 13.0
+    },
+    {
+        "item_name": "TRANSMAX MANUAL 80W-90 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 11960.0,
+        "purchase_price": 8059.95,
+        "reorder_level": 2.0,
+        "opening_stock": 6.0
+    },
+    {
+        "item_name": "2T 0.5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 270.0,
+        "purchase_price": 192.64,
+        "reorder_level": 5.0,
+        "opening_stock": 156.0
+    },
+    {
+        "item_name": "2T 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2450.0,
+        "purchase_price": 1694.98,
+        "reorder_level": 2.0,
+        "opening_stock": 10.0
+    },
+    {
+        "item_name": "4T 20W50 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 500.0,
+        "purchase_price": 379.05,
+        "reorder_level": 5.0,
+        "opening_stock": 48.0
+    },
+    {
+        "item_name": "4T SAE 40 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 460.0,
+        "purchase_price": 343.15,
+        "reorder_level": 5.0,
+        "opening_stock": 19.0
+    },
+    {
+        "item_name": "EP140 KLUBE 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 540.0,
+        "purchase_price": 0.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "ATF 0.5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 400.0,
+        "purchase_price": 233.29,
+        "reorder_level": 5.0,
+        "opening_stock": 120.0
+    },
+    {
+        "item_name": "ATF 4L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2420.0,
+        "purchase_price": 1776.25,
+        "reorder_level": 5.0,
+        "opening_stock": 13.0
+    },
+    {
+        "item_name": "BRAKE FLUID 0.25L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 250.0,
+        "purchase_price": 190.13,
+        "reorder_level": 5.0,
+        "opening_stock": 169.0
+    },
+    {
+        "item_name": "BRAKE FLUID 0.5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 500.0,
+        "purchase_price": 374.63,
+        "reorder_level": 5.0,
+        "opening_stock": 48.0
+    },
+    {
+        "item_name": "BATTERY WATER 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 170.0,
+        "purchase_price": 112.48,
+        "reorder_level": 5.0,
+        "opening_stock": 74.0
+    },
+    {
+        "item_name": "BATTERY ACID 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 210.0,
+        "purchase_price": 153.15,
+        "reorder_level": 5.0,
+        "opening_stock": 64.0
+    },
+    {
+        "item_name": "WASHER FLUID 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 200.0,
+        "purchase_price": 154.35,
+        "reorder_level": 5.0,
+        "opening_stock": 214.0
+    },
+    {
+        "item_name": "RUBIS COOLANT 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 500.0,
+        "purchase_price": 377.57,
+        "reorder_level": 5.0,
+        "opening_stock": 64.0
+    },
+    {
+        "item_name": "RUBIS COOLANT 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2500.0,
+        "purchase_price": 1755.0,
+        "reorder_level": 5.0,
+        "opening_stock": 4.0
+    },
+    {
+        "item_name": "RUBIS ANTIFREEZE COOLANT 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 500.0,
+        "purchase_price": 377.57,
+        "reorder_level": 5.0,
+        "opening_stock": 101.0
+    },
+    {
+        "item_name": "RUBIS ANTIFREEZE COOLANT 5L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 2500.0,
+        "purchase_price": 1755.0,
+        "reorder_level": 2.0,
+        "opening_stock": 21.0
+    },
+    {
+        "item_name": "CVT FLUID 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 1510.0,
+        "purchase_price": 1138.0,
+        "reorder_level": 5.0,
+        "opening_stock": 11.0
+    },
+    {
+        "item_name": "CVT FLUID 4L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 5970.0,
+        "purchase_price": 4171.99,
+        "reorder_level": 2.0,
+        "opening_stock": 3.0
+    },
+    {
+        "item_name": "GREASE EP2 0.5KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 600.0,
+        "purchase_price": 339.0,
+        "reorder_level": 5.0,
+        "opening_stock": 14.0
+    },
+    {
+        "item_name": "GREASE EP2 3KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 3450.0,
+        "purchase_price": 1914.0,
+        "reorder_level": 5.0,
+        "opening_stock": 16.0
+    },
+    {
+        "item_name": "GREASE EP3 0.5KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 600.0,
+        "purchase_price": 337.0,
+        "reorder_level": 5.0,
+        "opening_stock": 31.0
+    },
+    {
+        "item_name": "GREASE EP3 3KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 3500.0,
+        "purchase_price": 1941.0,
+        "reorder_level": 5.0,
+        "opening_stock": 24.0
+    },
+    {
+        "item_name": "GREASE EP3 17KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 20500.0,
+        "purchase_price": 11271.0,
+        "reorder_level": 5.0,
+        "opening_stock": 7.0
+    },
+    {
+        "item_name": "6KG REGULATOR",
+        "item_group": "ACCESSORIES",
+        "stock_uom": "Nos",
+        "selling_price": 825.0,
+        "purchase_price": 563.79,
+        "reorder_level": 5.0,
+        "opening_stock": 15.0
+    },
+    {
+        "item_name": "13KG REGULATOR",
+        "item_group": "ACCESSORIES",
+        "stock_uom": "Nos",
+        "selling_price": 950.0,
+        "purchase_price": 587.07,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "35KG REGULATOR",
+        "item_group": "ACCESSORIES",
+        "stock_uom": "Nos",
+        "selling_price": 3000.0,
+        "purchase_price": 2155.17,
+        "reorder_level": 5.0,
+        "opening_stock": 13.0
+    },
+    {
+        "item_name": "50KG REGULATOR",
+        "item_group": "ACCESSORIES",
+        "stock_uom": "Nos",
+        "selling_price": 3000.0,
+        "purchase_price": 1543.1,
+        "reorder_level": 5.0,
+        "opening_stock": 18.0
+    },
+    {
+        "item_name": "BURNERS",
+        "item_group": "ACCESSORIES",
+        "stock_uom": "Nos",
+        "selling_price": 990.0,
+        "purchase_price": 653.02,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "GRILLS",
+        "item_group": "ACCESSORIES",
+        "stock_uom": "Nos",
+        "selling_price": 320.0,
+        "purchase_price": 250.0,
+        "reorder_level": 5.0,
+        "opening_stock": 27.0
+    },
+    {
+        "item_name": "HOSE",
+        "item_group": "ACCESSORIES",
+        "stock_uom": "Nos",
+        "selling_price": 405.0,
+        "purchase_price": 323.0,
+        "reorder_level": 5.0,
+        "opening_stock": 57.0
+    },
+    {
+        "item_name": "6KG GAS",
+        "item_group": "GAS",
+        "stock_uom": "Kg",
+        "selling_price": 1460.0,
+        "purchase_price": 1318.6,
+        "reorder_level": 5.0,
+        "opening_stock": 36.0
+    },
+    {
+        "item_name": "13KG GAS",
+        "item_group": "GAS",
+        "stock_uom": "Kg",
+        "selling_price": 3275.0,
+        "purchase_price": 2985.3,
+        "reorder_level": 5.0,
+        "opening_stock": 36.0
+    },
+    {
+        "item_name": "35KG GAS",
+        "item_group": "GAS",
+        "stock_uom": "Kg",
+        "selling_price": 8595.0,
+        "purchase_price": 7858.5,
+        "reorder_level": 5.0,
+        "opening_stock": 4.0
+    },
+    {
+        "item_name": "50KG GAS",
+        "item_group": "GAS",
+        "stock_uom": "Kg",
+        "selling_price": 9250.0,
+        "purchase_price": 8250.0,
+        "reorder_level": 5.0,
+        "opening_stock": 7.0
+    },
+    {
+        "item_name": "6KG CYLINDER",
+        "item_group": "CYLINDER",
+        "stock_uom": "Nos",
+        "selling_price": 1800.0,
+        "purchase_price": 1800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 60.0
+    },
+    {
+        "item_name": "13KG CYLINDER",
+        "item_group": "CYLINDER",
+        "stock_uom": "Nos",
+        "selling_price": 3800.0,
+        "purchase_price": 3800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 60.0
+    },
+    {
+        "item_name": "35KG CYLINDER",
+        "item_group": "CYLINDER",
+        "stock_uom": "Nos",
+        "selling_price": 8000.0,
+        "purchase_price": 8000.0,
+        "reorder_level": 5.0,
+        "opening_stock": 5.0
+    },
+    {
+        "item_name": "50KG CYLINDER",
+        "item_group": "CYLINDER",
+        "stock_uom": "Nos",
+        "selling_price": 10500.0,
+        "purchase_price": 10500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 13.0
+    },
+    {
+        "item_name": "EMERGENCY FUEL CONTAINER 5L",
+        "item_group": "NOT FOR SALE",
+        "stock_uom": "Nos",
+        "selling_price": 0.0,
+        "purchase_price": 0.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "SQUEEGES",
+        "item_group": "FOR SALE",
+        "stock_uom": "Nos",
+        "selling_price": 0.0,
+        "purchase_price": 1.0,
+        "reorder_level": 0.0,
+        "opening_stock": 46.0
+    },
+    {
+        "item_name": "ATF 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 11000.0,
+        "purchase_price": 8320.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "HYSPIN AWS 46 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 9240.0,
+        "purchase_price": 6516.49,
+        "reorder_level": 5.0,
+        "opening_stock": 6.0
+    },
+    {
+        "item_name": "GREASE EPLEX 3KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 3800.0,
+        "purchase_price": 2589.01,
+        "reorder_level": 5.0,
+        "opening_stock": 7.0
+    },
+    {
+        "item_name": "GREASE EPLEX 17KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 25260.0,
+        "purchase_price": 14500.92,
+        "reorder_level": 5.0,
+        "opening_stock": 11.0
+    },
+    {
+        "item_name": "GREASE EPLEX 0.5KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 800.0,
+        "purchase_price": 452.5,
+        "reorder_level": 5.0,
+        "opening_stock": 9.0
+    },
+    {
+        "item_name": "GREASE EP2 17KG",
+        "item_group": "LUBES",
+        "stock_uom": "Kg",
+        "selling_price": 18000.0,
+        "purchase_price": 10063.95,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "RUBIS ANTIFREEZE COOLANT 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 9500.0,
+        "purchase_price": 6790.0,
+        "reorder_level": 5.0,
+        "opening_stock": 1.0
+    },
+    {
+        "item_name": "HYSPIN AWS 46 210L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 91480.0,
+        "purchase_price": 60060.37,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "RUBIS COOLANT 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 9500.0,
+        "purchase_price": 6790.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "POWER1 4T 1L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 500.0,
+        "purchase_price": 373.0,
+        "reorder_level": 5.0,
+        "opening_stock": 104.0
+    },
+    {
+        "item_name": "GTX 20W50 20L",
+        "item_group": "LUBES",
+        "stock_uom": "Liter",
+        "selling_price": 11100.0,
+        "purchase_price": 8453.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "1-87810-075-1 KITS",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 6800.0,
+        "purchase_price": 2100.0,
+        "reorder_level": 5.0,
+        "opening_stock": 1400.0
+    },
+    {
+        "item_name": "OIL FILTER 37010/40060",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 125.0,
+        "reorder_level": 5.0,
+        "opening_stock": 91.0
+    },
+    {
+        "item_name": "OIL FILTER 03001",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 350.0,
+        "purchase_price": 105.0,
+        "reorder_level": 5.0,
+        "opening_stock": 87.0
+    },
+    {
+        "item_name": "OIL FILTER MD13537",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 400.0,
+        "purchase_price": 140.0,
+        "reorder_level": 5.0,
+        "opening_stock": 85.0
+    },
+    {
+        "item_name": "OIL FILTER 03002",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 400.0,
+        "purchase_price": 130.0,
+        "reorder_level": 5.0,
+        "opening_stock": 73.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-21030",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 135.0,
+        "reorder_level": 5.0,
+        "opening_stock": 57.0
+    },
+    {
+        "item_name": "DENSO PLUGS 90919-00191",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 450.0,
+        "reorder_level": 5.0,
+        "opening_stock": 55.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-21050",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 155.0,
+        "reorder_level": 5.0,
+        "opening_stock": 45.0
+    },
+    {
+        "item_name": "CABIN AIR FILTER 87139-06050",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 285.0,
+        "reorder_level": 5.0,
+        "opening_stock": 40.0
+    },
+    {
+        "item_name": "OIL FILTER 04152-38010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 38.0
+    },
+    {
+        "item_name": "DENSO PLUGS 90919-01210 LOW GRADE",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 450.0,
+        "reorder_level": 5.0,
+        "opening_stock": 29.0
+    },
+    {
+        "item_name": "FUEL FILTER 23390-0L040",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 26.0
+    },
+    {
+        "item_name": "OIL FILTER AA100",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 26.0
+    },
+    {
+        "item_name": "OIL FILTER 03006",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 255.0,
+        "reorder_level": 5.0,
+        "opening_stock": 25.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-22020",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 145.0,
+        "reorder_level": 5.0,
+        "opening_stock": 25.0
+    },
+    {
+        "item_name": "OIL FILTER65FOO",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 400.0,
+        "purchase_price": 115.0,
+        "reorder_level": 5.0,
+        "opening_stock": 25.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-23030",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 145.0,
+        "reorder_level": 5.0,
+        "opening_stock": 22.0
+    },
+    {
+        "item_name": "FUEL FILTER 23030-64010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 255.0,
+        "reorder_level": 5.0,
+        "opening_stock": 22.0
+    },
+    {
+        "item_name": "OIL FILTER 8-97148-270-0",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1500.0,
+        "purchase_price": 900.0,
+        "reorder_level": 5.0,
+        "opening_stock": 16.0
+    },
+    {
+        "item_name": "DENSO PLUGS 90919-01210 HIGH GRADE",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 8200.0,
+        "purchase_price": 6500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 16.0
+    },
+    {
+        "item_name": "AIRFILTER 16546-V0100",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 14.0
+    },
+    {
+        "item_name": "OIL FILTER 8-98165071-0",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 350.0,
+        "reorder_level": 2.0,
+        "opening_stock": 14.0
+    },
+    {
+        "item_name": "FUEL FILTER 8-94414796-3",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 250.0,
+        "reorder_level": 5.0,
+        "opening_stock": 14.0
+    },
+    {
+        "item_name": "AIRFILTER 16546-ED500",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 240.0,
+        "reorder_level": 5.0,
+        "opening_stock": 13.0
+    },
+    {
+        "item_name": "AIR FILTER 17801-0L040",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 700.0,
+        "reorder_level": 5.0,
+        "opening_stock": 10.0
+    },
+    {
+        "item_name": "AIRFILTER 31120",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 8.0
+    },
+    {
+        "item_name": "AIR FILTER 0C010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1500.0,
+        "purchase_price": 200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 8.0
+    },
+    {
+        "item_name": "AIR FILTER MR 266849",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 8.0
+    },
+    {
+        "item_name": "17220-SRO-008",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 400.0,
+        "reorder_level": 2.0,
+        "opening_stock": 8.0
+    },
+    {
+        "item_name": "AIR FILTER 15209 2W200",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 7.0
+    },
+    {
+        "item_name": "OIL FILTER -97309-927",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 285.0,
+        "reorder_level": 5.0,
+        "opening_stock": 6.0
+    },
+    {
+        "item_name": "AIR FILTER 17801-30070",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1100.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 6.0
+    },
+    {
+        "item_name": "AIR FILTER 17801 - 11130",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1100.0,
+        "purchase_price": 550.0,
+        "reorder_level": 5.0,
+        "opening_stock": 6.0
+    },
+    {
+        "item_name": "OIL FILTER 15208-W1116",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 6.0
+    },
+    {
+        "item_name": "FUEL FILTER 220900",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 5.0
+    },
+    {
+        "item_name": "OIL FILTER PH 8A",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 4.0
+    },
+    {
+        "item_name": "OIL FILTER ME 013343 215002",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 900.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 4.0
+    },
+    {
+        "item_name": "OIL FILTER MD069782",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "AIR FILTER 16546-73C10",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "AIR FILTER 17801 - 31100",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 550.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "AIR FILTER R501-13-3A0",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "BRAKE PAD KD 2764",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2450.0,
+        "purchase_price": 1450.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "BRAKE PAD KD 2701",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2000.0,
+        "purchase_price": 1250.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "BRAKE PAD KD 1746",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2200.0,
+        "purchase_price": 1500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "BRAKE SHOE K1738",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2500.0,
+        "purchase_price": 1600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "BRAKE PAD KD 2780",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2500.0,
+        "purchase_price": 1570.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "BRAKE PAD KD 2754",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1900.0,
+        "purchase_price": 1170.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "BRAKE PAD KD 2718",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2000.0,
+        "purchase_price": 1120.0,
+        "reorder_level": 5.0,
+        "opening_stock": 2.0
+    },
+    {
+        "item_name": "AIR CLEANER AA090",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 1.0
+    },
+    {
+        "item_name": "AIR FILTER 9817220 J10",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 1000.0,
+        "reorder_level": 5.0,
+        "opening_stock": 1.0
+    },
+    {
+        "item_name": "BRAKE SHOE K2708..LINNING",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2500.0,
+        "purchase_price": 1700.0,
+        "reorder_level": 5.0,
+        "opening_stock": 1.0
+    },
+    {
+        "item_name": "BRAKE SHOE K2022",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2800.0,
+        "purchase_price": 1950.0,
+        "reorder_level": 5.0,
+        "opening_stock": 1.0
+    },
+    {
+        "item_name": "OIL FILTER 03004/10004",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 400.0,
+        "purchase_price": 130.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 15208-H8916",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 15600-41010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-30040/50040",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-20040",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 900.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-15070",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-11050",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FUEL FILTER 16403-Z7000",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "NGK PLUG(4PC)LFR6AIX-11",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1125.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "NGK PLUG(4PC)BKR6EKB-11(4198)",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "NGK PLUG(4PC)LFR6A-11(8H516)",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "NGK PLUG(4PC)4194",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 375.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "DENSO PLUG90919-01164",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 375.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "DENSO PLUG90919-01192 (K16TR11)",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 375.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "DASHBOARD SPRA",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 3002",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 70050",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 74020",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 30060",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FUEL FILTER OL041",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 54100",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 35020",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER11090",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 17801- 16020",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIRFILTER 17801-28010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "PLUG BKR6E1X",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1125.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "CABIN AIRFILTER 28010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "SHOI/SHYI-14-302A",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FRR 2038",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 400.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FRR 2027",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 400.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FRR 1044",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 300.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FRR 1004",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 200.0,
+        "purchase_price": 150.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "DENSO PLUGS SC20HR11(90919-01253)",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR CLEANER 21060",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR CLEANER 4.3",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1800.0,
+        "purchase_price": 900.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR CLEANER 17801-0L040",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1200.0,
+        "purchase_price": 700.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FUEL FILTER ME-036478",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER SL02-23-802",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 380.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER ME-034611",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1500.0,
+        "purchase_price": 1200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 16546-3HD0A",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2300.0,
+        "purchase_price": 1800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 17801-54170",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1200.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 28113-22600",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "DENSO PLUG FK16HR11- 01221",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 550.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "DENSO PLUG SK20BGR11-01243",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 550.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "V8 AIR FILTER",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 500.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "V8 OIL FILTER",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER MAHINDRA CV 500",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 17801-31100",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 970.0,
+        "purchase_price": 200.0,
+        "reorder_level": 3.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 8-98140265-0",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1100.0,
+        "purchase_price": 500.0,
+        "reorder_level": 2.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "UFF 3032",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "ME 034605/034611",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1600.0,
+        "purchase_price": 200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "PY8W-13-3A0",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "5-13240-023-0/3013",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 17801-21060",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 900.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AC",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 074013",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2800.0,
+        "purchase_price": 1500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FUEL CLEANER NEW",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1500.0,
+        "purchase_price": 1000.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "QC001",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1600.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1600.0,
+        "purchase_price": 900.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FUEL FILTER MX 910095",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1500.0,
+        "purchase_price": 1000.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER D04352",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 030722",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER FORD",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1200.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 8-98018-858-0",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 8-97049708-1",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 600.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "OIL FILTER 17220-RBJ-000",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 17801-11090",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "CABIN FILTER 12010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FUEL FILTER 23290-0L070",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 450.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 13780-71L00",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "BRAKE PAD KD 1740",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2400.0,
+        "purchase_price": 1400.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "17801 - 61030",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1700.0,
+        "purchase_price": 750.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "ME 036478",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 700.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER MD 620837",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1100.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "SEPARATOR 8-98092481-1",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1400.0,
+        "purchase_price": 1200.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "FUEL FILTER 8-98162-897-0",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1600.0,
+        "purchase_price": 800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 1500A190",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1200.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 16546 - 02L00",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1200.0,
+        "purchase_price": 600.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 17801 - B1010",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 820.0,
+        "purchase_price": 450.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 16546 - JA00A",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1000.0,
+        "purchase_price": 740.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 17220-RBO-00",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 700.0,
+        "purchase_price": 350.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 2000",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2400.0,
+        "purchase_price": 2000.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "LAND CRUISER BRAKE PAD",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 3800.0,
+        "purchase_price": 3500.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 37021",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 900.0,
+        "purchase_price": 700.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER JN30A",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2300.0,
+        "purchase_price": 1800.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "AIR FILTER 16546 - JD208",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 900.0,
+        "purchase_price": 750.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "16546-734000",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1200.0,
+        "purchase_price": 850.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "23390-51070",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 650.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "04152-38020",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 800.0,
+        "purchase_price": 650.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "17801-38030",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1400.0,
+        "purchase_price": 1100.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "ME084641",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 1400.0,
+        "purchase_price": 1100.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    },
+    {
+        "item_name": "PLUGS",
+        "item_group": "FILTERS",
+        "stock_uom": "Nos",
+        "selling_price": 2900.0,
+        "purchase_price": 2300.0,
+        "reorder_level": 5.0,
+        "opening_stock": 0.0
+    }
+]
