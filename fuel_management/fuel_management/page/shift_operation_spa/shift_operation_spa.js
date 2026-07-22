@@ -440,7 +440,6 @@ function setup_tabs(wrapper) {
         $tab.find('.view-pane[id$="-' + view + '-view"]').addClass('active');
     });
     
-    const $wrapper = $(wrapper);
     $wrapper.find('.nav-item').on('click', function(e) {
         e.preventDefault();
         
