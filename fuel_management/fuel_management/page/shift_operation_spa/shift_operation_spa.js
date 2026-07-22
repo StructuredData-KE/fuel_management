@@ -126,9 +126,12 @@ function render_meters($wrapper) {
                         if(!grouped[pg]) grouped[pg] = [];
                         grouped[pg].push(row);
                     });
+                    let grouped_entries = Object.entries(grouped);
+                    grouped_entries.sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true, sensitivity: 'base'}));
                     
                     let html = '';
-                    for(const [pg, rows] of Object.entries(grouped)) {
+                    for(const [pg, rows] of grouped_entries) {
+                        rows.sort((a, b) => (a.pump_nozzle || "").localeCompare((b.pump_nozzle || ""), undefined, {numeric: true, sensitivity: 'base'}));
                         let assigned_csa_id = "";
                         if (window.SHIFT_DOC.assigned_csas) {
                             let assignment = window.SHIFT_DOC.assigned_csas.find(a => a.pump_group === pg);
