@@ -496,8 +496,18 @@ function setup_tabs(wrapper) {
         const tabName = $(this).find('span').text();
         let displayTitle = tabName;
         if(window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.name) {
-            let template = window.ACTIVE_SHIFT.shift_template ? ` (${window.ACTIVE_SHIFT.shift_template})` : '';
-            displayTitle += ` - ${window.ACTIVE_SHIFT.name}${template}`;
+            let d = new Date(window.ACTIVE_SHIFT.shift_date || new Date());
+            let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            let day = d.getDate();
+            let suffix = 'th';
+            if(day % 10 === 1 && day !== 11) suffix = 'st';
+            else if(day % 10 === 2 && day !== 12) suffix = 'nd';
+            else if(day % 10 === 3 && day !== 13) suffix = 'rd';
+            let formattedDate = `${day}${suffix} ${months[d.getMonth()]}`.toUpperCase();
+            
+            let template = window.ACTIVE_SHIFT.shift_template ? `(${window.ACTIVE_SHIFT.shift_template})` : '';
+            let titlePrefix = tabName === "Dry Stock (Inventory)" ? "Inventory sales" : tabName;
+            displayTitle = `${titlePrefix} ${formattedDate} ${template}`;
         }
         $wrapper.find('#current-module-title').text(displayTitle);
     });

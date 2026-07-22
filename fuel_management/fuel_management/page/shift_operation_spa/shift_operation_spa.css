@@ -120,19 +120,22 @@
 
 /* Topbar */
 .topbar {
-    background: var(--card-bg);
+    background: #1e293b;
     padding: 1rem 2rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #0f172a;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
 }
 
 .topbar-left h2 {
     margin: 0;
     font-size: 1.25rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #ffffff;
 }
 
 .topbar-right {
