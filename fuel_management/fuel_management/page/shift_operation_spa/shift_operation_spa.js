@@ -314,6 +314,8 @@ function render_drystock($wrapper) {
     let shiftName = window.ACTIVE_SHIFT.shift_template ? `${window.ACTIVE_SHIFT.shift_template}` : window.ACTIVE_SHIFT.name;
     $wrapper.find('#drystock-shift-name').text(shiftName);
     $wrapper.find('#drystock-shift-date').text(sDate.split(" ")[0]);
+    $wrapper.find('#drystock-history-shift-name').text(shiftName);
+    $wrapper.find('#drystock-history-shift-date').text(sDate.split(" ")[0]);
 
     // Calculate Liability CSA
     let lubes_assignment = (window.ACTIVE_SHIFT.csa_assignments || []).find(a => a.pump_group.toLowerCase().includes('lube'));
@@ -472,13 +474,15 @@ function refresh_drystock_cart($wrapper) {
     $wrapper.find('#list-drystock').html(html);
     
     // Also render saved items
-    let filter_date = $wrapper.find('#drystock-filter-date').val();
+    let start_date = $wrapper.find('#drystock-filter-start-date').val();
+    let end_date = $wrapper.find('#drystock-filter-end-date').val();
     let filter_search = ($wrapper.find('#drystock-filter-search').val() || '').toLowerCase();
     
     let html_saved = '';
     (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
         let row_date = row.creation ? row.creation.split(" ")[0] : frappe.datetime.now_date();
-        if (filter_date && row_date !== filter_date) return;
+        if (start_date && row_date < start_date) return;
+        if (end_date && row_date > end_date) return;
         if (filter_search && row.item && !row.item.toLowerCase().includes(filter_search)) return;
         
         let csa_name = row.sold_by;
@@ -488,7 +492,10 @@ function refresh_drystock_cart($wrapper) {
         }
         let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Saved";
         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
-        let del_btn = is_locked ? `<button class="btn btn-xs btn-danger" disabled>X</button>` : `<button class="btn btn-xs btn-danger btn-remove-saved" data-idx="${idx}">X</button>`;
+        let del_btn = is_locked ? 
+            `<button class="btn btn-xs btn-danger" disabled>X</button>` : 
+            `<button class="btn btn-xs btn-secondary btn-edit-saved" data-idx="${idx}" style="margin-right:0.25rem;">Edit</button>
+             <button class="btn btn-xs btn-danger btn-remove-saved" data-idx="${idx}">X</button>`;
         
         html_saved += `
             <tr>
@@ -504,6 +511,59 @@ function refresh_drystock_cart($wrapper) {
     });
     $wrapper.find('#list-drystock-saved').html(html_saved);
     
+    $wrapper.find('.btn-edit-saved').off('click').on('click', function() {
+        if (is_locked) return;
+        let idx = parseInt($(this).attr('data-idx'));
+        let row = window.SHIFT_DOC.inventory_sales[idx];
+        
+        // Remove from DB first
+        window.SHIFT_DOC.inventory_sales.splice(idx, 1);
+        
+        frappe.call({
+            method: "frappe.client.get",
+            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+            callback: function(r) {
+                if(r.message) {
+                    let doc = r.message;
+                    doc.inventory_sales = window.SHIFT_DOC.inventory_sales.map(r2 => {
+                        return {
+                            name: r2._is_new ? undefined : r2.name,
+                            sold_by: r2.sold_by,
+                            item: r2.item,
+                            quantity: r2.quantity,
+                            uom_multiplier: r2.uom_multiplier,
+                            total_volume: r2.total_volume,
+                            selling_price: r2.selling_price,
+                            amount: r2.amount
+                        };
+                    });
+                    frappe.call({
+                        method: "frappe.client.save",
+                        args: { doc: doc },
+                        callback: function(r2) {
+                            if(r2.message) window.SHIFT_DOC = r2.message;
+                            
+                            // Load into form
+                            $wrapper.find('#drystock-csa').val(row.sold_by);
+                            $wrapper.find('#drystock-item-input').val(row.item);
+                            $wrapper.find('#drystock-qty').val(row.quantity);
+                            $wrapper.find('#drystock-uom').val(row.uom_multiplier);
+                            $wrapper.find('#drystock-price').val(row.selling_price);
+                            $wrapper.find('#drystock-volume').val(row.total_volume);
+                            $wrapper.find('#drystock-total').val(row.amount);
+                            
+                            // Switch to entry view
+                            $wrapper.find('.seg-btn[data-view="entry"]').click();
+                            refresh_drystock_cart($wrapper);
+                            
+                            frappe.show_alert({message: "Item moved to cart for editing", indicator: "orange"});
+                        }
+                    });
+                }
+            }
+        });
+    });
+
     $wrapper.find('.btn-remove-saved').off('click').on('click', function() {
         if (is_locked) return;
         let idx = parseInt($(this).attr('data-idx'));
@@ -770,6 +830,13 @@ function load_dropdowns(wrapper) {
 
 function setup_actions(wrapper) {
     const $wrapper = $(wrapper);
+    
+    // Bind Dry Stock History Filters
+    $wrapper.find('#drystock-filter-start-date, #drystock-filter-end-date, #drystock-filter-search').on('input', function() {
+        if(typeof refresh_drystock_cart === 'function') {
+            refresh_drystock_cart($wrapper);
+        }
+    });
     
     // Start Shift Logic
     $wrapper.find('#btn-start-shift').on('click', function() {

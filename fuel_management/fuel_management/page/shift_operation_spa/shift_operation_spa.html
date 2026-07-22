@@ -292,10 +292,23 @@
         <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
             <h3>Historical Sales</h3>
             
+            <div class="shift-context-box" style="margin-bottom: 1.5rem;">
+                <div class="context-detail">
+                    <span class="label">Shift:</span> <strong id="drystock-history-shift-name"></strong>
+                </div>
+                <div class="context-detail">
+                    <span class="label">Date:</span> <strong id="drystock-history-shift-date"></strong>
+                </div>
+            </div>
+            
             <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-                <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>Date Filter</label>
-                    <input type="date" id="drystock-filter-date" class="spa-input">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <label>Start Date</label>
+                    <input type="date" id="drystock-filter-start-date" class="spa-input">
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <label>End Date</label>
+                    <input type="date" id="drystock-filter-end-date" class="spa-input">
                 </div>
                 <div class="form-group" style="flex: 2; min-width: 200px;">
                     <label>Search Items</label>
