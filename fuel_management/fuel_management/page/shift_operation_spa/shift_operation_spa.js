@@ -24,7 +24,7 @@ function fetch_active_shift(wrapper) {
         args: {
             doctype: "Shift",
             filters: { status: "Open", owner: frappe.session.user },
-            fields: ["name", "station", "head_csa", "shift_template"],
+            fields: ["name", "station", "head_csa", "shift_template", "status"],
             limit_page_length: 1
         },
         callback: function(r) {
@@ -388,6 +388,9 @@ function render_drystock($wrapper) {
 
 function refresh_drystock_cart($wrapper) {
     let html = '';
+    
+    let is_locked = window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !frappe.user.has_role("System Manager");
+    
     (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
         let csa_name = row.sold_by;
         if (window.USERS_LIST) {
@@ -395,20 +398,28 @@ function refresh_drystock_cart($wrapper) {
             if(u) csa_name = u.full_name;
         }
         
+        let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Pending...";
+        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
+        
+        let del_btn = is_locked ? `<button class="btn btn-xs btn-danger" disabled>X</button>` : `<button class="btn btn-xs btn-danger btn-remove-drystock">X</button>`;
+        
         html += `
             <tr data-idx="${idx}">
+                <td style="font-family: monospace; color: #64748b;">${entry_id}</td>
+                <td style="color: #64748b;">${time_val}</td>
                 <td>${csa_name || ''}</td>
                 <td>${row.item}</td>
                 <td>${row.quantity}</td>
                 <td>${row.total_volume || 0}</td>
                 <td>${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                <td><button class="btn btn-xs btn-danger btn-remove-drystock">X</button></td>
+                <td>${del_btn}</td>
             </tr>
         `;
     });
     $wrapper.find('#list-drystock').html(html);
 
     $wrapper.find('.btn-remove-drystock').off('click').on('click', function() {
+        if (is_locked) return;
         let idx = parseInt($(this).closest('tr').attr('data-idx'));
         window.SHIFT_DOC.inventory_sales.splice(idx, 1);
         refresh_drystock_cart($wrapper);
@@ -545,6 +556,7 @@ function load_dropdowns(wrapper) {
         }
         
         $w.find('#input-shift-date').val(suggestedDate);
+        $w.find('#input-shift-date').attr('max', frappe.datetime.get_today());
         $w.find('#select-shift-template').val(selectedTemplate);
     }
 
@@ -679,7 +691,7 @@ function setup_actions(wrapper) {
     $wrapper.on('click', '#btn-save-wetstock', function() {
         let btn = $(this);
         let originalText = btn.text();
-        btn.prop('disabled', true).text('Saving...');
+        btn.prop('disabled', true); btn.find('.spinner').removeClass('hidden');
         
         let has_empty = false;
         let rows_data = [];
@@ -741,6 +753,11 @@ function setup_actions(wrapper) {
     });
     
     function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null) {
+        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !frappe.user.has_role("System Manager")) {
+            frappe.show_alert({message: "This shift is closed. Only System Managers can modify data.", indicator: "red"});
+            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
+            return;
+        }
         frappe.call({
             method: "frappe.client.get",
             args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
@@ -761,11 +778,11 @@ function setup_actions(wrapper) {
                             if(r2.message) {
                                 frappe.show_alert({message: success_msg, indicator: "green"});
                             }
-                            if(btn) btn.prop('disabled', false).text(originalText);
+                            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
                         }
                     });
                 } else {
-                    if(btn) btn.prop('disabled', false).text(originalText);
+                    if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
                 }
             }
         });
@@ -773,9 +790,13 @@ function setup_actions(wrapper) {
 
     
     $wrapper.on('click', '#btn-save-drystock', function() {
+        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !frappe.user.has_role("System Manager")) {
+            frappe.show_alert({message: "This shift is closed. Only System Managers can modify data.", indicator: "red"});
+            return;
+        }
         let btn = $(this);
         let originalText = btn.text();
-        btn.prop('disabled', true).text('Saving...');
+        btn.prop('disabled', true); btn.find('.spinner').removeClass('hidden');
         
         let rows_data = (window.SHIFT_DOC.inventory_sales || []).map(r => {
             return {

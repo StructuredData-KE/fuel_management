@@ -89,7 +89,7 @@
                             <h3>Shift Setup</h3>
                             <div class="form-group full-width">
                                 <label>Shift Date</label>
-                                <input type="date" id="input-shift-date" class="spa-input">
+                                <input type="date" id="input-shift-date" class="spa-input" max="today">
                             </div>
                             <div class="form-group full-width">
                                 <label>Shift Template</label>
@@ -132,7 +132,7 @@
                 <div class="dash-card center-card mb-4">
                     <div class="card-header-flex">
                         <h3>Meter Readings</h3>
-                        <button id="btn-save-wetstock" class="btn-secondary btn-sm">Save Readings</button>
+                        <button id="btn-save-wetstock" class="btn-secondary btn-sm"><span class="spinner hidden"></span> Save Readings</button>
                     </div>
                         <div class="meters-cards-wrapper">
                             <div id="meters-container" class="meters-cards-container">
@@ -147,7 +147,7 @@
                 <div class="dash-card center-card mb-4">
                     <div class="card-header-flex">
                         <h3>Dip Sticks</h3>
-                        <button id="btn-save-dips" class="btn-secondary btn-sm">Save Dips</button>
+                        <button id="btn-save-dips" class="btn-secondary btn-sm"><span class="spinner hidden"></span> Save Dips</button>
                     </div>
                         <div class="table-responsive">
                             <table class="dash-table meters-table">
@@ -171,7 +171,7 @@
                 <div class="dash-card center-card mb-4">
                     <div class="card-header-flex">
                         <h3>M-Pesa Tills</h3>
-                        <button id="btn-save-mpesa" class="btn-secondary btn-sm">Save Tills</button>
+                        <button id="btn-save-mpesa" class="btn-secondary btn-sm"><span class="spinner hidden"></span> Save Tills</button>
                     </div>
                         <div class="table-responsive">
                             <table class="dash-table meters-table">
@@ -308,6 +308,8 @@
                             <table class="dash-table">
                                 <thead>
                                     <tr>
+                                        <th>Entry ID</th>
+                                        <th>Time</th>
                                         <th>Sold By</th>
                                         <th>Item</th>
                                         <th>Qty</th>
@@ -319,7 +321,7 @@
                                 <tbody id="list-drystock"></tbody>
                             </table>
                         </div>
-                        <button class="btn-primary" id="btn-save-drystock" style="margin-top:1rem; width:100%;">Save Inventory Sales</button>
+                        <button class="btn-primary" id="btn-save-drystock" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Save Inventory Sales</button>
                     </div>
                 </div>
             </section>
