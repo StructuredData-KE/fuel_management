@@ -76,14 +76,20 @@ def execute():
             'set_posting_time': 1,
         })
         warehouse = frappe.db.get_value('Warehouse', {'is_group': 0, 'company': 'Kilibetcore'}) or frappe.db.get_value('Warehouse', {'is_group': 0})
-        for item_code, vals in items_dict.items():
-            recon.append('items', {
-                'item_code': item_code,
-                'warehouse': warehouse,
-                'qty': vals['qty'],
-                'valuation_rate': vals['rate'],
-            })
-            
-        recon.insert(ignore_permissions=True)
         frappe.db.commit()
-        print(f"Imported {len(data)} items and created Stock Reconciliation draft {recon.name}")
+        print(f"Successfully imported items!")
+        
+        try:
+            for item_code, vals in items_dict.items():
+                recon.append('items', {
+                    'item_code': item_code,
+                    'warehouse': warehouse,
+                    'qty': vals['qty'],
+                    'valuation_rate': vals['rate'],
+                })
+                
+            recon.insert(ignore_permissions=True)
+            frappe.db.commit()
+            print(f"Imported {len(data)} items and created Stock Reconciliation draft {recon.name}")
+        except Exception as e:
+            print(f"Items imported, but failed to create Stock Reconciliation: {e}")
