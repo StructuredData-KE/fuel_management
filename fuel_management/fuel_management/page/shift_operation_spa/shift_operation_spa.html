@@ -280,113 +280,137 @@
             
             <!-- DRY STOCK -->
             <section id="tab-drystock" class="tab-pane">
-    <div class="view-pane active" id="drystock-entry-view">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="history">Historical View</button>
+            <button class="seg-btn" data-view="entry" style="color: #047857; font-weight: 600;">+ New Sale</button>
+        </div>
+    </div>
+
+    <!-- HISTORY VIEW -->
+    <div class="view-pane active" id="drystock-history-view">
         <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
-                        <h3>Log Inventory Sale</h3>
-                        
-                        <div class="shift-context-box">
-                            <div class="context-detail">
-                                <span class="label">Shift:</span> <strong id="drystock-shift-name"></strong>
-                            </div>
-                            <div class="context-detail">
-                                <span class="label">Date:</span> <strong id="drystock-shift-date"></strong>
-                            </div>
-                            <div class="context-detail liability-box">
-                                <span class="label">Cash Liability:</span> <strong id="drystock-liability-csa">Calculating...</strong>
-                            </div>
-                        </div>
+            <h3>Historical Sales</h3>
+            
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label>Date Filter</label>
+                    <input type="date" id="drystock-filter-date" class="spa-input">
+                </div>
+                <div class="form-group" style="flex: 2; min-width: 200px;">
+                    <label>Search Items</label>
+                    <input type="text" id="drystock-filter-search" class="spa-input" placeholder="Search item name...">
+                </div>
+            </div>
 
-                        <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
-                            <label>Performance Tracking (Sold By)</label>
-                            <select id="drystock-csa" class="spa-input"></select>
-                            <small style="color: #64748b;">Select the CSA who pitched this item for performance tracking.</small>
-                        </div>
+            <div class="table-responsive">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Entry ID</th>
+                            <th>Time</th>
+                            <th>Sold By</th>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-drystock-saved"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
-                        <div class="pos-inline-row">
-                            <div class="form-group pos-item-search">
-                                <label>Search Item</label>
-                                <input list="drystock-items-list" id="drystock-item-input" class="spa-input" placeholder="Start typing item name...">
-                                <datalist id="drystock-items-list"></datalist>
-                            </div>
-                            
-                            <div class="form-group pos-small">
-                                <label>Qty</label>
-                                <input type="number" id="drystock-qty" class="spa-input" placeholder="0">
-                            </div>
-                            
-                            <div class="form-group pos-small">
-                                <label>UOM</label>
-                                <input type="number" id="drystock-uom" class="spa-input" placeholder="0" step="0.01" readonly>
-                            </div>
-                            
-                            <div class="form-group pos-small">
-                                <label>Vol.</label>
-                                <input type="text" id="drystock-volume" class="spa-input" placeholder="0" readonly>
-                            </div>
-                            
-                            <div class="form-group pos-med">
-                                <label>Price</label>
-                                <input type="text" id="drystock-price" class="spa-input" placeholder="0.00" readonly>
-                            </div>
-                            
-                            <div class="form-group pos-med">
-                                <label>Total</label>
-                                <input type="text" id="drystock-total" class="spa-input" placeholder="0.00" readonly>
-                            </div>
-                            
-                            <div class="form-group pos-btn">
-                                <button class="btn-primary" id="btn-add-drystock" style="height: 42px; margin-top: 24px;">+ Add</button>
-                            </div>
-                        </div>
-                        
-                        <div class="table-responsive" style="margin-top: 2rem;">
-                            <table class="dash-table">
-                                <thead>
-                                    <tr>
-                                        <th>Entry ID</th>
-                                        <th>Time</th>
-                                        <th>Sold By</th>
-                                        <th>Item</th>
-                                        <th>Qty</th>
-                                        <th>Volume</th>
-                                        <th>Amount</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="list-drystock"></tbody>
-                                <tfoot style="font-weight: 600; background: #f8fafc; border-top: 2px solid #e2e8f0;">
-                                    <tr>
-                                        <td colspan="4" style="text-align: right;">TOTAL:</td>
-                                        <td id="drystock-total-qty">0</td>
-                                        <td id="drystock-total-volume">0.00</td>
-                                        <td id="drystock-total-amount">0.00</td>
-                                        <td></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                        <button class="btn-primary" id="btn-save-drystock" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Save Inventory Sales</button>
-                        
-                        <hr style="margin: 3rem 0 1rem; border: 0; border-top: 1px solid #e2e8f0;">
-                        <h3>Previously Saved Sales</h3>
-                        <div class="table-responsive">
-                            <table class="dash-table">
-                                <thead>
-                                    <tr>
-                                        <th>Entry ID</th>
-                                        <th>Time</th>
-                                        <th>Sold By</th>
-                                        <th>Item</th>
-                                        <th>Qty</th>
-                                        <th>Amount</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="list-drystock-saved"></tbody>
-                            </table>
-                        </div>
+    <!-- ENTRY VIEW -->
+    <div class="view-pane" id="drystock-entry-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <h3>Log Inventory Sale</h3>
+            
+            <div class="shift-context-box">
+                <div class="context-detail">
+                    <span class="label">Shift:</span> <strong id="drystock-shift-name"></strong>
+                </div>
+                <div class="context-detail">
+                    <span class="label">Date:</span> <strong id="drystock-shift-date"></strong>
+                </div>
+                <div class="context-detail liability-box">
+                    <span class="label">Cash Liability:</span> <strong id="drystock-liability-csa">Calculating...</strong>
+                </div>
+            </div>
 
-                    </div>
+            <div class="form-group" style="max-width: 400px; margin-bottom: 1.5rem;">
+                <label>Performance Tracking (Sold By)</label>
+                <select id="drystock-csa" class="spa-input"></select>
+                <small style="color: #64748b;">Select the CSA who pitched this item for performance tracking.</small>
+            </div>
+
+            <div class="pos-inline-row">
+                <div class="form-group pos-item-search">
+                    <label>Search Item</label>
+                    <input list="drystock-items-list" id="drystock-item-input" class="spa-input" placeholder="Start typing item name...">
+                    <datalist id="drystock-items-list"></datalist>
+                </div>
+                
+                <div class="form-group pos-small">
+                    <label>Qty</label>
+                    <input type="number" id="drystock-qty" class="spa-input" placeholder="0">
+                </div>
+                
+                <div class="form-group pos-small">
+                    <label>UOM</label>
+                    <input type="number" id="drystock-uom" class="spa-input" placeholder="0" step="0.01" readonly>
+                </div>
+                
+                <div class="form-group pos-small">
+                    <label>Vol.</label>
+                    <input type="text" id="drystock-volume" class="spa-input" placeholder="0" readonly>
+                </div>
+                
+                <div class="form-group pos-med">
+                    <label>Price</label>
+                    <input type="text" id="drystock-price" class="spa-input" placeholder="0.00" readonly>
+                </div>
+                
+                <div class="form-group pos-med">
+                    <label>Total</label>
+                    <input type="text" id="drystock-total" class="spa-input" placeholder="0.00" readonly>
+                </div>
+                
+                <div class="form-group pos-btn">
+                    <button class="btn-primary" id="btn-add-drystock" style="height: 42px; margin-top: 24px;">+ Add</button>
+                </div>
+            </div>
+            
+            <div class="table-responsive" style="margin-top: 2rem;">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Entry ID</th>
+                            <th>Time</th>
+                            <th>Sold By</th>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Volume</th>
+                            <th>Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-drystock"></tbody>
+                    <tfoot style="font-weight: 600; background: #f8fafc; border-top: 2px solid #e2e8f0;">
+                        <tr>
+                            <td colspan="4" style="text-align: right;">TOTAL:</td>
+                            <td id="drystock-total-qty">0</td>
+                            <td id="drystock-total-volume">0.00</td>
+                            <td id="drystock-total-amount">0.00</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <button class="btn-primary" id="btn-save-drystock" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Save Inventory Sales</button>
+
+        </div>
     </div>
 </section>
 

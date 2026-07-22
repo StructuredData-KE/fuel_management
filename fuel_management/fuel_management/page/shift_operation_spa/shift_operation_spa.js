@@ -472,8 +472,15 @@ function refresh_drystock_cart($wrapper) {
     $wrapper.find('#list-drystock').html(html);
     
     // Also render saved items
+    let filter_date = $wrapper.find('#drystock-filter-date').val();
+    let filter_search = ($wrapper.find('#drystock-filter-search').val() || '').toLowerCase();
+    
     let html_saved = '';
     (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
+        let row_date = row.creation ? row.creation.split(" ")[0] : frappe.datetime.now_date();
+        if (filter_date && row_date !== filter_date) return;
+        if (filter_search && row.item && !row.item.toLowerCase().includes(filter_search)) return;
+        
         let csa_name = row.sold_by;
         if (window.USERS_LIST) {
             let u = window.USERS_LIST.find(u => u.name === row.sold_by);
@@ -982,8 +989,11 @@ function setup_actions(wrapper) {
                                 window.PENDING_DRYSTOCK = [];
                                 $wrapper.find('#drystock-csa').val('');
                                 refresh_drystock_cart($wrapper);
+                                // Automatically jump back to history view on success
+                                $wrapper.find('.seg-btn[data-view="history"]').click();
                             }
                             btn.prop('disabled', false).html(originalHTML);
+                            btn.find('.spinner').addClass('hidden');
 btn.find('.spinner').addClass('hidden');
                         }
                     });
