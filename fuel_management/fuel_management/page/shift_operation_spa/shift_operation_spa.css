@@ -473,6 +473,7 @@
     flex-wrap: wrap;
     align-items: stretch;
     border-bottom: 1px solid #e2e8f0;
+    background-color: #f8fafc;
 }
 .meter-row:last-child {
     border-bottom: none;
@@ -498,11 +499,13 @@
     min-width: 200px;
     border-right: 1px solid #e2e8f0;
 }
-.elec-col {
+.meter-closing-elec.highlight-input {
     background-color: #f0fdf4;
+    border-color: #86efac;
 }
-.manual-col {
+.meter-closing-manual.highlight-input {
     background-color: #eff6ff;
+    border-color: #93c5fd;
 }
 .col-title {
     font-weight: 600;
