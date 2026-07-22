@@ -50,6 +50,7 @@ class Shift(Document):
                             total_fuel_amount += (row.sales_quantity_electronic * price)
 
         total_dry_stock_amount = sum(flt(row.amount) for row in (self.inventory_sales or []))
+        self.expected_dry_stock_cash = total_dry_stock_amount
         
         total_mpesa = 0.0
         if self.mpesa_payments:
@@ -69,39 +70,57 @@ class Shift(Document):
             for s in fleet_summaries:
                 total_fleet_drops += flt(s.total_csa_drops)
 
-        self.expected_cash = (total_fuel_amount + total_dry_stock_amount) - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops)
+        self.expected_cash = total_fuel_amount - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops)
 
         if getattr(self, "actual_cash", None) is not None:
             self.cash_variance = flt(self.actual_cash) - flt(self.expected_cash)
+            
+        if getattr(self, "actual_dry_stock_cash", None) is not None:
+            self.dry_stock_cash_variance = flt(self.actual_dry_stock_cash) - flt(self.expected_dry_stock_cash)
 
     def on_update(self):
         self.create_stock_entry_on_close()
         self.post_cash_variance_to_liability_ledger()
 
     def post_cash_variance_to_liability_ledger(self):
+        # 1. Fuel Variance
         if self.status == "Closed" and getattr(self, "cash_variance", 0) and self.cash_variance < 0:
-            # We must assign this variance to the shift CSAs. 
-            # If multiple CSAs, we could split it, but usually Head CSA takes the hit or it's distributed.
-            # We'll create one ledger entry per assigned CSA splitting the variance.
+            csas = [row.csa for row in (self.assigned_csas or []) if row.csa and "Lube" not in (row.pump_group or "")]
+            if csas:
+                split_amount = abs(self.cash_variance) / len(csas)
+                for csa in csas:
+                    existing = frappe.db.exists("Staff Liability Ledger", {"shift": self.name, "employee": csa, "reason": ("like", "%Fuel%")})
+                    if not existing:
+                        ledger = frappe.new_doc("Staff Liability Ledger")
+                        ledger.employee = csa
+                        ledger.date = self.shift_date
+                        ledger.shift = self.name
+                        ledger.amount = split_amount
+                        ledger.reason = f"Fuel Cash Variance Shortfall for Shift {self.name}"
+                        ledger.insert(ignore_permissions=True)
+                        ledger.submit()
+                        frappe.msgprint(f"Staff Liability Ledger created for CSA {csa} (Fuel) for shortfall of {split_amount}")
+
+        # 2. Dry Stock Variance
+        if self.status == "Closed" and getattr(self, "dry_stock_cash_variance", 0) and self.dry_stock_cash_variance < 0:
+            lubes_csa = None
+            for row in (self.assigned_csas or []):
+                if row.pump_group and "Lube" in row.pump_group:
+                    lubes_csa = row.csa
+                    break
             
-            csas = [row.csa for row in (self.assigned_csas or []) if row.csa]
-            if not csas:
-                return
-                
-            split_amount = abs(self.cash_variance) / len(csas)
-            
-            for csa in csas:
-                existing = frappe.db.exists("Staff Liability Ledger", {"shift": self.name, "employee": csa})
+            if lubes_csa:
+                existing = frappe.db.exists("Staff Liability Ledger", {"shift": self.name, "employee": lubes_csa, "reason": ("like", "%Dry Stock%")})
                 if not existing:
                     ledger = frappe.new_doc("Staff Liability Ledger")
-                    ledger.employee = csa
+                    ledger.employee = lubes_csa
                     ledger.date = self.shift_date
                     ledger.shift = self.name
-                    ledger.amount = split_amount
-                    ledger.reason = f"Cash Variance Shortfall for Shift {self.name}"
+                    ledger.amount = abs(self.dry_stock_cash_variance)
+                    ledger.reason = f"Dry Stock Cash Variance Shortfall for Shift {self.name}"
                     ledger.insert(ignore_permissions=True)
                     ledger.submit()
-                    frappe.msgprint(f"Staff Liability Ledger created for CSA {csa} for shortfall of {split_amount}")
+                    frappe.msgprint(f"Staff Liability Ledger created for CSA {lubes_csa} (Dry Stock) for shortfall of {abs(self.dry_stock_cash_variance)}")
 
     def lock_shift_if_closed_for_csa(self):
         if not self.is_new():

@@ -93,6 +93,7 @@ function load_shift_data($wrapper) {
                 render_meters($wrapper);
                 render_dips($wrapper);
                 render_mpesa($wrapper);
+                render_drystock($wrapper);
             }
         }
     });
@@ -306,6 +307,114 @@ function render_mpesa($wrapper) {
     $wrapper.find('.mpesa-closing').trigger('input');
 }
 
+
+function render_drystock($wrapper) {
+    $wrapper.find('#drystock-shift-name').text(window.ACTIVE_SHIFT.name);
+    $wrapper.find('#drystock-shift-date').text(window.ACTIVE_SHIFT.shift_date);
+
+    // Populate CSA dropdown
+    let csaOptions = '<option value="">Select CSA...</option>';
+    if (window.USERS_LIST) {
+        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
+    }
+    $wrapper.find('#drystock-csa').html(csaOptions);
+
+    // Event listeners for calculating
+    function calc_drystock() {
+        let qty = parseFloat($wrapper.find('#drystock-qty').val()) || 0;
+        let uom = parseFloat($wrapper.find('#drystock-uom').val()) || 0;
+        let price = parseFloat($wrapper.find('#drystock-price').val()) || 0;
+        
+        $wrapper.find('#drystock-volume').val((qty * uom).toFixed(2));
+        $wrapper.find('#drystock-total').val((qty * price).toFixed(2));
+    }
+
+    $wrapper.find('#drystock-item').on('change', function() {
+        let price = $(this).find('option:selected').attr('data-price') || 0;
+        $wrapper.find('#drystock-price').val(parseFloat(price).toFixed(2));
+        calc_drystock();
+    });
+
+    $wrapper.find('#drystock-qty, #drystock-uom').on('input', calc_drystock);
+
+    // Add to Cart
+    $wrapper.find('#btn-add-drystock').off('click').on('click', function() {
+        let csa = $wrapper.find('#drystock-csa').val();
+        let item = $wrapper.find('#drystock-item').val();
+        let qty = parseFloat($wrapper.find('#drystock-qty').val()) || 0;
+        let uom = parseFloat($wrapper.find('#drystock-uom').val()) || 0;
+        let price = parseFloat($wrapper.find('#drystock-price').val()) || 0;
+        
+        if (!csa || !item || qty <= 0) {
+            frappe.show_alert({message: "Please select CSA, Item, and enter a valid quantity.", indicator: "red"});
+            return;
+        }
+
+        let volume = qty * uom;
+        let amount = qty * price;
+
+        if (!window.SHIFT_DOC.inventory_sales) window.SHIFT_DOC.inventory_sales = [];
+        
+        // Push a new row
+        let new_row = {
+            doctype: "Shift Inventory Sale",
+            sold_by: csa,
+            item: item,
+            quantity: qty,
+            uom_multiplier: uom,
+            total_volume: volume,
+            selling_price: price,
+            amount: amount,
+            _is_new: true
+        };
+        window.SHIFT_DOC.inventory_sales.push(new_row);
+        
+        // Reset form
+        $wrapper.find('#drystock-qty').val('');
+        $wrapper.find('#drystock-uom').val('');
+        calc_drystock();
+        
+        refresh_drystock_cart($wrapper);
+    });
+
+    refresh_drystock_cart($wrapper);
+    
+    // Also update variance fields if they already exist in doc
+    $wrapper.find('#cash-variance-val').text(window.SHIFT_DOC.cash_variance ? 'KES ' + window.SHIFT_DOC.cash_variance.toLocaleString('en-US', {minimumFractionDigits: 2}) : 'KES 0.00');
+    $wrapper.find('#drystock-variance-val').text(window.SHIFT_DOC.dry_stock_cash_variance ? 'KES ' + window.SHIFT_DOC.dry_stock_cash_variance.toLocaleString('en-US', {minimumFractionDigits: 2}) : 'KES 0.00');
+    $wrapper.find('#actual-cash-input').val(window.SHIFT_DOC.actual_cash || '');
+    $wrapper.find('#actual-drystock-cash-input').val(window.SHIFT_DOC.actual_dry_stock_cash || '');
+}
+
+function refresh_drystock_cart($wrapper) {
+    let html = '';
+    (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
+        let csa_name = row.sold_by;
+        if (window.USERS_LIST) {
+            let u = window.USERS_LIST.find(u => u.name === row.sold_by);
+            if(u) csa_name = u.full_name;
+        }
+        
+        html += `
+            <tr data-idx="${idx}">
+                <td>${csa_name || ''}</td>
+                <td>${row.item}</td>
+                <td>${row.quantity}</td>
+                <td>${row.total_volume || 0}</td>
+                <td>${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td><button class="btn btn-xs btn-danger btn-remove-drystock">X</button></td>
+            </tr>
+        `;
+    });
+    $wrapper.find('#list-drystock').html(html);
+
+    $wrapper.find('.btn-remove-drystock').off('click').on('click', function() {
+        let idx = parseInt($(this).closest('tr').attr('data-idx'));
+        window.SHIFT_DOC.inventory_sales.splice(idx, 1);
+        refresh_drystock_cart($wrapper);
+    });
+}
+
 function setup_tabs(wrapper) {
     const $wrapper = $(wrapper);
     $wrapper.find('.nav-item').on('click', function(e) {
@@ -331,7 +440,29 @@ function setup_tabs(wrapper) {
     });
 }
 
+window.DRYSTOCK_ITEMS = [];
 function load_dropdowns(wrapper) {
+    // Fetch Items for Dry Stock
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Item Price",
+            filters: { price_list: "Standard Selling" },
+            fields: ["item_code", "item_name", "price_list_rate"],
+            limit_page_length: 500
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.DRYSTOCK_ITEMS = r.message;
+                let options = '<option value="">Select Item...</option>';
+                r.message.forEach(item => {
+                    options += `<option value="${item.item_code}" data-price="${item.price_list_rate}">${item.item_name} - ${item.item_code}</option>`;
+                });
+                $(wrapper).find('#drystock-item').html(options);
+            }
+        }
+    });
+
     // Fetch Stations
     frappe.call({
         method: "frappe.client.get_list",
@@ -640,6 +771,51 @@ function setup_actions(wrapper) {
         });
     }
 
+    
+    $wrapper.on('click', '#btn-save-drystock', function() {
+        let btn = $(this);
+        let originalText = btn.text();
+        btn.prop('disabled', true).text('Saving...');
+        
+        let rows_data = (window.SHIFT_DOC.inventory_sales || []).map(r => {
+            return {
+                name: r._is_new ? undefined : r.name,
+                sold_by: r.sold_by,
+                item: r.item,
+                quantity: r.quantity,
+                uom_multiplier: r.uom_multiplier,
+                total_volume: r.total_volume,
+                selling_price: r.selling_price,
+                amount: r.amount
+            };
+        });
+        
+        frappe.call({
+            method: "frappe.client.get",
+            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+            callback: function(r) {
+                if(r.message) {
+                    let doc = r.message;
+                    doc.inventory_sales = rows_data;
+                    frappe.call({
+                        method: "frappe.client.save",
+                        args: { doc: doc },
+                        callback: function(r2) {
+                            if(r2.message) {
+                                frappe.show_alert({message: "Inventory Sales saved!", indicator: "green"});
+                                window.SHIFT_DOC = r2.message; 
+                                refresh_drystock_cart($wrapper);
+                            }
+                            btn.prop('disabled', false).text(originalText);
+                        }
+                    });
+                } else {
+                    btn.prop('disabled', false).text(originalText);
+                }
+            }
+        });
+    });
+
     // Close Shift Logic
     $wrapper.find('#btn-close-shift').on('click', function() {
         if(!window.ACTIVE_SHIFT) return;
@@ -652,21 +828,32 @@ function setup_actions(wrapper) {
             return;
         }
         
+        let actual_fuel_cash = parseFloat($wrapper.find('#actual-cash-input').val()) || 0;
+        let actual_drystock_cash = parseFloat($wrapper.find('#actual-drystock-cash-input').val()) || 0;
+
         frappe.confirm('Are you absolutely sure you want to close this shift? This will permanently lock the data and generate accounting entries.', () => {
             frappe.call({
-                method: "frappe.client.set_value",
-                args: {
-                    doctype: "Shift",
-                    name: window.ACTIVE_SHIFT.name,
-                    fieldname: "status",
-                    value: "Closed"
-                },
-                callback: function(r) {
-                    if(r.message) {
-                        frappe.show_alert({message: "Shift Closed successfully!", indicator: "green"});
-                        setTimeout(() => {
-                            location.reload();
-                        }, 2000);
+                method: "frappe.client.get",
+                args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+                callback: function(res) {
+                    if (res.message) {
+                        let doc = res.message;
+                        doc.actual_cash = actual_fuel_cash;
+                        doc.actual_dry_stock_cash = actual_drystock_cash;
+                        doc.status = "Closed";
+                        
+                        frappe.call({
+                            method: "frappe.client.save",
+                            args: { doc: doc },
+                            callback: function(r) {
+                                if(r.message) {
+                                    frappe.show_alert({message: "Shift Closed successfully!", indicator: "green"});
+                                    setTimeout(() => {
+                                        location.reload();
+                                    }, 2000);
+                                }
+                            }
+                        });
                     }
                 }
             });

@@ -110,14 +110,31 @@
             "read_only": 1
         },
         {
+            "fieldname": "expected_dry_stock_cash",
+            "fieldtype": "Currency",
+            "label": "Expected Dry Stock Cash",
+            "read_only": 1
+        },
+        {
             "fieldname": "actual_cash",
             "label": "Actual Cash",
             "fieldtype": "Currency"
         },
         {
+            "fieldname": "actual_dry_stock_cash",
+            "fieldtype": "Currency",
+            "label": "Actual Dry Stock Cash"
+        },
+        {
             "fieldname": "cash_variance",
             "label": "Cash Variance",
             "fieldtype": "Currency",
+            "read_only": 1
+        },
+        {
+            "fieldname": "dry_stock_cash_variance",
+            "fieldtype": "Currency",
+            "label": "Dry Stock Cash Variance",
             "read_only": 1
         },
         {
