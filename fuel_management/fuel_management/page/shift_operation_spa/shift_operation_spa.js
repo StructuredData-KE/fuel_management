@@ -431,7 +431,15 @@ function refresh_drystock_cart($wrapper) {
     
     let is_locked = window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"));
     
+    let total_qty = 0;
+    let total_volume = 0;
+    let total_amount = 0;
+
     (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
+        total_qty += row.quantity || 0;
+        total_volume += row.total_volume || 0;
+        total_amount += row.amount || 0;
+        
         let csa_name = row.sold_by;
         if (window.USERS_LIST) {
             let u = window.USERS_LIST.find(u => u.name === row.sold_by);
@@ -456,7 +464,12 @@ function refresh_drystock_cart($wrapper) {
             </tr>
         `;
     });
+    
     $wrapper.find('#list-drystock').html(html);
+    
+    $wrapper.find('#drystock-total-qty').text(total_qty);
+    $wrapper.find('#drystock-total-volume').text(total_volume.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+    $wrapper.find('#drystock-total-amount').text(total_amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
 
     $wrapper.find('.btn-remove-drystock').off('click').on('click', function() {
         if (is_locked) return;

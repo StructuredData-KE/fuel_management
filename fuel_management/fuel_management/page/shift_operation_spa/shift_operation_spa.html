@@ -280,13 +280,6 @@
             
             <!-- DRY STOCK -->
             <section id="tab-drystock" class="tab-pane">
-    <div class="segmented-control-wrapper">
-        <div class="segmented-control">
-            <button class="seg-btn active" data-view="entry">Entry View</button>
-            <button class="seg-btn" data-view="history">Historical View</button>
-        </div>
-    </div>
-    
     <div class="view-pane active" id="drystock-entry-view">
         <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
                         <h3>Log Inventory Sale</h3>
@@ -345,13 +338,8 @@
                                 <button class="btn-primary" id="btn-add-drystock" style="height: 42px; margin-top: 24px;">+ Add</button>
                             </div>
                         </div>
-                    </div>
-    </div>
-    
-    <div class="view-pane" id="drystock-history-view">
-        <div class="dash-card full-width-card">
-            <h3>Inventory Cart / History</h3>
-                        <div class="table-responsive">
+                        
+                        <div class="table-responsive" style="margin-top: 2rem;">
                             <table class="dash-table">
                                 <thead>
                                     <tr>
@@ -366,10 +354,20 @@
                                     </tr>
                                 </thead>
                                 <tbody id="list-drystock"></tbody>
+                                <tfoot style="font-weight: 600; background: #f8fafc; border-top: 2px solid #e2e8f0;">
+                                    <tr>
+                                        <td colspan="4" style="text-align: right;">TOTAL:</td>
+                                        <td id="drystock-total-qty">0</td>
+                                        <td id="drystock-total-volume">0.00</td>
+                                        <td id="drystock-total-amount">0.00</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
                         <button class="btn-primary" id="btn-save-drystock" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Save Inventory Sales</button>
-        </div>
+
+                    </div>
     </div>
 </section>
 
