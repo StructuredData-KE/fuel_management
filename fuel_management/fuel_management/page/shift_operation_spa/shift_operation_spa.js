@@ -389,7 +389,7 @@ function render_drystock($wrapper) {
 function refresh_drystock_cart($wrapper) {
     let html = '';
     
-    let is_locked = window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !frappe.user.has_role("System Manager");
+    let is_locked = window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"));
     
     (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
         let csa_name = row.sold_by;
@@ -753,8 +753,8 @@ function setup_actions(wrapper) {
     });
     
     function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null) {
-        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !frappe.user.has_role("System Manager")) {
-            frappe.show_alert({message: "This shift is closed. Only System Managers can modify data.", indicator: "red"});
+        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"))) {
+            frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
             if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
             return;
         }
@@ -790,8 +790,8 @@ function setup_actions(wrapper) {
 
     
     $wrapper.on('click', '#btn-save-drystock', function() {
-        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !frappe.user.has_role("System Manager")) {
-            frappe.show_alert({message: "This shift is closed. Only System Managers can modify data.", indicator: "red"});
+        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"))) {
+            frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
             return;
         }
         let btn = $(this);
