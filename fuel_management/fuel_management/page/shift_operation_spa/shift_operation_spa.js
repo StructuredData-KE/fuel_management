@@ -1574,7 +1574,7 @@ function render_customer_payments($wrapper) {
             args: {
                 doctype: "Customer Payment",
                 filters: { shift: window.ACTIVE_SHIFT.name },
-                fields: ["name", "creation", "customer", "csa", "mode_of_payment", "amount"],
+                fields: ["name", "date", "shift", "creation", "customer", "csa", "mode_of_payment", "amount"],
                 order_by: "creation desc"
             },
             callback: function(r) {
@@ -1591,6 +1591,8 @@ function render_customer_payments($wrapper) {
                         html += `
                             <tr>
                                 <td style="font-family: monospace; color: #64748b;">${row.name.substring(0, 8)}</td>
+                                <td>${row.date || ""}</td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
                                 <td>${row.customer}</td>
                                 <td>${csa_name}</td>
@@ -1600,7 +1602,7 @@ function render_customer_payments($wrapper) {
                         `;
                     });
                 }
-                if(html === '') html = '<tr><td colspan="6" class="text-center" style="color: #94a3b8; padding: 2rem;">No payments recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No payments recorded yet.</td></tr>';
                 $wrapper.find('#list-customer-payments-saved').html(html);
             }
         });
