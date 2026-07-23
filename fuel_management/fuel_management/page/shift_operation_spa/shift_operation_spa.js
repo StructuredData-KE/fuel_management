@@ -101,6 +101,7 @@ function load_shift_data($wrapper) {
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
                 if(typeof render_rtt === 'function') render_rtt($wrapper);
                 if(typeof render_topups === 'function') render_topups($wrapper);
+                if(typeof render_purchases === 'function') render_purchases($wrapper);
             }
         }
     });
@@ -2350,6 +2351,209 @@ function render_topups($wrapper) {
                     
                     // Switch to history view and refresh
                     $wrapper.find('#tab-topups .seg-btn[data-view="history"]').click();
+                    fetch_history();
+                }
+            }
+        });
+    });
+}
+
+
+// =========================================================
+// STATION PURCHASES MODULE
+// =========================================================
+function render_purchases($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+
+    let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+
+    // 1. Segments
+    $wrapper.find('#tab-purchases .seg-btn').off('click').on('click', function() {
+        let $btn = $(this);
+        let targetView = $btn.attr('data-view');
+        
+        $wrapper.find('#tab-purchases .seg-btn').removeClass('active');
+        $btn.addClass('active');
+        
+        $wrapper.find('#tab-purchases .view-pane').removeClass('active');
+        $wrapper.find(`#purchases-${targetView}-view`).addClass('active');
+    });
+
+    // 2. Dates
+    $wrapper.find('#pur-rec-date').val(window.SHIFT_DOC.shift_date);
+    $wrapper.find('#pur-doc-date').val(window.SHIFT_DOC.shift_date);
+    
+    // Set max date to today
+    let today = frappe.datetime.nowdate();
+    $wrapper.find('#pur-rec-date').attr('max', today);
+    $wrapper.find('#pur-doc-date').attr('max', today);
+
+    // 3. Supplier Dropdown
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Supplier", fields: ["name", "tax_id"], limit: 500 },
+        callback: function(r) {
+            let opts = '<option value="">Select Supplier...</option>';
+            if(r.message) {
+                window.PURCHASE_SUPPLIERS = r.message;
+                r.message.forEach(s => { opts += `<option value="${s.name}">${s.name}</option>`; });
+            }
+            $wrapper.find('#pur-supplier').html(opts);
+        }
+    });
+
+    $wrapper.find('#pur-supplier').on('change', function() {
+        let supp = $(this).val();
+        let s = (window.PURCHASE_SUPPLIERS || []).find(x => x.name === supp);
+        if(s && s.tax_id) {
+            $wrapper.find('#pur-invoice').val(s.tax_id);
+        } else {
+            $wrapper.find('#pur-invoice').val('N/A');
+        }
+    });
+
+    // 4. Item Dropdown
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Item", fields: ["name", "item_name"], filters: {disabled: 0}, limit: 500 },
+        callback: function(r) {
+            let opts = '<option value="">Select Item...</option>';
+            if(r.message) {
+                r.message.forEach(i => { opts += `<option value="${i.name}">${i.item_name}</option>`; });
+            }
+            $wrapper.find('#pur-item').html(opts);
+        }
+    });
+
+    // 5. Target Location Dropdown
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Warehouse", fields: ["name", "warehouse_name"], filters: {is_group: 0}, limit: 500 },
+        callback: function(r) {
+            let opts = '<option value="">Select Target...</option>';
+            if(r.message) {
+                r.message.forEach(w => { opts += `<option value="${w.name}">${w.warehouse_name}</option>`; });
+            }
+            $wrapper.find('#pur-target').html(opts);
+        }
+    });
+
+    // 6. Calculation Logic
+    let calcTotals = function() {
+        let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
+        let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
+        let isVat = $wrapper.find('#pur-vat').is(':checked');
+        
+        let total = qty * cost;
+        let net = total;
+        if(isVat) {
+            net = total / 1.16; // KE VAT 16%
+        }
+        
+        $wrapper.find('#pur-net').text(net.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        $wrapper.find('#pur-total').text(total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+    };
+    $wrapper.find('#pur-qty, #pur-cost, #pur-vat').on('input change', calcTotals);
+
+    // 7. Fetch History
+    let fetch_history = function() {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Station Purchase",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "receiving_date", "supplier", "tax_invoice_number", "item", "quantity", "target_location", "total_cost"],
+                order_by: "name desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                                <td>${row.receiving_date}</td>
+                                <td>${row.supplier}</td>
+                                <td><span class="badge" style="background: #f1f5f9;">${row.tax_invoice_number || "N/A"}</span></td>
+                                <td>${row.item}</td>
+                                <td>${row.quantity}</td>
+                                <td>${row.target_location}</td>
+                                <td style="font-weight: 600;">${parseFloat(row.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
+                $wrapper.find('#list-station-purchases-saved').html(html);
+            }
+        });
+    };
+    fetch_history();
+
+    // 8. Summary Modal and Save
+    let pendingPurchase = {};
+    
+    $wrapper.find('#btn-save-purchase').off('click').on('click', function() {
+        if (is_locked) {
+            frappe.show_alert({message: "Shift is closed.", indicator: "red"});
+            return;
+        }
+
+        pendingPurchase = {
+            doctype: "Station Purchase",
+            shift: window.ACTIVE_SHIFT.name,
+            receiving_date: $wrapper.find('#pur-rec-date').val(),
+            document_date: $wrapper.find('#pur-doc-date').val(),
+            supplier: $wrapper.find('#pur-supplier').val(),
+            item: $wrapper.find('#pur-item').val(),
+            target_location: $wrapper.find('#pur-target').val(),
+            quantity: parseFloat($wrapper.find('#pur-qty').val()) || 0,
+            unit_cost: parseFloat($wrapper.find('#pur-cost').val()) || 0,
+            vat_inclusive: $wrapper.find('#pur-vat').is(':checked') ? 1 : 0
+        };
+
+        if (!pendingPurchase.supplier || !pendingPurchase.item || !pendingPurchase.target_location || pendingPurchase.quantity <= 0 || pendingPurchase.unit_cost <= 0) {
+            frappe.show_alert({message: "Please fill all required fields correctly.", indicator: "red"});
+            return;
+        }
+
+        // Show Modal
+        $('#mod-pur-supp').text(pendingPurchase.supplier);
+        $('#mod-pur-item').text(pendingPurchase.item);
+        $('#mod-pur-target').text(pendingPurchase.target_location);
+        $('#mod-pur-qty').text(pendingPurchase.quantity);
+        $('#mod-pur-total').text((pendingPurchase.quantity * pendingPurchase.unit_cost).toLocaleString('en-US', {minimumFractionDigits:2}));
+        
+        $('#purchase-modal').removeClass('hidden');
+    });
+
+    $('#btn-cancel-pur-modal').off('click').on('click', function() {
+        $('#purchase-modal').addClass('hidden');
+    });
+
+    $('#btn-confirm-pur-modal').off('click').on('click', function() {
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        frappe.call({
+            method: "frappe.client.insert",
+            args: { doc: pendingPurchase },
+            callback: function(r) {
+                $btn.html(orig_html).prop('disabled', false);
+                $('#purchase-modal').addClass('hidden');
+                
+                if(r.message) {
+                    frappe.show_alert({message: "Purchase recorded successfully!", indicator: "green"});
+                    
+                    // Clear inputs
+                    $wrapper.find('#pur-supplier').val('').trigger('change');
+                    $wrapper.find('#pur-item').val('');
+                    $wrapper.find('#pur-qty').val('');
+                    $wrapper.find('#pur-cost').val('');
+                    
+                    // Switch to history view and refresh
+                    $wrapper.find('#tab-purchases .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
             }
