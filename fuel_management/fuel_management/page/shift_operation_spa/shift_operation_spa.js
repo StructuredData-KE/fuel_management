@@ -1164,7 +1164,7 @@ function render_invoices($wrapper) {
         args: {
             doctype: "Item",
             fields: ["name", "item_name", "item_group", "standard_rate"],
-            filters: { disabled: 0, is_sales_item: 1 },
+            filters: { disabled: 0, item_group: ["in", ["Fuel", "Lubes", "Accessories", "Gas", "Services", "Consumable", "Products"]] },
             limit: 1000
         },
         callback: function(r) {
@@ -1444,9 +1444,14 @@ function refresh_invoice_cart($wrapper) {
             `<button class="btn btn-xs btn-danger" disabled>X</button>` : 
             `<button class="btn btn-xs btn-danger btn-remove-saved-invoice" data-idx="${idx}">X</button>`;
 
+        let sDate = window.ACTIVE_SHIFT.shift_date || window.ACTIVE_SHIFT.creation || frappe.datetime.now_date();
+        let shiftName = window.ACTIVE_SHIFT.shift_template ? `${window.ACTIVE_SHIFT.shift_template}` : window.ACTIVE_SHIFT.name;
+
         html_saved += `
             <tr>
                 <td><span class="badge" style="background: #e2e8f0; color: #0f172a;">${row.entry_number || '-'}</span></td>
+                <td style="color: #64748b;">${sDate.split(" ")[0]}</td>
+                <td style="color: #64748b;">${shiftName}</td>
                 <td><strong>${row.customer || ''}</strong></td>
                 <td>${row.purchase_order || '-'}</td>
                 <td>${row.vehicle_registration || '-'}</td>
