@@ -2554,7 +2554,7 @@ function render_purchases($wrapper) {
             args: {
                 doctype: "Station Purchase",
                 filters: { shift: window.ACTIVE_SHIFT.name },
-                fields: ["name", "receiving_date", "supplier", "tax_invoice_number", "bill_no", "total_cost"],
+                fields: ["name", "receiving_date", "supplier", "tax_invoice_number", "document_invoice_number", "grand_total"],
                 order_by: "name desc"
             },
             callback: function(r) {
@@ -2567,8 +2567,8 @@ function render_purchases($wrapper) {
                                 <td>${row.receiving_date}</td>
                                 <td>${row.supplier}</td>
                                 <td><span class="badge" style="background: #f1f5f9;">${row.tax_invoice_number || "N/A"}</span></td>
-                                <td><span class="badge" style="background: #f1f5f9;">${row.bill_no || "N/A"}</span></td>
-                                <td style="font-weight: 600;">${frappe.format(row.total_cost || 0, {fieldtype: 'Currency'})}</td>
+                                <td><span class="badge" style="background: #f1f5f9;">${row.document_invoice_number || "N/A"}</span></td>
+                                <td style="font-weight: 600;">${frappe.format(row.grand_total || 0, {fieldtype: 'Currency'})}</td>
                             </tr>
                         `;
                     });
@@ -2611,7 +2611,7 @@ function render_purchases($wrapper) {
             receiving_date: rec_date,
             document_date: doc_date,
             supplier: supplier,
-            bill_no: doc_invoice,
+            document_invoice_number: doc_invoice,
             tax_invoice_number: kra_invoice,
             custom_kra_invoice_number: kra_invoice,
             transport_charge: transport,
