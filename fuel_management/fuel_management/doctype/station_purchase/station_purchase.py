@@ -26,7 +26,7 @@ class StationPurchase(Document):
         pi.set_posting_time = 1
         pi.update_stock = 1
         pi.bill_no = self.document_invoice_number
-        pi.remarks = f"Tax Invoice No: {self.tax_invoice_number}"
+        pi.custom_kra_invoice_number = self.tax_invoice_number
         
         for item in self.items:
             pi.append("items", {
@@ -39,12 +39,12 @@ class StationPurchase(Document):
             })
             
         if self.transport_charge and self.transport_charge > 0:
-            pi.append("taxes", {
-                "charge_type": "Actual",
-                "account_head": frappe.get_cached_value("Company", frappe.defaults.get_user_default("Company"), "default_expense_account") or "Cost of Goods Sold",
+            pi.append("items", {
+                "item_name": "Transport Charge",
                 "description": "Transport Charge",
-                "tax_amount": self.transport_charge,
-                "add_deduct_tax": "Add"
+                "qty": 1,
+                "rate": self.transport_charge,
+                "expense_account": frappe.get_cached_value("Company", frappe.defaults.get_user_default("Company"), "default_expense_account") or "Cost of Goods Sold"
             })
         
         pi.flags.ignore_permissions = True
