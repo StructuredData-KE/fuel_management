@@ -1163,8 +1163,8 @@ function render_invoices($wrapper) {
         args: {
             doctype: "Item",
             fields: ["name", "item_name", "item_group"],
-            filters: { disabled: 0, has_variants: 0 },
-            limit: 2000
+            filters: { disabled: 0 },
+            limit: 5000
         },
         callback: function(r) {
             if(r.message) {
