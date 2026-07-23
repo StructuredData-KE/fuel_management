@@ -95,6 +95,7 @@ function load_shift_data($wrapper) {
                 render_dips($wrapper);
                 render_mpesa($wrapper);
                 render_drystock($wrapper);
+                if(typeof render_invoices === 'function') render_invoices($wrapper);
             }
         }
     });
