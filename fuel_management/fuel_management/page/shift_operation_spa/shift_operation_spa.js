@@ -1157,26 +1157,13 @@ function render_invoices($wrapper) {
     });
     $wrapper.find('#invoice-csa').html(csaOptions);
 
-    // 3. Fetch Items
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "Item",
-            fields: ["name", "item_name", "item_code", "item_group"],
-            filters: { disabled: 0 },
-            limit: 5000
-        },
-        callback: function(r) {
-            if(r.message) {
-                window.INVOICE_ITEMS = r.message;
-                let itemOpts = '';
-                r.message.forEach(i => {
-                    itemOpts += `<option value="${i.item_name} - ${i.name}">`;
-                });
-                $wrapper.find('#invoice-items-list').html(itemOpts);
-            }
-        }
+    // 3. Use identical items as Drystock (Item Price query)
+    window.INVOICE_ITEMS = window.DRYSTOCK_ITEMS;
+    let itemOpts = '';
+    (window.INVOICE_ITEMS || []).forEach(i => {
+        itemOpts += `<option value="${i.item_name} - ${i.item_code}">`;
     });
+    $wrapper.find('#invoice-items-list').html(itemOpts);
 
     // 4. Fetch Customers
     frappe.call({
@@ -1228,25 +1215,10 @@ function render_invoices($wrapper) {
     // Event: Item changes -> Fetch Rate
     $wrapper.find('#invoice-item-input').off('change').on('change', function() {
         let val = $(this).val();
-        let item = (window.INVOICE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === val);
+        let item = (window.INVOICE_ITEMS || []).find(i => `${i.item_name} - ${i.item_code}` === val);
         if(item) {
-            // First try standard rate from item master, if 0 try to fetch from price list
-            frappe.call({
-                method: "frappe.client.get_value",
-                args: {
-                    doctype: "Item Price",
-                    filters: { item_code: item.name, price_list: "Standard Selling" },
-                    fieldname: "price_list_rate"
-                },
-                callback: function(r) {
-                    if(r.message && r.message.price_list_rate) {
-                        $wrapper.find('#invoice-rate').val(parseFloat(r.message.price_list_rate).toFixed(2));
-                    } else {
-                        $wrapper.find('#invoice-rate').val((parseFloat(item.standard_rate) || 0).toFixed(2));
-                    }
-                    calc_invoice();
-                }
-            });
+            $wrapper.find('#invoice-rate').val(parseFloat(item.price_list_rate || 0).toFixed(2));
+            calc_invoice();
         } else {
             $wrapper.find('#invoice-rate').val('');
         }
