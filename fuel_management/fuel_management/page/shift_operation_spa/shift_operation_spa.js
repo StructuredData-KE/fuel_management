@@ -135,6 +135,7 @@ function load_shift_data($wrapper) {
                 if(typeof render_customer_payments === 'function') render_customer_payments($wrapper);
                 if(typeof render_station_cards === 'function') render_station_cards($wrapper);
                 if(typeof render_petty_cash === 'function') render_petty_cash($wrapper);
+                if(typeof render_cash_transfers === 'function') render_cash_transfers($wrapper);
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
                 if(typeof render_rtt === 'function') render_rtt($wrapper);
                 if(typeof render_topups === 'function') render_topups($wrapper);
@@ -2822,6 +2823,134 @@ function load_petty_cash_history($wrapper) {
                 });
             } else {
                 $tbody.append('<tr><td colspan="7" class="text-center text-muted">No petty cash entries for this shift yet.</td></tr>');
+            }
+        }
+    });
+}
+
+
+
+// ==========================================
+// CASH TRANSFERS LOGIC
+// ==========================================
+function render_cash_transfers(wrapper) {
+    const $wrapper = $(wrapper);
+    
+    // Set default date
+    $wrapper.find('#ct-date').val(frappe.datetime.get_today());
+    
+    // Setup Segmented Control
+    $wrapper.find('#tab-cash-transfers .seg-btn').off('click').on('click', function() {
+        $wrapper.find('#tab-cash-transfers .seg-btn').removeClass('active');
+        $(this).addClass('active');
+        
+        const view = $(this).data('view');
+        $wrapper.find('#tab-cash-transfers .view-pane').removeClass('active');
+        $wrapper.find('#ct-' + view + '-view').addClass('active');
+    });
+    
+    // Load ERPNext Accounts
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Account",
+            filters: { is_group: 0, account_type: ["in", ["Bank", "Cash"]] },
+            fields: ["name"],
+            limit_page_length: 500
+        },
+        callback: function(r) {
+            let $select = $wrapper.find('#ct-account');
+            $select.empty().append('<option value="">Select Destination Account...</option>');
+            if(r.message) {
+                r.message.forEach(acc => {
+                    $select.append(`<option value="${acc.name}">${acc.name}</option>`);
+                });
+            }
+        }
+    });
+
+    // Save logic
+    $wrapper.find('#btn-save-cash-transfer').off('click').on('click', function() {
+        let date = $wrapper.find('#ct-date').val();
+        let ref = $wrapper.find('#ct-ref').val();
+        let account = $wrapper.find('#ct-account').val();
+        let amount = parseFloat($wrapper.find('#ct-amount').val());
+        
+        if(!date || !ref || !account || isNaN(amount) || amount <= 0) {
+            frappe.msgprint("Please fill all mandatory fields with valid values.");
+            return;
+        }
+        
+        let $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.find('.spinner').removeClass('hidden');
+        
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Station Cash Transfer",
+                    date: date,
+                    transaction_number: ref,
+                    destination_account: account,
+                    amount: amount,
+                    entered_by: frappe.session.user
+                }
+            },
+            callback: function(r) {
+                $btn.prop('disabled', false);
+                $btn.find('.spinner').addClass('hidden');
+                
+                if(!r.exc) {
+                    frappe.show_alert({message: "Cash Transfer recorded!", indicator: "green"});
+                    // Reset form
+                    $wrapper.find('#ct-date').val(frappe.datetime.get_today());
+                    $wrapper.find('#ct-ref').val('');
+                    $wrapper.find('#ct-account').val('');
+                    $wrapper.find('#ct-amount').val('');
+                    
+                    // Refresh History
+                    load_cash_transfer_history($wrapper);
+                    
+                    // Switch back to history view
+                    $wrapper.find('#tab-cash-transfers .seg-btn[data-view="history"]').click();
+                }
+            }
+        });
+    });
+
+    load_cash_transfer_history($wrapper);
+}
+
+function load_cash_transfer_history($wrapper) {
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Station Cash Transfer",
+            fields: ["name", "date", "transaction_number", "destination_account", "amount", "entered_by"],
+            order_by: "creation desc",
+            limit_page_length: 100
+        },
+        callback: function(r) {
+            let $tbody = $wrapper.find('#list-cash-transfers-saved');
+            $tbody.empty();
+            
+            if(r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let html = `
+                        <tr>
+                            <td><b>${row.name}</b></td>
+                            <td>${frappe.datetime.str_to_user(row.date)}</td>
+                            <td>${row.transaction_number}</td>
+                            <td>${row.destination_account}</td>
+                            <td>${row.entered_by || ''}</td>
+                            <td class="text-right"><b>${format_currency(row.amount)}</b></td>
+                        </tr>
+                    `;
+                    $tbody.append(html);
+                });
+            } else {
+                $tbody.append('<tr><td colspan="6" class="text-center text-muted">No external cash transfers recorded yet.</td></tr>');
             }
         }
     });

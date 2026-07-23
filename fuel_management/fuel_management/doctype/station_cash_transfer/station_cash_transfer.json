@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:CASH-TRANS-{YYYY}-{#####}",
+ "creation": "2026-07-23 16:45:52.371175",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "date",
+  "transaction_number",
+  "destination_account",
+  "amount",
+  "entered_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "transaction_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Transaction Number / Reference",
+   "reqd": 1
+  },
+  {
+   "fieldname": "destination_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Destination Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "entered_by",
+   "fieldtype": "Data",
+   "label": "Entered By (Head CSA/Owner)"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-23 16:45:52.371175",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "Station Cash Transfer",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
