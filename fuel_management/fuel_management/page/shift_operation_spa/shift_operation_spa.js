@@ -100,6 +100,7 @@ function load_shift_data($wrapper) {
                 if(typeof render_station_cards === 'function') render_station_cards($wrapper);
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
                 if(typeof render_rtt === 'function') render_rtt($wrapper);
+                if(typeof render_topups === 'function') render_topups($wrapper);
             }
         }
     });
@@ -2175,6 +2176,161 @@ function render_rtt($wrapper) {
                     
                     // Switch to history view and refresh
                     $wrapper.find('#tab-rtt .seg-btn[data-view="history"]').click();
+                    fetch_history();
+                }
+            }
+        });
+    });
+}
+
+
+// =========================================================
+// SUPPLIER TOP-UPS MODULE
+// =========================================================
+function render_topups($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+
+    let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+
+    // 1. Setup Segmented Control
+    $wrapper.find('#tab-topups .seg-btn').off('click').on('click', function() {
+        let $btn = $(this);
+        let targetView = $btn.attr('data-view');
+        
+        $wrapper.find('#tab-topups .seg-btn').removeClass('active');
+        $btn.addClass('active');
+        
+        $wrapper.find('#tab-topups .view-pane').removeClass('active');
+        $wrapper.find(`#topups-${targetView}-view`).addClass('active');
+    });
+
+    // 2. Setup CSA Dropdown
+    let csaOptions = '<option value="">Select CSA...</option>';
+    let availableCSAs = [window.SHIFT_DOC.head_csa];
+    (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
+        if(row.csa) availableCSAs.push(row.csa);
+    });
+    
+    availableCSAs = [...new Set(availableCSAs)];
+    availableCSAs.forEach(csa => {
+        if(!csa) return;
+        let csa_name = csa;
+        if(window.USERS_LIST) {
+            let u = window.USERS_LIST.find(user => user.name === csa);
+            if(u) csa_name = u.full_name;
+        }
+        csaOptions += `<option value="${csa}">${csa_name}</option>`;
+    });
+    $wrapper.find('#topup-csa').html(csaOptions);
+
+    // 3. Setup Cards Dropdown
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Supplier Card",
+            filters: { status: "Active" },
+            fields: ["name", "card_name"]
+        },
+        callback: function(r) {
+            let cardOpts = '<option value="">Select Supplier Card...</option>';
+            if(r.message) {
+                r.message.forEach(card => {
+                    cardOpts += `<option value="${card.name}">${card.card_name}</option>`;
+                });
+            }
+            $wrapper.find('#topup-card').html(cardOpts);
+        }
+    });
+
+    // 4. Fetch and Render History
+    let fetch_history = function() {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Station Supplier Top Up",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "date", "shift", "creation", "card", "csa", "rrn_number", "amount"],
+                order_by: "name desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
+                        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
+                        let csa_name = row.csa;
+                        if (window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(u => u.name === row.csa);
+                            if(u) csa_name = u.full_name;
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                                <td>${row.date || ""}</td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td style="color: #64748b;">${time_val}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.card}</span></td>
+                                <td>${csa_name}</td>
+                                <td>${row.rrn_number}</td>
+                                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No Top-Ups recorded yet.</td></tr>';
+                $wrapper.find('#list-station-topups-saved').html(html);
+            }
+        });
+    };
+    fetch_history();
+
+    // 5. Save Top-Up
+    $wrapper.find('#btn-save-station-topup').off('click').on('click', function() {
+        if (is_locked) {
+            frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+            return;
+        }
+
+        let card = $wrapper.find('#topup-card').val();
+        let csa = $wrapper.find('#topup-csa').val();
+        let rrn = $wrapper.find('#topup-rrn').val();
+        let amount = parseFloat($wrapper.find('#topup-amount').val()) || 0;
+
+        if (!card || !csa || !rrn || amount <= 0) {
+            frappe.show_alert({message: "Please fill all required fields.", indicator: "red"});
+            return;
+        }
+
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Station Supplier Top Up",
+                    shift: window.ACTIVE_SHIFT.name,
+                    date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
+                    card: card,
+                    csa: csa,
+                    rrn_number: rrn,
+                    amount: amount
+                }
+            },
+            callback: function(r) {
+                $btn.html(orig_html).prop('disabled', false);
+                if(r.message) {
+                    frappe.show_alert({message: "Top-Up saved successfully!", indicator: "green"});
+                    
+                    // Clear inputs
+                    $wrapper.find('#topup-card').val('');
+                    $wrapper.find('#topup-csa').val('');
+                    $wrapper.find('#topup-rrn').val('');
+                    $wrapper.find('#topup-amount').val('');
+                    
+                    // Switch to history view and refresh
+                    $wrapper.find('#tab-topups .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
             }

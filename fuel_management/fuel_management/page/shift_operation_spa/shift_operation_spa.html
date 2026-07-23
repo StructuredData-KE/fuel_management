@@ -59,6 +59,11 @@
                 <span>Return To Tank</span>
             </a>
             
+            <a href="#" class="nav-item" data-target="tab-topups">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>Supplier Top-Ups</span>
+            </a>
+            
             <div class="nav-section-title mt-4">CLOSURE</div>
             
             <a href="#" class="nav-item" data-target="tab-reconcile">
@@ -781,6 +786,72 @@
             </div>
             
             <button class="btn-primary" id="btn-save-station-rtt" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Add Return To Tank</button>
+        </div>
+    </div>
+</section>
+
+                        <!-- SUPPLIER TOP-UPS -->
+            <section id="tab-topups" class="tab-pane">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="history">Historical View</button>
+            <button class="seg-btn" data-view="entry" style="color: #047857; font-weight: 600;">+ New Top-Up</button>
+        </div>
+    </div>
+    
+    <!-- HISTORY VIEW -->
+    <div class="view-pane active" id="topups-history-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <h3>Supplier Top-Ups for Active Shift</h3>
+            <div class="table-responsive">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Entry</th>
+                            <th>Date</th>
+                            <th>Shift</th>
+                            <th>Time</th>
+                            <th>Card</th>
+                            <th>CSA</th>
+                            <th>RRN Number</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-station-topups-saved">
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ENTRY VIEW -->
+    <div class="view-pane" id="topups-entry-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <div class="card-header-flex">
+                <h3>Record Supplier Cash Top-Up</h3>
+            </div>
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Supplier Card <span style="color:red;">*</span></label>
+                    <select id="topup-card" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>CSA (Active Only) <span style="color:red;">*</span></label>
+                    <select id="topup-csa" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>RRN Number <span style="color:red;">*</span></label>
+                    <input type="text" id="topup-rrn" class="spa-input" placeholder="e.g. 123456789">
+                </div>
+                <div class="form-group">
+                    <label>Amount (KES) <span style="color:red;">*</span></label>
+                    <input type="number" id="topup-amount" class="spa-input" placeholder="0.00" step="0.01">
+                </div>
+            </div>
+            
+            <button class="btn-primary" id="btn-save-station-topup" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Add Top-Up</button>
         </div>
     </div>
 </section>
