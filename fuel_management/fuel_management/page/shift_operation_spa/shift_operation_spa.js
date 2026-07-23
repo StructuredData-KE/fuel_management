@@ -1163,7 +1163,7 @@ function render_invoices($wrapper) {
         method: "frappe.client.get_list",
         args: {
             doctype: "Item",
-            fields: ["name", "item_name", "item_group", "standard_rate"],
+            fields: ["name", "item_name", "item_group"],
             filters: { disabled: 0, item_group: ["in", ["Fuel", "Lubes", "Accessories", "Gas", "Services", "Consumable", "Products"]] },
             limit: 1000
         },
