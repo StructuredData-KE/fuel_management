@@ -239,46 +239,146 @@
             <section id="tab-invoices" class="tab-pane">
     <div class="segmented-control-wrapper">
         <div class="segmented-control">
-            <button class="seg-btn active" data-view="entry">Entry View</button>
-            <button class="seg-btn" data-view="history">Historical View</button>
+            <button class="seg-btn active" data-view="history">Historical View</button>
+            <button class="seg-btn" data-view="entry" style="color: #047857; font-weight: 600;">+ New Invoice</button>
         </div>
     </div>
-    
-    <div class="view-pane active" id="invoices-entry-view">
+
+    <!-- HISTORY VIEW -->
+    <div class="view-pane active" id="invoice-history-view">
         <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
-                        <h3>Log Credit Sale</h3>
-                        <div class="form-group">
-                            <label>Customer</label>
-                            <select id="invoice-customer" class="spa-input"></select>
-                        </div>
-                        <div class="form-group">
-                            <label>Amount (KES)</label>
-                            <input type="number" id="invoice-amount" class="spa-input" placeholder="0.00">
-                        </div>
-                        <button class="btn-primary mt-2" id="btn-add-invoice">Add Invoice</button>
-                    </div>
+            <h3>Historical Credit Invoices</h3>
+            
+            <div class="shift-context-box" style="margin-bottom: 1.5rem;">
+                <div class="context-detail">
+                    <span class="label">Shift:</span> <strong id="invoice-history-shift-name"></strong>
+                </div>
+                <div class="context-detail">
+                    <span class="label">Date:</span> <strong id="invoice-history-shift-date"></strong>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 2; min-width: 200px;">
+                    <label>Search Customer or Entry</label>
+                    <input type="text" id="invoice-filter-search" class="spa-input" placeholder="Search customer, entry no...">
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Entry ID</th>
+                            <th>Customer</th>
+                            <th>PO Number</th>
+                            <th>Vehicle</th>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-invoice-saved"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
-    
-    <div class="view-pane" id="invoices-history-view">
-        <div class="dash-card full-width-card">
-            <h3>Invoice History</h3>
-                        <div class="table-responsive">
-                            <table class="dash-table">
-                                <thead>
-                                    <tr>
-                                        <th>Customer</th>
-                                        <th>Amount</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="list-invoice"></tbody>
-                            </table>
-                        </div>
+
+    <!-- ENTRY VIEW -->
+    <div class="view-pane" id="invoice-entry-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <h3>Log Credit Sale</h3>
+            
+            <div class="shift-context-box">
+                <div class="context-detail">
+                    <span class="label">Shift:</span> <strong id="invoice-shift-name"></strong>
+                </div>
+                <div class="context-detail">
+                    <span class="label">Date:</span> <strong id="invoice-shift-date"></strong>
+                </div>
+                <div class="context-detail">
+                    <span class="label">Entry No:</span> <strong id="invoice-entry-number">Auto-generated</strong>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 250px;">
+                    <label>Customer</label>
+                    <input list="invoice-customers-list" id="invoice-customer-input" class="spa-input" placeholder="Type to search...">
+                    <datalist id="invoice-customers-list"></datalist>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label>Assigned CSA</label>
+                    <select id="invoice-csa" class="spa-input"></select>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label>Purchase Order Number</label>
+                    <input type="text" id="invoice-po" class="spa-input" placeholder="Enter PO if applicable">
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px;">
+                    <label>Vehicle Registration</label>
+                    <input list="invoice-vehicles-list" id="invoice-vehicle" class="spa-input" placeholder="Select or type new...">
+                    <datalist id="invoice-vehicles-list"></datalist>
+                </div>
+            </div>
+
+            <div class="pos-inline-row">
+                <div class="form-group" style="flex: 2;">
+                    <label>Item</label>
+                    <input list="invoice-items-list" id="invoice-item-input" class="spa-input" placeholder="Search fuel or lubes...">
+                    <datalist id="invoice-items-list"></datalist>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 100px;">
+                    <label>Rate (KES)</label>
+                    <input type="number" id="invoice-rate" class="spa-input readonly-style" readonly>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 100px;">
+                    <label>Amount (KES)</label>
+                    <input type="number" id="invoice-amount" class="spa-input" placeholder="0.00">
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 100px;">
+                    <label>Quantity</label>
+                    <input type="number" id="invoice-qty" class="spa-input readonly-style" readonly>
+                </div>
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                    <button class="btn-secondary" id="btn-add-invoice-item" style="height: 42px;">+ Add</button>
+                </div>
+            </div>
+
+            <div class="table-responsive" style="margin-top: 1.5rem;">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Rate</th>
+                            <th>Amount</th>
+                            <th width="50">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-invoice-cart">
+                        <tr><td colspan="5" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>
+                    </tbody>
+                    <tfoot style="background: #f8fafc; font-weight: 600;">
+                        <tr>
+                            <td colspan="3" style="text-align: right;">TOTAL:</td>
+                            <td id="invoice-cart-total-amount">0.00</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <button class="btn-primary mt-2" id="btn-save-invoice" style="width: 100%; justify-content: center; font-size: 1.1rem; padding: 1rem;">Save Invoice</button>
         </div>
     </div>
 </section>
             
-            <!-- DRY STOCK -->
+<!-- DRY STOCK -->
             <section id="tab-drystock" class="tab-pane">
     <div class="segmented-control-wrapper">
         <div class="segmented-control">

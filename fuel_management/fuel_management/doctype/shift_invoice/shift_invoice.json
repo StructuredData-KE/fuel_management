@@ -1,45 +1,86 @@
 {
- "actions": [],
- "allow_rename": 1,
- "creation": "2026-07-16 18:12:06.842221",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "customer",
-  "amount"
- ],
- "fields": [
-  {
-   "fieldname": "customer",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Customer",
-   "options": "Customer",
-   "reqd": 1
-  },
-  {
-   "fieldname": "amount",
-   "fieldtype": "Currency",
-   "in_list_view": 1,
-   "label": "Amount",
-   "reqd": 1
-  }
- ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
- "istable": 1,
- "links": [],
- "modified": "2026-07-16 18:12:06.842221",
- "modified_by": "Administrator",
- "module": "Fuel Management",
- "name": "Shift Invoice",
- "naming_rule": "Random",
- "owner": "Administrator",
- "permissions": [],
- "row_format": "Dynamic",
- "rows_threshold_for_grid_search": 20,
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+    "actions": [],
+    "allow_rename": 1,
+    "creation": "2026-07-16 18:12:06.842221",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "customer",
+        "amount"
+    ],
+    "fields": [
+        {
+            "fieldname": "customer",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Customer",
+            "options": "Customer",
+            "reqd": 1
+        },
+        {
+            "fieldname": "amount",
+            "fieldtype": "Currency",
+            "in_list_view": 1,
+            "label": "Amount",
+            "reqd": 1
+        },
+        {
+            "fieldname": "entry_number",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Entry Number"
+        },
+        {
+            "fieldname": "csa",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "CSA",
+            "options": "Employee"
+        },
+        {
+            "fieldname": "purchase_order",
+            "fieldtype": "Data",
+            "label": "Purchase Order"
+        },
+        {
+            "fieldname": "vehicle_registration",
+            "fieldtype": "Data",
+            "label": "Vehicle Registration"
+        },
+        {
+            "fieldname": "item",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Item",
+            "options": "Item"
+        },
+        {
+            "fieldname": "quantity",
+            "fieldtype": "Float",
+            "in_list_view": 1,
+            "label": "Quantity"
+        },
+        {
+            "fieldname": "rate",
+            "fieldtype": "Currency",
+            "label": "Rate"
+        }
+    ],
+    "grid_page_length": 50,
+    "index_web_pages_for_search": 1,
+    "istable": 1,
+    "links": [],
+    "modified": "2026-07-16 18:12:06.842221",
+    "modified_by": "Administrator",
+    "module": "Fuel Management",
+    "name": "Shift Invoice",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [],
+    "row_format": "Dynamic",
+    "rows_threshold_for_grid_search": 20,
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": []
 }

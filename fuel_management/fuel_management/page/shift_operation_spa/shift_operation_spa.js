@@ -1117,3 +1117,392 @@ btn.find('.spinner').addClass('hidden');
         });
     });
 }
+
+// ==========================================
+// CREDIT INVOICE POS LOGIC
+// ==========================================
+
+function render_invoices($wrapper) {
+    if (!window.ACTIVE_SHIFT) return;
+    window.PENDING_INVOICES = [];
+    
+    let sDate = window.ACTIVE_SHIFT.shift_date || window.ACTIVE_SHIFT.creation || frappe.datetime.now_date();
+    let shiftName = window.ACTIVE_SHIFT.shift_template ? `${window.ACTIVE_SHIFT.shift_template}` : window.ACTIVE_SHIFT.name;
+    $wrapper.find('#invoice-shift-name, #invoice-history-shift-name').text(shiftName);
+    $wrapper.find('#invoice-shift-date, #invoice-history-shift-date').text(sDate.split(" ")[0]);
+
+    // 1. Generate Entry Number (e.g. INV001)
+    let max_inv = 0;
+    (window.SHIFT_DOC.invoices || []).forEach(row => {
+        if(row.entry_number && row.entry_number.startsWith('INV')) {
+            let num = parseInt(row.entry_number.replace('INV', ''));
+            if(!isNaN(num) && num > max_inv) max_inv = num;
+        }
+    });
+    let next_entry = "INV" + String(max_inv + 1).padStart(3, '0');
+    $wrapper.find('#invoice-entry-number').text(next_entry);
+
+    // 2. Fetch Active CSAs
+    let csaOptions = '<option value="">Select CSA...</option>';
+    (window.ACTIVE_SHIFT.csa_assignments || []).forEach(a => {
+        if(a.csa) {
+            let u = window.USERS_LIST.find(u => u.name === a.csa);
+            let name = u ? u.full_name : a.csa;
+            // avoid duplicates
+            if(csaOptions.indexOf(`value="${a.csa}"`) === -1) {
+                csaOptions += `<option value="${a.csa}">${name}</option>`;
+            }
+        }
+    });
+    $wrapper.find('#invoice-csa').html(csaOptions);
+
+    // 3. Fetch Items (Same as Drystock + Fuel)
+    // We already have window.DRYSTOCK_ITEMS from render_drystock if it ran. But we need fuel too.
+    // Let's fetch all items that are either fuel or in drystock
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Item",
+            fields: ["name", "item_name", "item_group", "standard_rate"],
+            filters: { disabled: 0, is_sales_item: 1 },
+            limit: 1000
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.INVOICE_ITEMS = r.message;
+                let itemOpts = '';
+                r.message.forEach(i => {
+                    itemOpts += `<option value="${i.item_name} - ${i.name}">`;
+                });
+                $wrapper.find('#invoice-items-list').html(itemOpts);
+            }
+        }
+    });
+
+    // 4. Fetch Customers
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Customer",
+            fields: ["name", "customer_name"],
+            limit: 5000
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.CUSTOMERS_LIST = r.message;
+                let custOpts = '';
+                r.message.forEach(c => {
+                    custOpts += `<option value="${c.name}">${c.customer_name}</option>`;
+                });
+                $wrapper.find('#invoice-customers-list').html(custOpts);
+            }
+        }
+    });
+
+    // Event: Customer changes -> Fetch Vehicles
+    $wrapper.find('#invoice-customer-input').off('change').on('change', function() {
+        let cust = $(this).val();
+        $wrapper.find('#invoice-vehicles-list').empty();
+        if(cust) {
+            frappe.call({
+                method: "frappe.client.get_list",
+                args: {
+                    doctype: "Shift Invoice",
+                    fields: ["vehicle_registration"],
+                    filters: { customer: cust, vehicle_registration: ["!=", ""] },
+                    limit: 100
+                },
+                callback: function(r) {
+                    if(r.message) {
+                        let vOpts = '';
+                        let unique_v = [...new Set(r.message.map(m => m.vehicle_registration))];
+                        unique_v.forEach(v => {
+                            if(v) vOpts += `<option value="${v}">`;
+                        });
+                        $wrapper.find('#invoice-vehicles-list').html(vOpts);
+                    }
+                }
+            });
+        }
+    });
+
+    // Event: Item changes -> Fetch Rate
+    $wrapper.find('#invoice-item-input').off('change').on('change', function() {
+        let val = $(this).val();
+        let item = (window.INVOICE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === val);
+        if(item) {
+            // First try standard rate from item master, if 0 try to fetch from price list
+            frappe.call({
+                method: "frappe.client.get_value",
+                args: {
+                    doctype: "Item Price",
+                    filters: { item_code: item.name, price_list: "Standard Selling" },
+                    fieldname: "price_list_rate"
+                },
+                callback: function(r) {
+                    if(r.message && r.message.price_list_rate) {
+                        $wrapper.find('#invoice-rate').val(parseFloat(r.message.price_list_rate).toFixed(2));
+                    } else {
+                        $wrapper.find('#invoice-rate').val((parseFloat(item.standard_rate) || 0).toFixed(2));
+                    }
+                    calc_invoice();
+                }
+            });
+        } else {
+            $wrapper.find('#invoice-rate').val('');
+        }
+    });
+
+    // Event: Calc Qty
+    function calc_invoice() {
+        let amount = parseFloat($wrapper.find('#invoice-amount').val()) || 0;
+        let rate = parseFloat($wrapper.find('#invoice-rate').val()) || 0;
+        if(rate > 0) {
+            $wrapper.find('#invoice-qty').val((amount / rate).toFixed(4));
+        } else {
+            $wrapper.find('#invoice-qty').val('');
+        }
+    }
+    $wrapper.find('#invoice-amount').off('input').on('input', calc_invoice);
+
+    // Add to Cart
+    $wrapper.find('#btn-add-invoice-item').off('click').on('click', function() {
+        let customer = $wrapper.find('#invoice-customer-input').val();
+        let csa = $wrapper.find('#invoice-csa').val();
+        let po = $wrapper.find('#invoice-po').val();
+        let vehicle = $wrapper.find('#invoice-vehicle').val();
+        
+        let item_val = $wrapper.find('#invoice-item-input').val();
+        let item = (window.INVOICE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === item_val);
+        
+        let amount = parseFloat($wrapper.find('#invoice-amount').val()) || 0;
+        let rate = parseFloat($wrapper.find('#invoice-rate').val()) || 0;
+        let qty = parseFloat($wrapper.find('#invoice-qty').val()) || 0;
+
+        if (!customer || !csa || !item || amount <= 0 || rate <= 0) {
+            frappe.show_alert({message: "Customer, CSA, Item, and valid Amount are required.", indicator: "red"});
+            return;
+        }
+
+        window.PENDING_INVOICES.push({
+            _is_new: true,
+            customer: customer,
+            csa: csa,
+            purchase_order: po,
+            vehicle_registration: vehicle,
+            item: item.name,
+            item_name: item.item_name,
+            quantity: qty,
+            rate: rate,
+            amount: amount,
+            entry_number: next_entry
+        });
+
+        // clear item row
+        $wrapper.find('#invoice-item-input').val('');
+        $wrapper.find('#invoice-amount').val('');
+        $wrapper.find('#invoice-rate').val('');
+        $wrapper.find('#invoice-qty').val('');
+        
+        refresh_invoice_cart($wrapper);
+    });
+
+    // Save Cart
+    $wrapper.find('#btn-save-invoice').off('click').on('click', function() {
+        if (!window.PENDING_INVOICES || window.PENDING_INVOICES.length === 0) {
+            frappe.show_alert({message: "Cart is empty.", indicator: "red"});
+            return;
+        }
+
+        let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+        if(is_locked) {
+            frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+            return;
+        }
+
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        // Fetch latest doc
+        frappe.call({
+            method: "frappe.client.get",
+            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+            callback: function(r) {
+                if(r.message) {
+                    let doc = r.message;
+                    
+                    // merge existing and pending
+                    let new_list = (doc.invoices || []).map(r2 => {
+                        return {
+                            name: r2.name,
+                            customer: r2.customer,
+                            csa: r2.csa,
+                            purchase_order: r2.purchase_order,
+                            vehicle_registration: r2.vehicle_registration,
+                            item: r2.item,
+                            item_name: r2.item_name,
+                            quantity: r2.quantity,
+                            rate: r2.rate,
+                            amount: r2.amount,
+                            entry_number: r2.entry_number
+                        };
+                    });
+
+                    window.PENDING_INVOICES.forEach(p => {
+                        new_list.push({
+                            customer: p.customer,
+                            csa: p.csa,
+                            purchase_order: p.purchase_order,
+                            vehicle_registration: p.vehicle_registration,
+                            item: p.item,
+                            item_name: p.item_name,
+                            quantity: p.quantity,
+                            rate: p.rate,
+                            amount: p.amount,
+                            entry_number: p.entry_number
+                        });
+                    });
+
+                    doc.invoices = new_list;
+
+                    frappe.call({
+                        method: "frappe.client.save",
+                        args: { doc: doc },
+                        callback: function(r2) {
+                            $btn.html(orig_html).prop('disabled', false);
+                            if(r2.message) {
+                                window.SHIFT_DOC = r2.message;
+                                window.PENDING_INVOICES = [];
+                                
+                                // Reset form partially (keep CSA, Customer, etc or clear? Let's clear header fields for next customer)
+                                $wrapper.find('#invoice-customer-input').val('');
+                                $wrapper.find('#invoice-po').val('');
+                                $wrapper.find('#invoice-vehicle').val('');
+                                
+                                // Auto-jump to history
+                                $wrapper.find('.seg-btn[data-view="history"]').click();
+                                
+                                // Re-render to update the Entry No
+                                render_invoices($wrapper);
+                                frappe.show_alert({message: "Credit Invoice Saved!", indicator: "green"});
+                            }
+                        },
+                        error: function() {
+                            $btn.html(orig_html).prop('disabled', false);
+                        }
+                    });
+                } else {
+                    $btn.html(orig_html).prop('disabled', false);
+                }
+            }
+        });
+    });
+
+    refresh_invoice_cart($wrapper);
+}
+
+function refresh_invoice_cart($wrapper) {
+    let is_locked = window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== 'Open';
+    
+    // Render Pending Cart
+    let html_cart = '';
+    let grand_total = 0;
+    (window.PENDING_INVOICES || []).forEach((row, idx) => {
+        grand_total += (row.amount || 0);
+        html_cart += `
+            <tr>
+                <td>${row.item_name || row.item}</td>
+                <td>${row.quantity}</td>
+                <td>${frappe.format(row.rate, {fieldtype: 'Currency'})}</td>
+                <td>${frappe.format(row.amount, {fieldtype: 'Currency'})}</td>
+                <td><button class="btn btn-xs btn-danger btn-remove-invoice-cart" data-idx="${idx}">X</button></td>
+            </tr>
+        `;
+    });
+    if(!html_cart) {
+        html_cart = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>`;
+    }
+    $wrapper.find('#list-invoice-cart').html(html_cart);
+    $wrapper.find('#invoice-cart-total-amount').text(frappe.format(grand_total, {fieldtype: 'Currency'}));
+
+    $wrapper.find('.btn-remove-invoice-cart').off('click').on('click', function() {
+        let idx = parseInt($(this).attr('data-idx'));
+        window.PENDING_INVOICES.splice(idx, 1);
+        refresh_invoice_cart($wrapper);
+    });
+
+    // Render Historical Table
+    let filter_search = ($wrapper.find('#invoice-filter-search').val() || '').toLowerCase();
+    
+    let html_saved = '';
+    (window.SHIFT_DOC.invoices || []).forEach((row, idx) => {
+        let searchStr = `${row.customer} ${row.entry_number} ${row.vehicle_registration}`.toLowerCase();
+        if (filter_search && !searchStr.includes(filter_search)) return;
+        
+        let del_btn = is_locked ? 
+            `<button class="btn btn-xs btn-danger" disabled>X</button>` : 
+            `<button class="btn btn-xs btn-danger btn-remove-saved-invoice" data-idx="${idx}">X</button>`;
+
+        html_saved += `
+            <tr>
+                <td><span class="badge" style="background: #e2e8f0; color: #0f172a;">${row.entry_number || '-'}</span></td>
+                <td><strong>${row.customer || ''}</strong></td>
+                <td>${row.purchase_order || '-'}</td>
+                <td>${row.vehicle_registration || '-'}</td>
+                <td>${row.item_name || row.item || ''}</td>
+                <td>${row.quantity || 0}</td>
+                <td><strong>${frappe.format(row.amount, {fieldtype: 'Currency'})}</strong></td>
+                <td>${del_btn}</td>
+            </tr>
+        `;
+    });
+    if(!html_saved) {
+        html_saved = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 2rem;">No historical invoices match filters.</td></tr>`;
+    }
+    $wrapper.find('#list-invoice-saved').html(html_saved);
+
+    // Delete Historical Action
+    $wrapper.find('.btn-remove-saved-invoice').off('click').on('click', function() {
+        if (is_locked) return;
+        let idx = parseInt($(this).attr('data-idx'));
+        
+        frappe.confirm('Are you sure you want to delete this historical invoice item?', () => {
+            window.SHIFT_DOC.invoices.splice(idx, 1);
+            
+            frappe.call({
+                method: "frappe.client.get",
+                args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+                callback: function(r) {
+                    if(r.message) {
+                        let doc = r.message;
+                        doc.invoices = window.SHIFT_DOC.invoices.map(r2 => {
+                            return {
+                                name: r2._is_new ? undefined : r2.name,
+                                customer: r2.customer,
+                                csa: r2.csa,
+                                purchase_order: r2.purchase_order,
+                                vehicle_registration: r2.vehicle_registration,
+                                item: r2.item,
+                                item_name: r2.item_name,
+                                quantity: r2.quantity,
+                                rate: r2.rate,
+                                amount: r2.amount,
+                                entry_number: r2.entry_number
+                            };
+                        });
+                        frappe.call({
+                            method: "frappe.client.save",
+                            args: { doc: doc },
+                            callback: function(r2) {
+                                if(r2.message) window.SHIFT_DOC = r2.message;
+                                refresh_invoice_cart($wrapper);
+                                frappe.show_alert({message: "Item deleted from history", indicator: "green"});
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    });
+}
