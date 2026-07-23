@@ -1,0 +1,108 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "naming_series:",
+    "creation": "2026-07-23 12:28:48.265025",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_series",
+        "expense_no",
+        "date",
+        "shift",
+        "csa",
+        "column_break_1",
+        "category",
+        "memo",
+        "amount"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Naming Series",
+            "options": "SE-.YYYY.-",
+            "set_only_once": 1
+        },
+        {
+            "fieldname": "expense_no",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Expense No.",
+            "hidden": 1
+        },
+        {
+            "fieldname": "date",
+            "fieldtype": "Date",
+            "in_list_view": 1,
+            "label": "Date",
+            "read_only": 1,
+            "reqd": 1
+        },
+        {
+            "fieldname": "shift",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Shift",
+            "options": "Shift",
+            "read_only": 1,
+            "reqd": 1
+        },
+        {
+            "fieldname": "csa",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "CSA",
+            "options": "Employee",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "category",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Category",
+            "options": "Expense Claim Type",
+            "reqd": 1
+        },
+        {
+            "fieldname": "memo",
+            "fieldtype": "Small Text",
+            "label": "Memo"
+        },
+        {
+            "fieldname": "amount",
+            "fieldtype": "Currency",
+            "in_list_view": 1,
+            "label": "Amount",
+            "reqd": 1
+        }
+    ],
+    "links": [],
+    "modified": "2026-07-23 12:28:48.265125",
+    "modified_by": "Administrator",
+    "module": "Fuel Management",
+    "name": "Station Expense",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": []
+}

@@ -98,6 +98,7 @@ function load_shift_data($wrapper) {
                 if(typeof render_invoices === 'function') render_invoices($wrapper);
                 if(typeof render_customer_payments === 'function') render_customer_payments($wrapper);
                 if(typeof render_station_cards === 'function') render_station_cards($wrapper);
+                if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
             }
         }
     });
@@ -1812,6 +1813,154 @@ function render_station_cards($wrapper) {
                     
                     // Switch to history view and refresh
                     $wrapper.find('#tab-station-cards .seg-btn[data-view="history"]').click();
+                    fetch_history();
+                }
+            }
+        });
+    });
+}
+
+// =========================================================
+// STATION EXPENSES MODULE
+// =========================================================
+function render_station_expenses($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+
+    let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+
+    // 1. Setup Segmented Control
+    $wrapper.find('#tab-expenses .seg-btn').off('click').on('click', function() {
+        let $btn = $(this);
+        let targetView = $btn.attr('data-view');
+        
+        $wrapper.find('#tab-expenses .seg-btn').removeClass('active');
+        $btn.addClass('active');
+        
+        $wrapper.find('#tab-expenses .view-pane').removeClass('active');
+        $wrapper.find(`#expenses-${targetView}-view`).addClass('active');
+    });
+
+    // 2. Populate CSAs
+    let csaOptions = '<option value="">Select CSA...</option>';
+    let allowed_csas = [];
+    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
+        if(row.csa) allowed_csas.push(row.csa);
+    });
+    
+    // Remove duplicates
+    allowed_csas = [...new Set(allowed_csas)];
+    
+    allowed_csas.forEach(csa => {
+        let u = window.USERS_LIST.find(u => u.name === csa);
+        let name = u ? u.full_name : csa;
+        csaOptions += `<option value="${csa}">${name}</option>`;
+    });
+    $wrapper.find('#se-csa').html(csaOptions);
+
+    // 3. Populate Categories (from Expense Claim Type)
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Expense Claim Type", fields: ["name"], limit: 500 },
+        callback: function(r) {
+            if(r.message) {
+                let catOpts = '<option value="">Select Category...</option>';
+                r.message.forEach(c => {
+                    catOpts += `<option value="${c.name}">${c.name}</option>`;
+                });
+                $wrapper.find('#se-category').html(catOpts);
+            }
+        }
+    });
+
+    // 4. Fetch and Render History
+    let fetch_history = function() {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Station Expense",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "date", "shift", "creation", "category", "csa", "memo", "amount"],
+                order_by: "creation desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
+                        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
+                        let csa_name = row.csa;
+                        if (window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(u => u.name === row.csa);
+                            if(u) csa_name = u.full_name;
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name.substring(0, 10)}</td>
+                                <td>${row.date || ""}</td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td style="color: #64748b;">${time_val}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.category}</span></td>
+                                <td>${csa_name}</td>
+                                <td>${row.memo || ""}</td>
+                                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No expenses recorded yet.</td></tr>';
+                $wrapper.find('#list-station-expenses-saved').html(html);
+            }
+        });
+    };
+    fetch_history();
+
+    // 5. Save Station Expense
+    $wrapper.find('#btn-save-station-expense').off('click').on('click', function() {
+        if (is_locked) {
+            frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+            return;
+        }
+
+        let category = $wrapper.find('#se-category').val();
+        let csa = $wrapper.find('#se-csa').val();
+        let amount = parseFloat($wrapper.find('#se-amount').val()) || 0;
+        let memo = $wrapper.find('#se-memo').val();
+
+        if (!category || !csa || amount <= 0) {
+            frappe.show_alert({message: "Category, CSA, and valid Amount are required.", indicator: "red"});
+            return;
+        }
+
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Station Expense",
+                    shift: window.ACTIVE_SHIFT.name,
+                    date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
+                    category: category,
+                    csa: csa,
+                    amount: amount,
+                    memo: memo
+                }
+            },
+            callback: function(r) {
+                $btn.html(orig_html).prop('disabled', false);
+                if(r.message) {
+                    frappe.show_alert({message: "Station Expense saved successfully!", indicator: "green"});
+                    
+                    // Clear inputs
+                    $wrapper.find('#se-category').val('');
+                    $wrapper.find('#se-amount').val('');
+                    $wrapper.find('#se-memo').val('');
+                    
+                    // Switch to history view and refresh
+                    $wrapper.find('#tab-expenses .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
             }
