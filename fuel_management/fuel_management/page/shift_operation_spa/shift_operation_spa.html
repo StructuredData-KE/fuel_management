@@ -31,7 +31,11 @@
             
             <a href="#" class="nav-item" id="nav-station-cards" data-target="tab-station-cards">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                <span>Fleet Cards</span>
+                <span>Station Cards</span>
+            </a>
+            <a href="#" class="nav-item" id="nav-fleet-cards" data-target="tab-fleet-cards">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>Fleet Management</span>
             </a>
             
             <a href="#" class="nav-item" data-target="tab-invoices">
@@ -223,8 +227,77 @@
             </section>
             
             <!-- STATION CARDS -->
-            <!-- FLEET CARDS -->
+            
 <section id="tab-station-cards" class="tab-pane">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="history">Historical View</button>
+            <button class="seg-btn" data-view="entry" style="color: #047857; font-weight: 600;">+ New Card Payment</button>
+        </div>
+    </div>
+    
+    <!-- HISTORY VIEW -->
+    <div class="view-pane active" id="sc-history-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <h3>Station Cards for Active Shift</h3>
+            <div class="table-responsive">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Entry</th>
+                            <th>Time</th>
+                            <th>Receipt / RRN</th>
+                            <th>Card</th>
+                            <th>CSA</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-station-cards-saved">
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ENTRY VIEW -->
+    <div class="view-pane" id="sc-entry-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <div class="card-header-flex">
+                <h3>Record Station Card Payment</h3>
+            </div>
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Card</label>
+                    <select id="sc-card" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>CSA</label>
+                    <select id="sc-csa" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>Receipt No. / RRN</label>
+                    <input type="text" id="sc-receipt-no" class="spa-input" placeholder="e.g. 12345678">
+                </div>
+                <div class="form-group">
+                    <label>Amount (KES)</label>
+                    <input type="number" id="sc-amount" class="spa-input" placeholder="0.00" step="0.01">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Memo (Optional)</label>
+                    <input type="text" id="sc-memo" class="spa-input" placeholder="Notes...">
+                </div>
+            </div>
+            
+            <button class="btn-primary" id="btn-save-station-card" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Add Card Payment</button>
+        </div>
+    </div>
+</section>
+
+
+<!-- FLEET CARDS -->
+<section id="tab-fleet-cards" class="tab-pane">
     <div class="dash-card center-card" style="max-width: 1200px; width: 100%;">
         <div class="card-header-flex">
             <h3>Fleet Card Management</h3>

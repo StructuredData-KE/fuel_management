@@ -3100,3 +3100,156 @@ function update_reconcile_ui($wrapper) {
         $var.css('color', '#16a34a');
     }
 }
+
+
+function render_station_cards($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+
+    let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+
+    // 1. Setup Segmented Control
+    $wrapper.find('#tab-station-cards .seg-btn').off('click').on('click', function() {
+        let $btn = $(this);
+        let targetView = $btn.attr('data-view');
+        
+        $wrapper.find('#tab-station-cards .seg-btn').removeClass('active');
+        $btn.addClass('active');
+        
+        $wrapper.find('#tab-station-cards .view-pane').removeClass('active');
+        $wrapper.find(`#sc-${targetView}-view`).addClass('active');
+    });
+
+    // 2. Populate CSAs
+    let csaOptions = '<option value="">Select CSA...</option>';
+    let allowed_csas = [];
+    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
+        if(row.csa) allowed_csas.push(row.csa);
+    });
+    
+    // Remove duplicates
+    allowed_csas = [...new Set(allowed_csas)];
+    
+    allowed_csas.forEach(csa => {
+        let u = window.USERS_LIST.find(u => u.name === csa);
+        let name = u ? u.full_name : csa;
+        csaOptions += `<option value="${csa}">${name}</option>`;
+    });
+    $wrapper.find('#sc-csa').html(csaOptions);
+
+    // 3. Populate Cards (from Fleet Card DocType)
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Fleet Card", fields: ["name", "card_name", "status"], limit_page_length: 500, filters: { status: "Active" } },
+        callback: function(r) {
+            if(r.message) {
+                let cardOpts = '<option value="">Select Card...</option>';
+                r.message.forEach(c => {
+                    cardOpts += `<option value="${c.name}">${c.card_name}</option>`;
+                });
+                $wrapper.find('#sc-card').html(cardOpts);
+            }
+        }
+    });
+
+    // 4. Fetch and Render History
+    let fetch_history = function() {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Station Cards",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "date", "shift", "creation", "card", "csa", "receipt_no", "amount"],
+                order_by: "name desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
+                        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
+                        let csa_name = row.csa;
+                        if (window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(u => u.name === row.csa);
+                            if(u) csa_name = u.full_name;
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                                <td>${row.date || ""}</td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td style="color: #64748b;">${time_val}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.receipt_no}</span></td>
+                                <td>${row.card}</td>
+                                <td>${csa_name}</td>
+                                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No card payments recorded yet.</td></tr>';
+                $wrapper.find('#list-station-cards-saved').html(html);
+            }
+        });
+    };
+    fetch_history();
+
+    // 5. Save Station Card Payment
+    $wrapper.find('#btn-save-station-card').off('click').on('click', function() {
+        if (is_locked) {
+            frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+            return;
+        }
+
+        let card = $wrapper.find('#sc-card').val();
+        let csa = $wrapper.find('#sc-csa').val();
+        let receipt_no = $wrapper.find('#sc-receipt-no').val();
+        let amount = parseFloat($wrapper.find('#sc-amount').val()) || 0;
+        let memo = $wrapper.find('#sc-memo').val();
+
+        if (!card || !csa || !receipt_no || amount <= 0) {
+            frappe.show_alert({message: "Card, CSA, Receipt No, and valid Amount are required.", indicator: "red"});
+            return;
+        }
+
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Station Cards",
+                    shift: window.ACTIVE_SHIFT.name,
+                    date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
+                    card: card,
+                    csa: csa,
+                    receipt_no: receipt_no,
+                    amount: amount,
+                    memo: memo
+                }
+            },
+            callback: function(r) {
+                $btn.html(orig_html).prop('disabled', false);
+                if(r.message) {
+                    frappe.show_alert({message: "Station Card Payment saved successfully!", indicator: "green"});
+                    
+                    // Clear inputs
+                    $wrapper.find('#sc-card').val('');
+                    $wrapper.find('#sc-receipt-no').val('');
+                    $wrapper.find('#sc-amount').val('');
+                    $wrapper.find('#sc-memo').val('');
+                    
+                    // Switch to history view and refresh
+                    $wrapper.find('#tab-station-cards .seg-btn[data-view="history"]').click();
+                    fetch_history();
+                }
+            }
+        });
+    });
+}
+
+// =========================================================
+// STATION EXPENSES MODULE
+// =========================================================
