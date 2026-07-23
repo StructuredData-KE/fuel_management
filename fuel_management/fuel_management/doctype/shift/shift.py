@@ -124,6 +124,7 @@ class Shift(Document):
         self.create_stock_entry_on_close()
         self.post_cash_variance_to_liability_ledger()
         self.create_invoice_accounting_on_close()
+        self.create_topup_accounting_on_close()
 
     def create_invoice_accounting_on_close(self):
         from frappe.utils import nowdate, flt
@@ -453,3 +454,67 @@ def get_nozzle_prices(station, shift_date):
             nozzle_prices[nozzle.name] = {"price": price, "item": fuel_product}
             
     return nozzle_prices
+
+
+    def create_topup_accounting_on_close(self):
+        from frappe.utils import nowdate, flt
+        
+        if self.status != "Closed":
+            return
+            
+        topups = frappe.get_all("Station Supplier Top Up", filters={"shift": self.name}, fields=["name", "card", "amount", "rrn_number"])
+        if not topups:
+            return
+            
+        company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+        if not company:
+            return
+            
+        default_cash_account = frappe.get_cached_value("Company", company, "default_cash_account")
+        default_payable_account = frappe.get_cached_value("Company", company, "default_payable_account")
+        
+        if not default_cash_account or not default_payable_account:
+            frappe.msgprint("Default Cash or Payable account not set in Company. Skipping Top-Up Accounting.")
+            return
+
+        # We will create one Journal Entry for all top-ups in this shift
+        je = frappe.new_doc("Journal Entry")
+        je.voucher_type = "Journal Entry"
+        je.company = company
+        je.posting_date = self.shift_date or nowdate()
+        je.user_remark = f"Supplier Cash Top-Ups for Shift {self.name}"
+        
+        total_topup_amount = 0.0
+        
+        for t in topups:
+            amount = flt(t.amount)
+            if amount <= 0: continue
+            
+            supplier = frappe.db.get_value("Supplier Card", t.card, "supplier")
+            if not supplier: continue
+            
+            total_topup_amount += amount
+            
+            # Credit Supplier
+            je.append("accounts", {
+                "account": default_payable_account,
+                "party_type": "Supplier",
+                "party": supplier,
+                "credit_in_account_currency": amount,
+                "reference_type": "Station Supplier Top Up",
+                "reference_name": t.name,
+                "user_remark": f"Top-Up RRN: {t.rrn_number}"
+            })
+            
+        if total_topup_amount > 0:
+            # Debit Cash
+            je.append("accounts", {
+                "account": default_cash_account,
+                "debit_in_account_currency": total_topup_amount,
+                "user_remark": f"Total Cash received for Supplier Top-Ups Shift {self.name}"
+            })
+            
+            je.flags.ignore_permissions = True
+            je.insert()
+            je.submit()
+            frappe.msgprint(f"Generated Journal Entry {je.name} for Supplier Cash Top-Ups.")
