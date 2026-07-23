@@ -1169,49 +1169,11 @@ function render_invoices($wrapper) {
         callback: function(r) {
             if(r.message) {
                 window.INVOICE_ITEMS = r.message;
-                
-                // Fallback datalist just in case
                 let itemOpts = '';
-                let stringList = [];
                 r.message.forEach(i => {
-                    let text = `${i.item_name} - ${i.name}`;
-                    itemOpts += `<option value="${text}">`;
-                    stringList.push(text);
+                    itemOpts += `<option value="${i.item_name} - ${i.name}">`;
                 });
                 $wrapper.find('#invoice-items-list').html(itemOpts);
-                
-                // Initialize Awesomplete for true dropdown experience
-                let $input = $wrapper.find('#invoice-item-input');
-                if ($input.length > 0) {
-                    if (window.invoiceAwesomplete) {
-                        window.invoiceAwesomplete.list = stringList;
-                    } else {
-                        window.invoiceAwesomplete = new Awesomplete($input[0], {
-                            list: stringList,
-                            minChars: 0,
-                            maxItems: 50,
-                            autoFirst: true
-                        });
-                        
-                        // Force dropdown open on click
-                        $input.on('click', function() {
-                            if (window.invoiceAwesomplete.ul.childNodes.length === 0) {
-                                window.invoiceAwesomplete.minChars = 0;
-                                window.invoiceAwesomplete.evaluate();
-                            }
-                            if (window.invoiceAwesomplete.ul.hasAttribute('hidden')) {
-                                window.invoiceAwesomplete.open();
-                            } else {
-                                window.invoiceAwesomplete.close();
-                            }
-                        });
-                        
-                        // Trigger change event when awesomplete item is selected
-                        $input[0].addEventListener('awesomplete-selectcomplete', function() {
-                            $input.trigger('change');
-                        });
-                    }
-                }
             }
         }
     });
