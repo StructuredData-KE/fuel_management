@@ -44,6 +44,11 @@
                 <span>Dry Stock (Inventory)</span>
             </a>
 
+            <a href="#" class="nav-item" data-target="tab-customer-payments">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                <span>Customer Payments</span>
+            </a>
+
             <a href="#" class="nav-item" data-target="tab-expenses">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 <span>Expenses</span>
@@ -525,6 +530,80 @@
             </div>
             <button class="btn-primary" id="btn-save-drystock" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Save Inventory Sales</button>
 
+        </div>
+    </div>
+</section>
+</section>
+
+            <!-- CUSTOMER PAYMENTS -->
+            <section id="tab-customer-payments" class="tab-pane">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="history">Historical View</button>
+            <button class="seg-btn" data-view="entry" style="color: #047857; font-weight: 600;">+ New Payment</button>
+        </div>
+    </div>
+
+    <!-- HISTORY VIEW -->
+    <div class="view-pane active" id="cp-history-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <h3>Customer Payments for Active Shift</h3>
+            <div class="table-responsive">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Entry</th>
+                            <th>Time</th>
+                            <th>Customer</th>
+                            <th>CSA</th>
+                            <th>Mode</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-customer-payments-saved">
+                        <!-- Dynamic saved payments -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ENTRY VIEW -->
+    <div class="view-pane" id="cp-entry-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <div class="card-header-flex">
+                <h3>Record Customer Payment</h3>
+            </div>
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Customer</label>
+                    <input type="text" id="cp-customer-input" list="cp-customers-list" class="spa-input" placeholder="Type to search..." autocomplete="off">
+                    <datalist id="cp-customers-list"></datalist>
+                </div>
+                <div class="form-group">
+                    <label>CSA</label>
+                    <select id="cp-csa" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>Mode of Payment</label>
+                    <select id="cp-mode" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>Trans No. (Optional)</label>
+                    <input type="text" id="cp-trans-no" class="spa-input" placeholder="e.g. QWE123RTY">
+                </div>
+                <div class="form-group">
+                    <label>Amount (KES)</label>
+                    <input type="number" id="cp-amount" class="spa-input" placeholder="0.00" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Memo (Optional)</label>
+                    <input type="text" id="cp-memo" class="spa-input" placeholder="Notes...">
+                </div>
+            </div>
+            
+            <button class="btn-primary" id="btn-save-customer-payment" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Add Payment</button>
         </div>
     </div>
 </section>

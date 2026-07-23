@@ -96,6 +96,7 @@ function load_shift_data($wrapper) {
                 render_mpesa($wrapper);
                 render_drystock($wrapper);
                 if(typeof render_invoices === 'function') render_invoices($wrapper);
+                if(typeof render_customer_payments === 'function') render_customer_payments($wrapper);
             }
         }
     });
@@ -1484,6 +1485,182 @@ function refresh_invoice_cart($wrapper) {
                     }
                 }
             });
+        });
+    });
+}
+
+// =========================================================
+// CUSTOMER PAYMENTS MODULE
+// =========================================================
+function render_customer_payments($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+
+    let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+
+    // 1. Setup Segmented Control
+    $wrapper.find('#tab-customer-payments .seg-btn').off('click').on('click', function() {
+        let $btn = $(this);
+        let targetView = $btn.attr('data-view');
+        
+        $wrapper.find('#tab-customer-payments .seg-btn').removeClass('active');
+        $btn.addClass('active');
+        
+        $wrapper.find('#tab-customer-payments .view-pane').removeClass('active');
+        $wrapper.find(`#cp-${targetView}-view`).addClass('active');
+    });
+
+    // 2. Populate CSAs
+    let csaOptions = '<option value="">Select CSA...</option>';
+    let allowed_csas = [];
+    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
+        if(row.csa) allowed_csas.push(row.csa);
+    });
+    
+    // Remove duplicates
+    allowed_csas = [...new Set(allowed_csas)];
+    
+    allowed_csas.forEach(csa => {
+        let u = window.USERS_LIST.find(u => u.name === csa);
+        let name = u ? u.full_name : csa;
+        csaOptions += `<option value="${csa}">${name}</option>`;
+    });
+    $wrapper.find('#cp-csa').html(csaOptions);
+
+    // 3. Populate Customers (reuses window.CUSTOMERS_LIST fetched by invoices)
+    let pop_cust = function() {
+        if(window.CUSTOMERS_LIST) {
+            let custOpts = '';
+            window.CUSTOMERS_LIST.forEach(c => {
+                custOpts += `<option value="${c.name}">${c.customer_name}</option>`;
+            });
+            $wrapper.find('#cp-customers-list').html(custOpts);
+        }
+    };
+    if(window.CUSTOMERS_LIST) {
+        pop_cust();
+    } else {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: { doctype: "Customer", fields: ["name", "customer_name"], limit: 5000 },
+            callback: function(r) {
+                if(r.message) {
+                    window.CUSTOMERS_LIST = r.message;
+                    pop_cust();
+                }
+            }
+        });
+    }
+
+    // 4. Populate Mode of Payment
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Mode of Payment", fields: ["name"], limit: 100 },
+        callback: function(r) {
+            if(r.message) {
+                let mopOpts = '<option value="">Select Mode...</option>';
+                r.message.forEach(m => {
+                    mopOpts += `<option value="${m.name}">${m.name}</option>`;
+                });
+                $wrapper.find('#cp-mode').html(mopOpts);
+            }
+        }
+    });
+
+    // 5. Fetch and Render History
+    let fetch_history = function() {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Customer Payment",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "creation", "customer", "csa", "mode_of_payment", "amount"],
+                order_by: "creation desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
+                        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
+                        let csa_name = row.csa;
+                        if (window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(u => u.name === row.csa);
+                            if(u) csa_name = u.full_name;
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name.substring(0, 8)}</td>
+                                <td style="color: #64748b;">${time_val}</td>
+                                <td>${row.customer}</td>
+                                <td>${csa_name}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.mode_of_payment}</span></td>
+                                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="6" class="text-center" style="color: #94a3b8; padding: 2rem;">No payments recorded yet.</td></tr>';
+                $wrapper.find('#list-customer-payments-saved').html(html);
+            }
+        });
+    };
+    fetch_history();
+
+    // 6. Save Payment
+    $wrapper.find('#btn-save-customer-payment').off('click').on('click', function() {
+        if (is_locked) {
+            frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+            return;
+        }
+
+        let customer = $wrapper.find('#cp-customer-input').val();
+        let csa = $wrapper.find('#cp-csa').val();
+        let mode = $wrapper.find('#cp-mode').val();
+        let trans_no = $wrapper.find('#cp-trans-no').val();
+        let amount = parseFloat($wrapper.find('#cp-amount').val()) || 0;
+        let memo = $wrapper.find('#cp-memo').val();
+
+        if (!customer || !csa || !mode || amount <= 0) {
+            frappe.show_alert({message: "Customer, CSA, Mode of Payment, and valid Amount are required.", indicator: "red"});
+            return;
+        }
+
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Customer Payment",
+                    shift: window.ACTIVE_SHIFT.name,
+                    date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
+                    customer: customer,
+                    csa: csa,
+                    mode_of_payment: mode,
+                    trans_no: trans_no,
+                    amount: amount,
+                    memo: memo
+                }
+            },
+            callback: function(r) {
+                $btn.html(orig_html).prop('disabled', false);
+                if(r.message) {
+                    frappe.show_alert({message: "Customer Payment saved successfully!", indicator: "green"});
+                    
+                    // Clear inputs
+                    $wrapper.find('#cp-customer-input').val('');
+                    $wrapper.find('#cp-trans-no').val('');
+                    $wrapper.find('#cp-amount').val('');
+                    $wrapper.find('#cp-memo').val('');
+                    
+                    // Switch to history view and refresh
+                    $wrapper.find('#tab-customer-payments .seg-btn[data-view="history"]').click();
+                    fetch_history();
+                }
+            }
         });
     });
 }
