@@ -1182,7 +1182,7 @@ function render_invoices($wrapper) {
         args: {
             doctype: "Customer",
             fields: ["name", "customer_name"],
-            limit: 5000
+            limit_page_length: 5000
         },
         callback: function(r) {
             if(r.message) {
@@ -1207,7 +1207,7 @@ function render_invoices($wrapper) {
                     doctype: "Shift Invoice",
                     fields: ["vehicle_registration"],
                     filters: { customer: cust, vehicle_registration: ["!=", ""] },
-                    limit: 100
+                    limit_page_length: 100
                 },
                 callback: function(r) {
                     if(r.message) {
@@ -1547,7 +1547,7 @@ function render_customer_payments($wrapper) {
     } else {
         frappe.call({
             method: "frappe.client.get_list",
-            args: { doctype: "Customer", fields: ["name", "customer_name"], limit: 5000 },
+            args: { doctype: "Customer", fields: ["name", "customer_name"], limit_page_length: 5000 },
             callback: function(r) {
                 if(r.message) {
                     window.CUSTOMERS_LIST = r.message;
@@ -1560,7 +1560,7 @@ function render_customer_payments($wrapper) {
     // 4. Populate Mode of Payment
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Mode of Payment", fields: ["name"], limit: 100 },
+        args: { doctype: "Mode of Payment", fields: ["name"], limit_page_length: 100 },
         callback: function(r) {
             if(r.message) {
                 let mopOpts = '<option value="">Select Mode...</option>';
@@ -1713,7 +1713,7 @@ function render_station_cards($wrapper) {
     // 3. Populate Cards (from Fleet Card DocType)
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Fleet Card", fields: ["name", "card_name", "status"], limit: 500, filters: { status: "Active" } },
+        args: { doctype: "Fleet Card", fields: ["name", "card_name", "status"], limit_page_length: 500, filters: { status: "Active" } },
         callback: function(r) {
             if(r.message) {
                 let cardOpts = '<option value="">Select Card...</option>';
@@ -1864,7 +1864,7 @@ function render_station_expenses($wrapper) {
     // 3. Populate Categories (from Expense Claim Type)
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Expense Claim Type", fields: ["name"], limit: 500 },
+        args: { doctype: "Expense Claim Type", fields: ["name"], limit_page_length: 500 },
         callback: function(r) {
             if(r.message) {
                 let catOpts = '<option value="">Select Category...</option>';
@@ -2227,7 +2227,7 @@ function render_topups($wrapper) {
     // 2.5 Setup Mode of Payment Dropdown
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Mode of Payment", fields: ["name"], limit: 100 },
+        args: { doctype: "Mode of Payment", fields: ["name"], limit_page_length: 100 },
         callback: function(r) {
             let mopOpts = '<option value="">Select Mode...</option>';
             if(r.message) {
@@ -2391,7 +2391,7 @@ function render_purchases($wrapper) {
     // 3. Supplier Dropdown
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Supplier", fields: ["name", "tax_id"], limit: 500 },
+        args: { doctype: "Supplier", fields: ["name", "tax_id"], limit_page_length: 500 },
         callback: function(r) {
             let opts = '<option value="">Select Supplier...</option>';
             if(r.message) {
@@ -2415,7 +2415,7 @@ function render_purchases($wrapper) {
     // 4. Item Dropdown (Datalist approach)
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Item", fields: ["name", "item_name"], filters: {disabled: 0}, limit: 5000 },
+        args: { doctype: "Item", fields: ["name", "item_name"], filters: {disabled: 0}, limit_page_length: 5000 },
         callback: function(r) {
             let opts = '';
             if(r.message) {
@@ -2429,7 +2429,7 @@ function render_purchases($wrapper) {
     // 5. Target Location Dropdown
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Warehouse", fields: ["name", "warehouse_name"], filters: {is_group: 0}, limit: 500 },
+        args: { doctype: "Warehouse", fields: ["name", "warehouse_name"], filters: {is_group: 0}, limit_page_length: 500 },
         callback: function(r) {
             let opts = '<option value="">Select Target...</option>';
             if(r.message) {
