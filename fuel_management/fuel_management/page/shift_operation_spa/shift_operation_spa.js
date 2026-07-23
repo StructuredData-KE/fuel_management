@@ -2366,6 +2366,7 @@ function render_purchases($wrapper) {
     if(!window.ACTIVE_SHIFT) return;
 
     let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+    window.PURCHASE_CART = [];
 
     // 1. Segments
     $wrapper.find('#tab-purchases .seg-btn').off('click').on('click', function() {
@@ -2391,7 +2392,7 @@ function render_purchases($wrapper) {
     // 3. Supplier Dropdown
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Supplier", fields: ["name", "tax_id"], limit_page_length: 500 },
+        args: { doctype: "Supplier", fields: ["name"], limit_page_length: 500 },
         callback: function(r) {
             let opts = '<option value="">Select Supplier...</option>';
             if(r.message) {
@@ -2399,16 +2400,6 @@ function render_purchases($wrapper) {
                 r.message.forEach(s => { opts += `<option value="${s.name}">${s.name}</option>`; });
             }
             $wrapper.find('#pur-supplier').html(opts);
-        }
-    });
-
-    $wrapper.find('#pur-supplier').on('change', function() {
-        let supp = $(this).val();
-        let s = (window.PURCHASE_SUPPLIERS || []).find(x => x.name === supp);
-        if(s && s.tax_id) {
-            $wrapper.find('#pur-invoice').val(s.tax_id);
-        } else {
-            $wrapper.find('#pur-invoice').val('N/A');
         }
     });
 
@@ -2439,31 +2430,94 @@ function render_purchases($wrapper) {
         }
     });
 
-    // 6. Calculation Logic
-    let calcTotals = function() {
-        let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
-        let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
-        let isVat = $wrapper.find('#pur-vat').is(':checked');
+    // 6. Refresh Cart Function
+    let refresh_purchase_cart = function() {
+        let html = '';
+        let items_total = 0;
         
-        let total = qty * cost;
-        let net = total;
-        if(isVat) {
-            net = total / 1.16; // KE VAT 16%
+        window.PURCHASE_CART.forEach((row, idx) => {
+            let amount = row.quantity * row.unit_cost;
+            items_total += amount;
+            html += `
+                <tr>
+                    <td>${row.item_name}</td>
+                    <td>${row.target_location}</td>
+                    <td>${row.quantity}</td>
+                    <td>${frappe.format(row.unit_cost, {fieldtype: 'Currency'})}</td>
+                    <td><strong>${frappe.format(amount, {fieldtype: 'Currency'})}</strong></td>
+                    <td><button class="btn btn-xs btn-danger btn-remove-pur-cart" data-idx="${idx}">X</button></td>
+                </tr>
+            `;
+        });
+        
+        if(html === '') {
+            html = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>';
         }
         
-        $wrapper.find('#pur-net').text(net.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-        $wrapper.find('#pur-total').text(total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        $wrapper.find('#list-purchase-cart').html(html);
+        
+        $wrapper.find('.btn-remove-pur-cart').off('click').on('click', function() {
+            let idx = parseInt($(this).attr('data-idx'));
+            window.PURCHASE_CART.splice(idx, 1);
+            refresh_purchase_cart();
+        });
+        
+        // Update Totals
+        let transport = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+        let isVat = $wrapper.find('#pur-vat').is(':checked');
+        
+        let grand_total = items_total + transport;
+        let net = grand_total;
+        if(isVat) {
+            net = grand_total / 1.16;
+        }
+        
+        $wrapper.find('#pur-net').text(frappe.format(items_total, {fieldtype: 'Currency'})); // display items total here
+        $wrapper.find('#pur-total').text(frappe.format(grand_total, {fieldtype: 'Currency'}));
     };
-    $wrapper.find('#pur-qty, #pur-cost, #pur-vat').on('input change', calcTotals);
 
-    // 7. Fetch History
+    $wrapper.find('#pur-transport-charge, #pur-vat').on('input change', refresh_purchase_cart);
+
+    // 7. Add Item to Cart
+    $wrapper.find('#btn-add-purchase-item').off('click').on('click', function() {
+        let val = $wrapper.find('#pur-item-input').val();
+        let match = (window.PURCHASE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === val);
+        let item_code = match ? match.name : val;
+        let item_name = match ? match.item_name : val;
+        
+        let target = $wrapper.find('#pur-target').val();
+        let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
+        let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
+        
+        if (!item_code || !target || qty <= 0 || cost <= 0) {
+            frappe.show_alert({message: "Item, Target, Quantity, and Unit Cost are required.", indicator: "red"});
+            return;
+        }
+        
+        window.PURCHASE_CART.push({
+            item: item_code,
+            item_name: item_name,
+            target_location: target,
+            quantity: qty,
+            unit_cost: cost
+        });
+        
+        // Clear item inputs
+        $wrapper.find('#pur-item-input').val('');
+        $wrapper.find('#pur-qty').val('');
+        $wrapper.find('#pur-cost').val('');
+        
+        refresh_purchase_cart();
+    });
+
+    // 8. Fetch History
     let fetch_history = function() {
         frappe.call({
             method: "frappe.client.get_list",
             args: {
                 doctype: "Station Purchase",
                 filters: { shift: window.ACTIVE_SHIFT.name },
-                fields: ["name", "receiving_date", "supplier", "tax_invoice_number", "item", "quantity", "target_location", "total_cost"],
+                fields: ["name", "receiving_date", "supplier", "tax_invoice_number", "bill_no", "total_cost"],
                 order_by: "name desc"
             },
             callback: function(r) {
@@ -2476,67 +2530,65 @@ function render_purchases($wrapper) {
                                 <td>${row.receiving_date}</td>
                                 <td>${row.supplier}</td>
                                 <td><span class="badge" style="background: #f1f5f9;">${row.tax_invoice_number || "N/A"}</span></td>
-                                <td>${row.item}</td>
-                                <td>${row.quantity}</td>
-                                <td>${row.target_location}</td>
-                                <td style="font-weight: 600;">${parseFloat(row.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td><span class="badge" style="background: #f1f5f9;">${row.bill_no || "N/A"}</span></td>
+                                <td style="font-weight: 600;">${frappe.format(row.total_cost || 0, {fieldtype: 'Currency'})}</td>
                             </tr>
                         `;
                     });
                 }
-                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="6" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
                 $wrapper.find('#list-station-purchases-saved').html(html);
             }
         });
     };
     fetch_history();
 
-    // 8. Summary Modal and Save
-    let pendingPurchase = {};
-    
+    // 9. Save Entire Purchase
     $wrapper.find('#btn-save-purchase').off('click').on('click', function() {
         if (is_locked) {
             frappe.show_alert({message: "Shift is closed.", indicator: "red"});
             return;
         }
-
-        pendingPurchase = {
-            doctype: "Station Purchase",
-            shift: window.ACTIVE_SHIFT.name,
-            receiving_date: $wrapper.find('#pur-rec-date').val(),
-            document_date: $wrapper.find('#pur-doc-date').val(),
-            supplier: $wrapper.find('#pur-supplier').val(),
-            item: (() => {
-                let val = $wrapper.find('#pur-item-input').val();
-                let match = (window.PURCHASE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === val);
-                return match ? match.name : val;
-            })(),
-            target_location: $wrapper.find('#pur-target').val(),
-            quantity: parseFloat($wrapper.find('#pur-qty').val()) || 0,
-            unit_cost: parseFloat($wrapper.find('#pur-cost').val()) || 0,
-            vat_inclusive: $wrapper.find('#pur-vat').is(':checked') ? 1 : 0
-        };
-
-        if (!pendingPurchase.supplier || !pendingPurchase.item || !pendingPurchase.target_location || pendingPurchase.quantity <= 0 || pendingPurchase.unit_cost <= 0) {
-            frappe.show_alert({message: "Please fill all required fields correctly.", indicator: "red"});
+        
+        if (window.PURCHASE_CART.length === 0) {
+            frappe.show_alert({message: "Cart is empty. Add items first.", indicator: "red"});
             return;
         }
 
-        // Show Modal
-        $('#mod-pur-supp').text(pendingPurchase.supplier);
-        $('#mod-pur-item').text(pendingPurchase.item);
-        $('#mod-pur-target').text(pendingPurchase.target_location);
-        $('#mod-pur-qty').text(pendingPurchase.quantity);
-        $('#mod-pur-total').text((pendingPurchase.quantity * pendingPurchase.unit_cost).toLocaleString('en-US', {minimumFractionDigits:2}));
-        
-        $('#purchase-modal').removeClass('hidden');
-    });
+        let supplier = $wrapper.find('#pur-supplier').val();
+        let doc_invoice = $wrapper.find('#pur-doc-invoice').val();
+        let kra_invoice = $wrapper.find('#pur-kra-invoice').val();
+        let rec_date = $wrapper.find('#pur-rec-date').val();
+        let doc_date = $wrapper.find('#pur-doc-date').val();
+        let transport = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+        let isVat = $wrapper.find('#pur-vat').is(':checked') ? 1 : 0;
 
-    $('#btn-cancel-pur-modal').off('click').on('click', function() {
-        $('#purchase-modal').addClass('hidden');
-    });
+        if (!supplier || !doc_invoice || !rec_date || !doc_date) {
+            frappe.show_alert({message: "Supplier, Document Invoice No, Receiving Date and Document Date are required.", indicator: "red"});
+            return;
+        }
 
-    $('#btn-confirm-pur-modal').off('click').on('click', function() {
+        let pendingPurchase = {
+            doctype: "Station Purchase",
+            shift: window.ACTIVE_SHIFT.name,
+            receiving_date: rec_date,
+            document_date: doc_date,
+            supplier: supplier,
+            bill_no: doc_invoice,
+            tax_invoice_number: kra_invoice,
+            custom_kra_invoice_number: kra_invoice,
+            transport_charge: transport,
+            vat_inclusive: isVat,
+            items: window.PURCHASE_CART.map(item => {
+                return {
+                    item: item.item,
+                    target_location: item.target_location,
+                    quantity: item.quantity,
+                    unit_cost: item.unit_cost
+                };
+            })
+        };
+
         let $btn = $(this);
         let orig_html = $btn.html();
         $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
@@ -2546,21 +2598,25 @@ function render_purchases($wrapper) {
             args: { doc: pendingPurchase },
             callback: function(r) {
                 $btn.html(orig_html).prop('disabled', false);
-                $('#purchase-modal').addClass('hidden');
                 
                 if(r.message) {
                     frappe.show_alert({message: "Purchase recorded successfully!", indicator: "green"});
                     
-                    // Clear inputs
+                    // Clear form
                     $wrapper.find('#pur-supplier').val('').trigger('change');
-                    $wrapper.find('#pur-item-input').val('');
-                    $wrapper.find('#pur-qty').val('');
-                    $wrapper.find('#pur-cost').val('');
+                    $wrapper.find('#pur-doc-invoice').val('');
+                    $wrapper.find('#pur-kra-invoice').val('');
+                    $wrapper.find('#pur-transport-charge').val('');
+                    window.PURCHASE_CART = [];
+                    refresh_purchase_cart();
                     
                     // Switch to history view and refresh
                     $wrapper.find('#tab-purchases .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
+            },
+            error: function() {
+                $btn.html(orig_html).prop('disabled', false);
             }
         });
     });

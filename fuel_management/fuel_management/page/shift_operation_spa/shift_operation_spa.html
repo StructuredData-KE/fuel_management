@@ -919,8 +919,12 @@
                     <select id="pur-supplier" class="spa-input"></select>
                 </div>
                 <div class="form-group">
-                    <label>Tax Invoice Number (Read Only)</label>
-                    <input type="text" id="pur-invoice" class="spa-input" readonly style="background: #f1f5f9; cursor: not-allowed;">
+                    <label>Document Invoice No. <span style="color:red;">*</span></label>
+                    <input type="text" id="pur-doc-invoice" class="spa-input" placeholder="Enter Document Invoice No">
+                </div>
+                <div class="form-group">
+                    <label>KRA Invoice No.</label>
+                    <input type="text" id="pur-kra-invoice" class="spa-input" placeholder="Enter KRA Invoice No">
                 </div>
                 <div class="form-group">
                     <label>Receiving Date <span style="color:red;">*</span></label>
@@ -930,42 +934,70 @@
                     <label>Document Date <span style="color:red;">*</span></label>
                     <input type="date" id="pur-doc-date" class="spa-input">
                 </div>
-                
-                <div class="form-group">
-                    <label>Item / Fuel Product <span style="color:red;">*</span></label>
+            </div>
+
+            <!-- Cart Section -->
+            <div class="pos-inline-row" style="margin-top: 1.5rem;">
+                <div class="form-group" style="flex: 2;">
+                    <label>Item / Fuel Product</label>
                     <input type="text" id="pur-item-input" list="pur-items-list" class="spa-input" placeholder="Search item...">
                     <datalist id="pur-items-list"></datalist>
                 </div>
-                <div class="form-group">
-                    <label>Target Tank / Store <span style="color:red;">*</span></label>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <label>Target Tank / Store</label>
                     <select id="pur-target" class="spa-input"></select>
                 </div>
-                <div class="form-group">
-                    <label>Quantity <span style="color:red;">*</span></label>
+                <div class="form-group" style="flex: 1; min-width: 100px;">
+                    <label>Quantity</label>
                     <input type="number" id="pur-qty" class="spa-input" placeholder="0.00" step="0.01">
                 </div>
-                <div class="form-group">
-                    <label>Unit Cost <span style="color:red;">*</span></label>
+                <div class="form-group" style="flex: 1; min-width: 100px;">
+                    <label>Unit Cost</label>
                     <input type="number" id="pur-cost" class="spa-input" placeholder="0.00" step="0.01">
                 </div>
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                    <button class="btn-secondary" id="btn-add-purchase-item" style="height: 42px;">+ Add Item</button>
+                </div>
+            </div>
+
+            <div class="table-responsive" style="margin-top: 1.5rem;">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Target</th>
+                            <th>Qty</th>
+                            <th>Unit Cost</th>
+                            <th>Amount</th>
+                            <th width="50">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-purchase-cart">
+                        <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>
+                    </tbody>
+                </table>
             </div>
             
             <div style="display: flex; gap: 2rem; margin-top: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 8px;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div class="form-group" style="flex: 1; max-width: 200px; margin: 0;">
+                    <label>Transport Charge</label>
+                    <input type="number" id="pur-transport-charge" class="spa-input" placeholder="0.00" step="0.01">
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
                     <input type="checkbox" id="pur-vat" style="width: 20px; height: 20px;">
                     <label for="pur-vat" style="margin: 0; font-weight: 600;">VAT Inclusive</label>
                 </div>
                 <div>
-                    <span style="font-size: 0.9rem; color: #64748b;">Net Total:</span>
+                    <span style="font-size: 0.9rem; color: #64748b;">Items Total:</span>
                     <div id="pur-net" style="font-size: 1.2rem; font-weight: 600; color: #0f172a;">0.00</div>
                 </div>
                 <div>
-                    <span style="font-size: 0.9rem; color: #64748b;">Gross Total:</span>
+                    <span style="font-size: 0.9rem; color: #64748b;">Grand Total:</span>
                     <div id="pur-total" style="font-size: 1.2rem; font-weight: 700; color: #047857;">0.00</div>
                 </div>
             </div>
             
-            <button class="btn-primary" id="btn-save-purchase" style="margin-top:1.5rem; width:100%;"><span class="spinner hidden"></span> Proceed & Verify</button>
+            <button class="btn-primary" id="btn-save-purchase" style="margin-top:1.5rem; width:100%;"><span class="spinner hidden"></span> Save Purchase</button>
         </div>
     </div>
 </section>
