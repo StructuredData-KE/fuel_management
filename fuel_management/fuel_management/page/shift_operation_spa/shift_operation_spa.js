@@ -1996,7 +1996,10 @@ function render_rtt($wrapper) {
         method: "fuel_management.fuel_management.doctype.shift.shift.get_nozzle_prices",
         args: { station: window.SHIFT_DOC.station, shift_date: window.SHIFT_DOC.shift_date },
         callback: function(r) {
-            if(r.message) nozzlePrices = r.message;
+            if(r.message) {
+                nozzlePrices = r.message;
+                populateItems();
+            }
         }
     });
 
@@ -2013,20 +2016,34 @@ function render_rtt($wrapper) {
     });
     $wrapper.find('#rtt-nozzle').html(nozOptions);
 
+    // 3.5 Populate Item Dropdown
+    let populateItems = function() {
+        let uniqueItems = {};
+        for (let noz in nozzlePrices) {
+            let item = nozzlePrices[noz].item;
+            let price = nozzlePrices[noz].price;
+            if(item && !uniqueItems[item]) {
+                uniqueItems[item] = price;
+            }
+        }
+        let itemOpts = '<option value="">Select Item...</option>';
+        for (let item in uniqueItems) {
+            itemOpts += `<option value="${item}" data-price="${uniqueItems[item]}">${item}</option>`;
+        }
+        $wrapper.find('#rtt-item').html(itemOpts);
+    };
+
     // 4. Auto-Fill CSA and Item on Nozzle Change
     $wrapper.find('#rtt-nozzle').off('change').on('change', function() {
         let nozzle = $(this).val();
         if(!nozzle) {
             $wrapper.find('#rtt-csa, #rtt-csa-display').val('');
-            $wrapper.find('#rtt-item, #rtt-item-display').val('');
-            $wrapper.find('#rtt-amount').val('');
-            $wrapper.find('#rtt-price-indicator').text('');
             return;
         }
 
         frappe.db.get_value('Pump Nozzle', nozzle, 'pump_group', function(r) {
             if(r && r.pump_group) {
-                let csa = window.SHIFT_DOC.head_csa; // Default to Head CSA
+                let csa = window.SHIFT_DOC.head_csa;
                 let assigned = (window.SHIFT_DOC.assigned_csas || []).find(a => a.pump_group === r.pump_group);
                 if(assigned && assigned.csa) csa = assigned.csa;
 
@@ -2038,29 +2055,30 @@ function render_rtt($wrapper) {
             }
         });
 
-        if(nozzlePrices[nozzle]) {
-            let item = nozzlePrices[nozzle].item;
-            let price = nozzlePrices[nozzle].price;
-            
-            if(item) {
-                $wrapper.find('#rtt-item').val(item);
-                $wrapper.find('#rtt-item-display').val(item);
-            }
-            $wrapper.find('#rtt-price-indicator').text(`(@ ${price}/L)`);
-            
-            // Recalculate amount if volume is already entered
-            let vol = parseFloat($wrapper.find('#rtt-volume').val()) || 0;
-            $wrapper.find('#rtt-amount').val((vol * price).toFixed(2));
+        if(nozzlePrices[nozzle] && nozzlePrices[nozzle].item) {
+            $wrapper.find('#rtt-item').val(nozzlePrices[nozzle].item).trigger('change');
         }
     });
 
-    // 5. Auto-Calculate Value on Volume Input
-    $wrapper.find('#rtt-volume').off('input').on('input', function() {
-        let vol = parseFloat($(this).val()) || 0;
-        let nozzle = $wrapper.find('#rtt-nozzle').val();
-        if(nozzle && nozzlePrices[nozzle]) {
-            let price = nozzlePrices[nozzle].price;
-            $wrapper.find('#rtt-amount').val((vol * price).toFixed(2));
+    // 4.5 Auto-Update Price Indicator on Item Change
+    $wrapper.find('#rtt-item').off('change').on('change', function() {
+        let price = parseFloat($(this).find(':selected').data('price')) || 0;
+        if(price > 0) {
+            $wrapper.find('#rtt-price-indicator').text(`(@ ${price}/L)`);
+            let amount = parseFloat($wrapper.find('#rtt-amount').val()) || 0;
+            $wrapper.find('#rtt-volume').val((amount / price).toFixed(4));
+        } else {
+            $wrapper.find('#rtt-price-indicator').text('');
+            $wrapper.find('#rtt-volume').val('');
+        }
+    });
+
+    // 5. Auto-Calculate Volume on Amount Input
+    $wrapper.find('#rtt-amount').off('input').on('input', function() {
+        let amount = parseFloat($(this).val()) || 0;
+        let price = parseFloat($wrapper.find('#rtt-item').find(':selected').data('price')) || 0;
+        if(price > 0) {
+            $wrapper.find('#rtt-volume').val((amount / price).toFixed(4));
         }
     });
 

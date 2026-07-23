@@ -69,7 +69,6 @@
             "in_list_view": 1,
             "label": "Item",
             "options": "Item",
-            "read_only": 1,
             "reqd": 1
         },
         {
@@ -77,14 +76,14 @@
             "fieldtype": "Float",
             "in_list_view": 1,
             "label": "Volume Returned (Liters)",
-            "reqd": 1
+            "reqd": 1,
+            "read_only": 1
         },
         {
             "fieldname": "amount",
             "fieldtype": "Currency",
             "in_list_view": 1,
             "label": "Value Returned (Cash)",
-            "read_only": 1,
             "reqd": 1
         },
         {
