@@ -3,6 +3,8 @@ window.USERS_LIST = [];
 window.PUMP_GROUPS_LIST = [];
 window.SHIFT_TEMPLATES = [];
 
+window.STATION_SETTINGS = {};
+
 frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     // Render custom HTML structure
     $(wrapper).html(frappe.render_template("shift_operation_spa", {}));
@@ -12,8 +14,42 @@ frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     load_dropdowns(wrapper);
     setup_actions(wrapper);
     
-    // Initialize State
-    fetch_active_shift(wrapper);
+    // Fetch Settings then Initialize State
+    frappe.call({
+        method: "frappe.client.get",
+        args: {
+            doctype: "Station Global Settings",
+            name: "Station Global Settings"
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.STATION_SETTINGS = r.message;
+                apply_global_settings(wrapper);
+            }
+            fetch_active_shift(wrapper);
+        }
+    });
+}
+
+function apply_global_settings(wrapper) {
+    const $wrapper = $(wrapper);
+    const settings = window.STATION_SETTINGS;
+    
+    // Fleet Cards
+    if (settings.enable_fleet_card_management) {
+        $wrapper.find('#nav-station-cards').show();
+    } else {
+        $wrapper.find('#nav-station-cards').hide();
+    }
+    
+    // Petty Cash vs Expenses
+    if (settings.enable_petty_cash) {
+        $wrapper.find('#nav-petty-cash').show();
+        $wrapper.find('#nav-expenses').hide();
+    } else {
+        $wrapper.find('#nav-petty-cash').hide();
+        $wrapper.find('#nav-expenses').show();
+    }
 }
 
 function fetch_active_shift(wrapper) {
@@ -98,6 +134,7 @@ function load_shift_data($wrapper) {
                 if(typeof render_invoices === 'function') render_invoices($wrapper);
                 if(typeof render_customer_payments === 'function') render_customer_payments($wrapper);
                 if(typeof render_station_cards === 'function') render_station_cards($wrapper);
+                if(typeof render_petty_cash === 'function') render_petty_cash($wrapper);
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
                 if(typeof render_rtt === 'function') render_rtt($wrapper);
                 if(typeof render_topups === 'function') render_topups($wrapper);
@@ -2619,5 +2656,173 @@ function render_purchases($wrapper) {
                 $btn.html(orig_html).prop('disabled', false);
             }
         });
+    });
+}
+
+
+// ==========================================
+// PETTY CASH LOGIC
+// ==========================================
+function render_petty_cash(wrapper) {
+    const $wrapper = $(wrapper);
+    
+    // Setup Segmented Control
+    $wrapper.find('#tab-petty-cash .seg-btn').off('click').on('click', function() {
+        $wrapper.find('#tab-petty-cash .seg-btn').removeClass('active');
+        $(this).addClass('active');
+        
+        const view = $(this).data('view');
+        $wrapper.find('#tab-petty-cash .view-pane').removeClass('active');
+        $wrapper.find('#pc-' + view + '-view').addClass('active');
+    });
+    
+    // Load active accounts
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Station Petty Cash Account",
+            filters: { status: "Active" },
+            fields: ["name", "current_balance"]
+        },
+        callback: function(r) {
+            let $select = $wrapper.find('#pc-account');
+            $select.empty().append('<option value="">Select Account...</option>');
+            if(r.message) {
+                window.PETTY_CASH_ACCOUNTS = r.message;
+                r.message.forEach(acc => {
+                    $select.append(`<option value="${acc.name}">${acc.name}</option>`);
+                });
+            }
+        }
+    });
+    
+    // On Account Change
+    $wrapper.find('#pc-account').off('change').on('change', function() {
+        let acc_name = $(this).val();
+        let acc = (window.PETTY_CASH_ACCOUNTS || []).find(a => a.name === acc_name);
+        if (acc) {
+            $wrapper.find('#pc-balance').val(format_currency(acc.current_balance));
+        } else {
+            $wrapper.find('#pc-balance').val('');
+        }
+    });
+    
+    // Load Categories
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Expense Claim Type",
+            fields: ["name"],
+            limit_page_length: 100
+        },
+        callback: function(r) {
+            let $select = $wrapper.find('#pc-category');
+            $select.empty().append('<option value="">Select Category...</option>');
+            if(r.message) {
+                r.message.forEach(cat => {
+                    $select.append(`<option value="${cat.name}">${cat.name}</option>`);
+                });
+            }
+        }
+    });
+
+    // Save logic
+    $wrapper.find('#btn-save-petty-cash').off('click').on('click', function() {
+        if(!window.ACTIVE_SHIFT) {
+            frappe.msgprint("No active shift.");
+            return;
+        }
+        
+        let account = $wrapper.find('#pc-account').val();
+        let category = $wrapper.find('#pc-category').val();
+        let payee = $wrapper.find('#pc-payee').val();
+        let amount = parseFloat($wrapper.find('#pc-amount').val());
+        let memo = $wrapper.find('#pc-memo').val();
+        
+        if(!account || !category || !payee || isNaN(amount) || amount <= 0 || !memo) {
+            frappe.msgprint("Please fill all mandatory fields with valid values.");
+            return;
+        }
+        
+        let $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.find('.spinner').removeClass('hidden');
+        
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Station Petty Cash Entry",
+                    shift: window.ACTIVE_SHIFT.name,
+                    date: frappe.datetime.get_today(),
+                    petty_cash_account: account,
+                    category: category,
+                    payee: payee,
+                    amount: amount,
+                    memo: memo,
+                    csa: frappe.session.user
+                }
+            },
+            callback: function(r) {
+                $btn.prop('disabled', false);
+                $btn.find('.spinner').addClass('hidden');
+                
+                if(!r.exc) {
+                    frappe.show_alert({message: "Petty Cash Entry saved!", indicator: "green"});
+                    // Reset form
+                    $wrapper.find('#pc-account').val('').trigger('change');
+                    $wrapper.find('#pc-category').val('');
+                    $wrapper.find('#pc-payee').val('');
+                    $wrapper.find('#pc-amount').val('');
+                    $wrapper.find('#pc-memo').val('');
+                    
+                    // Refresh History
+                    load_petty_cash_history($wrapper);
+                    
+                    // Switch back to history view
+                    $wrapper.find('#tab-petty-cash .seg-btn[data-view="history"]').click();
+                }
+            }
+        });
+    });
+
+    load_petty_cash_history($wrapper);
+}
+
+function load_petty_cash_history($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+    
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Station Petty Cash Entry",
+            filters: { shift: window.ACTIVE_SHIFT.name },
+            fields: ["name", "date", "creation", "petty_cash_account", "category", "payee", "amount"],
+            order_by: "creation desc"
+        },
+        callback: function(r) {
+            let $tbody = $wrapper.find('#list-petty-cash-saved');
+            $tbody.empty();
+            
+            if(r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let timeStr = frappe.datetime.str_to_user(row.creation).split(' ')[1] || "";
+                    let html = `
+                        <tr>
+                            <td><b>${row.name}</b></td>
+                            <td>${frappe.datetime.str_to_user(row.date)}</td>
+                            <td>${timeStr}</td>
+                            <td>${row.petty_cash_account}</td>
+                            <td>${row.category}</td>
+                            <td>${row.payee}</td>
+                            <td class="text-right"><b>${format_currency(row.amount)}</b></td>
+                        </tr>
+                    `;
+                    $tbody.append(html);
+                });
+            } else {
+                $tbody.append('<tr><td colspan="7" class="text-center text-muted">No petty cash entries for this shift yet.</td></tr>');
+            }
+        }
     });
 }

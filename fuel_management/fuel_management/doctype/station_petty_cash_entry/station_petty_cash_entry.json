@@ -1,0 +1,89 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:PC-ENTRY-{YYYY}-{MM}-{#####}",
+ "creation": "2026-07-23 16:15:40.497137",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "shift",
+  "date",
+  "petty_cash_account",
+  "category",
+  "payee",
+  "amount",
+  "memo",
+  "csa"
+ ],
+ "fields": [
+  {
+   "fieldname": "shift",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shift",
+   "options": "Shift",
+   "reqd": 1
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "petty_cash_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Petty Cash Account",
+   "options": "Station Petty Cash Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Category",
+   "options": "Expense Claim Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "payee",
+   "fieldtype": "Data",
+   "label": "Payee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "memo",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "csa",
+   "fieldtype": "Data",
+   "label": "Entered By (CSA)"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-23 16:16:57.844194",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "Station Petty Cash Entry",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

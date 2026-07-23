@@ -1,0 +1,48 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-23 16:15:39.296128",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enable_petty_cash",
+  "enable_fleet_card_management",
+  "enable_cash_meter_reading"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enable_petty_cash",
+   "fieldtype": "Check",
+   "label": "Enable Petty Cash"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_fleet_card_management",
+   "fieldtype": "Check",
+   "label": "Enable Fleet Card Management"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_cash_meter_reading",
+   "fieldtype": "Check",
+   "label": "Enable Cash Meter Reading"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-23 16:16:56.630359",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "Station Global Settings",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -29,7 +29,7 @@
                 <span>M-Pesa Tills</span>
             </a>
             
-            <a href="#" class="nav-item" data-target="tab-station-cards">
+            <a href="#" class="nav-item" id="nav-station-cards" data-target="tab-station-cards">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
                 <span>Station Cards</span>
             </a>
@@ -49,9 +49,14 @@
                 <span>Customer Payments</span>
             </a>
 
-            <a href="#" class="nav-item" data-target="tab-expenses">
+            <a href="#" class="nav-item" id="nav-expenses" data-target="tab-expenses">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 <span>Expenses</span>
+            </a>
+            
+            <a href="#" class="nav-item" id="nav-petty-cash" data-target="tab-petty-cash" style="display: none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h0M2 9.5h20"/></svg>
+                <span>Petty Cash</span>
             </a>
             
             <a href="#" class="nav-item" data-target="tab-rtt">
@@ -998,6 +1003,80 @@
             </div>
             
             <button class="btn-primary" id="btn-save-purchase" style="margin-top:1.5rem; width:100%;"><span class="spinner hidden"></span> Save Purchase</button>
+        </div>
+    </div>
+</section>
+
+
+<!-- PETTY CASH -->
+<section id="tab-petty-cash" class="tab-pane">
+    <div class="segmented-control-wrapper">
+        <div class="segmented-control">
+            <button class="seg-btn active" data-view="history">Historical View</button>
+            <button class="seg-btn" data-view="entry" style="color: #047857; font-weight: 600;">+ New Petty Cash Entry</button>
+        </div>
+    </div>
+    
+    <!-- HISTORY VIEW -->
+    <div class="view-pane active" id="pc-history-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <h3>Petty Cash Entries for Active Shift</h3>
+            <div class="table-responsive">
+                <table class="dash-table">
+                    <thead>
+                        <tr>
+                            <th>Entry</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Account</th>
+                            <th>Category</th>
+                            <th>Payee</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="list-petty-cash-saved">
+                        <!-- Dynamic rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ENTRY VIEW -->
+    <div class="view-pane" id="pc-entry-view">
+        <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+            <div class="card-header-flex">
+                <h3>Record Petty Cash Expense</h3>
+            </div>
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Petty Cash Account <span style="color:red;">*</span></label>
+                    <select id="pc-account" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>Current Account Balance</label>
+                    <input type="text" id="pc-balance" class="spa-input" readonly style="background: #f1f5f9; font-weight: bold; color: #0f172a;">
+                </div>
+                <div class="form-group">
+                    <label>Category <span style="color:red;">*</span></label>
+                    <select id="pc-category" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>Payee <span style="color:red;">*</span></label>
+                    <input type="text" id="pc-payee" class="spa-input" placeholder="e.g. John Doe">
+                </div>
+                <div class="form-group">
+                    <label>Amount (KES) <span style="color:red;">*</span></label>
+                    <input type="number" id="pc-amount" class="spa-input" placeholder="0.00" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>Description / Memo <span style="color:red;">*</span></label>
+                    <input type="text" id="pc-memo" class="spa-input" placeholder="What was this for?">
+                </div>
+            </div>
+            
+            <button class="btn-primary" id="btn-save-petty-cash" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Add Entry</button>
         </div>
     </div>
 </section>
