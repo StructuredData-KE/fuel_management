@@ -10,6 +10,41 @@ class Shift(Document):
         self.auto_fetch_opening_readings()
         self.calculate_expected_stock()
         self.calculate_expected_cash()
+        self.auto_inject_dry_stock_from_invoices()
+
+    def auto_inject_dry_stock_from_invoices(self):
+        from frappe.utils import flt
+        if not self.invoices:
+            return
+            
+        for inv in self.invoices:
+            if not inv.item: continue
+            
+            item_group = frappe.db.get_value("Item", inv.item, "item_group")
+            if item_group == "Fuel":
+                continue
+                
+            found = False
+            for row in (self.inventory_sales or []):
+                if row.get("reference_invoice") == inv.entry_number:
+                    row.item = inv.item
+                    row.quantity = inv.quantity
+                    row.selling_price = inv.rate
+                    row.amount = inv.amount
+                    row.sold_by = inv.csa
+                    found = True
+                    break
+                    
+            if not found:
+                self.append("inventory_sales", {
+                    "item": inv.item,
+                    "quantity": inv.quantity,
+                    "selling_price": inv.rate,
+                    "amount": inv.amount,
+                    "sold_by": inv.csa,
+                    "is_invoice_sale": 1,
+                    "reference_invoice": inv.entry_number
+                })
 
     def auto_set_shift_display(self):
         from frappe.utils import getdate
@@ -81,6 +116,45 @@ class Shift(Document):
     def on_update(self):
         self.create_stock_entry_on_close()
         self.post_cash_variance_to_liability_ledger()
+        self.create_invoice_accounting_on_close()
+
+    def create_invoice_accounting_on_close(self):
+        from frappe.utils import nowdate, flt
+        
+        if self.status != "Closed":
+            return
+            
+        if not self.invoices:
+            return
+            
+        for inv in self.invoices:
+            if not inv.customer or flt(inv.amount) <= 0:
+                continue
+                
+            if inv.get("sales_invoice_reference"):
+                continue
+                
+            si = frappe.new_doc("Sales Invoice")
+            si.customer = inv.customer
+            si.posting_date = self.shift_date or nowdate()
+            si.po_no = inv.purchase_order
+            si.update_stock = 0
+            si.is_pos = 0
+            
+            si.append("items", {
+                "item_code": inv.item,
+                "qty": inv.quantity,
+                "rate": inv.rate,
+                "amount": inv.amount
+            })
+            
+            si.flags.ignore_permissions = True
+            si.insert()
+            si.submit()
+            
+            # Save the reference back to the Shift Invoice row
+            inv.db_set("sales_invoice_reference", si.name)
+            frappe.msgprint(f"Generated Sales Invoice {si.name} for Customer {inv.customer}")
 
     def post_cash_variance_to_liability_ledger(self):
         # 1. Fuel Variance

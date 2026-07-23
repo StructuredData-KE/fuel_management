@@ -494,10 +494,15 @@ function refresh_drystock_cart($wrapper) {
         }
         let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Saved";
         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
-        let del_btn = is_locked ? 
-            `<button class="btn btn-xs btn-danger" disabled>X</button>` : 
-            `<button class="btn btn-xs btn-secondary btn-edit-saved" data-idx="${idx}" style="margin-right:0.25rem;">Edit</button>
+        let del_btn = '';
+        if (row.is_invoice_sale) {
+            del_btn = `<span class="badge" style="background-color: var(--blue-50); color: var(--blue-600); border: 1px solid var(--blue-200);">Invoice Sale</span>`;
+        } else if (is_locked) {
+            del_btn = `<button class="btn btn-xs btn-danger" disabled>X</button>`;
+        } else {
+            del_btn = `<button class="btn btn-xs btn-secondary btn-edit-saved" data-idx="${idx}" style="margin-right:0.25rem;">Edit</button>
              <button class="btn btn-xs btn-danger btn-remove-saved" data-idx="${idx}">X</button>`;
+        }
         
         html_saved += `
             <tr>
