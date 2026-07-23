@@ -1577,7 +1577,7 @@ function render_customer_payments($wrapper) {
                 doctype: "Customer Payment",
                 filters: { shift: window.ACTIVE_SHIFT.name },
                 fields: ["name", "date", "shift", "creation", "customer", "csa", "mode_of_payment", "amount"],
-                order_by: "creation desc"
+                order_by: "name desc"
             },
             callback: function(r) {
                 let html = '';
@@ -1592,7 +1592,7 @@ function render_customer_payments($wrapper) {
                         
                         html += `
                             <tr>
-                                <td style="font-family: monospace; color: #64748b;">${row.name.substring(0, 8)}</td>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
                                 <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
@@ -1730,7 +1730,7 @@ function render_station_cards($wrapper) {
                 doctype: "Station Cards",
                 filters: { shift: window.ACTIVE_SHIFT.name },
                 fields: ["name", "date", "shift", "creation", "card", "csa", "receipt_no", "amount"],
-                order_by: "creation desc"
+                order_by: "name desc"
             },
             callback: function(r) {
                 let html = '';
@@ -1745,7 +1745,7 @@ function render_station_cards($wrapper) {
                         
                         html += `
                             <tr>
-                                <td style="font-family: monospace; color: #64748b;">${row.name.substring(0, 8)}</td>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
                                 <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
@@ -1881,7 +1881,7 @@ function render_station_expenses($wrapper) {
                 doctype: "Station Expense",
                 filters: { shift: window.ACTIVE_SHIFT.name },
                 fields: ["name", "date", "shift", "creation", "category", "csa", "memo", "amount"],
-                order_by: "creation desc"
+                order_by: "name desc"
             },
             callback: function(r) {
                 let html = '';
@@ -1896,7 +1896,7 @@ function render_station_expenses($wrapper) {
                         
                         html += `
                             <tr>
-                                <td style="font-family: monospace; color: #64748b;">${row.name.substring(0, 10)}</td>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
                                 <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>

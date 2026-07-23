@@ -5,6 +5,7 @@
     "doctype": "DocType",
     "engine": "InnoDB",
     "field_order": [
+        "naming_series",
         "date",
         "shift",
         "trans_no",
@@ -16,6 +17,13 @@
         "amount"
     ],
     "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Naming Series",
+            "options": "CP-.YYYY.-",
+            "set_only_once": 1
+        },
         {
             "fieldname": "date",
             "fieldtype": "Date",
@@ -85,7 +93,7 @@
     "modified_by": "Administrator",
     "module": "Fuel Management",
     "name": "Customer Payment",
-    "naming_rule": "Random",
+    "naming_rule": "By \"Naming Series\" field",
     "owner": "Administrator",
     "permissions": [
         {
@@ -103,5 +111,6 @@
     ],
     "sort_field": "modified",
     "sort_order": "DESC",
-    "states": []
+    "states": [],
+    "autoname": "naming_series:"
 }
