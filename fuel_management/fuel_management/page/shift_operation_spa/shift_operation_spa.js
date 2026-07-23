@@ -1162,9 +1162,9 @@ function render_invoices($wrapper) {
         method: "frappe.client.get_list",
         args: {
             doctype: "Item",
-            fields: ["name", "item_name", "item_group"],
-            filters: { disabled: 0 },
-            limit: 5000
+            fields: ["name", "item_name", "item_code", "item_group"],
+            filters: { disabled: 0, item_group: ["in", ["Fuel", "Lubes", "Accessories", "Gas", "Filters", "Consumable", "Services", "Products", "Store Items"]] },
+            limit: 2000
         },
         callback: function(r) {
             if(r.message) {
@@ -1183,10 +1183,10 @@ function render_invoices($wrapper) {
                 // Initialize Awesomplete for true dropdown experience
                 let $input = $wrapper.find('#invoice-item-input');
                 if ($input.length > 0) {
-                    if ($input[0].awesomplete) {
-                        $input[0].awesomplete.list = stringList;
+                    if (window.invoiceAwesomplete) {
+                        window.invoiceAwesomplete.list = stringList;
                     } else {
-                        new Awesomplete($input[0], {
+                        window.invoiceAwesomplete = new Awesomplete($input[0], {
                             list: stringList,
                             minChars: 0,
                             maxItems: 50,
@@ -1195,14 +1195,14 @@ function render_invoices($wrapper) {
                         
                         // Force dropdown open on click
                         $input.on('click', function() {
-                            if ($input[0].awesomplete.ul.childNodes.length === 0) {
-                                $input[0].awesomplete.minChars = 0;
-                                $input[0].awesomplete.evaluate();
+                            if (window.invoiceAwesomplete.ul.childNodes.length === 0) {
+                                window.invoiceAwesomplete.minChars = 0;
+                                window.invoiceAwesomplete.evaluate();
                             }
-                            if ($input[0].awesomplete.ul.hasAttribute('hidden')) {
-                                $input[0].awesomplete.open();
+                            if (window.invoiceAwesomplete.ul.hasAttribute('hidden')) {
+                                window.invoiceAwesomplete.open();
                             } else {
-                                $input[0].awesomplete.close();
+                                window.invoiceAwesomplete.close();
                             }
                         });
                         
