@@ -2412,16 +2412,17 @@ function render_purchases($wrapper) {
         }
     });
 
-    // 4. Item Dropdown
+    // 4. Item Dropdown (Datalist approach)
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Item", fields: ["name", "item_name"], filters: {disabled: 0}, limit: 500 },
+        args: { doctype: "Item", fields: ["name", "item_name"], filters: {disabled: 0}, limit: 5000 },
         callback: function(r) {
-            let opts = '<option value="">Select Item...</option>';
+            let opts = '';
             if(r.message) {
-                r.message.forEach(i => { opts += `<option value="${i.name}">${i.item_name}</option>`; });
+                window.PURCHASE_ITEMS = r.message;
+                r.message.forEach(i => { opts += `<option value="${i.item_name} - ${i.name}"></option>`; });
             }
-            $wrapper.find('#pur-item').html(opts);
+            $wrapper.find('#pur-items-list').html(opts);
         }
     });
 
@@ -2505,7 +2506,11 @@ function render_purchases($wrapper) {
             receiving_date: $wrapper.find('#pur-rec-date').val(),
             document_date: $wrapper.find('#pur-doc-date').val(),
             supplier: $wrapper.find('#pur-supplier').val(),
-            item: $wrapper.find('#pur-item').val(),
+            item: (() => {
+                let val = $wrapper.find('#pur-item-input').val();
+                let match = (window.PURCHASE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === val);
+                return match ? match.name : val;
+            })(),
             target_location: $wrapper.find('#pur-target').val(),
             quantity: parseFloat($wrapper.find('#pur-qty').val()) || 0,
             unit_cost: parseFloat($wrapper.find('#pur-cost').val()) || 0,
@@ -2548,7 +2553,7 @@ function render_purchases($wrapper) {
                     
                     // Clear inputs
                     $wrapper.find('#pur-supplier').val('').trigger('change');
-                    $wrapper.find('#pur-item').val('');
+                    $wrapper.find('#pur-item-input').val('');
                     $wrapper.find('#pur-qty').val('');
                     $wrapper.find('#pur-cost').val('');
                     
