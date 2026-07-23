@@ -133,9 +133,12 @@ function load_shift_data($wrapper) {
                 render_drystock($wrapper);
                 if(typeof render_invoices === 'function') render_invoices($wrapper);
                 if(typeof render_customer_payments === 'function') render_customer_payments($wrapper);
-                if(typeof render_station_cards === 'function') render_station_cards($wrapper);
+                if(typeof render_station_cards === 'function') render_fleet_cards($wrapper);
                 if(typeof render_petty_cash === 'function') render_petty_cash($wrapper);
                 if(typeof render_cash_transfers === 'function') render_cash_transfers($wrapper);
+            if (target === 'tab-reconcile') {
+                if(typeof render_reconcile === 'function') render_reconcile($wrapper);
+            }
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
                 if(typeof render_rtt === 'function') render_rtt($wrapper);
                 if(typeof render_topups === 'function') render_topups($wrapper);
@@ -1713,7 +1716,7 @@ function render_customer_payments($wrapper) {
 // =========================================================
 // STATION CARDS MODULE
 // =========================================================
-function render_station_cards($wrapper) {
+function render_fleet_cards($wrapper) {
     if(!window.ACTIVE_SHIFT) return;
 
     let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
@@ -2954,4 +2957,146 @@ function load_cash_transfer_history($wrapper) {
             }
         }
     });
+}
+
+
+
+// ==========================================
+// RECONCILIATION LOGIC
+// ==========================================
+function render_reconcile(wrapper) {
+    const $wrapper = $(wrapper);
+    
+    // We need to fetch all components asynchronously and then calculate
+    window.RECONCILE_DATA = {
+        fuel_sales: 0,
+        drystock_sales: 0,
+        expenses: 0,
+        fleet_drops: 0
+    };
+    
+    if(!window.ACTIVE_SHIFT) return;
+    let shift_name = window.ACTIVE_SHIFT.name;
+    
+    // 1. Fetch Fuel Sales (from shift.expected_cash which is calculated by shift backend? 
+    // Wait, the backend doesn't calculate expected_cash actively until close. 
+    // We can just sum all Pump Meter Readings amount for the shift.)
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Pump Meter Reading",
+            filters: { shift: shift_name },
+            fields: ["amount"]
+        },
+        callback: function(r) {
+            let fuel = 0;
+            if(r.message) {
+                r.message.forEach(x => fuel += (x.amount || 0));
+            }
+            window.RECONCILE_DATA.fuel_sales = fuel;
+            update_reconcile_ui($wrapper);
+        }
+    });
+    
+    // 2. Fetch Dry Stock Sales
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Shift Inventory Sale",
+            filters: { shift: shift_name },
+            fields: ["amount"]
+        },
+        callback: function(r) {
+            let dry = 0;
+            if(r.message) {
+                r.message.forEach(x => dry += (x.amount || 0));
+            }
+            window.RECONCILE_DATA.drystock_sales = dry;
+            update_reconcile_ui($wrapper);
+        }
+    });
+    
+    // 3. Fetch Expenses & Petty Cash (Station Expense + Station Petty Cash Entry)
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Station Expense",
+            filters: { shift: shift_name },
+            fields: ["amount"]
+        },
+        callback: function(r) {
+            let exp = 0;
+            if(r.message) {
+                r.message.forEach(x => exp += (x.amount || 0));
+            }
+            
+            // Also fetch petty cash
+            frappe.call({
+                method: "frappe.client.get_list",
+                args: {
+                    doctype: "Station Petty Cash Entry",
+                    filters: { shift: shift_name },
+                    fields: ["amount"]
+                },
+                callback: function(r2) {
+                    if(r2.message) {
+                        r2.message.forEach(x => exp += (x.amount || 0));
+                    }
+                    window.RECONCILE_DATA.expenses = exp;
+                    update_reconcile_ui($wrapper);
+                }
+            });
+        }
+    });
+    
+    // 4. Fetch Fleet Card Drops
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Fleet Card Shift Summary",
+            filters: { shift: shift_name },
+            fields: ["total_csa_drops"]
+        },
+        callback: function(r) {
+            let fleet = 0;
+            if(r.message) {
+                r.message.forEach(x => fleet += (x.total_csa_drops || 0));
+            }
+            window.RECONCILE_DATA.fleet_drops = fleet;
+            update_reconcile_ui($wrapper);
+        }
+    });
+    
+    // Listen to actual cash inputs
+    $wrapper.find('#actual-cash-input, #actual-drystock-cash-input').off('input').on('input', function() {
+        update_reconcile_ui($wrapper);
+    });
+}
+
+function update_reconcile_ui($wrapper) {
+    let d = window.RECONCILE_DATA;
+    if(!d) return;
+    
+    $wrapper.find('#rec-fuel-sales').text(format_currency(d.fuel_sales));
+    $wrapper.find('#rec-drystock-sales').text(format_currency(d.drystock_sales));
+    $wrapper.find('#rec-expenses').text(format_currency(d.expenses));
+    $wrapper.find('#rec-fleet-drops').text(format_currency(d.fleet_drops));
+    
+    // Net Expected = Fuel + Dry - Expenses - FleetDrops
+    let net = d.fuel_sales + d.drystock_sales - d.expenses - d.fleet_drops;
+    $wrapper.find('#rec-net-expected').text(format_currency(net));
+    
+    // Actual Cash
+    let actual_fuel = parseFloat($wrapper.find('#actual-cash-input').val()) || 0;
+    let actual_dry = parseFloat($wrapper.find('#actual-drystock-cash-input').val()) || 0;
+    let total_actual = actual_fuel + actual_dry;
+    
+    let variance = total_actual - net;
+    let $var = $wrapper.find('#rec-variance');
+    $var.text(format_currency(variance));
+    if (variance < 0) {
+        $var.css('color', '#dc2626');
+    } else {
+        $var.css('color', '#16a34a');
+    }
 }
