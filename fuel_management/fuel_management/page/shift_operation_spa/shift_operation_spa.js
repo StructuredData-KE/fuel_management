@@ -2223,6 +2223,21 @@ function render_topups($wrapper) {
     });
     $wrapper.find('#topup-csa').html(csaOptions);
 
+    // 2.5 Setup Mode of Payment Dropdown
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Mode of Payment", fields: ["name"], limit: 100 },
+        callback: function(r) {
+            let mopOpts = '<option value="">Select Mode...</option>';
+            if(r.message) {
+                r.message.forEach(m => {
+                    mopOpts += `<option value="${m.name}">${m.name}</option>`;
+                });
+            }
+            $wrapper.find('#topup-mop').html(mopOpts);
+        }
+    });
+
     // 3. Setup Cards Dropdown
     frappe.call({
         method: "frappe.client.get_list",
@@ -2249,7 +2264,7 @@ function render_topups($wrapper) {
             args: {
                 doctype: "Station Supplier Top Up",
                 filters: { shift: window.ACTIVE_SHIFT.name },
-                fields: ["name", "date", "shift", "creation", "card", "csa", "rrn_number", "amount"],
+                fields: ["name", "date", "shift", "creation", "card", "csa", "rrn_number", "mode_of_payment", "amount"],
                 order_by: "name desc"
             },
             callback: function(r) {
@@ -2272,6 +2287,7 @@ function render_topups($wrapper) {
                                 <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.card}</span></td>
                                 <td>${csa_name}</td>
                                 <td>${row.rrn_number}</td>
+                                <td><span class="badge">${row.mode_of_payment || ""}</span></td>
                                 <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             </tr>
                         `;
@@ -2294,9 +2310,10 @@ function render_topups($wrapper) {
         let card = $wrapper.find('#topup-card').val();
         let csa = $wrapper.find('#topup-csa').val();
         let rrn = $wrapper.find('#topup-rrn').val();
+        let mop = $wrapper.find('#topup-mop').val();
         let amount = parseFloat($wrapper.find('#topup-amount').val()) || 0;
 
-        if (!card || !csa || !rrn || amount <= 0) {
+        if (!card || !csa || !rrn || !mop || amount <= 0) {
             frappe.show_alert({message: "Please fill all required fields.", indicator: "red"});
             return;
         }
@@ -2315,6 +2332,7 @@ function render_topups($wrapper) {
                     card: card,
                     csa: csa,
                     rrn_number: rrn,
+                    mode_of_payment: mop,
                     amount: amount
                 }
             },
@@ -2328,6 +2346,7 @@ function render_topups($wrapper) {
                     $wrapper.find('#topup-csa').val('');
                     $wrapper.find('#topup-rrn').val('');
                     $wrapper.find('#topup-amount').val('');
+                    $wrapper.find('#topup-mop').val('');
                     
                     // Switch to history view and refresh
                     $wrapper.find('#tab-topups .seg-btn[data-view="history"]').click();

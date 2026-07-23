@@ -462,7 +462,7 @@ def get_nozzle_prices(station, shift_date):
         if self.status != "Closed":
             return
             
-        topups = frappe.get_all("Station Supplier Top Up", filters={"shift": self.name}, fields=["name", "card", "amount", "rrn_number"])
+        topups = frappe.get_all("Station Supplier Top Up", filters={"shift": self.name}, fields=["name", "card", "amount", "rrn_number", "mode_of_payment"])
         if not topups:
             return
             
@@ -473,8 +473,8 @@ def get_nozzle_prices(station, shift_date):
         default_cash_account = frappe.get_cached_value("Company", company, "default_cash_account")
         default_payable_account = frappe.get_cached_value("Company", company, "default_payable_account")
         
-        if not default_cash_account or not default_payable_account:
-            frappe.msgprint("Default Cash or Payable account not set in Company. Skipping Top-Up Accounting.")
+        if not default_payable_account:
+            frappe.msgprint("Default Payable account not set in Company. Skipping Top-Up Accounting.")
             return
 
         # We will create one Journal Entry for all top-ups in this shift
@@ -484,7 +484,10 @@ def get_nozzle_prices(station, shift_date):
         je.posting_date = self.shift_date or nowdate()
         je.user_remark = f"Supplier Cash Top-Ups for Shift {self.name}"
         
-        total_topup_amount = 0.0
+        has_entries = False
+        
+        # Track debit amounts per account
+        debit_accounts = {}
         
         for t in topups:
             amount = flt(t.amount)
@@ -492,8 +495,6 @@ def get_nozzle_prices(station, shift_date):
             
             supplier = frappe.db.get_value("Supplier Card", t.card, "supplier")
             if not supplier: continue
-            
-            total_topup_amount += amount
             
             # Credit Supplier
             je.append("accounts", {
@@ -506,13 +507,27 @@ def get_nozzle_prices(station, shift_date):
                 "user_remark": f"Top-Up RRN: {t.rrn_number}"
             })
             
-        if total_topup_amount > 0:
-            # Debit Cash
-            je.append("accounts", {
-                "account": default_cash_account,
-                "debit_in_account_currency": total_topup_amount,
-                "user_remark": f"Total Cash received for Supplier Top-Ups Shift {self.name}"
-            })
+            # Determine Debit Account based on Mode of Payment
+            debit_acct = default_cash_account
+            if getattr(t, "mode_of_payment", None):
+                mop_acct = frappe.db.get_value("Mode of Payment Account", {"parent": t.mode_of_payment, "company": company}, "default_account")
+                if mop_acct:
+                    debit_acct = mop_acct
+            
+            if not debit_acct:
+                frappe.throw(f"No account found to Debit for Mode of Payment {t.mode_of_payment} or Default Cash Account is missing.")
+                
+            debit_accounts[debit_acct] = debit_accounts.get(debit_acct, 0.0) + amount
+            has_entries = True
+            
+        if has_entries:
+            # Debit Cash/MOP Accounts
+            for acct, amt in debit_accounts.items():
+                je.append("accounts", {
+                    "account": acct,
+                    "debit_in_account_currency": amt,
+                    "user_remark": f"Total received for Supplier Top-Ups Shift {self.name}"
+                })
             
             je.flags.ignore_permissions = True
             je.insert()

@@ -231,6 +231,7 @@
                             <th>Receipt / RRN</th>
                             <th>Card</th>
                             <th>CSA</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                         </tr>
                     </thead>
@@ -319,6 +320,7 @@
                             <th>Vehicle</th>
                             <th>Item</th>
                             <th>Qty</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                             <th>Action</th>
                         </tr>
@@ -400,6 +402,7 @@
                             <th>Item</th>
                             <th>Qty</th>
                             <th>Rate</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                             <th width="50">Action</th>
                         </tr>
@@ -469,6 +472,7 @@
                             <th>Sold By</th>
                             <th>Item</th>
                             <th>Qty</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                             <th>Action</th>
                         </tr>
@@ -549,6 +553,7 @@
                             <th>Item</th>
                             <th>Qty</th>
                             <th>Volume</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                             <th>Action</th>
                         </tr>
@@ -596,6 +601,7 @@
                             <th>Customer</th>
                             <th>CSA</th>
                             <th>Mode</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                         </tr>
                     </thead>
@@ -671,6 +677,7 @@
                             <th>Category</th>
                             <th>CSA</th>
                             <th>Memo</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                         </tr>
                     </thead>
@@ -814,6 +821,7 @@
                             <th>Card</th>
                             <th>CSA</th>
                             <th>RRN Number</th>
+                            <th>Pay Mode</th>
                             <th>Amount</th>
                         </tr>
                     </thead>
@@ -844,6 +852,10 @@
                 <div class="form-group">
                     <label>RRN Number <span style="color:red;">*</span></label>
                     <input type="text" id="topup-rrn" class="spa-input" placeholder="e.g. 123456789">
+                </div>
+                <div class="form-group">
+                    <label>Payment Mode <span style="color:red;">*</span></label>
+                    <select id="topup-mop" class="spa-input"></select>
                 </div>
                 <div class="form-group">
                     <label>Amount (KES) <span style="color:red;">*</span></label>
