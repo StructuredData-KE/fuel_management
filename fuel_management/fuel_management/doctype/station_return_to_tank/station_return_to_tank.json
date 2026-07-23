@@ -1,0 +1,120 @@
+{
+    "actions": [],
+    "allow_rename": 1,
+    "autoname": "naming_series:",
+    "creation": "2026-07-23 12:49:39.373019",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_series",
+        "date",
+        "shift",
+        "csa",
+        "pump_nozzle",
+        "column_break_1",
+        "item",
+        "volume_returned",
+        "amount",
+        "memo"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Naming Series",
+            "options": "RTT-.YYYY.-",
+            "set_only_once": 1
+        },
+        {
+            "fieldname": "date",
+            "fieldtype": "Date",
+            "in_list_view": 1,
+            "label": "Date",
+            "read_only": 1,
+            "reqd": 1
+        },
+        {
+            "fieldname": "shift",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Shift",
+            "options": "Shift",
+            "read_only": 1,
+            "reqd": 1
+        },
+        {
+            "fieldname": "csa",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "CSA",
+            "options": "Employee",
+            "read_only": 1,
+            "reqd": 1
+        },
+        {
+            "fieldname": "pump_nozzle",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Pump Nozzle",
+            "options": "Pump Nozzle",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "item",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Item",
+            "options": "Item",
+            "read_only": 1,
+            "reqd": 1
+        },
+        {
+            "fieldname": "volume_returned",
+            "fieldtype": "Float",
+            "in_list_view": 1,
+            "label": "Volume Returned (Liters)",
+            "reqd": 1
+        },
+        {
+            "fieldname": "amount",
+            "fieldtype": "Currency",
+            "in_list_view": 1,
+            "label": "Value Returned (Cash)",
+            "read_only": 1,
+            "reqd": 1
+        },
+        {
+            "fieldname": "memo",
+            "fieldtype": "Small Text",
+            "label": "Memo"
+        }
+    ],
+    "links": [],
+    "modified": "2026-07-23 12:49:39.373087",
+    "modified_by": "Administrator",
+    "module": "Fuel Management",
+    "name": "Station Return To Tank",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": []
+}

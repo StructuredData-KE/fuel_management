@@ -99,6 +99,7 @@ function load_shift_data($wrapper) {
                 if(typeof render_customer_payments === 'function') render_customer_payments($wrapper);
                 if(typeof render_station_cards === 'function') render_station_cards($wrapper);
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
+                if(typeof render_rtt === 'function') render_rtt($wrapper);
             }
         }
     });
@@ -1961,6 +1962,201 @@ function render_station_expenses($wrapper) {
                     
                     // Switch to history view and refresh
                     $wrapper.find('#tab-expenses .seg-btn[data-view="history"]').click();
+                    fetch_history();
+                }
+            }
+        });
+    });
+}
+
+
+// =========================================================
+// RETURN TO TANK (RTT) MODULE
+// =========================================================
+function render_rtt($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+
+    let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
+
+    // 1. Setup Segmented Control
+    $wrapper.find('#tab-rtt .seg-btn').off('click').on('click', function() {
+        let $btn = $(this);
+        let targetView = $btn.attr('data-view');
+        
+        $wrapper.find('#tab-rtt .seg-btn').removeClass('active');
+        $btn.addClass('active');
+        
+        $wrapper.find('#tab-rtt .view-pane').removeClass('active');
+        $wrapper.find(`#rtt-${targetView}-view`).addClass('active');
+    });
+
+    // 2. Fetch Nozzle Prices map
+    let nozzlePrices = {};
+    frappe.call({
+        method: "fuel_management.fuel_management.doctype.shift.shift.get_nozzle_prices",
+        args: { station: window.SHIFT_DOC.station, shift_date: window.SHIFT_DOC.shift_date },
+        callback: function(r) {
+            if(r.message) nozzlePrices = r.message;
+        }
+    });
+
+    // 3. Setup Nozzle Dropdown
+    let nozOptions = '<option value="">Select Nozzle...</option>';
+    let availableNozzles = [];
+    (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
+        if(row.pump_nozzle) availableNozzles.push(row.pump_nozzle);
+    });
+    
+    availableNozzles = [...new Set(availableNozzles)];
+    availableNozzles.forEach(noz => {
+        nozOptions += `<option value="${noz}">${noz}</option>`;
+    });
+    $wrapper.find('#rtt-nozzle').html(nozOptions);
+
+    // 4. Auto-Fill CSA and Item on Nozzle Change
+    $wrapper.find('#rtt-nozzle').off('change').on('change', function() {
+        let nozzle = $(this).val();
+        if(!nozzle) {
+            $wrapper.find('#rtt-csa, #rtt-csa-display').val('');
+            $wrapper.find('#rtt-item, #rtt-item-display').val('');
+            $wrapper.find('#rtt-amount').val('');
+            $wrapper.find('#rtt-price-indicator').text('');
+            return;
+        }
+
+        frappe.db.get_value('Pump Nozzle', nozzle, 'pump_group', function(r) {
+            if(r && r.pump_group) {
+                let csa = window.SHIFT_DOC.head_csa; // Default to Head CSA
+                let assigned = (window.SHIFT_DOC.assigned_csas || []).find(a => a.pump_group === r.pump_group);
+                if(assigned && assigned.csa) csa = assigned.csa;
+
+                if(csa) {
+                    $wrapper.find('#rtt-csa').val(csa);
+                    let u = window.USERS_LIST.find(user => user.name === csa);
+                    $wrapper.find('#rtt-csa-display').val(u ? u.full_name : csa);
+                }
+            }
+        });
+
+        if(nozzlePrices[nozzle]) {
+            let item = nozzlePrices[nozzle].item;
+            let price = nozzlePrices[nozzle].price;
+            
+            if(item) {
+                $wrapper.find('#rtt-item').val(item);
+                $wrapper.find('#rtt-item-display').val(item);
+            }
+            $wrapper.find('#rtt-price-indicator').text(`(@ ${price}/L)`);
+            
+            // Recalculate amount if volume is already entered
+            let vol = parseFloat($wrapper.find('#rtt-volume').val()) || 0;
+            $wrapper.find('#rtt-amount').val((vol * price).toFixed(2));
+        }
+    });
+
+    // 5. Auto-Calculate Value on Volume Input
+    $wrapper.find('#rtt-volume').off('input').on('input', function() {
+        let vol = parseFloat($(this).val()) || 0;
+        let nozzle = $wrapper.find('#rtt-nozzle').val();
+        if(nozzle && nozzlePrices[nozzle]) {
+            let price = nozzlePrices[nozzle].price;
+            $wrapper.find('#rtt-amount').val((vol * price).toFixed(2));
+        }
+    });
+
+    // 6. Fetch and Render History
+    let fetch_history = function() {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Station Return To Tank",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "date", "shift", "creation", "pump_nozzle", "csa", "item", "volume_returned", "amount"],
+                order_by: "name desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
+                        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
+                        let csa_name = row.csa;
+                        if (window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(u => u.name === row.csa);
+                            if(u) csa_name = u.full_name;
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                                <td>${row.date || ""}</td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td style="color: #64748b;">${time_val}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.pump_nozzle}</span></td>
+                                <td>${csa_name}</td>
+                                <td>${row.item}</td>
+                                <td>${row.volume_returned} L</td>
+                                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="9" class="text-center" style="color: #94a3b8; padding: 2rem;">No RTT recorded yet.</td></tr>';
+                $wrapper.find('#list-station-rtt-saved').html(html);
+            }
+        });
+    };
+    fetch_history();
+
+    // 7. Save RTT
+    $wrapper.find('#btn-save-station-rtt').off('click').on('click', function() {
+        if (is_locked) {
+            frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+            return;
+        }
+
+        let nozzle = $wrapper.find('#rtt-nozzle').val();
+        let csa = $wrapper.find('#rtt-csa').val();
+        let item = $wrapper.find('#rtt-item').val();
+        let vol = parseFloat($wrapper.find('#rtt-volume').val()) || 0;
+        let amount = parseFloat($wrapper.find('#rtt-amount').val()) || 0;
+        let memo = $wrapper.find('#rtt-memo').val();
+
+        if (!nozzle || !csa || !item || vol <= 0 || amount <= 0) {
+            frappe.show_alert({message: "Please fill all required fields properly.", indicator: "red"});
+            return;
+        }
+
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        frappe.call({
+            method: "frappe.client.insert",
+            args: {
+                doc: {
+                    doctype: "Station Return To Tank",
+                    shift: window.ACTIVE_SHIFT.name,
+                    date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
+                    pump_nozzle: nozzle,
+                    csa: csa,
+                    item: item,
+                    volume_returned: vol,
+                    amount: amount,
+                    memo: memo
+                }
+            },
+            callback: function(r) {
+                $btn.html(orig_html).prop('disabled', false);
+                if(r.message) {
+                    frappe.show_alert({message: "Return To Tank saved successfully!", indicator: "green"});
+                    
+                    // Clear inputs
+                    $wrapper.find('#rtt-nozzle').val('').trigger('change');
+                    $wrapper.find('#rtt-volume').val('');
+                    $wrapper.find('#rtt-memo').val('');
+                    
+                    // Switch to history view and refresh
+                    $wrapper.find('#tab-rtt .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
             }

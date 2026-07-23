@@ -100,12 +100,19 @@ class Shift(Document):
 
         # Deduct Fleet Card CSA Drops
         total_fleet_drops = 0.0
+        
+        # Deduct Station Return To Tank (RTT)
+        total_rtt_amount = 0.0
+        if not self.is_new():
+            rtt_records = frappe.get_all("Station Return To Tank", filters={"shift": self.name}, fields=["amount"])
+            total_rtt_amount = sum(frappe.utils.flt(r.amount) for r in rtt_records)
+
         if not self.is_new():
             fleet_summaries = frappe.get_all("Fleet Card Shift Summary", filters={"shift": self.name, "docstatus": ("<", 2)}, fields=["total_csa_drops"])
             for s in fleet_summaries:
                 total_fleet_drops += flt(s.total_csa_drops)
 
-        self.expected_cash = total_fuel_amount - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops)
+        self.expected_cash = total_fuel_amount - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops + total_rtt_amount)
 
         if getattr(self, "actual_cash", None) is not None:
             self.cash_variance = flt(self.actual_cash) - flt(self.expected_cash)
@@ -344,8 +351,16 @@ class Shift(Document):
                     if item_group != "Fuel":
                         sales_per_item[row.item] = sales_per_item.get(row.item, 0) + row.quantity
 
-            if not sales_per_item:
+
+            # Deduct Station Return To Tank Volumes (credit back to stock)
+            rtt_records = frappe.get_all("Station Return To Tank", filters={"shift": self.name}, fields=["item", "volume_returned"])
+            for rtt in rtt_records:
+                if rtt.item and rtt.volume_returned:
+                    sales_per_item[rtt.item] = sales_per_item.get(rtt.item, 0) - rtt.volume_returned
+
+            if not sales_per_item or all(qty <= 0 for qty in sales_per_item.values()):
                 return
+
 
             se = frappe.new_doc("Stock Entry")
             se.stock_entry_type = "Material Issue"
@@ -412,12 +427,12 @@ def get_nozzle_prices(station, shift_date):
     
     for nozzle in nozzles:
         if not nozzle.fuel_tank:
-            nozzle_prices[nozzle.name] = 0.0
+            nozzle_prices[nozzle.name] = {"price": 0.0, "item": getattr(nozzle, "fuel_product", None)}
             continue
             
         fuel_product = frappe.db.get_value("Fuel Tank", nozzle.fuel_tank, "fuel_product")
         if not fuel_product:
-            nozzle_prices[nozzle.name] = 0.0
+            nozzle_prices[nozzle.name] = {"price": 0.0, "item": getattr(nozzle, "fuel_product", None)}
             continue
             
         if fuel_product in product_price_cache:
@@ -435,6 +450,6 @@ def get_nozzle_prices(station, shift_date):
             )
             price = flt(price_record[0].price_list_rate) if price_record else 0.0
             product_price_cache[fuel_product] = price
-            nozzle_prices[nozzle.name] = price
+            nozzle_prices[nozzle.name] = {"price": price, "item": fuel_product}
             
     return nozzle_prices
