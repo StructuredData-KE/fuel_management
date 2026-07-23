@@ -1156,25 +1156,61 @@ function render_invoices($wrapper) {
     });
     $wrapper.find('#invoice-csa').html(csaOptions);
 
-    // 3. Fetch Items (Same as Drystock + Fuel)
-    // We already have window.DRYSTOCK_ITEMS from render_drystock if it ran. But we need fuel too.
-    // Let's fetch all items that are either fuel or in drystock
+    // 3. Fetch Items
     frappe.call({
         method: "frappe.client.get_list",
         args: {
             doctype: "Item",
             fields: ["name", "item_name", "item_group"],
-            filters: { disabled: 0, item_group: ["in", ["Fuel", "Lubes", "Accessories", "Gas", "Services", "Consumable", "Products"]] },
-            limit: 1000
+            filters: { disabled: 0, has_variants: 0 },
+            limit: 2000
         },
         callback: function(r) {
             if(r.message) {
                 window.INVOICE_ITEMS = r.message;
+                
+                // Fallback datalist just in case
                 let itemOpts = '';
+                let stringList = [];
                 r.message.forEach(i => {
-                    itemOpts += `<option value="${i.item_name} - ${i.name}">`;
+                    let text = `${i.item_name} - ${i.name}`;
+                    itemOpts += `<option value="${text}">`;
+                    stringList.push(text);
                 });
                 $wrapper.find('#invoice-items-list').html(itemOpts);
+                
+                // Initialize Awesomplete for true dropdown experience
+                let $input = $wrapper.find('#invoice-item-input');
+                if ($input.length > 0) {
+                    if ($input[0].awesomplete) {
+                        $input[0].awesomplete.list = stringList;
+                    } else {
+                        new Awesomplete($input[0], {
+                            list: stringList,
+                            minChars: 0,
+                            maxItems: 50,
+                            autoFirst: true
+                        });
+                        
+                        // Force dropdown open on click
+                        $input.on('click', function() {
+                            if ($input[0].awesomplete.ul.childNodes.length === 0) {
+                                $input[0].awesomplete.minChars = 0;
+                                $input[0].awesomplete.evaluate();
+                            }
+                            if ($input[0].awesomplete.ul.hasAttribute('hidden')) {
+                                $input[0].awesomplete.open();
+                            } else {
+                                $input[0].awesomplete.close();
+                            }
+                        });
+                        
+                        // Trigger change event when awesomplete item is selected
+                        $input[0].addEventListener('awesomplete-selectcomplete', function() {
+                            $input.trigger('change');
+                        });
+                    }
+                }
             }
         }
     });
