@@ -847,7 +847,7 @@ function load_dropdowns(wrapper) {
         method: "frappe.client.get_list",
         args: {
             doctype: "Employee",
-            filters: { enabled: 1 },
+            filters: { status: "Active" },
             fields: ["name", "employee_name"]
         },
         callback: function(r) {
