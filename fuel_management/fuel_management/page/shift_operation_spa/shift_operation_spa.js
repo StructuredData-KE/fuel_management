@@ -842,7 +842,27 @@ function load_dropdowns(wrapper) {
         }
     });
 
-    // Fetch Head CSAs and normal CSAs (Users with enabled: 1)
+    // Fetch Head CSAs (Users)
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "User",
+            filters: { enabled: 1 },
+            fields: ["name", "full_name"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                let options = '<option value="">Select Head CSA...</option>';
+                r.message.forEach(u => {
+                    let selected = (u.name === frappe.session.user) ? 'selected' : '';
+                    options += `<option value="${u.name}" ${selected}>${u.full_name}</option>`;
+                });
+                $(wrapper).find('#select-head-csa').html(options);
+            }
+        }
+    });
+
+    // Fetch Employees (for pump attendants, using legacy USERS_LIST variable)
     frappe.call({
         method: "frappe.client.get_list",
         args: {
@@ -853,12 +873,6 @@ function load_dropdowns(wrapper) {
         callback: function(r) {
             if(r.message) {
                 window.USERS_LIST = r.message;
-                let options = '<option value="">Select Head CSA...</option>';
-                r.message.forEach(u => {
-                    let selected = (u.name === frappe.session.user) ? 'selected' : '';
-                    options += `<option value="${u.name}" ${selected}>${u.employee_name}</option>`;
-                });
-                $(wrapper).find('#select-head-csa').html(options);
                 render_pump_group_rows($(wrapper));
             }
         }
