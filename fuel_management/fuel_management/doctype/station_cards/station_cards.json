@@ -12,6 +12,7 @@
   "csa",
   "column_break_1",
   "card",
+  "card_date",
   "memo",
   "amount"
  ],
@@ -65,6 +66,13 @@
    "in_list_view": 1,
    "label": "Card",
    "options": "Station Card Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "card_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Card Date",
    "reqd": 1
   },
   {

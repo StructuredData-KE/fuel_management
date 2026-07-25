@@ -37,9 +37,11 @@ function apply_global_settings(wrapper) {
     
     // Fleet Cards
     if (settings.enable_fleet_card_management) {
+        $wrapper.find('#nav-fleet-cards').show();
         $wrapper.find('#nav-station-cards').show();
     } else {
-        $wrapper.find('#nav-station-cards').hide();
+        $wrapper.find('#nav-fleet-cards').hide();
+        $wrapper.find('#nav-station-cards').show();
     }
     
     // Petty Cash vs Expenses
@@ -1818,11 +1820,12 @@ function render_fleet_cards($wrapper) {
         let card = $wrapper.find('#sc-card').val();
         let csa = $wrapper.find('#sc-csa').val();
         let receipt_no = $wrapper.find('#sc-receipt-no').val();
+        let card_date = $wrapper.find('#sc-card-date').val();
         let amount = parseFloat($wrapper.find('#sc-amount').val()) || 0;
         let memo = $wrapper.find('#sc-memo').val();
 
-        if (!card || !csa || !receipt_no || amount <= 0) {
-            frappe.show_alert({message: "Card, CSA, Receipt No, and valid Amount are required.", indicator: "red"});
+        if (!card || !csa || !receipt_no || !card_date || amount <= 0) {
+            frappe.show_alert({message: "Card, CSA, Receipt No, Card Date, and valid Amount are required.", indicator: "red"});
             return;
         }
 
@@ -1838,6 +1841,7 @@ function render_fleet_cards($wrapper) {
                     shift: window.ACTIVE_SHIFT.name,
                     date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
                     card: card,
+                    card_date: card_date,
                     csa: csa,
                     receipt_no: receipt_no,
                     amount: amount,
@@ -1852,6 +1856,7 @@ function render_fleet_cards($wrapper) {
                     // Clear inputs
                     $wrapper.find('#sc-card').val('');
                     $wrapper.find('#sc-receipt-no').val('');
+                    $wrapper.find('#sc-card-date').val('');
                     $wrapper.find('#sc-amount').val('');
                     $wrapper.find('#sc-memo').val('');
                     
