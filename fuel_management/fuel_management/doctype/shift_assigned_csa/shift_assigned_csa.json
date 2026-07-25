@@ -15,7 +15,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "CSA",
-   "options": "User",
+   "options": "Employee",
    "reqd": 1
   },
   {

@@ -196,7 +196,7 @@ function render_meters($wrapper) {
                         if (window.USERS_LIST) {
                             let user = window.USERS_LIST.find(u => u.name === assigned_csa_id);
                             if (user) {
-                                csa_name = user.full_name;
+                                csa_name = user.employee_name;
                             }
                         }
                         let csa_text = csa_name ? ` &nbsp;|&nbsp; <span style="color: #64748b; font-weight: 500;">CSA: ${csa_name}</span>` : "";
@@ -372,7 +372,7 @@ function render_drystock($wrapper) {
     let lubes_assignment = (window.ACTIVE_SHIFT.csa_assignments || []).find(a => a.pump_group.toLowerCase().includes('lube'));
     if (lubes_assignment) {
         let u = window.USERS_LIST.find(u => u.name === lubes_assignment.csa);
-        let name = u ? u.full_name : lubes_assignment.csa;
+        let name = u ? u.employee_name : lubes_assignment.csa;
         $wrapper.find('#drystock-liability-csa').text(name + " (Assigned)");
     } else {
         $wrapper.find('#drystock-liability-csa').text("Select Sold By (Fallback)");
@@ -381,12 +381,12 @@ function render_drystock($wrapper) {
     // Populate CSA dropdown
     let csaOptions = '<option value="">Select CSA...</option>';
     if (window.USERS_LIST) {
-        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
+        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.employee_name}</option>`; });
     }
     $wrapper.find('#drystock-csa').html(csaOptions).off('change').on('change', function() {
         if (!lubes_assignment) {
             let u = window.USERS_LIST.find(u => u.name === $(this).val());
-            let name = u ? u.full_name : "Whoever sells it";
+            let name = u ? u.employee_name : "Whoever sells it";
             $wrapper.find('#drystock-liability-csa').text(name + " (Fallback)");
         }
     });
@@ -500,7 +500,7 @@ function refresh_drystock_cart($wrapper) {
         let csa_name = row.sold_by;
         if (window.USERS_LIST) {
             let u = window.USERS_LIST.find(u => u.name === row.sold_by);
-            if(u) csa_name = u.full_name;
+            if(u) csa_name = u.employee_name;
         }
         
         let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Pending...";
@@ -539,7 +539,7 @@ function refresh_drystock_cart($wrapper) {
         let csa_name = row.sold_by;
         if (window.USERS_LIST) {
             let u = window.USERS_LIST.find(u => u.name === row.sold_by);
-            if(u) csa_name = u.full_name;
+            if(u) csa_name = u.employee_name;
         }
         let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Saved";
         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
@@ -846,9 +846,9 @@ function load_dropdowns(wrapper) {
     frappe.call({
         method: "frappe.client.get_list",
         args: {
-            doctype: "User",
+            doctype: "Employee",
             filters: { enabled: 1 },
-            fields: ["name", "full_name"]
+            fields: ["name", "employee_name"]
         },
         callback: function(r) {
             if(r.message) {
@@ -856,7 +856,7 @@ function load_dropdowns(wrapper) {
                 let options = '<option value="">Select Head CSA...</option>';
                 r.message.forEach(u => {
                     let selected = (u.name === frappe.session.user) ? 'selected' : '';
-                    options += `<option value="${u.name}" ${selected}>${u.full_name}</option>`;
+                    options += `<option value="${u.name}" ${selected}>${u.employee_name}</option>`;
                 });
                 $(wrapper).find('#select-head-csa').html(options);
                 render_pump_group_rows($(wrapper));
@@ -869,7 +869,7 @@ function load_dropdowns(wrapper) {
         if(!window.PUMP_GROUPS_LIST || window.PUMP_GROUPS_LIST.length === 0) return;
         
         let csaOptions = '<option value="">Select CSA...</option>';
-        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.full_name}</option>`; });
+        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.employee_name}</option>`; });
         
         let html = '';
         window.PUMP_GROUPS_LIST.forEach(pg => {
@@ -1202,7 +1202,7 @@ function render_invoices($wrapper) {
     (window.ACTIVE_SHIFT.csa_assignments || []).forEach(a => {
         if(a.csa) {
             let u = window.USERS_LIST.find(u => u.name === a.csa);
-            let name = u ? u.full_name : a.csa;
+            let name = u ? u.employee_name : a.csa;
             // avoid duplicates
             if(csaOptions.indexOf(`value="${a.csa}"`) === -1) {
                 csaOptions += `<option value="${a.csa}">${name}</option>`;
@@ -1570,7 +1570,7 @@ function render_customer_payments($wrapper) {
     
     allowed_csas.forEach(csa => {
         let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.full_name : csa;
+        let name = u ? u.employee_name : csa;
         csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#cp-csa').html(csaOptions);
@@ -1633,7 +1633,7 @@ function render_customer_payments($wrapper) {
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
-                            if(u) csa_name = u.full_name;
+                            if(u) csa_name = u.employee_name;
                         }
                         
                         html += `
@@ -1748,7 +1748,7 @@ function render_fleet_cards($wrapper) {
     
     allowed_csas.forEach(csa => {
         let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.full_name : csa;
+        let name = u ? u.employee_name : csa;
         csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#sc-csa').html(csaOptions);
@@ -1786,7 +1786,7 @@ function render_fleet_cards($wrapper) {
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
-                            if(u) csa_name = u.full_name;
+                            if(u) csa_name = u.employee_name;
                         }
                         
                         html += `
@@ -1899,7 +1899,7 @@ function render_station_expenses($wrapper) {
     
     allowed_csas.forEach(csa => {
         let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.full_name : csa;
+        let name = u ? u.employee_name : csa;
         csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#se-csa').html(csaOptions);
@@ -1937,7 +1937,7 @@ function render_station_expenses($wrapper) {
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
-                            if(u) csa_name = u.full_name;
+                            if(u) csa_name = u.employee_name;
                         }
                         
                         html += `
@@ -2095,7 +2095,7 @@ function render_rtt($wrapper) {
                 if(csa) {
                     $wrapper.find('#rtt-csa').val(csa);
                     let u = window.USERS_LIST.find(user => user.name === csa);
-                    $wrapper.find('#rtt-csa-display').val(u ? u.full_name : csa);
+                    $wrapper.find('#rtt-csa-display').val(u ? u.employee_name : csa);
                 }
             }
         });
@@ -2145,7 +2145,7 @@ function render_rtt($wrapper) {
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
-                            if(u) csa_name = u.full_name;
+                            if(u) csa_name = u.employee_name;
                         }
                         
                         html += `
@@ -2261,7 +2261,7 @@ function render_topups($wrapper) {
         let csa_name = csa;
         if(window.USERS_LIST) {
             let u = window.USERS_LIST.find(user => user.name === csa);
-            if(u) csa_name = u.full_name;
+            if(u) csa_name = u.employee_name;
         }
         csaOptions += `<option value="${csa}">${csa_name}</option>`;
     });
@@ -2319,7 +2319,7 @@ function render_topups($wrapper) {
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
-                            if(u) csa_name = u.full_name;
+                            if(u) csa_name = u.employee_name;
                         }
                         
                         html += `
@@ -3134,7 +3134,7 @@ function render_station_cards($wrapper) {
     
     allowed_csas.forEach(csa => {
         let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.full_name : csa;
+        let name = u ? u.employee_name : csa;
         csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#sc-csa').html(csaOptions);
@@ -3172,7 +3172,7 @@ function render_station_cards($wrapper) {
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
-                            if(u) csa_name = u.full_name;
+                            if(u) csa_name = u.employee_name;
                         }
                         
                         html += `
