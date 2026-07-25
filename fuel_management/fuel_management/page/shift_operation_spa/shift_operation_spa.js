@@ -1751,10 +1751,10 @@ function render_fleet_cards($wrapper) {
     });
     $wrapper.find('#sc-csa').html(csaOptions);
 
-    // 3. Populate Cards (from Fleet Card DocType)
+    // 3. Populate Cards (from Station Card Type DocType)
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Fleet Card", fields: ["name", "card_name", "status"], limit_page_length: 500, filters: { status: "Active" } },
+        args: { doctype: "Station Card Type", fields: ["name", "card_name", "status"], limit_page_length: 500, filters: { status: "Active" } },
         callback: function(r) {
             if(r.message) {
                 let cardOpts = '<option value="">Select Card...</option>';
