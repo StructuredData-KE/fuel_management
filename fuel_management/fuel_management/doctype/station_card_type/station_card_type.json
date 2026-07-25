@@ -46,6 +46,18 @@
    "role": "System Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "All"
+  },
+  {
+   "read": 1,
+   "role": "CSA"
+  },
+  {
+   "read": 1,
+   "role": "Fuel Manager"
   }
  ],
  "sort_field": "modified",
