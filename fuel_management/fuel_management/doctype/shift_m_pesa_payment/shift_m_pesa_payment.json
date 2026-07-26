@@ -43,7 +43,7 @@
    "in_list_view": 1,
    "label": "Transfers Made",
    "default": "0",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "amount",

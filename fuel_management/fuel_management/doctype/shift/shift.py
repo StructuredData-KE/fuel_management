@@ -91,6 +91,8 @@ class Shift(Document):
         if self.mpesa_payments:
             for row in self.mpesa_payments:
                 row.amount = flt(row.closing_balance) - flt(row.opening_balance) + flt(row.transfers_made)
+                if row.amount < 0:
+                    frappe.throw(f"Amount collected for {row.mpesa_till} cannot be negative. Please check the closing balance and transfers made.")
                 total_mpesa += row.amount
 
         total_cards = sum(flt(row.amount) for row in (self.card_payments or []))
