@@ -691,3 +691,9 @@
     to { transform: rotate(360deg); }
 }
 .hidden { display: none !important; }
+
+.compact-card { margin-bottom: 0 !important; }
+.compact-row { display: flex; align-items: center; }
+.compact-input { height: 35px !important; padding: 4px 8px !important; font-size: 0.95em !important; }
+.history-table th { font-weight: bold; }
+.history-table td { vertical-align: middle; }

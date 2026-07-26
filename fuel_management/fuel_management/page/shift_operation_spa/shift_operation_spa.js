@@ -171,134 +171,342 @@ function render_meters($wrapper) {
                 args: { station: window.SHIFT_DOC.station, shift_date: window.SHIFT_DOC.shift_date },
                 callback: function(r2) {
                     let nozzle_prices = r2.message || {};
-                    
                     let grouped = {};
                     (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
                         let pg = nozzle_to_pg[row.pump_nozzle] || "Ungrouped";
                         if(!grouped[pg]) grouped[pg] = [];
                         grouped[pg].push(row);
                     });
-                    let grouped_entries = Object.entries(grouped);
-                    grouped_entries.sort((a, b) => a[0].localeCompare(b[0], undefined, {numeric: true, sensitivity: 'base'}));
                     
-                    let html = '';
-                    for(const [pg, rows] of grouped_entries) {
+                    window.METER_GROUPS = grouped;
+                    window.NOZZLE_PRICES = nozzle_prices;
+                    
+                    // Render Selector
+                    let pg_options = '<option value="">Select a Pump Group...</option>';
+                    Object.keys(grouped).sort().forEach(pg => {
+                        pg_options += `<option value="${pg}">${pg}</option>`;
+                    });
+                    
+                    let html = `
+                    <div class="meter-entry-header" style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; color: var(--text-primary);">Select Pump Group to Enter Readings</label>
+                        <select class="spa-input" id="pg-selector" style="max-width: 400px; display: inline-block; margin-left: 10px;">
+                            ${pg_options}
+                        </select>
+                    </div>
+                    
+                    <div id="pg-entry-form" style="display: none; margin-top: 15px;">
+                        <!-- dynamic rows go here -->
+                    </div>
+                    
+                    <hr style="margin: 30px 0;">
+                    <div class="meter-history-header">
+                        <h5 style="color: var(--primary); font-weight: bold; margin-bottom: 15px;">Posted Meter Readings (Current Shift)</h5>
+                        <div class="table-responsive">
+                            <table class="table table-bordered history-table" style="background: white; border-radius: 8px;">
+                                <thead style="background: var(--bg-light); color: var(--text-secondary);">
+                                    <tr>
+                                        <th>Pump Group</th>
+                                        <th>Nozzles</th>
+                                        <th>Status</th>
+                                        <th style="width: 150px; text-align: center;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pg-history-body">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    `;
+                    
+                    $wrapper.find('#meters-container').html(html);
+                    
+                    render_history();
+                    
+                    $wrapper.find('#pg-selector').on('change', function() {
+                        let selected_pg = $(this).val();
+                        if (selected_pg) {
+                            render_pg_form(selected_pg);
+                            $wrapper.find('#pg-entry-form').slideDown();
+                        } else {
+                            $wrapper.find('#pg-entry-form').slideUp();
+                        }
+                    });
+                    
+                    function render_history() {
+                        let history_html = '';
+                        Object.entries(window.METER_GROUPS).sort().forEach(([pg, rows]) => {
+                            let has_readings = rows.some(r => r.closing_electronic_meter > 0 || r.closing_manual_meter > 0);
+                            if (has_readings) {
+                                let nozzle_names = rows.map(r => r.pump_nozzle).join(', ');
+                                history_html += `
+                                <tr>
+                                    <td><strong>${pg}</strong></td>
+                                    <td style="font-size: 0.85em; color: #64748b;">${nozzle_names}</td>
+                                    <td><span class="badge" style="background: var(--success); color: white; padding: 5px 10px;">Saved</span></td>
+                                    <td style="text-align: center;">
+                                        <button class="btn btn-xs btn-primary btn-edit-pg" data-pg="${pg}"><i class="fa fa-edit"></i> Edit</button>
+                                        <button class="btn btn-xs btn-danger btn-delete-pg" data-pg="${pg}"><i class="fa fa-trash"></i> Clear</button>
+                                    </td>
+                                </tr>
+                                `;
+                            }
+                        });
+                        if (!history_html) history_html = '<tr><td colspan="4" class="text-center text-muted" style="padding: 20px;">No readings posted yet for this shift.</td></tr>';
+                        $wrapper.find('#pg-history-body').html(history_html);
+                    }
+                    
+                    $wrapper.on('click', '.btn-edit-pg', function() {
+                        let pg = $(this).attr('data-pg');
+                        $wrapper.find('#pg-selector').val(pg).trigger('change');
+                        $("html, body").animate({ scrollTop: 0 }, "fast");
+                    });
+                    
+                    $wrapper.on('click', '.btn-delete-pg', function() {
+                        let pg = $(this).attr('data-pg');
+                        frappe.confirm(`Are you sure you want to clear the readings for <b>${pg}</b>?`, function() {
+                            let rows_to_clear = window.METER_GROUPS[pg].map(r => {
+                                return {
+                                    name: r.name,
+                                    closing_electronic_meter: 0,
+                                    closing_manual_meter: 0
+                                };
+                            });
+                            save_child_table("pump_meter_readings", rows_to_clear, `${pg} cleared!`, null, null, function() {
+                                window.METER_GROUPS[pg].forEach(r => {
+                                    r.closing_electronic_meter = 0;
+                                    r.closing_manual_meter = 0;
+                                });
+                                render_history();
+                                if ($wrapper.find('#pg-selector').val() === pg) {
+                                    $wrapper.find('#pg-selector').val('').trigger('change');
+                                }
+                            });
+                        });
+                    });
+                    
+                    function render_pg_form(pg) {
+                        let rows = window.METER_GROUPS[pg];
                         rows.sort((a, b) => (a.pump_nozzle || "").localeCompare((b.pump_nozzle || ""), undefined, {numeric: true, sensitivity: 'base'}));
+                        
                         let assigned_csa_id = "";
                         if (window.SHIFT_DOC.assigned_csas) {
                             let assignment = window.SHIFT_DOC.assigned_csas.find(a => a.pump_group === pg);
-                            if (assignment) {
-                                assigned_csa_id = assignment.csa;
-                            }
+                            if (assignment) assigned_csa_id = assignment.csa;
                         }
-                        
                         let csa_name = assigned_csa_id;
                         if (window.USERS_LIST) {
                             let user = window.USERS_LIST.find(u => u.name === assigned_csa_id);
-                            if (user) {
-                                csa_name = user.employee_name;
-                            }
+                            if (user) csa_name = user.employee_name;
                         }
-                        let csa_text = csa_name ? ` &nbsp;|&nbsp; <span style="color: #64748b; font-weight: 500;">CSA: ${csa_name}</span>` : "";
-
-                        html += `
-                            <div class="pump-group-card">
-                                <div class="pump-group-header">${pg}${csa_text}</div>
-                                <div class="pump-nozzles-list">
+                        let csa_text = csa_name ? `<div style="font-size: 0.85em; color: var(--primary); margin-top: 5px;">Assigned CSA: <strong>${csa_name}</strong></div>` : "";
+                        
+                        let html = `
+                            <div class="pump-group-card" style="margin-bottom: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 2px solid var(--primary-light);">
+                                <div class="pump-group-header" style="background: var(--primary-light); color: var(--primary); padding: 12px 20px; font-size: 1.1em;">
+                                    ${pg} ${csa_text}
+                                </div>
+                                <div class="pump-nozzles-list" style="padding: 10px;">
                         `;
+                        
                         rows.forEach(row => {
-                            let price = nozzle_prices[row.pump_nozzle] || 0.0;
+                            let price_obj = window.NOZZLE_PRICES[row.pump_nozzle] || {};
+                            let price = price_obj.price || 0.0;
+                            let item_code = price_obj.item || '';
+                            let is_ago = (item_code.toUpperCase().indexOf('AGO') !== -1 || item_code.toUpperCase().indexOf('DIESEL') !== -1);
+                            let is_pms = (item_code.toUpperCase().indexOf('PMS') !== -1 || item_code.toUpperCase().indexOf('PETROL') !== -1);
+                            let fuel_type = is_ago ? 'AGO' : (is_pms ? 'PMS' : item_code);
+                            
                             html += `
-                                <div class="meter-row" data-name="${row.name}">
-                                    <div class="nozzle-col">
-                                        <div class="nozzle-name">${row.pump_nozzle}</div>
+                                <div class="meter-row" data-name="${row.name}" data-fuel-type="${fuel_type}" style="padding: 10px 15px; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
+                                    <div class="nozzle-col" style="flex: 0 0 150px;">
+                                        <div class="nozzle-name" style="font-size: 1.1em; color: var(--primary); font-weight: bold;">${row.pump_nozzle}</div>
+                                        <div style="font-size: 0.85em; color: #64748b; background: #f1f5f9; display: inline-block; padding: 2px 6px; border-radius: 4px; margin-top: 4px;">${fuel_type} @ ${price.toFixed(2)}</div>
                                     </div>
                                     
-                                    <div class="elec-col">
-                                        <div class="col-title">Electronic</div>
-                                        <div class="reading-label">Open: <span class="read-only-cell">${row.opening_electronic_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-field="closing_electronic_meter" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Enter Closing">
-                                        <div class="sales-value">Sales: <span class="meter-sales-elec font-weight-bold">0.00</span></div>
+                                    <div class="elec-col" style="flex: 1; padding: 0 10px;">
+                                        <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Electronic</div>
+                                        <div class="reading-label" style="font-size: 0.8em;">Open: <span class="read-only-cell" style="font-weight: bold;">${row.opening_electronic_meter}</span></div>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Closing Elec" style="padding: 6px; font-size: 1em; height: 35px;">
+                                        <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-elec font-weight-bold">0.00</span></div>
                                     </div>
                                     
-                                    <div class="manual-col">
-                                        <div class="col-title">Manual</div>
-                                        <div class="reading-label">Open: <span class="read-only-cell">${row.opening_manual_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-field="closing_manual_meter" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Enter Closing">
-                                        <div class="sales-value">Sales: <span class="meter-sales-manual font-weight-bold">0.00</span></div>
+                                    <div class="manual-col" style="flex: 1; padding: 0 10px;">
+                                        <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Manual</div>
+                                        <div class="reading-label" style="font-size: 0.8em;">Open: <span class="read-only-cell" style="font-weight: bold;">${row.opening_manual_meter}</span></div>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Closing Manual" style="padding: 6px; font-size: 1em; height: 35px;">
+                                        <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-manual font-weight-bold">0.00</span></div>
                                     </div>
                                     
-                                    <div class="summary-col">
-                                        <div class="variance-box">Variance: <span class="meter-variance font-weight-bold">0.00</span></div>
-                                        <div class="total-box">Value: <span class="meter-total-value font-weight-bold">0.00</span></div>
+                                    <div class="summary-col" style="flex: 1; text-align: right; justify-content: center;">
+                                        <div class="variance-box" style="font-size: 0.9em; margin-bottom: 5px;">Var: <span class="meter-variance font-weight-bold">0.00</span></div>
+                                        <div class="total-box" style="font-size: 1em; color: var(--primary);">Value: <br><span class="meter-total-value font-weight-bold">0.00</span></div>
                                     </div>
                                 </div>
                             `;
                         });
-                        html += `</div></div>`;
+                        
+                        html += `
+                                </div>
+                                <div class="pg-summary-footer" style="background: #f8fafc; padding: 15px 20px; border-top: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;">
+                                    <div class="row text-center">
+                                        <div class="col-md-3" style="border-right: 1px solid #e2e8f0;">
+                                            <div style="font-size: 0.85em; color: #64748b; font-weight: bold; text-transform: uppercase;">Total AGO Ltrs</div>
+                                            <div id="sum-ago-ltrs" style="font-size: 1.4em; color: var(--primary); font-weight: bold;">0.00</div>
+                                        </div>
+                                        <div class="col-md-3" style="border-right: 1px solid #e2e8f0;">
+                                            <div style="font-size: 0.85em; color: #64748b; font-weight: bold; text-transform: uppercase;">Total PMS Ltrs</div>
+                                            <div id="sum-pms-ltrs" style="font-size: 1.4em; color: var(--primary); font-weight: bold;">0.00</div>
+                                        </div>
+                                        <div class="col-md-3" style="border-right: 1px solid #e2e8f0;">
+                                            <div style="font-size: 0.85em; color: #64748b; font-weight: bold; text-transform: uppercase;">Total AGO Value</div>
+                                            <div id="sum-ago-val" style="font-size: 1.4em; color: #10b981; font-weight: bold;">0.00</div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div style="font-size: 0.85em; color: #64748b; font-weight: bold; text-transform: uppercase;">Total PMS Value</div>
+                                            <div id="sum-pms-val" style="font-size: 1.4em; color: #10b981; font-weight: bold;">0.00</div>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 20px; text-align: center;">
+                                        <button class="btn btn-primary btn-lg" id="btn-save-single-pg" data-pg="${pg}" style="min-width: 250px; border-radius: 30px;">
+                                            <span class="spinner hidden"><i class="fa fa-spinner fa-spin"></i></span>
+                                            <i class="fa fa-save"></i> Save ${pg} Readings
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        $wrapper.find('#pg-entry-form').html(html);
+                        
+                        $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('blur', function() {
+                            if($(this).val()) $(this).val(parseFloat($(this).val()).toFixed(2));
+                        });
+                        
+                        function calc_row() {
+                            let $row = $(this).closest('.meter-row');
+                            let closing_elec = parseFloat($row.find('.meter-closing-elec').val());
+                            let opening_elec = parseFloat($row.find('.meter-closing-elec').attr('data-opening')) || 0;
+                            let price = parseFloat($row.find('.meter-closing-elec').attr('data-price')) || 0;
+                            
+                            let closing_manual = parseFloat($row.find('.meter-closing-manual').val());
+                            let opening_manual = parseFloat($row.find('.meter-closing-manual').attr('data-opening')) || 0;
+                            
+                            let sales_elec = 0;
+                            if (!isNaN(closing_elec) && closing_elec >= opening_elec) {
+                                sales_elec = closing_elec - opening_elec;
+                                $row.find('.meter-sales-elec').text(sales_elec.toFixed(2)).css('color', 'var(--text-primary)');
+                                $row.find('.meter-closing-elec').removeClass('error-input');
+                            } else if(!isNaN(closing_elec)) {
+                                $row.find('.meter-sales-elec').text('ERR').css('color', 'var(--danger)');
+                                $row.find('.meter-closing-elec').addClass('error-input');
+                            }
+                            
+                            let sales_manual = 0;
+                            if (!isNaN(closing_manual) && closing_manual >= opening_manual) {
+                                sales_manual = closing_manual - opening_manual;
+                                $row.find('.meter-sales-manual').text(sales_manual.toFixed(2)).css('color', 'var(--text-primary)');
+                                $row.find('.meter-closing-manual').removeClass('error-input');
+                            } else if(!isNaN(closing_manual)) {
+                                $row.find('.meter-sales-manual').text('ERR').css('color', 'var(--danger)');
+                                $row.find('.meter-closing-manual').addClass('error-input');
+                            }
+                            
+                            let variance = Math.abs(sales_elec - sales_manual);
+                            $row.find('.meter-variance').text(variance.toFixed(2));
+                            if (variance > 2.0 && sales_manual > 0) {
+                                $row.find('.meter-variance').addClass('variance-alert');
+                            } else {
+                                $row.find('.meter-variance').removeClass('variance-alert');
+                            }
+                            
+                            let total_value = sales_elec * price;
+                            $row.find('.meter-total-value').attr('data-val', total_value).text(total_value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                            $row.attr('data-sales-ltrs', sales_elec);
+                            
+                            calc_footer();
+                        }
+                        
+                        function calc_footer() {
+                            let ago_ltrs = 0, pms_ltrs = 0, ago_val = 0, pms_val = 0;
+                            $wrapper.find('#pg-entry-form .meter-row').each(function() {
+                                let fuel = $(this).attr('data-fuel-type');
+                                let ltrs = parseFloat($(this).attr('data-sales-ltrs')) || 0;
+                                let val = parseFloat($(this).find('.meter-total-value').attr('data-val')) || 0;
+                                if (fuel === 'AGO') { ago_ltrs += ltrs; ago_val += val; }
+                                else if (fuel === 'PMS') { pms_ltrs += ltrs; pms_val += val; }
+                            });
+                            $wrapper.find('#sum-ago-ltrs').text(ago_ltrs.toFixed(2));
+                            $wrapper.find('#sum-pms-ltrs').text(pms_ltrs.toFixed(2));
+                            $wrapper.find('#sum-ago-val').text(ago_val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                            $wrapper.find('#sum-pms-val').text(pms_val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                        }
+                        
+                        $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('input', calc_row);
+                        $wrapper.find('.meter-closing-elec').each(calc_row);
+                        
+                        // Save handler for this PG
+                        $wrapper.find('#btn-save-single-pg').on('click', function() {
+                            let btn = $(this);
+                            let originalText = btn.html();
+                            let pg_name = btn.attr('data-pg');
+                            let has_empty = false;
+                            let rows_data = [];
+                            
+                            $wrapper.find('#pg-entry-form .meter-row[data-name]').each(function() {
+                                let row_name = $(this).attr('data-name');
+                                let elec_input = $(this).find('.meter-closing-elec');
+                                let man_input = $(this).find('.meter-closing-manual');
+                                let elec_val = elec_input.val();
+                                let man_val = man_input.val();
+                                
+                                if (elec_val === "" || elec_val === null || man_val === "" || man_val === null) {
+                                    has_empty = true;
+                                    if (elec_val === "" || elec_val === null) elec_input.addClass('error-input');
+                                    if (man_val === "" || man_val === null) man_input.addClass('error-input');
+                                }
+                                
+                                rows_data.push({
+                                    name: row_name,
+                                    closing_electronic_meter: elec_val ? parseFloat(elec_val) : 0,
+                                    closing_manual_meter: man_val ? parseFloat(man_val) : 0
+                                });
+                            });
+                            
+                            if (has_empty) {
+                                frappe.msgprint({ title: __('Validation Error'), indicator: 'red', message: __('Please enter all closing meter readings for this group.') });
+                                return;
+                            }
+                            
+                            let ago_val = $wrapper.find('#sum-ago-val').text();
+                            let pms_val = $wrapper.find('#sum-pms-val').text();
+                            
+                            frappe.confirm(`<b>Confirm Save for ${pg_name}</b><br><br><span style="color:var(--primary); font-size:1.1em;">Total AGO Value:</span> <b>Ksh ${ago_val}</b><br><span style="color:var(--primary); font-size:1.1em;">Total PMS Value:</span> <b>Ksh ${pms_val}</b>`, function() {
+                                btn.prop('disabled', true); btn.find('.spinner').removeClass('hidden');
+                                save_child_table("pump_meter_readings", rows_data, `${pg_name} saved!`, btn, originalText, function() {
+                                    // Update local state
+                                    rows_data.forEach(rd => {
+                                        let mr = window.METER_GROUPS[pg_name].find(m => m.name === rd.name);
+                                        if (mr) {
+                                            mr.closing_electronic_meter = rd.closing_electronic_meter;
+                                            mr.closing_manual_meter = rd.closing_manual_meter;
+                                        }
+                                    });
+                                    // Clear form and re-render history
+                                    $wrapper.find('#pg-selector').val('').trigger('change');
+                                    render_history();
+                                    frappe.show_alert({message: `${pg_name} readings successfully saved!`, indicator: 'green'});
+                                });
+                            }, function() {
+                                // User clicked cancel on confirm
+                            });
+                        });
                     }
-                    
-                    $wrapper.find('#meters-container').html(html);
-
-                    // Format to 2 decimal places on blur
-                    $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('blur', function() {
-                        if($(this).val()) {
-                            $(this).val(parseFloat($(this).val()).toFixed(2));
-                        }
-                    });
-
-                    // Live Math & Validation
-                    function calc_row() {
-                        let $row = $(this).closest('.meter-row');
-                        let closing_elec = parseFloat($row.find('.meter-closing-elec').val());
-                        let opening_elec = parseFloat($row.find('.meter-closing-elec').attr('data-opening')) || 0;
-                        let price = parseFloat($row.find('.meter-closing-elec').attr('data-price')) || 0;
-                        
-                        let closing_manual = parseFloat($row.find('.meter-closing-manual').val());
-                        let opening_manual = parseFloat($row.find('.meter-closing-manual').attr('data-opening')) || 0;
-                        
-                        let sales_elec = 0;
-                        if (!isNaN(closing_elec) && closing_elec >= opening_elec) {
-                            sales_elec = closing_elec - opening_elec;
-                            $row.find('.meter-sales-elec').text(sales_elec.toFixed(2)).css('color', 'var(--text-primary)');
-                            $row.find('.meter-closing-elec').removeClass('error-input');
-                        } else if(!isNaN(closing_elec)) {
-                            $row.find('.meter-sales-elec').text('ERR').css('color', 'var(--danger)');
-                            $row.find('.meter-closing-elec').addClass('error-input');
-                        }
-                        
-                        let sales_manual = 0;
-                        if (!isNaN(closing_manual) && closing_manual >= opening_manual) {
-                            sales_manual = closing_manual - opening_manual;
-                            $row.find('.meter-sales-manual').text(sales_manual.toFixed(2)).css('color', 'var(--text-primary)');
-                            $row.find('.meter-closing-manual').removeClass('error-input');
-                        } else if(!isNaN(closing_manual)) {
-                            $row.find('.meter-sales-manual').text('ERR').css('color', 'var(--danger)');
-                            $row.find('.meter-closing-manual').addClass('error-input');
-                        }
-                        
-                        let variance = Math.abs(sales_elec - sales_manual);
-                        $row.find('.meter-variance').text(variance.toFixed(2));
-                        
-                        if (variance > 2.0 && sales_manual > 0) {
-                            $row.find('.meter-variance').addClass('variance-alert');
-                        } else {
-                            $row.find('.meter-variance').removeClass('variance-alert');
-                        }
-                        
-                        let total_value = sales_elec * price;
-                        $row.find('.meter-total-value').text(total_value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-                    }
-                    
-                    $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('input', calc_row);
-                    // Trigger initial
-                    $wrapper.find('.meter-closing-elec').each(calc_row);
                 }
             });
         }
     });
 }
-
 function render_dips($wrapper) {
     let html = '';
     (window.SHIFT_DOC.dip_stick_readings || []).forEach(row => {
@@ -976,32 +1184,7 @@ function setup_actions(wrapper) {
     // ---------------------------------------------------
     // Save Handlers
     // ---------------------------------------------------
-    $wrapper.on('click', '#btn-save-wetstock', function() {
-        let btn = $(this);
-        let originalText = btn.text();
-        btn.prop('disabled', true); btn.find('.spinner').removeClass('hidden');
-        
-        let has_empty = false;
-        let rows_data = [];
-        $wrapper.find('#meters-container .meter-row[data-name]').each(function() {
-            let row_name = $(this).attr('data-name');
-            let elec_input = $(this).find('.meter-closing-elec');
-            let man_input = $(this).find('.meter-closing-manual');
-            
-            let elec_val = elec_input.val();
-            let man_val = man_input.val();
-            
-            if (elec_val === "" || elec_val === null || man_val === "" || man_val === null) {
-                has_empty = true;
-                if (elec_val === "" || elec_val === null) elec_input.addClass('error-input');
-                if (man_val === "" || man_val === null) man_input.addClass('error-input');
-            }
-            
-            rows_data.push({
-                name: row_name,
-                closing_electronic_meter: elec_val ? parseFloat(elec_val) : 0,
-                closing_manual_meter: man_val ? parseFloat(man_val) : 0
-            });
+    // Old bulk save wetstock removed in favor of per-pump-group save.
         });
         
         if (has_empty) {
@@ -1040,7 +1223,7 @@ function setup_actions(wrapper) {
         save_child_table("mpesa_payments", readings, "M-Pesa Tills saved!");
     });
     
-    function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null) {
+    function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null, callback = null) {
         if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"))) {
             frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
             if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
