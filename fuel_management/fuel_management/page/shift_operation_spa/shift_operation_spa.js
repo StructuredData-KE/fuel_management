@@ -225,6 +225,9 @@ function render_meters($wrapper) {
                     
                     $wrapper.find('#pg-selector').on('change', function() {
                         let selected_pg = $(this).val();
+                        if (window.EDITING_PG && window.EDITING_PG !== selected_pg) {
+                            window.EDITING_PG = null; // Clear edit mode if they manually select another group
+                        }
                         if (selected_pg) {
                             render_pg_form(selected_pg);
                             $wrapper.find('#pg-entry-form').slideDown();
@@ -258,6 +261,7 @@ function render_meters($wrapper) {
                     
                     $wrapper.on('click', '.btn-edit-pg', function() {
                         let pg = $(this).attr('data-pg');
+                        window.EDITING_PG = pg;
                         $wrapper.find('#pg-selector').val(pg).trigger('change');
                         $("html, body").animate({ scrollTop: 0 }, "fast");
                     });
@@ -277,6 +281,7 @@ function render_meters($wrapper) {
                                     r.closing_electronic_meter = 0;
                                     r.closing_manual_meter = 0;
                                 });
+                                window.EDITING_PG = null;
                                 render_history();
                                 if ($wrapper.find('#pg-selector').val() === pg) {
                                     $wrapper.find('#pg-selector').val('').trigger('change');
@@ -288,6 +293,10 @@ function render_meters($wrapper) {
                     function render_pg_form(pg) {
                         let rows = window.METER_GROUPS[pg];
                         rows.sort((a, b) => (a.pump_nozzle || "").localeCompare((b.pump_nozzle || ""), undefined, {numeric: true, sensitivity: 'base'}));
+                        
+                        let has_saved = rows.some(r => r.closing_electronic_meter > 0 || r.closing_manual_meter > 0);
+                        let is_locked = has_saved && window.EDITING_PG !== pg;
+                        let disable_attr = is_locked ? 'disabled' : '';
                         
                         let assigned_csa_id = "";
                         if (window.SHIFT_DOC.assigned_csas) {
@@ -333,14 +342,14 @@ function render_meters($wrapper) {
                                     <div class="elec-col" style="flex: 1; padding: 0 10px;">
                                         <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Electronic</div>
                                         <div class="reading-label" style="font-size: 0.8em;">Open: <span class="read-only-cell" style="font-weight: bold;">${row.opening_electronic_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Closing Elec" style="padding: 6px; font-size: 1em; height: 35px;">
+                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Closing Elec" style="padding: 6px; font-size: 1em; height: 35px;" ${disable_attr}>
                                         <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-elec font-weight-bold">0.00</span></div>
                                     </div>
                                     
                                     <div class="manual-col" style="flex: 1; padding: 0 10px;">
                                         <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Manual</div>
                                         <div class="reading-label" style="font-size: 0.8em;">Open: <span class="read-only-cell" style="font-weight: bold;">${row.opening_manual_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Closing Manual" style="padding: 6px; font-size: 1em; height: 35px;">
+                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Closing Manual" style="padding: 6px; font-size: 1em; height: 35px;" ${disable_attr}>
                                         <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-manual font-weight-bold">0.00</span></div>
                                     </div>
                                     
@@ -374,10 +383,14 @@ function render_meters($wrapper) {
                                         </div>
                                     </div>
                                     <div style="margin-top: 20px; text-align: center;">
-                                        <button class="btn btn-primary btn-lg" id="btn-save-single-pg" data-pg="${pg}" style="min-width: 250px; border-radius: 30px;">
+                                        ${is_locked ? 
+                                        `<div class="alert alert-warning" style="display:inline-block; margin-bottom:0;">
+                                            <i class="fa fa-lock"></i> Readings for ${pg} are already saved. Use the <b>Edit</b> button in the History table to modify.
+                                        </div>` : 
+                                        `<button class="btn btn-primary btn-lg" id="btn-save-single-pg" data-pg="${pg}" style="min-width: 250px; border-radius: 30px;">
                                             <span class="spinner hidden"><i class="fa fa-spinner fa-spin"></i></span>
                                             <i class="fa fa-save"></i> Save ${pg} Readings
-                                        </button>
+                                        </button>`}
                                     </div>
                                 </div>
                             </div>
@@ -500,6 +513,7 @@ function render_meters($wrapper) {
                                         }
                                     });
                                     // Clear form and re-render history
+                                    window.EDITING_PG = null;
                                     $wrapper.find('#pg-selector').val('').trigger('change');
                                     render_history();
                                     frappe.show_alert({message: `${pg_name} readings successfully saved!`, indicator: 'green'});
