@@ -1259,10 +1259,12 @@ function setup_actions(wrapper) {
                                 frappe.show_alert({message: success_msg, indicator: "green"});
                             }
                             if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
+            if(callback) callback(r2);
                         }
                     });
                 } else {
                     if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
+            if(callback) callback(r2);
                 }
             }
         });
