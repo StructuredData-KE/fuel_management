@@ -52,6 +52,12 @@
    "label": "Amount Collected",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "posted",
+   "fieldtype": "Check",
+   "label": "Posted",
+   "default": "0"
   }
  ],
  "grid_page_length": 50,

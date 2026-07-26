@@ -535,3 +535,8 @@ def get_nozzle_prices(station, shift_date):
             nozzle_prices[nozzle.name] = {"price": price, "item": fuel_product}
             
     return nozzle_prices
+
+
+@frappe.whitelist()
+def get_till_pump_groups():
+    return frappe.db.sql("SELECT parent, pump_group FROM \"tabM-Pesa Till Pump Group\" WHERE parenttype = 'M-Pesa Till'", as_dict=True)

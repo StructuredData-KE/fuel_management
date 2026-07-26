@@ -547,12 +547,7 @@ function render_dips($wrapper) {
 function render_mpesa($wrapper) {
     if(!window.TILL_CSA_MAPPING) {
         frappe.call({
-            method: "frappe.client.get_list",
-            args: {
-                doctype: "M-Pesa Till Pump Group",
-                fields: ["parent", "pump_group"],
-                limit_page_length: 500
-            },
+            method: "fuel_management.fuel_management.doctype.shift.shift.get_till_pump_groups",
             callback: function(r) {
                 let mapping = {};
                 if(r.message) {
