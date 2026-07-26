@@ -529,8 +529,7 @@ def get_nozzle_prices(station, shift_date):
                 limit=1
             )
             price = flt(price_record[0].price_list_rate) if price_record else 0.0
-            product_price_cache[fuel_product] = price
+            product_price_cache[fuel_product] = {"price": price, "item": fuel_product}
             nozzle_prices[nozzle.name] = {"price": price, "item": fuel_product}
             
     return nozzle_prices
-
