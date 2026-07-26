@@ -1185,19 +1185,7 @@ function setup_actions(wrapper) {
     // Save Handlers
     // ---------------------------------------------------
     // Old bulk save wetstock removed in favor of per-pump-group save.
-        });
-        
-        if (has_empty) {
-            frappe.msgprint({
-                title: __('Validation Error'),
-                indicator: 'red',
-                message: __('Please enter all closing meter readings before saving. Fields cannot be empty.')
-            });
-            btn.prop('disabled', false).text(originalText);
-            return;
-        }
-        save_child_table("pump_meter_readings", rows_data, "Meter Readings saved!", btn, originalText);
-    });
+
     
     $wrapper.find('#btn-save-dips').on('click', function() {
         let readings = [];
