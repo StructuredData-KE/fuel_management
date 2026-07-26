@@ -546,22 +546,39 @@ function render_dips($wrapper) {
 
 function render_mpesa($wrapper) {
     let html = '';
+    let posted_html = '';
     (window.SHIFT_DOC.mpesa_payments || []).forEach(row => {
-        html += `
-            <tr data-name="${row.name}">
-                <td style="font-weight: 600; color: var(--text-primary);">${row.mpesa_till}</td>
-                <td><span class="read-only-cell">${row.opening_balance || 0}</span></td>
-                <td>
-                    <input type="number" class="spa-input mpesa-transfers highlight-input" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="Enter Transfers">
-                </td>
-                <td>
-                    <input type="number" class="spa-input mpesa-closing highlight-input" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance || ''}" placeholder="Enter Closing">
-                </td>
-                <td class="mpesa-collected font-weight-bold">0.00</td>
-            </tr>
-        `;
+        if (row.posted) {
+            posted_html += `
+                <tr data-name="${row.name}">
+                    <td style="font-weight: 600; color: var(--text-primary);">${row.mpesa_till}</td>
+                    <td><span class="read-only-cell">${row.opening_balance || 0}</span></td>
+                    <td><span class="read-only-cell">${row.transfers_made || 0}</span></td>
+                    <td><span class="read-only-cell">${row.closing_balance || 0}</span></td>
+                    <td class="font-weight-bold">${row.amount || 0}</td>
+                    <td>
+                        <button class="btn-clear-mpesa btn-secondary btn-sm" style="color: #dc2626; border-color: #fca5a5;">Edit/Clear</button>
+                    </td>
+                </tr>
+            `;
+        } else {
+            html += `
+                <tr data-name="${row.name}">
+                    <td style="font-weight: 600; color: var(--text-primary);">${row.mpesa_till}</td>
+                    <td><span class="read-only-cell">${row.opening_balance || 0}</span></td>
+                    <td>
+                        <input type="number" class="spa-input mpesa-transfers highlight-input" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="Enter Transfers">
+                    </td>
+                    <td>
+                        <input type="number" class="spa-input mpesa-closing highlight-input" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance || ''}" placeholder="Enter Closing">
+                    </td>
+                    <td class="mpesa-collected font-weight-bold">0.00</td>
+                </tr>
+            `;
+        }
     });
-    $wrapper.find('#mpesa-tills-container').html(html);
+    $wrapper.find('#mpesa-tills-container').html(html || '<tr><td colspan="5" class="text-center">No pending tills to input.</td></tr>');
+    $wrapper.find('#posted-mpesa-container').html(posted_html || '<tr><td colspan="6" class="text-center">No posted tills yet.</td></tr>');
 
     // Add Live Math
     function calc_mpesa() {
@@ -1136,6 +1153,16 @@ function setup_actions(wrapper) {
             refresh_drystock_cart($wrapper);
         }
     });
+
+    // M-Pesa Segmented Control
+    $wrapper.find('#tab-mpesa .seg-btn').off('click').on('click', function() {
+        let targetView = $(this).attr('data-view');
+        $wrapper.find('#tab-mpesa .seg-btn').removeClass('active');
+        $(this).addClass('active');
+        
+        $wrapper.find('#tab-mpesa .view-pane').removeClass('active');
+        $wrapper.find(`#mpesa-${targetView}-view`).addClass('active');
+    });
     
     // Start Shift Logic
     $wrapper.find('#btn-start-shift').on('click', function() {
@@ -1221,15 +1248,57 @@ function setup_actions(wrapper) {
     });
     
     $wrapper.find('#btn-save-mpesa').on('click', function() {
+        let btn = $(this);
         let readings = [];
+        let valid = true;
+        let missing = 0;
+        let originalText = btn.html();
+        btn.html('<span class="spinner"></span> Saving...');
+        btn.prop('disabled', true);
+        
         $wrapper.find('#mpesa-tills-container tr').each(function() {
-            readings.push({
-                name: $(this).attr('data-name'),
-                transfers_made: $(this).find('.mpesa-transfers').val(),
-                closing_balance: $(this).find('.mpesa-closing').val()
+            let closing = $(this).find('.mpesa-closing').val();
+            let transfers = $(this).find('.mpesa-transfers').val();
+            if(closing !== "") {
+                readings.push({
+                    name: $(this).attr('data-name'),
+                    transfers_made: transfers || 0,
+                    closing_balance: closing,
+                    posted: 1
+                });
+            } else {
+                missing++;
+            }
+        });
+        
+        if(readings.length === 0) {
+            frappe.msgprint("Please enter closing balances for at least one till before saving.");
+            btn.html(originalText);
+            btn.prop('disabled', false);
+            return;
+        }
+        if(missing > 0) {
+            // It's fine if they don't save all of them at once.
+        }
+        save_child_table("mpesa_payments", readings, "M-Pesa Tills saved!", btn, originalText, function() {
+            render_mpesa($wrapper);
+        });
+    });
+    
+    $wrapper.on('click', '.btn-clear-mpesa', function() {
+        let name = $(this).closest('tr').attr('data-name');
+        let btn = $(this);
+        frappe.confirm('Are you sure you want to edit/clear this till reading?', () => {
+            btn.text('Clearing...');
+            save_child_table("mpesa_payments", [{
+                name: name,
+                closing_balance: 0,
+                transfers_made: 0,
+                posted: 0
+            }], "Till Cleared!", null, null, function() {
+                render_mpesa($wrapper);
             });
         });
-        save_child_table("mpesa_payments", readings, "M-Pesa Tills saved!");
     });
     
     function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null, callback = null) {

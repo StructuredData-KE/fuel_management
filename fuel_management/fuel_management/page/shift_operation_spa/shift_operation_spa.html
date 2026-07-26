@@ -202,11 +202,19 @@
                 
             <!-- M-PESA TILLS -->
             <section id="tab-mpesa" class="tab-pane">
-                <div class="dash-card center-card mb-4">
-                    <div class="card-header-flex">
-                        <h3>M-Pesa Tills</h3>
-                        <button id="btn-save-mpesa" class="btn-secondary btn-sm"><span class="spinner hidden"></span> Save Tills</button>
+                <div class="segmented-control-wrapper">
+                    <div class="segmented-control">
+                        <button class="seg-btn active" data-view="entry">Input Tills</button>
+                        <button class="seg-btn" data-view="history">Posted History</button>
                     </div>
+                </div>
+
+                <div class="view-pane active" id="mpesa-entry-view">
+                    <div class="dash-card center-card mb-4">
+                        <div class="card-header-flex">
+                            <h3>M-Pesa Tills</h3>
+                            <button id="btn-save-mpesa" class="btn-secondary btn-sm"><span class="spinner hidden"></span> Save Tills</button>
+                        </div>
                         <div class="table-responsive">
                             <table class="dash-table meters-table">
                                 <thead>
@@ -224,6 +232,32 @@
                             </table>
                         </div>
                     </div>
+                </div>
+                
+                <div class="view-pane" id="mpesa-history-view">
+                    <div class="dash-card center-card" style="background: #f8fafc;">
+                        <div class="card-header-flex">
+                            <h3>Posted M-Pesa Tills</h3>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="dash-table meters-table">
+                                <thead>
+                                    <tr>
+                                        <th>Till Name</th>
+                                        <th>Opening Bal.</th>
+                                        <th>Bank Transfers</th>
+                                        <th>Closing Bal.</th>
+                                        <th>Amount Collected</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="posted-mpesa-container">
+                                    <!-- Posted Rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </section>
             
             <!-- STATION CARDS -->
