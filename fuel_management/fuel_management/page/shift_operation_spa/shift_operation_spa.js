@@ -545,13 +545,56 @@ function render_dips($wrapper) {
 }
 
 function render_mpesa($wrapper) {
+    if(!window.TILL_CSA_MAPPING) {
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "M-Pesa Till Pump Group",
+                fields: ["parent", "pump_group"],
+                limit_page_length: 500
+            },
+            callback: function(r) {
+                let mapping = {};
+                if(r.message) {
+                    let pg_to_csa = {};
+                    (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
+                        let csa_name = row.csa;
+                        if(window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(user => user.name === row.csa);
+                            if(u) csa_name = u.employee_name;
+                        }
+                        if(!pg_to_csa[row.pump_group]) pg_to_csa[row.pump_group] = [];
+                        pg_to_csa[row.pump_group].push(csa_name);
+                    });
+                    
+                    r.message.forEach(row => {
+                        if(!mapping[row.parent]) mapping[row.parent] = [];
+                        if(pg_to_csa[row.pump_group]) {
+                            mapping[row.parent].push(...pg_to_csa[row.pump_group]);
+                        }
+                    });
+                }
+                window.TILL_CSA_MAPPING = mapping;
+                render_mpesa($wrapper);
+            }
+        });
+        return;
+    }
+
     let html = '';
     let posted_html = '';
     (window.SHIFT_DOC.mpesa_payments || []).forEach(row => {
+        let csa_names = window.TILL_CSA_MAPPING[row.mpesa_till] || [];
+        let unique_csas = [...new Set(csa_names)];
+        let csa_text = unique_csas.length > 0 ? `<div style="font-size: 0.85em; color: var(--primary); margin-top: 5px;">Assigned CSA: <strong>${unique_csas.join(', ')}</strong></div>` : "";
+
         if (row.posted) {
             posted_html += `
                 <tr data-name="${row.name}">
-                    <td style="font-weight: 600; color: var(--text-primary);">${row.mpesa_till}</td>
+                    <td style="font-weight: 600; color: var(--text-primary);">
+                        ${row.mpesa_till}
+                        ${csa_text}
+                    </td>
                     <td><span class="read-only-cell">${row.opening_balance || 0}</span></td>
                     <td><span class="read-only-cell">${row.transfers_made || 0}</span></td>
                     <td><span class="read-only-cell">${row.closing_balance || 0}</span></td>
@@ -564,7 +607,10 @@ function render_mpesa($wrapper) {
         } else {
             html += `
                 <tr data-name="${row.name}">
-                    <td style="font-weight: 600; color: var(--text-primary);">${row.mpesa_till}</td>
+                    <td style="font-weight: 600; color: var(--text-primary);">
+                        ${row.mpesa_till}
+                        ${csa_text}
+                    </td>
                     <td><span class="read-only-cell">${row.opening_balance || 0}</span></td>
                     <td>
                         <input type="number" class="spa-input mpesa-transfers highlight-input" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="Enter Transfers">
