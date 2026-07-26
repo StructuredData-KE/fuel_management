@@ -3452,7 +3452,7 @@ function render_station_cards($wrapper) {
     
     allowed_csas.forEach(csa => {
         let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.employee_name : csa;
+        let name = u ? (u.employee_name || u.full_name) : csa;
         csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#sc-csa').html(csaOptions);
@@ -3464,10 +3464,13 @@ function render_station_cards($wrapper) {
         callback: function(r) {
             if(r.message) {
                 let cardOpts = '<option value="">Select Card...</option>';
+                let filterOpts = '<option value="">All Cards</option>';
                 r.message.forEach(c => {
                     cardOpts += `<option value="${c.name}">${c.card_name}</option>`;
+                    filterOpts += `<option value="${c.name}">${c.card_name}</option>`;
                 });
                 $wrapper.find('#sc-card').html(cardOpts);
+                $wrapper.find('#sc-filter-card').html(filterOpts);
             }
         }
     });

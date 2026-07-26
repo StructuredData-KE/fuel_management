@@ -3,4 +3,14 @@ import frappe
 from frappe.model.document import Document
 
 class StationCards(Document):
-    pass
+    def validate(self):
+        if self.receipt_no:
+            exists = frappe.db.exists(
+                "Station Cards", 
+                {
+                    "receipt_no": self.receipt_no,
+                    "name": ["!=", self.name]
+                }
+            )
+            if exists:
+                frappe.throw(f"Receipt number {self.receipt_no} has already been saved.")
