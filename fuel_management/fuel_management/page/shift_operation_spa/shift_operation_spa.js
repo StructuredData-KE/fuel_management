@@ -313,9 +313,15 @@ function render_meters($wrapper) {
                             let price_obj = window.NOZZLE_PRICES[row.pump_nozzle] || {};
                             let price = price_obj.price || 0.0;
                             let item_code = price_obj.item || '';
-                            let is_ago = (item_code.toUpperCase().indexOf('AGO') !== -1 || item_code.toUpperCase().indexOf('DIESEL') !== -1);
-                            let is_pms = (item_code.toUpperCase().indexOf('PMS') !== -1 || item_code.toUpperCase().indexOf('PETROL') !== -1);
-                            let fuel_type = is_ago ? 'AGO' : (is_pms ? 'PMS' : item_code);
+                            let item_upper = item_code.toUpperCase();
+                            let is_ago = (item_upper.indexOf('AGO') !== -1 || item_upper.indexOf('DIESEL') !== -1);
+                            let is_pms = (item_upper.indexOf('PMS') !== -1 || item_upper.indexOf('PETROL') !== -1 || item_upper.indexOf('SUPER') !== -1 || item_upper.indexOf('V-POWER') !== -1);
+                            if (!is_ago && !is_pms) {
+                                let noz_upper = (row.pump_nozzle || "").toUpperCase();
+                                if (noz_upper.indexOf('AGO') !== -1 || noz_upper.indexOf('DIESEL') !== -1) is_ago = true;
+                                if (noz_upper.indexOf('PMS') !== -1 || noz_upper.indexOf('SUPER') !== -1) is_pms = true;
+                            }
+                            let fuel_type = is_ago ? 'AGO' : (is_pms ? 'PMS' : (item_code || 'UNKNOWN'));
                             
                             html += `
                                 <div class="meter-row" data-name="${row.name}" data-fuel-type="${fuel_type}" style="padding: 10px 15px; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
@@ -420,9 +426,10 @@ function render_meters($wrapper) {
                                 $row.find('.meter-variance').removeClass('variance-alert');
                             }
                             
-                            let total_value = sales_elec * price;
+                            let sales_to_use = sales_elec > 0 ? sales_elec : sales_manual;
+                            let total_value = sales_to_use * price;
                             $row.find('.meter-total-value').attr('data-val', total_value).text(total_value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-                            $row.attr('data-sales-ltrs', sales_elec);
+                            $row.attr('data-sales-ltrs', sales_to_use);
                             
                             calc_footer();
                         }
