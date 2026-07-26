@@ -341,14 +341,14 @@ function render_meters($wrapper) {
                                     
                                     <div class="elec-col" style="flex: 1; padding: 0 10px;">
                                         <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Electronic</div>
-                                        <div class="reading-label" style="font-size: 0.8em;">Open: <span class="read-only-cell" style="font-weight: bold;">${row.opening_electronic_meter}</span></div>
+                                        <div class="reading-label" style="font-size: 0.8em;">Opening: <span class="read-only-cell" style="font-weight: bold;">${row.opening_electronic_meter}</span></div>
                                         <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Closing Elec" style="padding: 6px; font-size: 1em; height: 35px;" ${disable_attr}>
                                         <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-elec font-weight-bold">0.00</span></div>
                                     </div>
                                     
                                     <div class="manual-col" style="flex: 1; padding: 0 10px;">
                                         <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Manual</div>
-                                        <div class="reading-label" style="font-size: 0.8em;">Open: <span class="read-only-cell" style="font-weight: bold;">${row.opening_manual_meter}</span></div>
+                                        <div class="reading-label" style="font-size: 0.8em;">Opening: <span class="read-only-cell" style="font-weight: bold;">${row.opening_manual_meter}</span></div>
                                         <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Closing Manual" style="padding: 6px; font-size: 1em; height: 35px;" ${disable_attr}>
                                         <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-manual font-weight-bold">0.00</span></div>
                                     </div>
