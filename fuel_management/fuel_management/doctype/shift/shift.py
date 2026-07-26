@@ -539,4 +539,4 @@ def get_nozzle_prices(station, shift_date):
 
 @frappe.whitelist()
 def get_till_pump_groups():
-    return frappe.db.sql("SELECT parent, pump_group FROM \"tabM-Pesa Till Pump Group\" WHERE parenttype = 'M-Pesa Till'", as_dict=True)
+    return frappe.db.sql("SELECT parent, pump_group FROM `tabM-Pesa Till Pump Group` WHERE parenttype = 'M-Pesa Till'", as_dict=True)
