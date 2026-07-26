@@ -590,10 +590,10 @@ function render_mpesa($wrapper) {
                         ${row.mpesa_till}
                         ${csa_text}
                     </td>
-                    <td><span class="read-only-cell">${format_currency(row.opening_balance || 0)}</span></td>
-                    <td><span class="read-only-cell">${format_currency(row.transfers_made || 0)}</span></td>
-                    <td><span class="read-only-cell">${format_currency(row.closing_balance || 0)}</span></td>
-                    <td class="font-weight-bold">${format_currency(row.amount || 0)}</td>
+                    <td><span class="read-only-cell">${Number(row.opening_balance || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
+                    <td><span class="read-only-cell">${Number(row.transfers_made || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
+                    <td><span class="read-only-cell">${Number(row.closing_balance || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
+                    <td class="font-weight-bold">${Number(row.amount || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
                     <td>
                         <button class="btn-clear-mpesa btn-secondary btn-sm" style="color: #dc2626; border-color: #fca5a5;">Edit/Clear</button>
                     </td>
@@ -606,7 +606,7 @@ function render_mpesa($wrapper) {
                         ${row.mpesa_till}
                         ${csa_text}
                     </td>
-                    <td><span class="read-only-cell">${format_currency(row.opening_balance || 0)}</span></td>
+                    <td><span class="read-only-cell">${Number(row.opening_balance || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
                     <td>
                         <input type="number" class="spa-input mpesa-transfers highlight-input" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="Enter Transfers">
                     </td>
@@ -636,7 +636,7 @@ function render_mpesa($wrapper) {
             $row.find('.mpesa-collected').text('ERR').css('color', 'var(--danger)');
         } else {
             $closingInput.removeClass('error-input');
-            $row.find('.mpesa-collected').text(format_currency(collected)).css('color', 'var(--text-primary)');
+            $row.find('.mpesa-collected').text(collected.toLocaleString('en-US', {maximumFractionDigits: 0})).css('color', 'var(--text-primary)');
         }
     }
     
