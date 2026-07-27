@@ -139,9 +139,7 @@ function load_shift_data($wrapper) {
                 if(typeof render_station_cards === 'function') render_station_cards($wrapper);
                 if(typeof render_petty_cash === 'function') render_petty_cash($wrapper);
                 if(typeof render_cash_transfers === 'function') render_cash_transfers($wrapper);
-            if (target === 'tab-reconcile') {
                 if(typeof render_reconcile === 'function') render_reconcile($wrapper);
-            }
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
                 if(typeof render_rtt === 'function') render_rtt($wrapper);
                 if(typeof render_topups === 'function') render_topups($wrapper);
