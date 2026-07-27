@@ -916,7 +916,14 @@ function refresh_drystock_cart($wrapper) {
                             
                             // Load into form
                             $wrapper.find('#drystock-csa').val(row.sold_by);
-                            $wrapper.find('#drystock-item-input').val(row.item);
+                            
+                            let full_item_name = row.item;
+                            if (window.DRYSTOCK_ITEMS) {
+                                let match = window.DRYSTOCK_ITEMS.find(i => i.item_code === row.item);
+                                if (match) full_item_name = `${match.item_name} - ${match.item_code}`;
+                            }
+                            $wrapper.find('#drystock-item-input').val(full_item_name);
+                            
                             $wrapper.find('#drystock-qty').val(row.quantity);
                             $wrapper.find('#drystock-uom').val(row.uom_multiplier);
                             $wrapper.find('#drystock-price').val(row.selling_price);
