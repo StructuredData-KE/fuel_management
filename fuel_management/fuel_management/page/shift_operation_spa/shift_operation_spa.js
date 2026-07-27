@@ -3477,12 +3477,27 @@ function render_station_cards($wrapper) {
 
     // 4. Fetch and Render History
     let fetch_history = function() {
+        let filters = { shift: window.ACTIVE_SHIFT.name };
+        let date_from = $wrapper.find('#sc-filter-date-from').val();
+        let date_to = $wrapper.find('#sc-filter-date-to').val();
+        let card_filter = $wrapper.find('#sc-filter-card').val();
+        
+        if (date_from && date_to) {
+            filters.date = ["between", [date_from, date_to]];
+        } else if (date_from) {
+            filters.date = [">=", date_from];
+        } else if (date_to) {
+            filters.date = ["<=", date_to];
+        }
+        
+        if (card_filter) filters.card = card_filter;
+
         frappe.call({
             method: "frappe.client.get_list",
             args: {
                 doctype: "Station Cards",
-                filters: { shift: window.ACTIVE_SHIFT.name },
-                fields: ["name", "date", "shift", "creation", "card", "csa", "receipt_no", "amount"],
+                filters: filters,
+                fields: ["name", "date", "shift", "creation", "card", "csa", "receipt_no", "amount", "memo"],
                 order_by: "name desc"
             },
             callback: function(r) {
@@ -3493,29 +3508,63 @@ function render_station_cards($wrapper) {
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
-                            if(u) csa_name = u.employee_name;
+                            if (u) csa_name = u.employee_name || u.full_name;
                         }
                         
                         html += `
-                            <tr>
-                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
-                                <td>${row.date || ""}</td>
-                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
-                                <td style="color: #64748b;">${time_val}</td>
-                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.receipt_no}</span></td>
+                            <tr data-name="${row.name}" data-card="${row.card}" data-csa="${row.csa}" data-receipt="${row.receipt_no}" data-amount="${row.amount}" data-memo="${row.memo || ''}">
+                                <td>${frappe.datetime.str_to_user(row.date)}</td>
+                                <td>${row.shift || ""}</td>
+                                <td>${time_val}</td>
+                                <td><a href="/app/station-cards/${row.name}">${row.receipt_no}</a></td>
                                 <td>${row.card}</td>
                                 <td>${csa_name}</td>
                                 <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td>
+                                    <button class="btn btn-xs btn-secondary btn-edit-sc">Edit</button>
+                                    <button class="btn btn-xs btn-danger btn-delete-sc" style="margin-left: 5px;">Delete</button>
+                                </td>
                             </tr>
                         `;
                     });
                 }
                 if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No card payments recorded yet.</td></tr>';
                 $wrapper.find('#list-station-cards-saved').html(html);
+
+                // Action listeners
+                $wrapper.find('.btn-delete-sc').click(function() {
+                    let name = $(this).closest('tr').data('name');
+                    frappe.confirm('Are you sure you want to delete this record?', () => {
+                        frappe.call({
+                            method: "frappe.client.delete",
+                            args: { doctype: "Station Cards", name: name },
+                            callback: function(res) {
+                                if(!res.exc) fetch_history();
+                            }
+                        });
+                    });
+                });
+
+                $wrapper.find('.btn-edit-sc').click(function() {
+                    let $tr = $(this).closest('tr');
+                    $wrapper.find('#sc-card').val($tr.data('card'));
+                    $wrapper.find('#sc-csa').val($tr.data('csa'));
+                    $wrapper.find('#sc-receipt-no').val($tr.data('receipt'));
+                    $wrapper.find('#sc-amount').val($tr.data('amount'));
+                    $wrapper.find('#sc-memo').val($tr.data('memo'));
+                    $wrapper.data('editing-sc', $tr.data('name')); 
+                    
+                    // Switch to entry view
+                    $wrapper.find('#tab-station-cards .seg-btn[data-view="entry"]').click();
+                    $wrapper.find('#sc-entry-view .card-header-flex h3').text('Edit Station Card Payment');
+                    $wrapper.find('#btn-save-station-card').text('Update Payment');
+                });
             }
         });
     };
     fetch_history();
+
+    $wrapper.find('#sc-filter-date-from, #sc-filter-date-to, #sc-filter-card').on('change', fetch_history);
 
     // 5. Save Station Card Payment
     $wrapper.find('#btn-save-station-card').off('click').on('click', function() {
