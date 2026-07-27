@@ -3726,8 +3726,6 @@ function render_greasing(wrapper) {
         }
     });
     $wrapper.find('#greasing-csa').html(csa_html);
-    
-    frappe.msgprint("Populated CSA with count: " + csa_count);
 
     // Fetch and Populate Vehicle Types
     frappe.call({
@@ -3746,13 +3744,10 @@ function render_greasing(wrapper) {
                     vt_html += `<option value="${vt.name}">${vt.vehicle_type} (KES ${vt.greasing_price})</option>`;
                 });
                 $wrapper.find('#greasing-vehicle-type').html(vt_html);
-                frappe.msgprint("Populated Vehicles with count: " + r.message.length);
-            } else {
-                frappe.msgprint("Vehicle Type fetch returned no message.");
             }
         },
         error: function(err) {
-            frappe.msgprint("Error loading Grease Vehicle Types: " + JSON.stringify(err));
+            console.error("Error loading Grease Vehicle Types: ", err);
         }
     });
 
