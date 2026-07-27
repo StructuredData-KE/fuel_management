@@ -102,7 +102,7 @@ function lock_ui_for_active_shift($wrapper) {
     // Update Badge
     let bShiftName = window.ACTIVE_SHIFT.shift_template ? window.ACTIVE_SHIFT.shift_template : "Shift";
     let formattedDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
-    $wrapper.find('#active-shift-badge').addClass('active-shift').text(`Active: ${formattedDate}(${bShiftName}) - ${window.ACTIVE_SHIFT.name}`);
+    $wrapper.find('#active-shift-badge').addClass('active-shift').text(`Active: ${formattedDate}(${bShiftName})`);
     
     // Switch to Fuel tab automatically
     $wrapper.find('.nav-item[data-target="tab-fuel"]').click();
