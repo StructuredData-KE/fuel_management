@@ -3587,26 +3587,43 @@ function render_station_cards($wrapper) {
         let orig_html = $btn.html();
         $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
 
+        let edit_id = $wrapper.data('editing-sc');
+        let method = edit_id ? "frappe.client.set_value" : "frappe.client.insert";
+        let args = edit_id ? {
+            doctype: "Station Cards",
+            name: edit_id,
+            fieldname: {
+                card: card,
+                csa: csa,
+                receipt_no: receipt_no,
+                amount: amount,
+                memo: memo
+            }
+        } : {
+            doc: {
+                doctype: "Station Cards",
+                shift: window.ACTIVE_SHIFT.name,
+                date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
+                card: card,
+                csa: csa,
+                receipt_no: receipt_no,
+                amount: amount,
+                memo: memo
+            }
+        };
+
         frappe.call({
-            method: "frappe.client.insert",
-            args: {
-                doc: {
-                    doctype: "Station Cards",
-                    shift: window.ACTIVE_SHIFT.name,
-                    date: window.SHIFT_DOC.shift_date || frappe.datetime.nowdate(),
-                    card: card,
-                    csa: csa,
-                    receipt_no: receipt_no,
-                    amount: amount,
-                    memo: memo
-                }
-            },
+            method: method,
+            args: args,
             callback: function(r) {
                 $btn.html(orig_html).prop('disabled', false);
                 if(r.message) {
                     frappe.show_alert({message: "Station Card Payment saved successfully!", indicator: "green"});
                     
-                    // Clear inputs
+                    // Clear inputs and reset state
+                    $wrapper.data('editing-sc', null);
+                    $wrapper.find('#sc-entry-view .card-header-flex h3').text('New Station Card Payment');
+                    $wrapper.find('#btn-save-station-card').text('Save Payment');
                     $wrapper.find('#sc-card').val('');
                     $wrapper.find('#sc-receipt-no').val('');
                     $wrapper.find('#sc-amount').val('');
