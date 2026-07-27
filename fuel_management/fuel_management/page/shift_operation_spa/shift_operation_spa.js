@@ -1959,7 +1959,7 @@ function render_customer_payments($wrapper) {
                             <tr>
                                 <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
-                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
                                 <td>${row.customer}</td>
                                 <td>${csa_name}</td>
@@ -2112,7 +2112,7 @@ function render_fleet_cards($wrapper) {
                             <tr>
                                 <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
-                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
                                 <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.receipt_no}</span></td>
                                 <td>${row.card}</td>
@@ -2263,7 +2263,7 @@ function render_station_expenses($wrapper) {
                             <tr>
                                 <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
-                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
                                 <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.category}</span></td>
                                 <td>${csa_name}</td>
@@ -2471,7 +2471,7 @@ function render_rtt($wrapper) {
                             <tr>
                                 <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
-                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
                                 <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.pump_nozzle}</span></td>
                                 <td>${csa_name}</td>
@@ -2645,7 +2645,7 @@ function render_topups($wrapper) {
                             <tr>
                                 <td style="font-family: monospace; color: #64748b;">${row.name}</td>
                                 <td>${row.date || ""}</td>
-                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${row.shift || ""}</span></td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
                                 <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.card}</span></td>
                                 <td>${csa_name}</td>
@@ -3515,7 +3515,7 @@ function render_station_cards($wrapper) {
                         html += `
                             <tr data-name="${row.name}" data-card="${row.card}" data-csa="${row.csa}" data-receipt="${row.receipt_no}" data-amount="${row.amount}" data-memo="${row.memo || ''}">
                                 <td>${row.name}</td>
-                                <td>${frappe.datetime.str_to_user(row.date)} (${row.shift || ""})</td>
+                                <td>${frappe.datetime.str_to_user(row.date)} (${window.ACTIVE_SHIFT.shift_template || ""})</td>
                                 <td><a href="/app/station-cards/${row.name}">${row.receipt_no}</a></td>
                                 <td>${row.card}</td>
                                 <td>${csa_name}</td>
