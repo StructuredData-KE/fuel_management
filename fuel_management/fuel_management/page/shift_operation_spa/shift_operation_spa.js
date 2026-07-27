@@ -657,7 +657,7 @@ function render_drystock($wrapper) {
     $wrapper.find('#drystock-history-shift-date').text(sDate.split(" ")[0]);
 
     // Calculate Liability CSA
-    let lubes_assignment = (window.ACTIVE_SHIFT.csa_assignments || []).find(a => a.pump_group.toLowerCase().includes('lube'));
+    let lubes_assignment = (window.SHIFT_DOC.assigned_csas || []).find(a => (a.pump_group || '').toLowerCase().includes('lube'));
     if (lubes_assignment) {
         let u = window.USERS_LIST.find(u => u.name === lubes_assignment.csa);
         let name = u ? u.employee_name : lubes_assignment.csa;
@@ -727,8 +727,8 @@ function render_drystock($wrapper) {
         let uom = parseFloat($wrapper.find('#drystock-uom').val()) || 0;
         let price = parseFloat($wrapper.find('#drystock-price').val()) || 0;
         
-        if (!csa || !item || qty <= 0) {
-            frappe.show_alert({message: "Please select CSA, search for a valid Item, and enter quantity.", indicator: "red"});
+        if (!item || qty <= 0) {
+            frappe.show_alert({message: "Please search for a valid Item and enter quantity.", indicator: "red"});
             return;
         }
 
