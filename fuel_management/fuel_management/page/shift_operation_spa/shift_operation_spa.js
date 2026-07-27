@@ -3689,6 +3689,9 @@ function render_station_cards($wrapper) {
 // =========================================================
 // GREASING MODULE
 // =========================================================
+// =========================================================
+// GREASING MODULE
+// =========================================================
 function render_greasing(wrapper) {
     const $wrapper = $(wrapper);
     if(!window.ACTIVE_SHIFT) return;
@@ -3712,9 +3715,16 @@ function render_greasing(wrapper) {
 
     // Populate CSA Dropdown
     let csa_html = '<option value="">Select CSA...</option>';
+    let csa_count = 0;
     (window.SHIFT_DOC.assigned_csas || []).forEach(csa_row => {
         if(csa_row.csa) {
-            csa_html += `<option value="${csa_row.csa}">${csa_row.csa}</option>`;
+            csa_count++;
+            let csa_name = csa_row.csa;
+            if(window.USERS_LIST) {
+                let u = window.USERS_LIST.find(user => user.name === csa_row.csa);
+                if(u) csa_name = u.employee_name || u.full_name;
+            }
+            csa_html += `<option value="${csa_row.csa}">${csa_name}</option>`;
         }
     });
     $wrapper.find('#greasing-csa').html(csa_html);
@@ -3737,6 +3747,9 @@ function render_greasing(wrapper) {
                 });
                 $wrapper.find('#greasing-vehicle-type').html(vt_html);
             }
+        },
+        error: function(err) {
+            frappe.msgprint("Error loading Grease Vehicle Types: " + JSON.stringify(err));
         }
     });
 
