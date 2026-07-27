@@ -3513,9 +3513,8 @@ function render_station_cards($wrapper) {
                         
                         html += `
                             <tr data-name="${row.name}" data-card="${row.card}" data-csa="${row.csa}" data-receipt="${row.receipt_no}" data-amount="${row.amount}" data-memo="${row.memo || ''}">
-                                <td>${frappe.datetime.str_to_user(row.date)}</td>
-                                <td>${row.shift || ""}</td>
-                                <td>${time_val}</td>
+                                <td>${row.name}</td>
+                                <td>${frappe.datetime.str_to_user(row.date)} (${row.shift || ""})</td>
                                 <td><a href="/app/station-cards/${row.name}">${row.receipt_no}</a></td>
                                 <td>${row.card}</td>
                                 <td>${csa_name}</td>
@@ -3528,7 +3527,7 @@ function render_station_cards($wrapper) {
                         `;
                     });
                 }
-                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No card payments recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="7" class="text-center" style="color: #94a3b8; padding: 2rem;">No card payments recorded yet.</td></tr>';
                 $wrapper.find('#list-station-cards-saved').html(html);
 
                 // Action listeners
