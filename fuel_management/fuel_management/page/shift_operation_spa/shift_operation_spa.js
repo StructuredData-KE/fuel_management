@@ -62,7 +62,7 @@ function fetch_active_shift(wrapper) {
         args: {
             doctype: "Shift",
             filters: { status: "Open", owner: frappe.session.user },
-            fields: ["name", "station", "head_csa", "shift_template", "status"],
+            fields: ["name", "station", "head_csa", "shift_template", "shift_date", "status"],
             limit_page_length: 1
         },
         callback: function(r) {
@@ -101,7 +101,8 @@ function lock_ui_for_active_shift($wrapper) {
     
     // Update Badge
     let bShiftName = window.ACTIVE_SHIFT.shift_template ? window.ACTIVE_SHIFT.shift_template : "Shift";
-    $wrapper.find('#active-shift-badge').addClass('active-shift').text(`Active: ${bShiftName} - ${window.ACTIVE_SHIFT.name}`);
+    let formattedDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
+    $wrapper.find('#active-shift-badge').addClass('active-shift').text(`Active: ${formattedDate}(${bShiftName}) - ${window.ACTIVE_SHIFT.name}`);
     
     // Switch to Fuel tab automatically
     $wrapper.find('.nav-item[data-target="tab-fuel"]').click();
