@@ -135,7 +135,7 @@ function load_shift_data($wrapper) {
                 render_drystock($wrapper);
                 if(typeof render_invoices === 'function') render_invoices($wrapper);
                 if(typeof render_customer_payments === 'function') render_customer_payments($wrapper);
-                if(typeof render_station_cards === 'function') render_fleet_cards($wrapper);
+                if(typeof render_station_cards === 'function') render_station_cards($wrapper);
                 if(typeof render_petty_cash === 'function') render_petty_cash($wrapper);
                 if(typeof render_cash_transfers === 'function') render_cash_transfers($wrapper);
             if (target === 'tab-reconcile') {
