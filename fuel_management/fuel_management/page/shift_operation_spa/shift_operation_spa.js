@@ -806,7 +806,7 @@ function refresh_drystock_cart($wrapper) {
         html += `
             <tr data-idx="${idx}">
                 <td style="font-family: monospace; color: #64748b;">${entry_id} (Pending)</td>
-                <td style="color: #64748b;">${date_val} ${time_val}</td>
+                <td style="color: #64748b;">${date_val}</td>
                 <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                 <td>${csa_name || ''}</td>
                 <td>${row.item}</td>
@@ -866,7 +866,7 @@ function refresh_drystock_cart($wrapper) {
         html_saved += `
             <tr>
                 <td style="font-family: monospace; color: #64748b;">${entry_id}</td>
-                <td style="color: #64748b;">${date_val} ${time_val}</td>
+                <td style="color: #64748b;">${date_val}</td>
                 <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                 <td>${csa_name || ''}</td>
                 <td>${row.item}</td>
