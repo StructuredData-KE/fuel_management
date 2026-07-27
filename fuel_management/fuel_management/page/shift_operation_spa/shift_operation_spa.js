@@ -793,7 +793,7 @@ function refresh_drystock_cart($wrapper) {
         
         let entry_id = 1000 + idx + 1;
         let time_val = frappe.datetime.now_time().substring(0, 5);
-        let date_val = frappe.datetime.str_to_user(frappe.datetime.now_date());
+        let date_val = frappe.datetime.str_to_user(window.SHIFT_DOC.shift_date || frappe.datetime.now_date());
         
         let del_btn = is_locked ? `<button class="btn btn-xs btn-danger" disabled>X</button>` : `<button class="btn btn-xs btn-danger btn-remove-drystock">X</button>`;
         
@@ -849,7 +849,7 @@ function refresh_drystock_cart($wrapper) {
         }
         let entry_id = 1000 + (row.idx || (idx + 1));
         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
-        let date_val = row.creation ? frappe.datetime.str_to_user(row.creation.split(" ")[0]) : frappe.datetime.str_to_user(frappe.datetime.now_date());
+        let date_val = frappe.datetime.str_to_user(window.SHIFT_DOC.shift_date || frappe.datetime.now_date());
         
         let del_btn = '';
         if (row.is_invoice_sale) {
