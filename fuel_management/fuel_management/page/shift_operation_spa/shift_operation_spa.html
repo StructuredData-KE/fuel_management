@@ -769,48 +769,48 @@
         <h3>Greasing Sales</h3>
         
         <!-- Inventory Tracking -->
-        <h4 style="margin-top: 1rem; color: #475569;">Greasing Inventory (KG)</h4>
-        <div class="pos-inline-row" style="margin-bottom: 2rem;">
-            <div class="form-group pos-med">
+        <h4 style="margin-top: 1rem; color: #475569; text-align: center;">Greasing Inventory (KG)</h4>
+        <div class="form-grid" style="margin-bottom: 2rem;">
+            <div class="form-group">
                 <label>Opening Balance</label>
                 <input type="number" id="greasing-opening-balance" class="spa-input" placeholder="0.00" step="0.01">
             </div>
-            <div class="form-group pos-med">
+            <div class="form-group">
                 <label>Top-Up</label>
                 <input type="number" id="greasing-top-up" class="spa-input" placeholder="0.00" step="0.01">
             </div>
-            <div class="form-group pos-med">
+            <div class="form-group">
                 <label>Closing Balance</label>
                 <input type="number" id="greasing-closing-balance" class="spa-input" placeholder="0.00" step="0.01">
             </div>
-            <div class="form-group pos-med">
+            <div class="form-group">
                 <label>Total Used</label>
                 <input type="text" id="greasing-total-used" class="spa-input" placeholder="0.00" readonly style="background: #f1f5f9; font-weight: bold;">
             </div>
         </div>
 
         <!-- Sales Entry -->
-        <h4 style="margin-top: 1rem; color: #475569;">New Greasing Sale</h4>
-        <div class="pos-inline-row">
-            <div class="form-group" style="flex: 2;">
-                <label>CSA in Charge</label>
-                <select id="greasing-csa" class="spa-input"></select>
+        <div style="border-top: 1px solid #e2e8f0; margin: 2rem 0; padding-top: 1.5rem;">
+            <h4 style="margin-bottom: 1rem; color: #475569; text-align: center;">Record New Greasing Sale</h4>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>CSA in Charge</label>
+                    <select id="greasing-csa" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>Vehicle Type</label>
+                    <select id="greasing-vehicle-type" class="spa-input"></select>
+                </div>
+                <div class="form-group">
+                    <label>No. of Vehicles</label>
+                    <input type="number" id="greasing-num-vehicles" class="spa-input" placeholder="1" value="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>Amount / Vehicle</label>
+                    <input type="text" id="greasing-amount-per" class="spa-input" placeholder="0.00" readonly>
+                </div>
             </div>
-            <div class="form-group" style="flex: 2;">
-                <label>Vehicle Type</label>
-                <select id="greasing-vehicle-type" class="spa-input"></select>
-            </div>
-            <div class="form-group pos-small">
-                <label>No. of Vehicles</label>
-                <input type="number" id="greasing-num-vehicles" class="spa-input" placeholder="1" value="1" min="1">
-            </div>
-            <div class="form-group pos-med">
-                <label>Amount / Vehicle</label>
-                <input type="text" id="greasing-amount-per" class="spa-input" placeholder="0.00" readonly>
-            </div>
-            <div class="form-group pos-btn">
-                <button class="btn-secondary" id="btn-add-greasing" style="height: 42px; margin-top: 24px;">+ Add</button>
-            </div>
+            <button class="btn-primary" id="btn-add-greasing" style="width: 100%; margin-top: 1rem;">+ Add Greasing Sale</button>
         </div>
 
         <!-- Sales History -->
