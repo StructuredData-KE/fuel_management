@@ -791,20 +791,29 @@ function refresh_drystock_cart($wrapper) {
             if(u) csa_name = u.employee_name;
         }
         
-        let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Pending...";
-        let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
+        let entry_id = 1000 + idx + 1;
+        let time_val = frappe.datetime.now_time().substring(0, 5);
+        let date_val = frappe.datetime.str_to_user(frappe.datetime.now_date());
         
         let del_btn = is_locked ? `<button class="btn btn-xs btn-danger" disabled>X</button>` : `<button class="btn btn-xs btn-danger btn-remove-drystock">X</button>`;
         
+        let category = '';
+        if (window.DRYSTOCK_ITEMS) {
+            let i = window.DRYSTOCK_ITEMS.find(i => i.item_code === row.item);
+            if (i) category = i.item_group || '';
+        }
+
         html += `
             <tr data-idx="${idx}">
-                <td style="font-family: monospace; color: #64748b;">${entry_id}</td>
-                <td style="color: #64748b;">${time_val}</td>
+                <td style="font-family: monospace; color: #64748b;">${entry_id} (Pending)</td>
+                <td style="color: #64748b;">${date_val} ${time_val}</td>
+                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                 <td>${csa_name || ''}</td>
                 <td>${row.item}</td>
+                <td>${category}</td>
                 <td>${row.quantity}</td>
                 <td>${row.total_volume || 0}</td>
-                <td>${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                 <td>${del_btn}</td>
             </tr>
         `;
@@ -818,19 +827,30 @@ function refresh_drystock_cart($wrapper) {
     let filter_search = ($wrapper.find('#drystock-filter-search').val() || '').toLowerCase();
     
     let html_saved = '';
+    let total_amount_saved = 0;
     (window.SHIFT_DOC.inventory_sales || []).forEach((row, idx) => {
         let row_date = row.creation ? row.creation.split(" ")[0] : frappe.datetime.now_date();
         if (start_date && row_date < start_date) return;
         if (end_date && row_date > end_date) return;
-        if (filter_search && row.item && !row.item.toLowerCase().includes(filter_search)) return;
-        
+        let category = '';
+        if (window.DRYSTOCK_ITEMS) {
+            let i = window.DRYSTOCK_ITEMS.find(i => i.item_code === row.item);
+            if (i) category = i.item_group || '';
+        }
+
+        if (filter_search && 
+            !(row.item && row.item.toLowerCase().includes(filter_search)) && 
+            !(category && category.toLowerCase().includes(filter_search))) return;
+            
         let csa_name = row.sold_by;
         if (window.USERS_LIST) {
             let u = window.USERS_LIST.find(u => u.name === row.sold_by);
             if(u) csa_name = u.employee_name;
         }
-        let entry_id = row.name && !row._is_new ? row.name.substring(0, 8) : "Saved";
+        let entry_id = 1000 + (row.idx || (idx + 1));
         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : frappe.datetime.now_time().substring(0, 5);
+        let date_val = row.creation ? frappe.datetime.str_to_user(row.creation.split(" ")[0]) : frappe.datetime.str_to_user(frappe.datetime.now_date());
+        
         let del_btn = '';
         if (row.is_invoice_sale) {
             del_btn = `<span class="badge" style="background-color: var(--blue-50); color: var(--blue-600); border: 1px solid var(--blue-200);">Invoice Sale</span>`;
@@ -841,18 +861,25 @@ function refresh_drystock_cart($wrapper) {
              <button class="btn btn-xs btn-danger btn-remove-saved" data-idx="${idx}">X</button>`;
         }
         
+        total_amount_saved += parseFloat(row.amount || 0);
+
         html_saved += `
             <tr>
                 <td style="font-family: monospace; color: #64748b;">${entry_id}</td>
-                <td style="color: #64748b;">${time_val}</td>
+                <td style="color: #64748b;">${date_val} ${time_val}</td>
+                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                 <td>${csa_name || ''}</td>
                 <td>${row.item}</td>
+                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${category}</span></td>
                 <td>${row.quantity}</td>
-                <td>${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                <td>${row.total_volume || 0}</td>
+                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                 <td>${del_btn}</td>
             </tr>
         `;
     });
+    
+    $wrapper.find('#drystock-history-total').text('Total Amount: KES ' + (total_amount_saved + total_amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
     $wrapper.find('#list-drystock-saved').html(html_saved);
     
     $wrapper.find('.btn-edit-saved').off('click').on('click', function() {
@@ -1018,13 +1045,21 @@ function load_dropdowns(wrapper) {
         },
         callback: function(r) {
             if(r.message) {
-                window.DRYSTOCK_ITEMS = r.message;
-                let options = '';
-                r.message.forEach(item => {
-                    // Populate datalist with name - code so it's readable but parseable
-                    options += `<option value="${item.item_name} - ${item.item_code}"></option>`;
+                frappe.call({
+                    method: "frappe.client.get_list",
+                    args: { doctype: "Item", fields: ["name", "item_group"], limit_page_length: 500 },
+                    callback: function(r2) {
+                        let groups = {};
+                        if(r2.message) r2.message.forEach(i => groups[i.name] = i.item_group);
+                        r.message.forEach(item => item.item_group = groups[item.item_code] || "");
+                        window.DRYSTOCK_ITEMS = r.message;
+                        let options = '';
+                        r.message.forEach(item => {
+                            options += `<option value="${item.item_name} - ${item.item_code}"></option>`;
+                        });
+                        $(wrapper).find('#drystock-items-list').html(options);
+                    }
                 });
-                $(wrapper).find('#drystock-items-list').html(options);
             }
         }
     });
