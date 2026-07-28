@@ -1846,7 +1846,7 @@ function refresh_invoice_cart($wrapper) {
     (window.SHIFT_DOC.invoices || []).forEach((row, idx) => {
         let searchStr = `${row.customer} ${row.entry_number} ${row.vehicle_registration}`.toLowerCase();
         if (filter_search && !searchStr.includes(filter_search)) return;
-        let c = (window.CUSTOMERS || []).find(c => c.name === row.customer);
+        let c = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
         let customer_name = c ? c.customer_name : row.customer;
         
         let csa_name = row.csa;
@@ -1897,7 +1897,7 @@ function refresh_invoice_cart($wrapper) {
         
         frappe.confirm('This will load the invoice back into the entry form and remove it from history. Continue?', () => {
             // Populate form
-            let c = (window.CUSTOMERS || []).find(c => c.name === row.customer);
+            let c = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
             let customer_name = c ? c.customer_name : '';
             $wrapper.find('#invoice-customer-input').val(`${row.customer} - ${customer_name}`);
             $wrapper.find('#invoice-customer-input').trigger('change');
