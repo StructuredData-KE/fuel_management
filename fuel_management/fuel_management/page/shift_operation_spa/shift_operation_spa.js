@@ -1622,6 +1622,7 @@ function render_invoices($wrapper) {
                     custOpts += `<option value="${c.name}">${c.customer_name}</option>`;
                 });
                 $wrapper.find('#invoice-customers-list').html(custOpts);
+                refresh_invoice_cart($wrapper);
             }
         }
     });
