@@ -3842,17 +3842,15 @@ function render_greasing(wrapper) {
         
         $btn.html('<span class="spinner"></span> Saving...').prop('disabled', true);
 
+        let doc = window.SHIFT_DOC;
+        doc.grease_opening_balance = op;
+        doc.grease_top_up = top;
+        doc.grease_closing_balance = cl;
+        
         frappe.call({
-            method: "frappe.client.set_value",
+            method: "frappe.client.save",
             args: {
-                doctype: "Shift",
-                name: window.ACTIVE_SHIFT.name,
-                fieldname: {
-                    "grease_opening_balance": op,
-                    "grease_top_up": top,
-                    "grease_closing_balance": cl,
-                    "greasing_sales": window.SHIFT_DOC.greasing_sales || []
-                }
+                doc: doc
             },
             callback: function(r) {
                 if(!r.exc) {
