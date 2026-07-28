@@ -3537,7 +3537,7 @@ function load_csa_reconciliation($wrapper, csa) {
     $wrapper.find('#recon-variance').text('0.00').css('color', '#94a3b8');
     
     frappe.call({
-        method: "fuel_management.fuel_management.fuel_management.api.get_csa_reconciliation_data",
+        method: "fuel_management.fuel_management.api.get_csa_reconciliation_data",
         args: { shift_id: shift_name, csa_id: csa },
         callback: function(r) {
             if(r.message) {
