@@ -1582,15 +1582,19 @@ function render_invoices($wrapper) {
 
     // 2. Fetch Active CSAs
     let csaOptions = '<option value="">Select CSA...</option>';
-    (window.ACTIVE_SHIFT.csa_assignments || []).forEach(a => {
-        if(a.csa) {
-            let u = window.USERS_LIST.find(u => u.name === a.csa);
-            let name = u ? u.employee_name : a.csa;
-            // avoid duplicates
-            if(csaOptions.indexOf(`value="${a.csa}"`) === -1) {
-                csaOptions += `<option value="${a.csa}">${name}</option>`;
-            }
-        }
+    let allowed_csas = [];
+    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
+        if(row.csa) allowed_csas.push(row.csa);
+    });
+    
+    // Remove duplicates
+    allowed_csas = [...new Set(allowed_csas)];
+    
+    allowed_csas.forEach(csa => {
+        let u = window.USERS_LIST.find(u => u.name === csa);
+        let name = u ? u.employee_name : csa;
+        csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#invoice-csa').html(csaOptions);
 
