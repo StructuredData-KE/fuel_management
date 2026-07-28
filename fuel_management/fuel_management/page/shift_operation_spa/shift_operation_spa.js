@@ -1674,7 +1674,9 @@ function render_invoices($wrapper) {
 
     // Add to Cart
     $wrapper.find('#btn-add-invoice-item').off('click').on('click', function() {
-        let customer = $wrapper.find('#invoice-customer-input').val();
+        let customer_raw = $wrapper.find('#invoice-customer-input').val();
+        let customer = customer_raw ? customer_raw.split(' - ')[0].trim() : '';
+        
         let csa = $wrapper.find('#invoice-csa').val();
         let po = $wrapper.find('#invoice-po').val();
         let vehicle = $wrapper.find('#invoice-vehicle').val();
@@ -1697,7 +1699,7 @@ function render_invoices($wrapper) {
             csa: csa,
             purchase_order: po,
             vehicle_registration: vehicle,
-            item: item.name,
+            item: item.item_code,
             item_name: item.item_name,
             quantity: qty,
             rate: rate,
