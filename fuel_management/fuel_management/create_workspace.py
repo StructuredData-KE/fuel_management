@@ -12,7 +12,7 @@ def execute():
         doc.label = "Fuel Management"
         doc.title = "Fuel Management"
         doc.module = "Fuel Management"
-        doc.is_standard = 1
+        doc.is_standard = 0
         doc.public = 1
         doc.icon = "indicator-blue"
         
