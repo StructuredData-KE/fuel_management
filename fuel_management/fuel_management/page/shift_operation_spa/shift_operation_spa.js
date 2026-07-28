@@ -1833,7 +1833,7 @@ function refresh_invoice_cart($wrapper) {
         html_cart = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>`;
     }
     $wrapper.find('#list-invoice-cart').html(html_cart);
-    $wrapper.find('#invoice-cart-total-amount').text(frappe.format(grand_total, {fieldtype: 'Currency'}));
+    $wrapper.find('#invoice-cart-total-amount').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
 
     $wrapper.find('.btn-remove-invoice-cart').off('click').on('click', function() {
         let idx = parseInt($(this).attr('data-idx'));
@@ -2961,8 +2961,8 @@ function render_purchases($wrapper) {
             net = grand_total / 1.16;
         }
         
-        $wrapper.find('#pur-net').text(frappe.format(items_total, {fieldtype: 'Currency'})); // display items total here
-        $wrapper.find('#pur-total').text(frappe.format(grand_total, {fieldtype: 'Currency'}));
+        $wrapper.find('#pur-net').html(frappe.format(items_total, {fieldtype: 'Currency'})); // display items total here
+        $wrapper.find('#pur-total').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
     };
 
     $wrapper.find('#pur-transport-charge, #pur-vat').on('input change', refresh_purchase_cart);
@@ -3851,7 +3851,7 @@ function render_greasing(wrapper) {
         
         if(!tbody) tbody = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">No greasing sales found</td></tr>';
         $wrapper.find('#list-greasing-sales').html(tbody);
-        $wrapper.find('#greasing-total-sales-amount').text(frappe.format(total, {fieldtype: 'Currency'}));
+        $wrapper.find('#greasing-total-sales-amount').html(frappe.format(total, {fieldtype: 'Currency'}));
 
         // Delete Handler
         $wrapper.find('.btn-delete-greasing').off('click').on('click', function() {
