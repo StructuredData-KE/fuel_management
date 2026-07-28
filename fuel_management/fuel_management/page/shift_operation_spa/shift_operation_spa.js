@@ -16,13 +16,9 @@ frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
         if(jqXHR.status === 403) {
             let details = "Unknown";
             try {
-                if(typeof ajaxSettings.data === 'string') {
-                    let urlParams = new URLSearchParams(ajaxSettings.data);
-                    if(urlParams.get('cmd') === 'frappe.client.get_list') {
-                        details = "Doctype: " + urlParams.get('doctype');
-                    } else {
-                        details = "Cmd: " + urlParams.get('cmd');
-                    }
+                details = "URL: " + ajaxSettings.url;
+                if(typeof ajaxSettings.data === 'string' && ajaxSettings.data.length > 0) {
+                    details += "<br>Data: " + ajaxSettings.data;
                 }
             } catch(e) {}
             frappe.msgprint({
