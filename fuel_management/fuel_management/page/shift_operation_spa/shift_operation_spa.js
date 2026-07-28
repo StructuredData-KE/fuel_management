@@ -1685,7 +1685,7 @@ function render_invoices($wrapper) {
         let vehicle = $wrapper.find('#invoice-vehicle').val();
         
         let item_val = $wrapper.find('#invoice-item-input').val();
-        let item = (window.INVOICE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === item_val);
+        let item = (window.INVOICE_ITEMS || []).find(i => `${i.item_name} - ${i.item_code}` === item_val);
         
         let amount = parseFloat($wrapper.find('#invoice-amount').val()) || 0;
         let rate = parseFloat($wrapper.find('#invoice-rate').val()) || 0;
