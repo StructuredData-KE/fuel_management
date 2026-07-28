@@ -1220,7 +1220,7 @@ function load_dropdowns(wrapper) {
         args: {
             doctype: "Employee",
             filters: { status: "Active" },
-            fields: ["name", "employee_name"]
+            fields: ["name", "employee_name", "user_id"]
         },
         callback: function(r) {
             if(r.message) {
@@ -1583,7 +1583,10 @@ function render_invoices($wrapper) {
     // 2. Fetch Active CSAs
     let csaOptions = '<option value="">Select CSA...</option>';
     let allowed_csas = [];
-    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    if(window.SHIFT_DOC.head_csa) {
+        let head_emp = window.USERS_LIST ? window.USERS_LIST.find(u => u.user_id === window.SHIFT_DOC.head_csa) : null;
+        if (head_emp) allowed_csas.push(head_emp.name);
+    }
     (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
         if(row.csa) allowed_csas.push(row.csa);
     });
@@ -1683,7 +1686,11 @@ function render_invoices($wrapper) {
         let vehicle = $wrapper.find('#invoice-vehicle').val();
         
         let item_val = $wrapper.find('#invoice-item-input').val();
-        let item = (window.INVOICE_ITEMS || []).find(i => `${i.item_name} - ${i.item_code}` === item_val);
+        let item = (window.INVOICE_ITEMS || []).find(i => 
+            `${i.item_name} - ${i.item_code}` === item_val || 
+            i.item_name.toLowerCase() === item_val.toLowerCase() || 
+            i.item_code.toLowerCase() === item_val.toLowerCase()
+        );
         
         let amount = parseFloat($wrapper.find('#invoice-amount').val()) || 0;
         let rate = parseFloat($wrapper.find('#invoice-rate').val()) || 0;
@@ -1876,10 +1883,10 @@ function refresh_invoice_cart($wrapper) {
                 <td><span class="badge" style="background: #e2e8f0; color: #0f172a;">${row.entry_number || '-'}</span></td>
                 <td style="color: #64748b;">${sDate.split(" ")[0]}</td>
                 <td style="color: #64748b;">${shiftName}</td>
-                <td><strong>${customer_name || ''}</strong></td>
+                <td><strong>${customer_name || row.customer || ''}</strong></td>
                 <td>${row.purchase_order || '-'}</td>
                 <td>${row.vehicle_registration || '-'}</td>
-                <td>${row.item_name || row.item || ''}</td>
+                <td>${row.item_name || (function(){ let i_obj = (window.INVOICE_ITEMS || []).find(i => i.item_code === row.item); return i_obj ? i_obj.item_name : row.item; })() || ''}</td>
                 <td>${row.quantity || 0}</td>
                 <td>${csa_name || ''}</td>
                 <td><strong>${frappe.format(row.amount, {fieldtype: 'Currency'})}</strong></td>
@@ -1908,7 +1915,9 @@ function refresh_invoice_cart($wrapper) {
             $wrapper.find('#invoice-csa').val(row.csa);
             $wrapper.find('#invoice-po').val(row.purchase_order);
             $wrapper.find('#invoice-vehicle').val(row.vehicle_registration);
-            $wrapper.find('#invoice-item-input').val(`${row.item_name} - ${row.item}`);
+            let i_obj = (window.INVOICE_ITEMS || []).find(i => i.item_code === row.item);
+            let i_name = row.item_name || (i_obj ? i_obj.item_name : '');
+            $wrapper.find('#invoice-item-input').val(`${i_name} - ${row.item}`);
             $wrapper.find('#invoice-qty').val(row.quantity);
             $wrapper.find('#invoice-rate').val(row.rate);
             $wrapper.find('#invoice-amount').val(row.amount);
@@ -2004,22 +2013,14 @@ function render_customer_payments($wrapper) {
         $wrapper.find(`#cp-${targetView}-view`).addClass('active');
     });
 
-    // 2. Populate CSAs
+    // 2. Populate CSAs (All available CSAs in the station)
     let csaOptions = '<option value="">Select CSA...</option>';
-    let allowed_csas = [];
-    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
-    (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
-        if(row.csa) allowed_csas.push(row.csa);
-    });
-    
-    // Remove duplicates
-    allowed_csas = [...new Set(allowed_csas)];
-    
-    allowed_csas.forEach(csa => {
-        let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.employee_name : csa;
-        csaOptions += `<option value="${csa}">${name}</option>`;
-    });
+    if (window.USERS_LIST) {
+        window.USERS_LIST.forEach(u => {
+            let name = u.employee_name || u.full_name || u.name;
+            csaOptions += `<option value="${u.name}">${name}</option>`;
+        });
+    }
     $wrapper.find('#cp-csa').html(csaOptions);
 
     // 3. Populate Customers (reuses window.CUSTOMERS_LIST fetched by invoices)
@@ -2077,11 +2078,24 @@ function render_customer_payments($wrapper) {
                 if(r.message) {
                     r.message.forEach(row => {
                         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
-                        let csa_name = row.csa;
-                        if (window.USERS_LIST) {
+                        let csa_name = row.csa || "N/A";
+                        if (row.csa && window.USERS_LIST) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
                             if(u) csa_name = u.employee_name;
                         }
+                        
+                        let cust = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
+                        let customer_name = cust ? cust.customer_name : row.customer;
+                        
+                        let del_btn = is_locked ? 
+                            `<button class="btn btn-xs btn-danger" disabled>X</button>` :
+                            `<button class="btn btn-xs btn-danger btn-delete-cp" data-name="${row.name}">X</button>`;
+                            
+                        let edit_btn = is_locked ?
+                            `<button class="btn btn-xs btn-default" disabled>Edit</button>` :
+                            `<button class="btn btn-xs btn-default btn-edit-cp" data-name="${row.name}" data-customer="${row.customer}" data-csa="${row.csa}" data-mode="${row.mode_of_payment}" data-amount="${row.amount}">Edit</button>`;
+                            
+                        let action_html = `<div style="display:flex; gap:0.5rem;">${edit_btn}${del_btn}</div>`;
                         
                         html += `
                             <tr>
@@ -2089,16 +2103,58 @@ function render_customer_payments($wrapper) {
                                 <td>${row.date || ""}</td>
                                 <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
                                 <td style="color: #64748b;">${time_val}</td>
-                                <td>${row.customer}</td>
+                                <td><strong>${customer_name}</strong></td>
                                 <td>${csa_name}</td>
-                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.mode_of_payment}</span></td>
-                                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569;">${row.mode_of_payment || ""}</span></td>
+                                <td style="font-weight: 600; text-align:right;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td>${action_html}</td>
                             </tr>
                         `;
                     });
                 }
-                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No payments recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="9" class="text-center" style="color: #94a3b8; padding: 2rem;">No payments recorded yet.</td></tr>';
                 $wrapper.find('#list-customer-payments-saved').html(html);
+                
+                // Bind Edit and Delete handlers
+                $wrapper.find('.btn-delete-cp').off('click').on('click', function() {
+                    let cp_name = $(this).attr('data-name');
+                    frappe.confirm('Are you sure you want to delete this payment?', () => {
+                        frappe.call({
+                            method: "frappe.client.delete",
+                            args: { doctype: "Customer Payment", name: cp_name },
+                            callback: function(del_r) {
+                                if(!del_r.exc) {
+                                    frappe.show_alert({message: "Payment deleted", indicator: "green"});
+                                    fetch_history();
+                                }
+                            }
+                        });
+                    });
+                });
+                
+                $wrapper.find('.btn-edit-cp').off('click').on('click', function() {
+                    let $btn = $(this);
+                    let cp_name = $btn.attr('data-name');
+                    
+                    frappe.confirm('This will load the payment back into the entry form and delete it from history. Continue?', () => {
+                        $wrapper.find('#cp-customer-input').val($btn.attr('data-customer'));
+                        $wrapper.find('#cp-customer-input').trigger('change');
+                        $wrapper.find('#cp-csa').val($btn.attr('data-csa'));
+                        $wrapper.find('#cp-mode').val($btn.attr('data-mode'));
+                        $wrapper.find('#cp-amount').val($btn.attr('data-amount'));
+                        
+                        frappe.call({
+                            method: "frappe.client.delete",
+                            args: { doctype: "Customer Payment", name: cp_name },
+                            callback: function(del_r) {
+                                if(!del_r.exc) {
+                                    $wrapper.find('#tab-customer-payments .seg-btn[data-view="entry"]').click();
+                                    fetch_history();
+                                }
+                            }
+                        });
+                    });
+                });
             }
         });
     };
@@ -2118,8 +2174,8 @@ function render_customer_payments($wrapper) {
         let amount = parseFloat($wrapper.find('#cp-amount').val()) || 0;
         let memo = $wrapper.find('#cp-memo').val();
 
-        if (!customer || !csa || !mode || amount <= 0) {
-            frappe.show_alert({message: "Customer, CSA, Mode of Payment, and valid Amount are required.", indicator: "red"});
+        if (!customer || !mode || amount <= 0) {
+            frappe.show_alert({message: "Customer, Mode of Payment, and valid Amount are required.", indicator: "red"});
             return;
         }
 
@@ -2185,7 +2241,10 @@ function render_fleet_cards($wrapper) {
     // 2. Populate CSAs
     let csaOptions = '<option value="">Select CSA...</option>';
     let allowed_csas = [];
-    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    if(window.SHIFT_DOC.head_csa) {
+        let head_emp = window.USERS_LIST ? window.USERS_LIST.find(u => u.user_id === window.SHIFT_DOC.head_csa) : null;
+        if (head_emp) allowed_csas.push(head_emp.name);
+    }
     (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
         if(row.csa) allowed_csas.push(row.csa);
     });
@@ -2336,7 +2395,10 @@ function render_station_expenses($wrapper) {
     // 2. Populate CSAs
     let csaOptions = '<option value="">Select CSA...</option>';
     let allowed_csas = [];
-    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    if(window.SHIFT_DOC.head_csa) {
+        let head_emp = window.USERS_LIST ? window.USERS_LIST.find(u => u.user_id === window.SHIFT_DOC.head_csa) : null;
+        if (head_emp) allowed_csas.push(head_emp.name);
+    }
     (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
         if(row.csa) allowed_csas.push(row.csa);
     });
@@ -2535,7 +2597,8 @@ function render_rtt($wrapper) {
 
         frappe.db.get_value('Pump Nozzle', nozzle, 'pump_group', function(r) {
             if(r && r.pump_group) {
-                let csa = window.SHIFT_DOC.head_csa;
+                let head_emp = window.USERS_LIST ? window.USERS_LIST.find(u => u.user_id === window.SHIFT_DOC.head_csa) : null;
+                let csa = head_emp ? head_emp.name : null;
                 let assigned = (window.SHIFT_DOC.assigned_csas || []).find(a => a.pump_group === r.pump_group);
                 if(assigned && assigned.csa) csa = assigned.csa;
 
@@ -2697,7 +2760,11 @@ function render_topups($wrapper) {
 
     // 2. Setup CSA Dropdown
     let csaOptions = '<option value="">Select CSA...</option>';
-    let availableCSAs = [window.SHIFT_DOC.head_csa];
+    let availableCSAs = [];
+    if(window.SHIFT_DOC.head_csa) {
+        let head_emp = window.USERS_LIST ? window.USERS_LIST.find(u => u.user_id === window.SHIFT_DOC.head_csa) : null;
+        if (head_emp) availableCSAs.push(head_emp.name);
+    }
     (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
         if(row.csa) availableCSAs.push(row.csa);
     });
@@ -3415,117 +3482,236 @@ function load_cash_transfer_history($wrapper) {
 // ==========================================
 function render_reconcile(wrapper) {
     const $wrapper = $(wrapper);
-    
-    // We need to fetch all components asynchronously and then calculate
-    window.RECONCILE_DATA = {
-        fuel_sales: 0,
-        drystock_sales: 0,
-        expenses: 0,
-        fleet_drops: 0
-    };
-    
     if(!window.ACTIVE_SHIFT) return;
+    
+    // Populate CSA selector
+    let csaOptions = '<option value="">-- Select CSA to Reconcile --</option>';
+    let allowed_csas = [];
+    if(window.SHIFT_DOC && window.SHIFT_DOC.head_csa) {
+        allowed_csas.push(window.SHIFT_DOC.head_csa);
+    }
+    if(window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas) {
+        window.SHIFT_DOC.assigned_csas.forEach(row => {
+            if(row.csa) allowed_csas.push(row.csa);
+        });
+    }
+    allowed_csas = [...new Set(allowed_csas)];
+    
+    allowed_csas.forEach(csa => {
+        let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === csa) : null;
+        let name = u ? (u.employee_name || u.full_name) : csa;
+        csaOptions += `<option value="${csa}">${name}</option>`;
+    });
+    
+    $wrapper.find('#recon-csa-select').html(csaOptions);
+    
+    // Bind CSA selection
+    $wrapper.find('#recon-csa-select').off('change').on('change', function() {
+        let csa = $(this).val();
+        if(!csa) {
+            $wrapper.find('#recon-csa-container').hide();
+            return;
+        }
+        $wrapper.find('#recon-csa-container').show();
+        load_csa_reconciliation($wrapper, csa);
+    });
+    
+    // Bind Actual Cash input
+    $wrapper.find('#recon-actual-cash').off('input').on('input', function() {
+        calculate_csa_variance($wrapper);
+    });
+    
+    // Bind Save
+    $wrapper.find('#btn-save-recon').off('click').on('click', function() {
+        save_csa_reconciliation($wrapper);
+    });
+    
+    load_reconciliation_history($wrapper);
+}
+
+function load_csa_reconciliation($wrapper, csa) {
     let shift_name = window.ACTIVE_SHIFT.name;
     
-    // 1. Calculate Fuel Sales from loaded Shift Doc
-    let fuel = 0;
-    if(window.SHIFT_DOC && window.SHIFT_DOC.pump_meter_readings) {
-        window.SHIFT_DOC.pump_meter_readings.forEach(x => fuel += (x.amount || 0));
-    }
-    window.RECONCILE_DATA.fuel_sales = fuel;
-    update_reconcile_ui($wrapper);
+    // Reset UI
+    $wrapper.find('#recon-actual-cash').val('');
+    $wrapper.find('#recon-variance').text('0.00').css('color', '#94a3b8');
     
-    // 2. Calculate Dry Stock Sales from loaded Shift Doc
-    let dry = 0;
-    if(window.SHIFT_DOC && window.SHIFT_DOC.inventory_sales) {
-        window.SHIFT_DOC.inventory_sales.forEach(x => dry += (x.amount || 0));
-    }
-    window.RECONCILE_DATA.drystock_sales = dry;
-    update_reconcile_ui($wrapper);
-    
-    // 3. Fetch Expenses & Petty Cash (Station Expense + Station Petty Cash Entry)
     frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "Station Expense",
-            filters: { shift: shift_name },
-            fields: ["amount"]
-        },
+        method: "fuel_management.fuel_management.fuel_management.api.get_csa_reconciliation_data",
+        args: { shift_id: shift_name, csa_id: csa },
         callback: function(r) {
-            let exp = 0;
             if(r.message) {
-                r.message.forEach(x => exp += (x.amount || 0));
-            }
-            
-            // Also fetch petty cash
-            frappe.call({
-                method: "frappe.client.get_list",
-                args: {
-                    doctype: "Station Petty Cash Entry",
-                    filters: { shift: shift_name },
-                    fields: ["amount"]
-                },
-                callback: function(r2) {
-                    if(r2.message) {
-                        r2.message.forEach(x => exp += (x.amount || 0));
-                    }
-                    window.RECONCILE_DATA.expenses = exp;
-                    update_reconcile_ui($wrapper);
+                window.CURRENT_RECON = r.message;
+                window.CURRENT_RECON.csa = csa;
+                
+                // Liabilities
+                $wrapper.find('.meter-breakdown-row').remove();
+                if (r.message.meter_sales_breakdown && r.message.meter_sales_breakdown.length > 0) {
+                    $wrapper.find('#recon-meter-sales').text(format_currency(r.message.meter_sales));
+                    let html = '';
+                    r.message.meter_sales_breakdown.forEach(b => {
+                        html += `<tr class="meter-breakdown-row"><td style="padding: 0.2rem 0 0.2rem 1.5rem; color: #64748b; font-size: 0.9rem;">&#8627; ${b.pump_group}</td><td style="text-align: right; color: #64748b; font-size: 0.9rem;">${format_currency(b.amount)}</td></tr>`;
+                    });
+                    $wrapper.find('#recon-meter-sales').parent().after(html);
+                } else {
+                    $wrapper.find('#recon-meter-sales').text(format_currency(r.message.meter_sales));
                 }
-            });
-        }
-    });
-    
-    // 4. Fetch Fleet Card Drops
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "Fleet Card Shift Summary",
-            filters: { shift: shift_name },
-            fields: ["total_csa_drops"]
-        },
-        callback: function(r) {
-            let fleet = 0;
-            if(r.message) {
-                r.message.forEach(x => fleet += (x.total_csa_drops || 0));
+                
+                $wrapper.find('#recon-inventory-sales').text(format_currency(r.message.inventory_sales));
+                $wrapper.find('#recon-greasing-sales').text(format_currency(r.message.greasing_sales));
+                $wrapper.find('#recon-customer-payments').text(format_currency(r.message.customer_payments));
+                
+                let tot_liab = r.message.meter_sales + r.message.inventory_sales + r.message.greasing_sales + r.message.customer_payments;
+                $wrapper.find('#recon-total-liabilities').text(format_currency(tot_liab));
+                window.CURRENT_RECON.total_liabilities = tot_liab;
+                
+                // Deductions
+                $wrapper.find('#recon-mpesa').text(format_currency(r.message.mpesa));
+                $wrapper.find('#recon-invoices').text(format_currency(r.message.invoices));
+                $wrapper.find('#recon-cards').text(format_currency(r.message.cards));
+                $wrapper.find('#recon-expenses').text(format_currency(r.message.expenses));
+                $wrapper.find('#recon-rtt').text(format_currency(r.message.rtt_deductions));
+                
+                let tot_deduct = r.message.mpesa + r.message.invoices + r.message.cards + r.message.expenses + r.message.rtt_deductions;
+                $wrapper.find('#recon-total-deductions').text(format_currency(tot_deduct));
+                window.CURRENT_RECON.total_deductions = tot_deduct;
+                
+                // Expected
+                let expected = tot_liab - tot_deduct;
+                $wrapper.find('#recon-expected-cash').text(format_currency(expected));
+                window.CURRENT_RECON.expected_cash = expected;
+                
+                calculate_csa_variance($wrapper);
             }
-            window.RECONCILE_DATA.fleet_drops = fleet;
-            update_reconcile_ui($wrapper);
         }
-    });
-    
-    // Listen to actual cash inputs
-    $wrapper.find('#actual-cash-input, #actual-drystock-cash-input').off('input').on('input', function() {
-        update_reconcile_ui($wrapper);
     });
 }
 
-function update_reconcile_ui($wrapper) {
-    let d = window.RECONCILE_DATA;
-    if(!d) return;
+function calculate_csa_variance($wrapper) {
+    if(!window.CURRENT_RECON) return;
+    let expected = window.CURRENT_RECON.expected_cash || 0;
+    let actual = parseFloat($wrapper.find('#recon-actual-cash').val()) || 0;
+    let variance = actual - expected;
     
-    $wrapper.find('#rec-fuel-sales').text(format_currency(d.fuel_sales));
-    $wrapper.find('#rec-drystock-sales').text(format_currency(d.drystock_sales));
-    $wrapper.find('#rec-expenses').text(format_currency(d.expenses));
-    $wrapper.find('#rec-fleet-drops').text(format_currency(d.fleet_drops));
-    
-    // Net Expected = Fuel + Dry - Expenses - FleetDrops
-    let net = d.fuel_sales + d.drystock_sales - d.expenses - d.fleet_drops;
-    $wrapper.find('#rec-net-expected').text(format_currency(net));
-    
-    // Actual Cash
-    let actual_fuel = parseFloat($wrapper.find('#actual-cash-input').val()) || 0;
-    let actual_dry = parseFloat($wrapper.find('#actual-drystock-cash-input').val()) || 0;
-    let total_actual = actual_fuel + actual_dry;
-    
-    let variance = total_actual - net;
-    let $var = $wrapper.find('#rec-variance');
+    let $var = $wrapper.find('#recon-variance');
     $var.text(format_currency(variance));
     if (variance < 0) {
         $var.css('color', '#dc2626');
     } else {
         $var.css('color', '#16a34a');
     }
+}
+
+function save_csa_reconciliation($wrapper) {
+    if(!window.CURRENT_RECON) return;
+    let actual = parseFloat($wrapper.find('#recon-actual-cash').val());
+    if(isNaN(actual)) {
+        frappe.msgprint("Please enter the actual cash submitted.");
+        return;
+    }
+    
+    let $btn = $wrapper.find('#btn-save-recon');
+    $btn.prop('disabled', true);
+    $btn.find('.spinner').removeClass('hidden');
+    
+    frappe.call({
+        method: "frappe.client.insert",
+        args: {
+            doc: {
+                doctype: "Shift Cash Reconciliation",
+                shift: window.ACTIVE_SHIFT.name,
+                csa: window.CURRENT_RECON.csa,
+                manager: frappe.session.user,
+                timestamp: frappe.datetime.now_datetime(),
+                
+                meter_sales: window.CURRENT_RECON.meter_sales,
+                inventory_sales: window.CURRENT_RECON.inventory_sales,
+                greasing_sales: window.CURRENT_RECON.greasing_sales,
+                customer_payments: window.CURRENT_RECON.customer_payments,
+                
+                mpesa: window.CURRENT_RECON.mpesa,
+                invoices: window.CURRENT_RECON.invoices,
+                cards: window.CURRENT_RECON.cards,
+                expenses: window.CURRENT_RECON.expenses,
+                rtt_deductions: window.CURRENT_RECON.rtt_deductions,
+                
+                actual_cash: actual
+            }
+        },
+        callback: function(r) {
+            $btn.prop('disabled', false);
+            $btn.find('.spinner').addClass('hidden');
+            
+            if(!r.exc) {
+                frappe.show_alert({message: "Reconciliation Saved!", indicator: "green"});
+                
+                // Clear inputs
+                $wrapper.find('#recon-actual-cash').val('');
+                $wrapper.find('#recon-csa-select').val('');
+                $wrapper.find('#recon-csa-container').hide();
+                window.CURRENT_RECON = null;
+                
+                load_reconciliation_history($wrapper);
+            }
+        }
+    });
+}
+
+function load_reconciliation_history($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Shift Cash Reconciliation",
+            filters: { shift: window.ACTIVE_SHIFT.name },
+            fields: ["name", "timestamp", "csa", "expected_cash", "actual_cash", "variance"],
+            order_by: "creation desc"
+        },
+        callback: function(r) {
+            let $tbody = $wrapper.find('#recon-history-body');
+            $tbody.empty();
+            if(r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === row.csa) : null;
+                    let csa_name = u ? (u.employee_name || u.full_name) : row.csa;
+                    
+                    let var_color = row.variance < 0 ? '#dc2626' : '#16a34a';
+                    let edit_btn = window.ACTIVE_SHIFT.status === 'Open' ? `<button class="btn btn-xs btn-danger btn-delete-recon" data-name="${row.name}">Delete</button>` : '';
+                    
+                    let html = `
+                        <tr>
+                            <td>${frappe.datetime.str_to_user(row.timestamp).split(' ')[1]}</td>
+                            <td><b>${csa_name}</b></td>
+                            <td class="text-right">${format_currency(row.expected_cash)}</td>
+                            <td class="text-right">${format_currency(row.actual_cash)}</td>
+                            <td class="text-right" style="color:${var_color}; font-weight:bold;">${format_currency(row.variance)}</td>
+                            <td>${edit_btn}</td>
+                        </tr>
+                    `;
+                    $tbody.append(html);
+                });
+                
+                // Bind delete
+                $wrapper.find('.btn-delete-recon').off('click').on('click', function() {
+                    let name = $(this).attr('data-name');
+                    frappe.confirm("Are you sure you want to delete this reconciliation record? You will need to re-enter it.", () => {
+                        frappe.call({
+                            method: "frappe.client.delete",
+                            args: { doctype: "Shift Cash Reconciliation", name: name },
+                            callback: function(del_res) {
+                                if(!del_res.exc) {
+                                    frappe.show_alert({message: "Record deleted", indicator: "green"});
+                                    load_reconciliation_history($wrapper);
+                                }
+                            }
+                        });
+                    });
+                });
+            } else {
+                $tbody.append('<tr><td colspan="6" class="text-center text-muted">No reconciliations completed yet.</td></tr>');
+            }
+        }
+    });
 }
 
 
@@ -3549,7 +3735,10 @@ function render_station_cards($wrapper) {
     // 2. Populate CSAs
     let csaOptions = '<option value="">Select CSA...</option>';
     let allowed_csas = [];
-    if(window.SHIFT_DOC.head_csa) allowed_csas.push(window.SHIFT_DOC.head_csa);
+    if(window.SHIFT_DOC.head_csa) {
+        let head_emp = window.USERS_LIST ? window.USERS_LIST.find(u => u.user_id === window.SHIFT_DOC.head_csa) : null;
+        if (head_emp) allowed_csas.push(head_emp.name);
+    }
     (window.SHIFT_DOC.assigned_csas || []).forEach(row => {
         if(row.csa) allowed_csas.push(row.csa);
     });

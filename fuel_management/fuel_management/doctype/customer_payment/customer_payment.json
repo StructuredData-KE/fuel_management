@@ -70,7 +70,7 @@
             "in_list_view": 1,
             "label": "CSA",
             "options": "Employee",
-            "reqd": 1
+            "reqd": 0
         },
         {
             "fieldname": "mode_of_payment",

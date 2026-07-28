@@ -1,0 +1,219 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-28 16:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "shift",
+  "csa",
+  "manager",
+  "timestamp",
+  "cb_1",
+  "status",
+  "sb_liabilities",
+  "meter_sales",
+  "inventory_sales",
+  "greasing_sales",
+  "customer_payments",
+  "total_liabilities",
+  "sb_deductions",
+  "mpesa",
+  "invoices",
+  "cards",
+  "expenses",
+  "rtt_deductions",
+  "total_deductions",
+  "sb_reconciliation",
+  "expected_cash",
+  "cb_2",
+  "actual_cash",
+  "cb_3",
+  "variance"
+ ],
+ "fields": [
+  {
+   "fieldname": "shift",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shift",
+   "options": "Shift",
+   "reqd": 1
+  },
+  {
+   "fieldname": "csa",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "CSA",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "manager",
+   "fieldtype": "Link",
+   "label": "Manager",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "label": "Timestamp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Saved",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nSaved",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_liabilities",
+   "fieldtype": "Section Break",
+   "label": "Sales / Liabilities"
+  },
+  {
+   "default": "0",
+   "fieldname": "meter_sales",
+   "fieldtype": "Currency",
+   "label": "Meter Sales"
+  },
+  {
+   "default": "0",
+   "fieldname": "inventory_sales",
+   "fieldtype": "Currency",
+   "label": "Inventory Sales"
+  },
+  {
+   "default": "0",
+   "fieldname": "greasing_sales",
+   "fieldtype": "Currency",
+   "label": "Greasing Sales"
+  },
+  {
+   "default": "0",
+   "fieldname": "customer_payments",
+   "fieldtype": "Currency",
+   "label": "Customer Payments"
+  },
+  {
+   "bold": 1,
+   "fieldname": "total_liabilities",
+   "fieldtype": "Currency",
+   "label": "Total Liabilities",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_deductions",
+   "fieldtype": "Section Break",
+   "label": "Deductions"
+  },
+  {
+   "default": "0",
+   "fieldname": "mpesa",
+   "fieldtype": "Currency",
+   "label": "M-Pesa"
+  },
+  {
+   "default": "0",
+   "fieldname": "invoices",
+   "fieldtype": "Currency",
+   "label": "Invoices"
+  },
+  {
+   "default": "0",
+   "fieldname": "cards",
+   "fieldtype": "Currency",
+   "label": "Cards"
+  },
+  {
+   "default": "0",
+   "fieldname": "expenses",
+   "fieldtype": "Currency",
+   "label": "Expenses"
+  },
+  {
+   "default": "0",
+   "fieldname": "rtt_deductions",
+   "fieldtype": "Currency",
+   "label": "RTT Deductions"
+  },
+  {
+   "bold": 1,
+   "fieldname": "total_deductions",
+   "fieldtype": "Currency",
+   "label": "Total Deductions",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_reconciliation",
+   "fieldtype": "Section Break",
+   "label": "Reconciliation"
+  },
+  {
+   "bold": 1,
+   "fieldname": "expected_cash",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Expected Cash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "actual_cash",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Actual Cash Submitted",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cb_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "fieldname": "variance",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Variance",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-28 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "Shift Cash Reconciliation",
+ "naming_rule": "Expression",
+ "autoname": "format:REC-{shift}-{csa}-{####}",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "is_submittable": 0
+}

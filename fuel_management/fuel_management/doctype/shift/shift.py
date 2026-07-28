@@ -11,6 +11,7 @@ class Shift(Document):
         self.calculate_expected_stock()
         self.calculate_expected_cash()
         self.auto_inject_dry_stock_from_invoices()
+        self.validate_csa_reconciliation()
 
     def auto_inject_dry_stock_from_invoices(self):
         from frappe.utils import flt
@@ -205,6 +206,17 @@ class Shift(Document):
                     ledger.insert(ignore_permissions=True)
                     ledger.submit()
                     frappe.msgprint(f"Staff Liability Ledger created for CSA {lubes_csa} (Dry Stock) for shortfall of {abs(self.dry_stock_cash_variance)}")
+
+    def validate_csa_reconciliation(self):
+        if self.status in ["Ended", "Closed"]:
+            if self.assigned_csas:
+                csas_in_shift = [row.csa for row in self.assigned_csas if row.csa]
+                if not csas_in_shift:
+                    return
+                reconciled = frappe.get_all("Shift Cash Reconciliation", filters={"shift": self.name}, pluck="csa")
+                missing = [csa for csa in csas_in_shift if csa not in reconciled]
+                if missing:
+                    frappe.throw(f"Cannot close shift. The following CSAs have not been reconciled: {', '.join(missing)}")
 
     def lock_shift_if_closed_for_csa(self):
         if not self.is_new():

@@ -94,7 +94,7 @@
             
             <a href="#" class="nav-item" data-target="tab-reconcile">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <span>Reconcile Shift</span>
+                <span>CSA Cash Reconciliation</span>
             </a>
         </nav>
     </aside>
@@ -842,7 +842,7 @@
 
 
             <!-- CUSTOMER PAYMENTS -->
-            <section id="tab-customer-payments" class="tab-pane">
+            <section id="tab-customer-payments" class="tab-pane" style="margin-top: -2rem;">
     <div class="segmented-control-wrapper">
         <div class="segmented-control">
             <button class="seg-btn active" data-view="history">Historical View</button>
@@ -865,8 +865,8 @@
                             <th>Customer</th>
                             <th>CSA</th>
                             <th>Mode</th>
-                            <th>Pay Mode</th>
                             <th>Amount</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="list-customer-payments-saved">
@@ -1402,76 +1402,120 @@
 
 <!-- RECONCILE -->
             <section id="tab-reconcile" class="tab-pane">
-    <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
-        <h3>Shift Reconciliation Breakdown</h3>
-        
-        <div class="table-responsive" style="margin-top: 1rem;">
-            <table class="dash-table" style="font-size: 1.1rem;">
-                <tbody>
-                    <tr>
-                        <td style="width: 70%;">Total Fuel Sales (Pump Meters)</td>
-                        <td id="rec-fuel-sales" class="text-right" style="font-weight: 600;">0.00</td>
-                    </tr>
-                    <tr>
-                        <td>Total Dry Stock Sales</td>
-                        <td id="rec-drystock-sales" class="text-right" style="font-weight: 600;">0.00</td>
-                    </tr>
-                    <tr>
-                        <td style="color: #dc2626;">Less: Shift Expenses & Petty Cash</td>
-                        <td id="rec-expenses" class="text-right" style="color: #dc2626;">0.00</td>
-                    </tr>
-                    <tr>
-                        <td style="color: #dc2626; font-weight:bold;">Less: Fleet Card Drops</td>
-                        <td id="rec-fleet-drops" class="text-right" style="color: #dc2626; font-weight:bold;">0.00</td>
-                    </tr>
-                    <tr style="background: #f8fafc; border-top: 2px solid #cbd5e1;">
-                        <td style="font-size: 1.2rem; font-weight: bold;">Net Expected Cash</td>
-                        <td id="rec-net-expected" class="text-right" style="font-size: 1.2rem; font-weight: bold; color: #0f172a;">0.00</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+                <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                        <h3 style="margin: 0;">CSA Cash Reconciliation</h3>
+                        <div style="display: flex; gap: 1rem; align-items: center;">
+                            <label style="font-weight: 600; color: #475569;">Select CSA:</label>
+                            <select id="recon-csa-select" class="spa-input" style="min-width: 250px;">
+                                <option value="">-- Select CSA to Reconcile --</option>
+                            </select>
+                        </div>
+                    </div>
 
-        <div style="margin-top: 2rem; background: #f1f5f9; padding: 1.5rem; border-radius: 8px;">
-            <h4 style="margin-top:0;">Actual Cash Declared</h4>
-            <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
-                <div class="form-group">
-                    <label>Fuel Cash</label>
-                    <input type="number" id="actual-cash-input" class="spa-input huge-input" placeholder="0.00">
+                    <div id="recon-csa-container" style="display: none;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                            <!-- Liabilities Column -->
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem;">
+                                <h4 style="margin-top: 0; color: #0f172a; border-bottom: 2px solid #cbd5e1; padding-bottom: 0.5rem;">Total Liabilities (Expected +)</h4>
+                                <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+                                    <tbody>
+                                        <tr><td style="padding: 0.5rem 0;">Meter Sales</td><td id="recon-meter-sales" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr><td style="padding: 0.5rem 0;">Inventory Sales</td><td id="recon-inventory-sales" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr><td style="padding: 0.5rem 0;">Greasing Services</td><td id="recon-greasing-sales" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr><td style="padding: 0.5rem 0;">Customer Payments</td><td id="recon-customer-payments" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr style="border-top: 2px solid #cbd5e1;"><td style="padding: 0.5rem 0; font-weight: bold;">Total Liabilities</td><td id="recon-total-liabilities" style="text-align: right; font-weight: bold; color: #0f172a;">0.00</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Deductions Column -->
+                            <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 1.5rem;">
+                                <h4 style="margin-top: 0; color: #be123c; border-bottom: 2px solid #fecdd3; padding-bottom: 0.5rem;">Total Deductions (Expected -)</h4>
+                                <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; color: #be123c;">
+                                    <tbody>
+                                        <tr><td style="padding: 0.5rem 0;">M-Pesa Payments</td><td id="recon-mpesa" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr><td style="padding: 0.5rem 0;">Invoices</td><td id="recon-invoices" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr><td style="padding: 0.5rem 0;">Card Payments</td><td id="recon-cards" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr><td style="padding: 0.5rem 0;">Expenses</td><td id="recon-expenses" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr><td style="padding: 0.5rem 0;">RTT (Testing)</td><td id="recon-rtt" style="text-align: right; font-weight: 600;">0.00</td></tr>
+                                        <tr style="border-top: 2px solid #fecdd3;"><td style="padding: 0.5rem 0; font-weight: bold;">Total Deductions</td><td id="recon-total-deductions" style="text-align: right; font-weight: bold;">0.00</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Expected vs Actual -->
+                        <div style="background: #f1f5f9; padding: 2rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                                <span style="font-size: 1.5rem; font-weight: bold; color: #0f172a;">Expected Cash:</span>
+                                <span id="recon-expected-cash" style="font-size: 1.8rem; font-weight: bold; color: #0f172a;">0.00</span>
+                            </div>
+                            
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label style="font-size: 1.2rem; color: #334155;">Actual Cash Submitted</label>
+                                <input type="number" id="recon-actual-cash" class="spa-input huge-input" placeholder="0.00" style="font-size: 2rem; padding: 1.5rem; text-align: center;">
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 1.5rem; border-top: 2px solid #cbd5e1;">
+                                <span style="font-size: 1.2rem; font-weight: bold; color: #475569;">Variance (Actual - Expected):</span>
+                                <span id="recon-variance" style="font-size: 1.5rem; font-weight: bold; color: #94a3b8;">0.00</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 2rem; text-align: right;">
+                            <button id="btn-save-recon" class="btn-primary btn-lg" style="padding: 1rem 2rem;">
+                                <span class="spinner hidden"></span> Save & Reconcile Next
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- History Table -->
+                    <div style="margin-top: 3rem; border-top: 1px solid #e2e8f0; padding-top: 2rem;">
+                        <h3 style="margin-top: 0;">Reconciliation History</h3>
+                        <div class="table-responsive">
+                            <table class="dash-table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>CSA</th>
+                                        <th>Expected</th>
+                                        <th>Actual</th>
+                                        <th>Variance</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recon-history-body">
+                                    <!-- Dynamic records -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Close Shift Checklist -->
+                    <div class="dash-card full-width-card mt-4" style="background: #fff; border: 1px solid #e2e8f0; margin-top:3rem;">
+                        <h3>Pre-Close Checklist</h3>
+                        <div style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+                            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                                <input type="checkbox" id="chk-cash-captured" style="width:20px; height:20px;">
+                                <span>I confirm all CSA cash has been captured and variance verified.</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                                <input type="checkbox" id="chk-reports-printed" style="width:20px; height:20px;">
+                                <span>I confirm all end-of-shift reports and Z-Reports have been printed.</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="dash-card full-width-card mt-4 center-content" style="border:none; background:transparent;">
+                        <button id="btn-close-shift" class="btn-danger btn-lg" style="width: 100%; padding: 1rem; font-size: 1.1rem;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2" style="width:20px;height:20px;vertical-align:middle; display:inline-block;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            Close Shift & Lock
+                        </button>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Dry Stock Cash</label>
-                    <input type="number" id="actual-drystock-cash-input" class="spa-input huge-input" placeholder="0.00">
-                </div>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #cbd5e1;">
-                <span style="font-size: 1.2rem; font-weight: bold;">Cash Variance:</span>
-                <span id="rec-variance" style="font-size: 1.3rem; font-weight: bold;">0.00</span>
-            </div>
-        </div>
-        
-        <div class="dash-card full-width-card mt-4" style="background: #fff; border: 1px solid #e2e8f0; margin-top:1.5rem;">
-            <h3>Pre-Close Checklist</h3>
-            <div style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
-                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                    <input type="checkbox" id="chk-cash-captured" style="width:20px; height:20px;">
-                    <span>I confirm all CSA cash has been captured and variance verified.</span>
-                </label>
-                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
-                    <input type="checkbox" id="chk-reports-printed" style="width:20px; height:20px;">
-                    <span>I confirm all end-of-shift reports and Z-Reports have been printed.</span>
-                </label>
-            </div>
-        </div>
-        
-        <div class="dash-card full-width-card mt-4 center-content" style="border:none; background:transparent;">
-            <button id="btn-close-shift" class="btn-danger btn-lg" style="width: 100%; padding: 1rem; font-size: 1.1rem;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mr-2" style="width:20px;height:20px;vertical-align:middle; display:inline-block;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                Close Shift & Lock
-            </button>
-        </div>
-    </div>
-</section>
+            </section>
             
         </div>
     </div>
