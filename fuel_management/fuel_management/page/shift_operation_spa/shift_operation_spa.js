@@ -3363,43 +3363,21 @@ function render_reconcile(wrapper) {
     if(!window.ACTIVE_SHIFT) return;
     let shift_name = window.ACTIVE_SHIFT.name;
     
-    // 1. Fetch Fuel Sales (from shift.expected_cash which is calculated by shift backend? 
-    // Wait, the backend doesn't calculate expected_cash actively until close. 
-    // We can just sum all Pump Meter Readings amount for the shift.)
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "Pump Meter Reading",
-            filters: { shift: shift_name },
-            fields: ["amount"]
-        },
-        callback: function(r) {
-            let fuel = 0;
-            if(r.message) {
-                r.message.forEach(x => fuel += (x.amount || 0));
-            }
-            window.RECONCILE_DATA.fuel_sales = fuel;
-            update_reconcile_ui($wrapper);
-        }
-    });
+    // 1. Calculate Fuel Sales from loaded Shift Doc
+    let fuel = 0;
+    if(window.SHIFT_DOC && window.SHIFT_DOC.pump_meter_readings) {
+        window.SHIFT_DOC.pump_meter_readings.forEach(x => fuel += (x.amount || 0));
+    }
+    window.RECONCILE_DATA.fuel_sales = fuel;
+    update_reconcile_ui($wrapper);
     
-    // 2. Fetch Dry Stock Sales
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "Shift Inventory Sale",
-            filters: { shift: shift_name },
-            fields: ["amount"]
-        },
-        callback: function(r) {
-            let dry = 0;
-            if(r.message) {
-                r.message.forEach(x => dry += (x.amount || 0));
-            }
-            window.RECONCILE_DATA.drystock_sales = dry;
-            update_reconcile_ui($wrapper);
-        }
-    });
+    // 2. Calculate Dry Stock Sales from loaded Shift Doc
+    let dry = 0;
+    if(window.SHIFT_DOC && window.SHIFT_DOC.inventory_sales) {
+        window.SHIFT_DOC.inventory_sales.forEach(x => dry += (x.amount || 0));
+    }
+    window.RECONCILE_DATA.drystock_sales = dry;
+    update_reconcile_ui($wrapper);
     
     // 3. Fetch Expenses & Petty Cash (Station Expense + Station Petty Cash Entry)
     frappe.call({
