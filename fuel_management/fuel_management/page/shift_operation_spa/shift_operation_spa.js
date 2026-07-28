@@ -1631,25 +1631,20 @@ function render_invoices($wrapper) {
         let cust = $(this).val();
         $wrapper.find('#invoice-vehicles-list').empty();
         if(cust) {
-            frappe.call({
-                method: "frappe.client.get_list",
-                args: {
-                    doctype: "Shift Invoice",
-                    fields: ["vehicle_registration"],
-                    filters: { customer: cust, vehicle_registration: ["!=", ""] },
-                    limit_page_length: 100
-                },
-                callback: function(r) {
-                    if(r.message) {
-                        let vOpts = '';
-                        let unique_v = [...new Set(r.message.map(m => m.vehicle_registration))];
-                        unique_v.forEach(v => {
-                            if(v) vOpts += `<option value="${v}">`;
-                        });
-                        $wrapper.find('#invoice-vehicles-list').html(vOpts);
-                    }
+        let unique_v = [];
+        if(window.SHIFT_DOC && window.SHIFT_DOC.invoices) {
+            window.SHIFT_DOC.invoices.forEach(row => {
+                if(row.customer === cust && row.vehicle_registration) {
+                    unique_v.push(row.vehicle_registration);
                 }
             });
+        }
+        unique_v = [...new Set(unique_v)];
+        let vOpts = '';
+        unique_v.forEach(v => {
+            if(v) vOpts += `<option value="${v}">`;
+        });
+        $wrapper.find('#invoice-vehicles-list').html(vOpts);
         }
     });
 
