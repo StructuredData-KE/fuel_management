@@ -6,6 +6,33 @@ window.SHIFT_TEMPLATES = [];
 window.STATION_SETTINGS = {};
 
 frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
+    var page = frappe.ui.make_app_page({
+        parent: wrapper,
+        title: 'Shift Operations',
+        single_column: true
+    });
+    
+    $(document).ajaxError(function(event, jqXHR, ajaxSettings, thrownError) {
+        if(jqXHR.status === 403) {
+            let details = "Unknown";
+            try {
+                if(typeof ajaxSettings.data === 'string') {
+                    let urlParams = new URLSearchParams(ajaxSettings.data);
+                    if(urlParams.get('cmd') === 'frappe.client.get_list') {
+                        details = "Doctype: " + urlParams.get('doctype');
+                    } else {
+                        details = "Cmd: " + urlParams.get('cmd');
+                    }
+                }
+            } catch(e) {}
+            frappe.msgprint({
+                title: "Permission Error Debug",
+                message: "A background fetch failed with 403 Forbidden.<br><b>Details:</b> " + details,
+                indicator: "red"
+            });
+        }
+    });
+
     // Render custom HTML structure
     $(wrapper).html(frappe.render_template("shift_operation_spa", {}));
     
