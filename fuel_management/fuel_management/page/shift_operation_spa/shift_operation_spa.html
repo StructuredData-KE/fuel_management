@@ -538,8 +538,13 @@
                     <datalist id="invoice-customers-list"></datalist>
                 </div>
                 <div class="form-group" style="flex: 1; min-width: 200px;">
-                    <label>Assigned CSA</label>
+                    <label>Assigned CSA (Invoice Issuer)</label>
                     <select id="invoice-csa" class="spa-input"></select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px; display: none;" id="invoice-inventory-csa-group">
+                    <label style="color: var(--warning-dark);">Inventory CSA (Item Source)</label>
+                    <select id="invoice-inventory-csa" class="spa-input"></select>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 4px;">Select whose inventory this item was taken from.</div>
                 </div>
             </div>
 

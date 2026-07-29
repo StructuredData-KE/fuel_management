@@ -1600,6 +1600,7 @@ function render_invoices($wrapper) {
         csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#invoice-csa').html(csaOptions);
+    .find('#invoice-inventory-csa').html(csaOptions);
 
     // 3. Use identical items as Drystock (Item Price query)
     window.INVOICE_ITEMS = window.DRYSTOCK_ITEMS;
@@ -1659,8 +1660,14 @@ function render_invoices($wrapper) {
         if(item) {
             $wrapper.find('#invoice-rate').val(parseFloat(item.price_list_rate || 0).toFixed(2));
             calc_invoice();
+            if (item.item_group !== 'Fuel') {
+                $wrapper.find('#invoice-inventory-csa-group').show();
+            } else {
+                $wrapper.find('#invoice-inventory-csa-group').hide();
+            }
         } else {
             $wrapper.find('#invoice-rate').val('');
+            $wrapper.find('#invoice-inventory-csa-group').hide();
         }
     });
 
@@ -1682,6 +1689,7 @@ function render_invoices($wrapper) {
         let customer = customer_raw ? customer_raw.split(' - ')[0].trim() : '';
         
         let csa = $wrapper.find('#invoice-csa').val();
+        let inv_csa = $wrapper.find('#invoice-inventory-csa').val();
         let po = $wrapper.find('#invoice-po').val();
         let vehicle = $wrapper.find('#invoice-vehicle').val();
         
@@ -1705,6 +1713,7 @@ function render_invoices($wrapper) {
             _is_new: true,
             customer: customer,
             csa: csa,
+            inventory_csa: (item.item_group !== 'Fuel') ? inv_csa : '',
             purchase_order: po,
             vehicle_registration: vehicle,
             item: item.item_code,
@@ -1967,6 +1976,7 @@ function refresh_invoice_cart($wrapper) {
                                 name: r2._is_new ? undefined : r2.name,
                                 customer: r2.customer,
                                 csa: r2.csa,
+                                inventory_csa: r2.inventory_csa,
                                 purchase_order: r2.purchase_order,
                                 vehicle_registration: r2.vehicle_registration,
                                 item: r2.item,

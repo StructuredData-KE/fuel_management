@@ -52,7 +52,7 @@ class Shift(Document):
                     "quantity": inv.quantity,
                     "selling_price": inv.rate,
                     "amount": inv.amount,
-                    "sold_by": inv.csa,
+                    "sold_by": getattr(inv, "inventory_csa", inv.csa) or inv.csa,
                     "is_invoice_sale": 1,
                     "reference_invoice": inv.entry_number
                 })
