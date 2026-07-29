@@ -602,18 +602,9 @@ function render_mpesa($wrapper) {
     let html = '';
     let posted_html = '';
     (window.SHIFT_DOC.mpesa_payments || []).forEach(row => {
-        let csaOpts = `<option value="">Select CSA...</option>`;
-        if(window.USERS_LIST && window.SHIFT_DOC.assigned_csas) {
-            let unique_csas = [...new Set(window.SHIFT_DOC.assigned_csas.map(a => a.csa))];
-            unique_csas.forEach(csa => {
-                let user = window.USERS_LIST.find(u => u.name === csa);
-                if(user) {
-                    let sel = (row.csa === csa) ? 'selected' : '';
-                    csaOpts += `<option value="${csa}" ${sel}>${user.employee_name}</option>`;
-                }
-            });
-        }
-        let csa_text = `<select class="spa-input mpesa-csa highlight-input" data-field="csa" style="width:100%; margin-top:5px; padding: 4px; border-radius: 4px;">${csaOpts}</select>`;
+        let csa_names = window.TILL_CSA_MAPPING[row.mpesa_till] || [];
+        let unique_csas = [...new Set(csa_names)];
+        let csa_text = unique_csas.length > 0 ? `<div style="font-size: 0.85em; color: var(--primary); margin-top: 5px;">Assigned CSA: <strong>${unique_csas.join(', ')}</strong></div>` : "";
 
         if (row.posted) {
             posted_html += `
@@ -1374,11 +1365,9 @@ function setup_actions(wrapper) {
         $wrapper.find('#mpesa-tills-container tr').each(function() {
             let closing = $(this).find('.mpesa-closing').val();
             let transfers = $(this).find('.mpesa-transfers').val();
-            let csa = $(this).find('.mpesa-csa').val();
             if(closing !== "") {
                 readings.push({
                     name: $(this).attr('data-name'),
-                    csa: csa,
                     transfers_made: transfers || 0,
                     closing_balance: closing,
                     posted: 1

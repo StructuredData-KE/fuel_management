@@ -53,7 +53,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
             group_totals = {}
             
             for r in readings:
-                qty = (r.sales_quantity_electronic or 0.0) + (r.sales_quantity_manual or 0.0)
+                qty = (r.sales_quantity_electronic or 0.0)
                 if qty <= 0: continue
                 
                 tank = nozzle_tanks.get(r.pump_nozzle)
