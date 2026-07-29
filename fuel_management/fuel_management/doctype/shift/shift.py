@@ -25,6 +25,12 @@ class Shift(Document):
 
     def auto_inject_dry_stock_from_invoices(self):
         from frappe.utils import flt
+        
+        # Clean up orphaned injected inventory sales
+        if getattr(self, "inventory_sales", None):
+            valid_invoice_entries = [inv.entry_number for inv in (self.invoices or []) if getattr(inv, "entry_number", None)]
+            self.inventory_sales = [row for row in self.inventory_sales if not row.get("is_invoice_sale") or row.get("reference_invoice") in valid_invoice_entries]
+            
         if not self.invoices:
             return
             
