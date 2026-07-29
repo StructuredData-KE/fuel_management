@@ -1600,7 +1600,7 @@ function render_invoices($wrapper) {
         csaOptions += `<option value="${csa}">${name}</option>`;
     });
     $wrapper.find('#invoice-csa').html(csaOptions);
-    .find('#invoice-inventory-csa').html(csaOptions);
+    $wrapper.find('#invoice-inventory-csa').html(csaOptions);
 
     // 3. Use identical items as Drystock (Item Price query)
     window.INVOICE_ITEMS = window.DRYSTOCK_ITEMS;
