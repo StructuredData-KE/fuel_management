@@ -374,13 +374,8 @@ class Shift(Document):
                     qty = row.total_volume if getattr(row, "total_volume", 0) else row.quantity
                     sales_per_item[row.item] = sales_per_item.get(row.item, 0) + qty
 
-            # Deduct Credit Invoice Non-Fuel Items
-            # (Fuel items sold on credit are already deducted via pump meter readings)
-            for row in (self.invoices or []):
-                if getattr(row, "item", None) and getattr(row, "quantity", 0) and row.quantity > 0:
-                    item_group = frappe.db.get_value("Item", row.item, "item_group")
-                    if item_group != "Fuel":
-                        sales_per_item[row.item] = sales_per_item.get(row.item, 0) + row.quantity
+            # Note: Credit Invoice Non-Fuel Items are already injected into inventory_sales
+            # so we DO NOT iterate over self.invoices here, avoiding double-deduction!
 
 
             # Deduct Station Return To Tank Volumes (credit back to stock)
