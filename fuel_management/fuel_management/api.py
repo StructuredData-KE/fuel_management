@@ -44,7 +44,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
             readings = frappe.get_all(
                 "Pump Meter Reading",
                 filters={"parent": shift_id, "parenttype": "Shift", "pump_nozzle": ["in", nozzle_names]},
-                fields=["pump_nozzle", "sales_quantity_electronic"]
+                fields=["pump_nozzle", "sales_quantity_electronic", "sales_quantity_manual"]
             )
             
             # Aggregate Meter Sales and fetch prices
@@ -53,7 +53,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
             group_totals = {}
             
             for r in readings:
-                qty = r.sales_quantity_electronic or 0.0
+                qty = (r.sales_quantity_electronic or 0.0) + (r.sales_quantity_manual or 0.0)
                 if qty <= 0: continue
                 
                 tank = nozzle_tanks.get(r.pump_nozzle)
@@ -134,62 +134,75 @@ def get_csa_reconciliation_data(shift_id, csa_id):
                 data["rtt_deductions"] += qty * item_prices[item]
                 
     # 2. Inventory Sales
-    inventory_sales = frappe.db.sql("""
-        SELECT SUM(amount) FROM `tabShift Inventory Sale` 
+    inventory_data = frappe.db.sql("""
+        SELECT item, quantity, amount 
+        FROM `tabShift Inventory Sale` 
         WHERE parent=%s AND parenttype='Shift' AND sold_by=%s
-    """, (shift_id, csa_id))
-    data["inventory_sales"] = inventory_sales[0][0] if inventory_sales and inventory_sales[0][0] else 0.0
+    """, (shift_id, csa_id), as_dict=True)
+    data["inventory_breakdown"] = inventory_data or []
+    data["inventory_sales"] = sum([d.amount for d in inventory_data]) if inventory_data else 0.0
     
     # 3. Greasing Sales
-    greasing_sales = frappe.db.sql("""
-        SELECT SUM(total_amount) FROM `tabShift Greasing Sale` 
+    greasing_data = frappe.db.sql("""
+        SELECT customer, total_amount as amount 
+        FROM `tabShift Greasing Sale` 
         WHERE parent=%s AND parenttype='Shift' AND csa=%s
-    """, (shift_id, csa_id))
-    data["greasing_sales"] = greasing_sales[0][0] if greasing_sales and greasing_sales[0][0] else 0.0
+    """, (shift_id, csa_id), as_dict=True)
+    data["greasing_breakdown"] = greasing_data or []
+    data["greasing_sales"] = sum([d.amount for d in greasing_data]) if greasing_data else 0.0
     
     # 4. Customer Payments
-    # Customer payments is a standalone Doctype
-    customer_payments = frappe.db.sql("""
-        SELECT SUM(amount) FROM `tabCustomer Payment` 
+    cp_data = frappe.db.sql("""
+        SELECT name, customer, amount 
+        FROM `tabCustomer Payment` 
         WHERE shift=%s AND csa=%s AND docstatus=1
-    """, (shift_id, csa_id))
+    """, (shift_id, csa_id), as_dict=True)
     
-    # If Customer Payment docstatus=1 isn't standard, just sum all.
-    if customer_payments and customer_payments[0][0]:
-        data["customer_payments"] = customer_payments[0][0]
-    else:
-        customer_payments = frappe.db.sql("""
-            SELECT SUM(amount) FROM `tabCustomer Payment` 
+    if not cp_data:
+        cp_data = frappe.db.sql("""
+            SELECT name, customer, amount 
+            FROM `tabCustomer Payment` 
             WHERE shift=%s AND csa=%s
-        """, (shift_id, csa_id))
-        data["customer_payments"] = customer_payments[0][0] if customer_payments and customer_payments[0][0] else 0.0
+        """, (shift_id, csa_id), as_dict=True)
+        
+    data["customer_payments_breakdown"] = cp_data or []
+    data["customer_payments"] = sum([d.amount for d in cp_data]) if cp_data else 0.0
         
     # 5. M-Pesa
-    mpesa = frappe.db.sql("""
-        SELECT SUM(amount) FROM `tabShift M-Pesa Payment` 
-        WHERE parent=%s AND parenttype='Shift'
-    """, (shift_id,))
-    data["mpesa"] = mpesa[0][0] if mpesa and mpesa[0][0] else 0.0
+    mpesa_data = frappe.db.sql("""
+        SELECT mpesa_till, amount 
+        FROM `tabShift M-Pesa Payment` 
+        WHERE parent=%s AND parenttype='Shift' AND csa=%s
+    """, (shift_id, csa_id), as_dict=True)
+    data["mpesa_breakdown"] = mpesa_data or []
+    data["mpesa"] = sum([d.amount for d in mpesa_data]) if mpesa_data else 0.0
     
     # 6. Invoices
-    invoices = frappe.db.sql("""
-        SELECT SUM(amount) FROM `tabShift Invoice` 
+    invoices_data = frappe.db.sql("""
+        SELECT item, quantity, entry_number, amount 
+        FROM `tabShift Invoice` 
         WHERE parent=%s AND parenttype='Shift' AND csa=%s
-    """, (shift_id, csa_id))
-    data["invoices"] = invoices[0][0] if invoices and invoices[0][0] else 0.0
+    """, (shift_id, csa_id), as_dict=True)
+    data["invoices_breakdown"] = invoices_data or []
+    data["invoices"] = sum([d.amount for d in invoices_data]) if invoices_data else 0.0
     
     # 7. Cards
-    cards = frappe.db.sql("""
-        SELECT SUM(amount) FROM `tabShift Card Payment` 
-        WHERE parent=%s AND parenttype='Shift'
-    """, (shift_id,))
-    data["cards"] = cards[0][0] if cards and cards[0][0] else 0.0
+    cards_data = frappe.db.sql("""
+        SELECT card as card_type, receipt_no, amount 
+        FROM `tabStation Cards` 
+        WHERE shift=%s AND csa=%s
+    """, (shift_id, csa_id), as_dict=True)
+    data["cards_breakdown"] = cards_data or []
+    data["cards"] = sum([d.amount for d in cards_data]) if cards_data else 0.0
     
     # 8. Expenses
-    expenses = frappe.db.sql("""
-        SELECT SUM(amount) FROM `tabShift Expense` 
-        WHERE parent=%s AND parenttype='Shift'
-    """, (shift_id,))
-    data["expenses"] = expenses[0][0] if expenses and expenses[0][0] else 0.0
+    expenses_data = frappe.db.sql("""
+        SELECT name, category, amount 
+        FROM `tabStation Expense` 
+        WHERE shift=%s AND csa=%s
+    """, (shift_id, csa_id), as_dict=True)
+    
+    data["expenses_breakdown"] = expenses_data or []
+    data["expenses"] = sum([d.amount for d in expenses_data]) if expenses_data else 0.0
     
     return data

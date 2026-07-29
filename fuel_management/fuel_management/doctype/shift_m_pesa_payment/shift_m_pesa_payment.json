@@ -5,14 +5,14 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": [
+ "field_order": [ "csa",
   "mpesa_till",
   "opening_balance",
   "closing_balance",
   "transfers_made",
   "amount"
  ],
- "fields": [
+ "fields": [ { "fieldname": "csa", "fieldtype": "Link", "options": "Employee", "in_list_view": 1, "label": "CSA" },
   {
    "fieldname": "mpesa_till",
    "fieldtype": "Link",

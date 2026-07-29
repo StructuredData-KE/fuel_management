@@ -5,12 +5,12 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": [
+ "field_order": [ "csa",
   "card_type",
   "receipt_no",
   "amount"
  ],
- "fields": [
+ "fields": [ { "fieldname": "csa", "fieldtype": "Link", "options": "Employee", "in_list_view": 1, "label": "CSA" },
   {
    "fieldname": "card_type",
    "fieldtype": "Select",

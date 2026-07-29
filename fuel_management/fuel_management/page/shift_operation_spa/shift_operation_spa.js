@@ -602,9 +602,18 @@ function render_mpesa($wrapper) {
     let html = '';
     let posted_html = '';
     (window.SHIFT_DOC.mpesa_payments || []).forEach(row => {
-        let csa_names = window.TILL_CSA_MAPPING[row.mpesa_till] || [];
-        let unique_csas = [...new Set(csa_names)];
-        let csa_text = unique_csas.length > 0 ? `<div style="font-size: 0.85em; color: var(--primary); margin-top: 5px;">Assigned CSA: <strong>${unique_csas.join(', ')}</strong></div>` : "";
+        let csaOpts = `<option value="">Select CSA...</option>`;
+        if(window.USERS_LIST && window.SHIFT_DOC.assigned_csas) {
+            let unique_csas = [...new Set(window.SHIFT_DOC.assigned_csas.map(a => a.csa))];
+            unique_csas.forEach(csa => {
+                let user = window.USERS_LIST.find(u => u.name === csa);
+                if(user) {
+                    let sel = (row.csa === csa) ? 'selected' : '';
+                    csaOpts += `<option value="${csa}" ${sel}>${user.employee_name}</option>`;
+                }
+            });
+        }
+        let csa_text = `<select class="spa-input mpesa-csa highlight-input" data-field="csa" style="width:100%; margin-top:5px; padding: 4px; border-radius: 4px;">${csaOpts}</select>`;
 
         if (row.posted) {
             posted_html += `
@@ -1365,9 +1374,11 @@ function setup_actions(wrapper) {
         $wrapper.find('#mpesa-tills-container tr').each(function() {
             let closing = $(this).find('.mpesa-closing').val();
             let transfers = $(this).find('.mpesa-transfers').val();
+            let csa = $(this).find('.mpesa-csa').val();
             if(closing !== "") {
                 readings.push({
                     name: $(this).attr('data-name'),
+                    csa: csa,
                     transfers_made: transfers || 0,
                     closing_balance: closing,
                     posted: 1
@@ -3545,22 +3556,7 @@ function load_csa_reconciliation($wrapper, csa) {
                 window.CURRENT_RECON.csa = csa;
                 
                 // Liabilities
-                $wrapper.find('.meter-breakdown-row').remove();
-                if (r.message.meter_sales_breakdown && r.message.meter_sales_breakdown.length > 0) {
-                    $wrapper.find('#recon-meter-sales').text(format_currency(r.message.meter_sales));
-                    let html = '';
-                    r.message.meter_sales_breakdown.forEach(b => {
-                        let liters_text = [];
-                        if (b.petrol_liters && b.petrol_liters > 0) liters_text.push(`Petrol: ${b.petrol_liters.toFixed(2)}L`);
-                        if (b.diesel_liters && b.diesel_liters > 0) liters_text.push(`Diesel: ${b.diesel_liters.toFixed(2)}L`);
-                        let details = liters_text.length > 0 ? ` <span style="color: #94a3b8; font-size: 0.85em;">(${liters_text.join(', ')})</span>` : '';
-                        html += `<tr class="meter-breakdown-row"><td style="padding: 0.2rem 0 0.2rem 1.5rem; color: #64748b; font-size: 0.9rem;">&#8627; ${b.pump_group}${details}</td><td style="text-align: right; color: #64748b; font-size: 0.9rem;">${format_currency(b.amount)}</td></tr>`;
-                    });
-                    $wrapper.find('#recon-meter-sales').parent().after(html);
-                } else {
-                    $wrapper.find('#recon-meter-sales').text(format_currency(r.message.meter_sales));
-                }
-                
+                $wrapper.find('#recon-meter-sales').text(format_currency(r.message.meter_sales));
                 $wrapper.find('#recon-inventory-sales').text(format_currency(r.message.inventory_sales));
                 $wrapper.find('#recon-greasing-sales').text(format_currency(r.message.greasing_sales));
                 $wrapper.find('#recon-customer-payments').text(format_currency(r.message.customer_payments));
@@ -4117,8 +4113,129 @@ function render_greasing(wrapper) {
                 }
             },
             always: function() {
-                $btn.html(orig).prop('disabled', false);
-            }
-        });
-    });
-}
+                $btn.html(orig).prop('disable
+
+  // ==========================================
+  // BREAKDOWN MODAL LOGIC
+  // ==========================================
+  function show_breakdown_modal(title, data, columns) {
+      const $modal = $('#breakdown-modal');
+      $('#breakdown-modal-title').text(title);
+      
+      let html = `<table class="table table-bordered" style="width:100%; border-collapse:collapse; margin-top:10px;">
+          <thead style="background:#f8fafc; border-bottom:2px solid #e2e8f0;">
+              <tr>`;
+      columns.forEach(col => {
+          html += `<th style="padding:10px; text-align:left; color:#475569; font-weight:600;">${col.label}</th>`;
+      });
+      html += `</tr></thead><tbody>`;
+      
+      if(!data || data.length === 0) {
+          html += `<tr><td colspan="${columns.length}" style="text-align:center; padding:20px; color:#64748b;">No data found</td></tr>`;
+      } else {
+          data.forEach(row => {
+              html += `<tr style="border-bottom:1px solid #f1f5f9;">`;
+              columns.forEach(col => {
+                  let val = row[col.key] || '';
+                  if(col.format === 'currency') val = format_currency(val);
+                  html += `<td style="padding:10px; color:#1e293b;">${val}</td>`;
+              });
+              html += `</tr>`;
+          });
+      }
+      
+      html += `</tbody></table>`;
+      $('#breakdown-modal-body').html(html);
+      $modal.css('display', 'flex');
+      
+      $('#breakdown-modal-close').off('click').on('click', function() {
+          $modal.hide();
+      });
+  }
+
+  // Bind clicks
+  $(document).on('click', '.recon-link', function() {
+      if(!window.CURRENT_RECON) return;
+      let type = $(this).attr('data-type');
+      let data = [];
+      let columns = [];
+      let title = "";
+      
+      if(type === 'meter_sales') {
+          title = "Meter Sales Breakdown";
+          data = window.CURRENT_RECON.meter_sales_breakdown || [];
+          columns = [
+              {label: 'Pump Group', key: 'pump_group'},
+              {label: 'Petrol (L)', key: 'petrol_liters'},
+              {label: 'Diesel (L)', key: 'diesel_liters'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'inventory_sales') {
+          title = "Inventory Sales Breakdown";
+          data = window.CURRENT_RECON.inventory_breakdown || [];
+          columns = [
+              {label: 'Item', key: 'item'},
+              {label: 'Qty', key: 'quantity'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'greasing_sales') {
+          title = "Greasing Services Breakdown";
+          data = window.CURRENT_RECON.greasing_breakdown || [];
+          columns = [
+              {label: 'Customer', key: 'customer'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'customer_payments') {
+          title = "Customer Payments (Credit) Breakdown";
+          data = window.CURRENT_RECON.customer_payments_breakdown || [];
+          columns = [
+              {label: 'Ref', key: 'name'},
+              {label: 'Customer', key: 'customer'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'mpesa') {
+          title = "M-Pesa Tills Breakdown";
+          data = window.CURRENT_RECON.mpesa_breakdown || [];
+          columns = [
+              {label: 'Till', key: 'mpesa_till'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'invoices') {
+          title = "Credit Invoices Breakdown";
+          data = window.CURRENT_RECON.invoices_breakdown || [];
+          columns = [
+              {label: 'Item', key: 'item'},
+              {label: 'Qty', key: 'quantity'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'cards') {
+          title = "Card Payments Breakdown";
+          data = window.CURRENT_RECON.cards_breakdown || [];
+          columns = [
+              {label: 'Card Type', key: 'card_type'},
+              {label: 'Receipt', key: 'receipt_no'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'expenses') {
+          title = "Station Expenses Breakdown";
+          data = window.CURRENT_RECON.expenses_breakdown || [];
+          columns = [
+              {label: 'Ref', key: 'name'},
+              {label: 'Category', key: 'category'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if (type === 'rtt') {
+          // RTT doesn't have a detailed breakdown yet, but just in case
+          title = "Return To Tank Breakdown";
+          data = window.CURRENT_RECON.rtt_breakdown || [];
+          columns = [
+              {label: 'Item', key: 'item'},
+              {label: 'Qty', key: 'quantity'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      }
+      
+      if(title) {
+          show_breakdown_modal(title, data, columns);
+      }
+  });
