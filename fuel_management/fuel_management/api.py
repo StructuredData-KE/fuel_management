@@ -75,9 +75,34 @@ def get_csa_reconciliation_data(shift_id, csa_id):
                 data["meter_sales"] += amount
                 
                 grp = nozzle_groups.get(r.pump_nozzle, "Unknown")
-                group_totals[grp] = group_totals.get(grp, 0.0) + amount
+                if grp not in group_totals:
+                    group_totals[grp] = {"amount": 0.0, "petrol_liters": 0.0, "diesel_liters": 0.0}
                 
-            data["meter_sales_breakdown"] = [{"pump_group": g, "amount": a} for g, a in group_totals.items()]
+                group_totals[grp]["amount"] += amount
+                
+                item_upper = (item or "").upper()
+                is_pms = "PMS" in item_upper or "PETROL" in item_upper or "SUPER" in item_upper
+                is_ago = "AGO" in item_upper or "DIESEL" in item_upper
+                
+                if not is_pms and not is_ago:
+                    noz_upper = (r.pump_nozzle or "").upper()
+                    if "AGO" in noz_upper or "DIESEL" in noz_upper: is_ago = True
+                    if "PMS" in noz_upper or "SUPER" in noz_upper: is_pms = True
+                
+                if is_pms:
+                    group_totals[grp]["petrol_liters"] += qty
+                elif is_ago:
+                    group_totals[grp]["diesel_liters"] += qty
+                
+            data["meter_sales_breakdown"] = [
+                {
+                    "pump_group": g, 
+                    "amount": v["amount"], 
+                    "petrol_liters": v["petrol_liters"], 
+                    "diesel_liters": v["diesel_liters"]
+                } 
+                for g, v in group_totals.items()
+            ]
                 
             # 9. RTT Deductions
             # RTT is also tied to Nozzles

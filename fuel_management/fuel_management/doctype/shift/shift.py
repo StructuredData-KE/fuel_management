@@ -8,10 +8,20 @@ class Shift(Document):
         self.lock_shift_if_closed_for_csa()
         self.lock_active_shift_overlap()
         self.auto_fetch_opening_readings()
+        self.calculate_sales_quantity()
         self.calculate_expected_stock()
         self.calculate_expected_cash()
         self.auto_inject_dry_stock_from_invoices()
         self.validate_csa_reconciliation()
+
+    def calculate_sales_quantity(self):
+        from frappe.utils import flt
+        if self.pump_meter_readings:
+            for row in self.pump_meter_readings:
+                if row.closing_electronic_meter is not None and row.opening_electronic_meter is not None:
+                    row.sales_quantity_electronic = max(0, flt(row.closing_electronic_meter) - flt(row.opening_electronic_meter))
+                if row.closing_manual_meter is not None and row.opening_manual_meter is not None:
+                    row.sales_quantity_manual = max(0, flt(row.closing_manual_meter) - flt(row.opening_manual_meter))
 
     def auto_inject_dry_stock_from_invoices(self):
         from frappe.utils import flt

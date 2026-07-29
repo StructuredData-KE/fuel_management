@@ -3550,7 +3550,11 @@ function load_csa_reconciliation($wrapper, csa) {
                     $wrapper.find('#recon-meter-sales').text(format_currency(r.message.meter_sales));
                     let html = '';
                     r.message.meter_sales_breakdown.forEach(b => {
-                        html += `<tr class="meter-breakdown-row"><td style="padding: 0.2rem 0 0.2rem 1.5rem; color: #64748b; font-size: 0.9rem;">&#8627; ${b.pump_group}</td><td style="text-align: right; color: #64748b; font-size: 0.9rem;">${format_currency(b.amount)}</td></tr>`;
+                        let liters_text = [];
+                        if (b.petrol_liters && b.petrol_liters > 0) liters_text.push(`Petrol: ${b.petrol_liters.toFixed(2)}L`);
+                        if (b.diesel_liters && b.diesel_liters > 0) liters_text.push(`Diesel: ${b.diesel_liters.toFixed(2)}L`);
+                        let details = liters_text.length > 0 ? ` <span style="color: #94a3b8; font-size: 0.85em;">(${liters_text.join(', ')})</span>` : '';
+                        html += `<tr class="meter-breakdown-row"><td style="padding: 0.2rem 0 0.2rem 1.5rem; color: #64748b; font-size: 0.9rem;">&#8627; ${b.pump_group}${details}</td><td style="text-align: right; color: #64748b; font-size: 0.9rem;">${format_currency(b.amount)}</td></tr>`;
                     });
                     $wrapper.find('#recon-meter-sales').parent().after(html);
                 } else {
