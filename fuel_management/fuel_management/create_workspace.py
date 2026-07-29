@@ -1,4 +1,4 @@
-﻿import frappe
+import frappe
 import json
 
 def execute():
@@ -13,7 +13,7 @@ def execute():
         doc.name = "Fuel Management"
         doc.label = "Fuel Management"
         doc.title = "Fuel Management"
-        doc.module = "Fuel Management"
+        doc.module = ""
         doc.is_standard = 0
         doc.public = 1
         doc.icon = "indicator-blue"
