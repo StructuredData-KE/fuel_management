@@ -4102,7 +4102,11 @@ function render_greasing(wrapper) {
                 }
             },
             always: function() {
-                $btn.html(orig).prop('disable
+                $btn.html(orig).prop('disabled', false);
+            }
+        });
+    });
+}
 
   // ==========================================
   // BREAKDOWN MODAL LOGIC
