@@ -170,10 +170,22 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         
     # 5. M-Pesa
     mpesa_data = frappe.db.sql("""
-        SELECT mpesa_till, amount 
-        FROM `tabShift M-Pesa Payment` 
-        WHERE parent=%s AND parenttype='Shift' AND csa=%s
-    """, (shift_id, csa_id), as_dict=True)
+        SELECT 
+            sp.mpesa_till, 
+            sp.amount 
+        FROM `tabShift M-Pesa Payment` sp
+        WHERE sp.parent=%s AND sp.parenttype='Shift' 
+        AND sp.mpesa_till IN (
+            SELECT tpg.parent 
+            FROM `tabM-Pesa Till Pump Group` tpg
+            WHERE tpg.parenttype = 'M-Pesa Till'
+            AND tpg.pump_group IN (
+                SELECT sc.pump_group
+                FROM `tabShift Assigned CSA` sc
+                WHERE sc.parent=%s AND sc.parenttype='Shift' AND sc.csa=%s
+            )
+        )
+    """, (shift_id, shift_id, csa_id), as_dict=True)
     data["mpesa_breakdown"] = mpesa_data or []
     data["mpesa"] = sum([d.amount for d in mpesa_data]) if mpesa_data else 0.0
     
