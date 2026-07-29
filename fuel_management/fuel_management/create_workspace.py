@@ -4,7 +4,7 @@ import json
 def execute():
     try:
         if frappe.db.exists("Workspace", "Fuel Management"):
-            frappe.delete_doc("Workspace", "Fuel Management")
+            frappe.db.set_value("Workspace", "Fuel Management", "is_standard", 0); frappe.delete_doc("Workspace", "Fuel Management")
             frappe.db.commit()
 
         doc = frappe.new_doc("Workspace")
