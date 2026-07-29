@@ -144,7 +144,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     
     # 3. Greasing Sales
     greasing_data = frappe.db.sql("""
-        SELECT customer, total_amount as amount 
+        SELECT vehicle_type, total_amount as amount 
         FROM `tabShift Greasing Sale` 
         WHERE parent=%s AND parenttype='Shift' AND csa=%s
     """, (shift_id, csa_id), as_dict=True)

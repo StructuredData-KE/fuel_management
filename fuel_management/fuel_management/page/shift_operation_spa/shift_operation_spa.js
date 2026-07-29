@@ -4175,7 +4175,7 @@ function render_greasing(wrapper) {
           title = "Greasing Services Breakdown";
           data = window.CURRENT_RECON.greasing_breakdown || [];
           columns = [
-              {label: 'Customer', key: 'customer'},
+              {label: 'Vehicle Type', key: 'vehicle_type'},
               {label: 'Amount', key: 'amount', format: 'currency'}
           ];
       } else if(type === 'customer_payments') {
