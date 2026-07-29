@@ -1,20 +1,23 @@
-import frappe
+﻿import frappe
 import json
 
 def execute():
     try:
+        # MAGIC FIX: Manually inject the missing module into Frappe's memory cache
+        # This completely bypasses the core Frappe v14 bug where it fails to build the cache
+        if "fuel_management" not in frappe.local.module_app:
+            frappe.local.module_app["fuel_management"] = "fuel_management"
+
         if frappe.db.exists("Workspace", "Fuel Management"):
-            doc = frappe.get_doc("Workspace", "Fuel Management")
-            doc.is_standard = 0
-            doc.links = []
-        else:
-            doc = frappe.new_doc("Workspace")
-        
+            frappe.delete_doc("Workspace", "Fuel Management")
+            frappe.db.commit()
+
+        doc = frappe.new_doc("Workspace")
         doc.name = "Fuel Management"
         doc.label = "Fuel Management"
         doc.title = "Fuel Management"
-        doc.module = ""
-        doc.is_standard = 0
+        doc.module = "Fuel Management"
+        doc.is_standard = 1
         doc.public = 1
         doc.icon = "indicator-blue"
         
@@ -129,7 +132,7 @@ def execute():
             }
         ])
         
-        doc.save(ignore_permissions=True)
+        doc.insert(ignore_permissions=True)
         frappe.db.commit()
         print("Fuel Management Workspace generated perfectly!")
     except Exception as e:
