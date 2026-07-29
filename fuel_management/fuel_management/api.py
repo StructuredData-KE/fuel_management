@@ -163,8 +163,8 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     # 8. Expenses
     expenses = frappe.db.sql("""
         SELECT SUM(amount) FROM `tabShift Expense` 
-        WHERE parent=%s AND parenttype='Shift' AND csa=%s
-    """, (shift_id, csa_id))
+        WHERE parent=%s AND parenttype='Shift'
+    """, (shift_id,))
     data["expenses"] = expenses[0][0] if expenses and expenses[0][0] else 0.0
     
     return data
