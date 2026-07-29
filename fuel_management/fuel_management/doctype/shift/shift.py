@@ -38,7 +38,7 @@ class Shift(Document):
             if not inv.item: continue
             
             item_group = frappe.db.get_value("Item", inv.item, "item_group")
-            if item_group == "Fuel":
+            if item_group and item_group.upper() in ["FUEL", "FUELS"]:
                 continue
                 
             found = False

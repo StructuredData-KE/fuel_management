@@ -1660,7 +1660,7 @@ function render_invoices($wrapper) {
         if(item) {
             $wrapper.find('#invoice-rate').val(parseFloat(item.price_list_rate || 0).toFixed(2));
             calc_invoice();
-            if (item.item_group !== 'Fuel') {
+            if (!item.item_group || !['FUEL', 'FUELS'].includes(item.item_group.toUpperCase())) {
                 $wrapper.find('#invoice-inventory-csa-group').show();
             } else {
                 $wrapper.find('#invoice-inventory-csa-group').hide();
@@ -1713,7 +1713,7 @@ function render_invoices($wrapper) {
             _is_new: true,
             customer: customer,
             csa: csa,
-            inventory_csa: (item.item_group !== 'Fuel') ? inv_csa : '',
+            inventory_csa: (!item.item_group || !['FUEL', 'FUELS'].includes(item.item_group.toUpperCase())) ? inv_csa : '',
             purchase_order: po,
             vehicle_registration: vehicle,
             item: item.item_code,
