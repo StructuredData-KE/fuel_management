@@ -552,25 +552,32 @@ class Shift(Document):
                 })
 
     def calculate_expected_stock(self):
+        from frappe.utils import flt
         if self.station and self.dip_stick_readings:
-            station_doc = frappe.get_doc("Fuel Station", self.station)
-            if not station_doc.default_forecourt_warehouse:
-                return
+            # Get all purchases for this shift
+            shift_purchases = frappe.get_all("Station Purchase", filters={"shift": self.name, "docstatus": 1}, pluck="name")
+            purchase_map = {}
+            if shift_purchases:
+                items = frappe.get_all("Station Purchase Item", filters={"parent": ["in", shift_purchases]}, fields=["item_code", "qty"])
+                for item in items:
+                    purchase_map[item.item_code] = purchase_map.get(item.item_code, 0) + flt(item.qty)
 
             for row in self.dip_stick_readings:
                 tank = frappe.db.get_value("Fuel Tank", row.fuel_tank, ["fuel_product"], as_dict=True)
-                if tank and tank.fuel_product:
-                    bin_qty = frappe.db.get_value("Bin", {"item_code": tank.fuel_product, "warehouse": station_doc.default_forecourt_warehouse}, "actual_qty") or 0.0
-                    
-                    sales = 0
-                    if self.pump_meter_readings:
-                        for p in self.pump_meter_readings:
-                            if p.pump_nozzle:
-                                pump_tank = frappe.db.get_value("Pump Nozzle", p.pump_nozzle, "fuel_tank")
-                                if pump_tank == row.fuel_tank:
-                                    sales += (p.sales_quantity_electronic or 0)
+                
+                sales = 0
+                if self.pump_meter_readings:
+                    for p in self.pump_meter_readings:
+                        if p.pump_nozzle:
+                            pump_tank = frappe.db.get_value("Pump Nozzle", p.pump_nozzle, "fuel_tank")
+                            if pump_tank == row.fuel_tank:
+                                sales += (p.sales_quantity_electronic or 0)
                                 
-                    row.expected_stock = bin_qty - sales
+                purchased_qty = 0
+                if tank and tank.fuel_product:
+                    purchased_qty = purchase_map.get(tank.fuel_product, 0)
+                    
+                row.expected_stock = flt(row.opening_dip) + purchased_qty - sales
 
     def create_stock_entry_on_close(self):
         if self.status == "Closed" and not self.stock_entry_reference:
