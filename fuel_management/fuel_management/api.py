@@ -134,11 +134,26 @@ def get_csa_reconciliation_data(shift_id, csa_id):
                 data["rtt_deductions"] += qty * item_prices[item]
                 
     # 2. Inventory Sales
-    inventory_data = frappe.db.sql("""
-        SELECT item, quantity, amount 
-        FROM `tabShift Inventory Sale` 
-        WHERE parent=%s AND parenttype='Shift' AND sold_by=%s
-    """, (shift_id, csa_id), as_dict=True)
+    is_lubes_assigned = assigned_groups and "Lubes & Accessories" in assigned_groups
+    
+    if is_lubes_assigned:
+        inventory_data = frappe.db.sql("""
+            SELECT item, quantity, amount 
+            FROM `tabShift Inventory Sale` 
+            WHERE parent=%s AND parenttype='Shift' 
+            AND (
+                (sold_by=%s)
+                OR (is_invoice_sale=0)
+            )
+        """, (shift_id, csa_id), as_dict=True)
+    else:
+        inventory_data = frappe.db.sql("""
+            SELECT item, quantity, amount 
+            FROM `tabShift Inventory Sale` 
+            WHERE parent=%s AND parenttype='Shift' 
+            AND sold_by=%s AND (is_invoice_sale IS NULL OR is_invoice_sale=1)
+        """, (shift_id, csa_id), as_dict=True)
+
     data["inventory_breakdown"] = inventory_data or []
     data["inventory_sales"] = sum([d.amount for d in inventory_data]) if inventory_data else 0.0
     
