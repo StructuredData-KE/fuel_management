@@ -274,3 +274,68 @@ def get_expected_dips(shift_id):
         expected[row.fuel_tank] = row.expected_stock
         
     return expected
+
+
+@frappe.whitelist()
+def setup_accounts():
+    company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+    if not company:
+        return "No default company found"
+        
+    def get_root_account(root_type):
+        return frappe.db.get_value("Account", {"company": company, "root_type": root_type, "is_group": 1, "parent_account": ("is", "not set")})
+        
+    asset_root = get_root_account("Asset")
+    income_root = get_root_account("Income")
+    
+    current_assets = frappe.db.get_value("Account", {"company": company, "account_name": "Current Assets", "is_group": 1})
+    if not current_assets: current_assets = asset_root
+    
+    cash_in_hand = frappe.db.get_value("Account", {"company": company, "account_name": "Cash In Hand", "is_group": 1})
+    if not cash_in_hand: cash_in_hand = current_assets
+    
+    direct_income = frappe.db.get_value("Account", {"company": company, "account_name": "Direct Income", "is_group": 1})
+    if not direct_income: direct_income = income_root
+
+    accounts_to_create = [
+        {"account_name": "Shift Control Account", "parent_account": current_assets, "account_type": "Asset", "is_group": 0},
+        {"account_name": "Shift Main Cash", "parent_account": cash_in_hand, "account_type": "Cash", "is_group": 0},
+        {"account_name": "Fuel Sales Revenue", "parent_account": direct_income, "account_type": "Income Account", "is_group": 0},
+        {"account_name": "Dry Stock Sales Revenue", "parent_account": direct_income, "account_type": "Income Account", "is_group": 0},
+        {"account_name": "Greasing Sales Revenue", "parent_account": direct_income, "account_type": "Income Account", "is_group": 0},
+        {"account_name": "CSA Shortfalls (Staff Liability)", "parent_account": current_assets, "account_type": "Receivable", "is_group": 0},
+        {"account_name": "Shift Overages", "parent_account": direct_income, "account_type": "Income Account", "is_group": 0},
+    ]
+    
+    created = []
+    
+    for acc in accounts_to_create:
+        acc_id = f"{acc['account_name']} - {frappe.get_cached_value('Company', company, 'abbr')}"
+        if not frappe.db.exists("Account", acc_id):
+            doc = frappe.new_doc("Account")
+            doc.account_name = acc["account_name"]
+            doc.parent_account = acc["parent_account"]
+            doc.company = company
+            doc.account_type = acc["account_type"]
+            doc.is_group = acc["is_group"]
+            doc.insert(ignore_permissions=True)
+            created.append(doc.name)
+            
+    # Now map them to Fuel Station
+    stations = frappe.get_all("Fuel Station")
+    mapped = 0
+    for s in stations:
+        station = frappe.get_doc("Fuel Station", s.name)
+        abbr = frappe.get_cached_value('Company', company, 'abbr')
+        station.shift_control_account = f"Shift Control Account - {abbr}"
+        station.cash_account = f"Shift Main Cash - {abbr}"
+        station.fuel_sales_account = f"Fuel Sales Revenue - {abbr}"
+        station.dry_stock_sales_account = f"Dry Stock Sales Revenue - {abbr}"
+        station.greasing_sales_account = f"Greasing Sales Revenue - {abbr}"
+        station.shortfall_account = f"CSA Shortfalls (Staff Liability) - {abbr}"
+        station.overage_account = f"Shift Overages - {abbr}"
+        station.save(ignore_permissions=True)
+        mapped += 1
+        
+    frappe.db.commit()
+    return f"Created accounts: {created}. Mapped to {mapped} Fuel Stations."
