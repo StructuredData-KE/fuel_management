@@ -919,16 +919,7 @@ function refresh_drystock_cart($wrapper) {
                 if(r.message) {
                     let doc = r.message;
                     doc.inventory_sales = window.SHIFT_DOC.inventory_sales.map(r2 => {
-                        return {
-                            name: r2._is_new ? undefined : r2.name,
-                            sold_by: r2.sold_by,
-                            item: r2.item,
-                            quantity: r2.quantity,
-                            uom_multiplier: r2.uom_multiplier,
-                            total_volume: r2.total_volume,
-                            selling_price: r2.selling_price,
-                            amount: r2.amount
-                        };
+                        return { ...r2, name: r2._is_new ? undefined : r2.name };
                     });
                     frappe.call({
                         method: "frappe.client.save",
@@ -977,16 +968,7 @@ function refresh_drystock_cart($wrapper) {
                 if(r.message) {
                     let doc = r.message;
                     doc.inventory_sales = window.SHIFT_DOC.inventory_sales.map(r => {
-                        return {
-                            name: r._is_new ? undefined : r.name,
-                            sold_by: r.sold_by,
-                            item: r.item,
-                            quantity: r.quantity,
-                            uom_multiplier: r.uom_multiplier,
-                            total_volume: r.total_volume,
-                            selling_price: r.selling_price,
-                            amount: r.amount
-                        };
+                        return { ...r, name: r._is_new ? undefined : r.name };
                     });
                     frappe.call({
                         method: "frappe.client.save",
@@ -1466,16 +1448,7 @@ function setup_actions(wrapper) {
         let combined_rows = [...(window.SHIFT_DOC.inventory_sales || []), ...window.PENDING_DRYSTOCK];
         
         let rows_data = combined_rows.map(r => {
-            return {
-                name: r._is_new ? undefined : r.name,
-                sold_by: r.sold_by,
-                item: r.item,
-                quantity: r.quantity,
-                uom_multiplier: r.uom_multiplier,
-                total_volume: r.total_volume,
-                selling_price: r.selling_price,
-                amount: r.amount
-            };
+            return { ...r, name: r._is_new ? undefined : r.name };
         });
         
         frappe.call({
@@ -1500,12 +1473,11 @@ function setup_actions(wrapper) {
                             }
                             btn.prop('disabled', false).html(originalHTML);
                             btn.find('.spinner').addClass('hidden');
-btn.find('.spinner').addClass('hidden');
                         }
                     });
                 } else {
                     btn.prop('disabled', false).html(originalHTML);
-btn.find('.spinner').addClass('hidden');
+                    btn.find('.spinner').addClass('hidden');
                 }
             }
         });
@@ -1760,19 +1732,7 @@ function render_invoices($wrapper) {
                     
                     // merge existing and pending
                     let new_list = (doc.invoices || []).map(r2 => {
-                        return {
-                            name: r2.name,
-                            customer: r2.customer,
-                            csa: r2.csa,
-                            purchase_order: r2.purchase_order,
-                            vehicle_registration: r2.vehicle_registration,
-                            item: r2.item,
-                            item_name: r2.item_name,
-                            quantity: r2.quantity,
-                            rate: r2.rate,
-                            amount: r2.amount,
-                            entry_number: r2.entry_number
-                        };
+                        return { ...r2, name: r2._is_new ? undefined : r2.name };
                     });
 
                     window.PENDING_INVOICES.forEach(p => {
@@ -1972,20 +1932,7 @@ function refresh_invoice_cart($wrapper) {
                     if(r.message) {
                         let doc = r.message;
                         doc.invoices = window.SHIFT_DOC.invoices.map(r2 => {
-                            return {
-                                name: r2._is_new ? undefined : r2.name,
-                                customer: r2.customer,
-                                csa: r2.csa,
-                                inventory_csa: r2.inventory_csa,
-                                purchase_order: r2.purchase_order,
-                                vehicle_registration: r2.vehicle_registration,
-                                item: r2.item,
-                                item_name: r2.item_name,
-                                quantity: r2.quantity,
-                                rate: r2.rate,
-                                amount: r2.amount,
-                                entry_number: r2.entry_number
-                            };
+                            return { ...r2, name: r2._is_new ? undefined : r2.name };
                         });
                         frappe.call({
                             method: "frappe.client.save",
