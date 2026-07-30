@@ -66,3 +66,21 @@ class StationPurchase(Document):
             frappe.message_log = []
         
         frappe.msgprint(f"Generated Purchase Invoice {pi.name}")
+
+@frappe.whitelist()
+def get_purchases_history(date_from=None, date_to=None):
+    filters = {}
+    if date_from and date_to:
+        filters['receiving_date'] = ['between', [date_from, date_to]]
+    elif date_from:
+        filters['receiving_date'] = ['>=', date_from]
+    elif date_to:
+        filters['receiving_date'] = ['<=', date_to]
+    
+    purchases = frappe.get_all('Station Purchase', filters=filters, fields=['name', 'receiving_date', 'supplier', 'tax_invoice_number', 'document_invoice_number', 'grand_total'], order_by='name desc', limit_page_length=50)
+    
+    for p in purchases:
+        p.items = frappe.get_all('Station Purchase Item', filters={'parent': p.name}, fields=['item', 'quantity'])
+    
+    return purchases
+

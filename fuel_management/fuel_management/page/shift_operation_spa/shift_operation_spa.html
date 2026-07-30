@@ -1178,7 +1178,13 @@
     <!-- HISTORY VIEW -->
     <div class="view-pane active" id="purchases-history-view">
         <div class="dash-card center-card" style="max-width: 1200px; width: 100%;">
-            <h3>Station Purchases for Active Shift</h3>
+            <div class="card-header-flex">
+                <h3>Latest Purchases</h3>
+                <div style="display: flex; gap: 10px;">
+                    <input type="date" id="pur-filter-date-from" class="spa-input form-control" style="max-width: 150px;" title="Date From">
+                    <input type="date" id="pur-filter-date-to" class="spa-input form-control" style="max-width: 150px;" title="Date To">
+                </div>
+            </div>
             <div class="table-responsive">
                 <table class="dash-table">
                     <thead>
@@ -1186,6 +1192,7 @@
                             <th>Entry</th>
                             <th>Date</th>
                             <th>Supplier</th>
+                            <th>Items</th>
                             <th>Tax Invoice</th>
                             <th>Doc Invoice</th>
                             <th>Grand Total</th>

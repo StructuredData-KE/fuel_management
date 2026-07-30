@@ -3202,23 +3202,26 @@ function render_purchases($wrapper) {
 
     // 8. Fetch History
     let fetch_history = function() {
+        let date_from = $wrapper.find('#pur-filter-date-from').val();
+        let date_to = $wrapper.find('#pur-filter-date-to').val();
+
         frappe.call({
-            method: "frappe.client.get_list",
+            method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.get_purchases_history",
             args: {
-                doctype: "Station Purchase",
-                filters: { shift: window.ACTIVE_SHIFT.name },
-                fields: ["name", "receiving_date", "supplier", "tax_invoice_number", "document_invoice_number", "grand_total"],
-                order_by: "name desc"
+                date_from: date_from,
+                date_to: date_to
             },
             callback: function(r) {
                 let html = '';
                 if(r.message) {
                     r.message.forEach(row => {
+                        let items_html = (row.items || []).map(i => `<div><small>${i.quantity}x ${i.item}</small></div>`).join('');
                         html += `
                             <tr>
-                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                                <td>${row.name}</td>
                                 <td>${row.receiving_date}</td>
                                 <td>${row.supplier}</td>
+                                <td>${items_html}</td>
                                 <td><span class="badge" style="background: #f1f5f9;">${row.tax_invoice_number || "N/A"}</span></td>
                                 <td><span class="badge" style="background: #f1f5f9;">${row.document_invoice_number || "N/A"}</span></td>
                                 <td style="font-weight: 600;">${frappe.format(row.grand_total || 0, {fieldtype: 'Currency'})}</td>
@@ -3226,12 +3229,15 @@ function render_purchases($wrapper) {
                         `;
                     });
                 }
-                if(html === '') html = '<tr><td colspan="6" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="7" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
+                
                 $wrapper.find('#list-station-purchases-saved').html(html);
             }
         });
     };
     fetch_history();
+    
+    $wrapper.find('#pur-filter-date-from, #pur-filter-date-to').on('change', fetch_history);
 
     // 9. Save Entire Purchase
     $wrapper.find('#btn-save-purchase').off('click').on('click', function() {
