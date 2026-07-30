@@ -3032,53 +3032,71 @@ function render_purchases($wrapper) {
         }
     });
 
-    // 6. Refresh Cart Function
-    let refresh_purchase_cart = function() {
-        let html = '';
-        let items_total = 0;
+        // 6. Refresh Cart Function
+        let refresh_purchase_cart = function() {
+            let html = '';
+            let items_total = 0;
+            
+            window.PURCHASE_CART.forEach((row, idx) => {
+                let amount = row.quantity * row.unit_cost;
+                let vat_rate = parseFloat(row.vat_rate) || 0;
+                let amount_grand = amount;
+                if(!row.vat_inclusive && vat_rate > 0) {
+                    amount_grand = amount * (1 + (vat_rate / 100));
+                }
+                items_total += amount_grand;
+                
+                let vat_lbl = row.vat_inclusive ? 'Incl' : (vat_rate > 0 ? '+VAT' : 'No VAT');
+                
+                html += `
+                    <tr>
+                        <td>${row.item_name} <br><small style="color:var(--text-muted)">${row.uom || ''} | VAT: ${vat_rate}% (${vat_lbl})</small></td>
+                        <td>${row.target_location}</td>
+                        <td>${row.quantity}</td>
+                        <td>${frappe.format(row.unit_cost, {fieldtype: 'Currency'})}</td>
+                        <td><strong>${frappe.format(amount_grand, {fieldtype: 'Currency'})}</strong></td>
+                        <td><button class="btn btn-xs btn-danger btn-remove-pur-cart" data-idx="${idx}">X</button></td>
+                    </tr>
+                `;
+            });
+            
+            if(html === '') {
+                html = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>';
+            }
+            
+            $wrapper.find('#list-purchase-cart').html(html);
+            
+            $wrapper.find('.btn-remove-pur-cart').off('click').on('click', function() {
+                let idx = parseInt($(this).attr('data-idx'));
+                window.PURCHASE_CART.splice(idx, 1);
+                refresh_purchase_cart();
+            });
+            
+            // Update Totals
+            let transport = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+            
+            let grand_total = items_total + transport;
+            
+            $wrapper.find('#pur-net').html(frappe.format(items_total, {fieldtype: 'Currency'})); // display items total here
+            $wrapper.find('#pur-total').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
+        };
+    
+        $wrapper.find('#pur-transport-charge').on('input', refresh_purchase_cart);
         
-        window.PURCHASE_CART.forEach((row, idx) => {
-            let amount = row.quantity * row.unit_cost;
-            items_total += amount;
-            html += `
-                <tr>
-                    <td>${row.item_name}</td>
-                    <td>${row.target_location}</td>
-                    <td>${row.quantity}</td>
-                    <td>${frappe.format(row.unit_cost, {fieldtype: 'Currency'})}</td>
-                    <td><strong>${frappe.format(amount, {fieldtype: 'Currency'})}</strong></td>
-                    <td><button class="btn btn-xs btn-danger btn-remove-pur-cart" data-idx="${idx}">X</button></td>
-                </tr>
-            `;
-        });
+        let calculate_live_total = function() {
+            let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
+            let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
+            let vat_rate = parseFloat($wrapper.find('#pur-vat-rate').val()) || 0;
+            let is_incl = $wrapper.find('#pur-vat-incl').is(':checked');
+            
+            let total = qty * cost;
+            if(!is_incl && vat_rate > 0) {
+                total = total * (1 + (vat_rate / 100));
+            }
+            $wrapper.find('#pur-live-total').text(frappe.format(total, {fieldtype: 'Currency'}));
+        };
         
-        if(html === '') {
-            html = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>';
-        }
-        
-        $wrapper.find('#list-purchase-cart').html(html);
-        
-        $wrapper.find('.btn-remove-pur-cart').off('click').on('click', function() {
-            let idx = parseInt($(this).attr('data-idx'));
-            window.PURCHASE_CART.splice(idx, 1);
-            refresh_purchase_cart();
-        });
-        
-        // Update Totals
-        let transport = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
-        let isVat = $wrapper.find('#pur-vat').is(':checked');
-        
-        let grand_total = items_total + transport;
-        let net = grand_total;
-        if(isVat) {
-            net = grand_total / 1.16;
-        }
-        
-        $wrapper.find('#pur-net').html(frappe.format(items_total, {fieldtype: 'Currency'})); // display items total here
-        $wrapper.find('#pur-total').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
-    };
-
-    $wrapper.find('#pur-transport-charge, #pur-vat').on('input change', refresh_purchase_cart);
+        $wrapper.find('#pur-qty, #pur-cost, #pur-vat-rate, #pur-vat-incl').on('input change', calculate_live_total);
 
     // 7. Add Item to Cart
     $wrapper.find('#btn-add-purchase-item').off('click').on('click', function() {
@@ -3090,6 +3108,9 @@ function render_purchases($wrapper) {
         let target = $wrapper.find('#pur-target').val();
         let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
         let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
+        let uom = $wrapper.find('#pur-uom').val();
+        let vat_rate = parseFloat($wrapper.find('#pur-vat-rate').val()) || 0;
+        let vat_incl = $wrapper.find('#pur-vat-incl').is(':checked') ? 1 : 0;
         
         if (!item_code || !target || qty <= 0 || cost <= 0) {
             frappe.show_alert({message: "Item, Target, Quantity, and Unit Cost are required.", indicator: "red"});
@@ -3101,13 +3122,17 @@ function render_purchases($wrapper) {
             item_name: item_name,
             target_location: target,
             quantity: qty,
-            unit_cost: cost
+            unit_cost: cost,
+            uom: uom,
+            vat_rate: vat_rate,
+            vat_inclusive: vat_incl
         });
         
         // Clear item inputs
         $wrapper.find('#pur-item-input').val('');
         $wrapper.find('#pur-qty').val('');
         $wrapper.find('#pur-cost').val('');
+        $wrapper.find('#pur-live-total').text('0.00');
         
         refresh_purchase_cart();
     });
@@ -3163,10 +3188,14 @@ function render_purchases($wrapper) {
         let rec_date = $wrapper.find('#pur-rec-date').val();
         let doc_date = $wrapper.find('#pur-doc-date').val();
         let transport = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
-        let isVat = $wrapper.find('#pur-vat').is(':checked') ? 1 : 0;
 
         if (!supplier || !doc_invoice || !rec_date || !doc_date) {
             frappe.show_alert({message: "Supplier, Document Invoice No, Receiving Date and Document Date are required.", indicator: "red"});
+            return;
+        }
+        
+        if (window.PURCHASE_CART.length === 0) {
+            frappe.show_alert({message: "Please add at least one item.", indicator: "red"});
             return;
         }
 
@@ -3180,13 +3209,15 @@ function render_purchases($wrapper) {
             tax_invoice_number: kra_invoice,
             custom_kra_invoice_number: kra_invoice,
             transport_charge: transport,
-            vat_inclusive: isVat,
             items: window.PURCHASE_CART.map(item => {
                 return {
                     item: item.item,
                     target_location: item.target_location,
                     quantity: item.quantity,
-                    unit_cost: item.unit_cost
+                    unit_cost: item.unit_cost,
+                    uom: item.uom,
+                    vat_rate: item.vat_rate,
+                    vat_inclusive: item.vat_inclusive
                 };
             })
         };

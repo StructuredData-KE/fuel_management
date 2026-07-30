@@ -4,16 +4,22 @@ from frappe.model.document import Document
 
 class StationPurchase(Document):
     def validate(self):
+        from frappe.utils import flt
         grand_total = 0
         for item in self.items:
-            item.total_cost = item.quantity * item.unit_cost
-            if item.vat_inclusive:
-                item.net_total = item.total_cost / 1.16  # Assuming 16% VAT standard in KE
+            item.total_cost = flt(item.quantity) * flt(item.unit_cost)
+            vat_rate = flt(getattr(item, "vat_rate", 0))
+            
+            if getattr(item, "vat_inclusive", False):
+                item.net_total = item.total_cost / (1 + (vat_rate / 100))
+                item_grand = item.total_cost
             else:
                 item.net_total = item.total_cost
-            grand_total += item.net_total
-        
-        self.grand_total = grand_total + (self.transport_charge or 0)
+                item_grand = item.total_cost * (1 + (vat_rate / 100))
+                
+            grand_total += item_grand
+            
+        self.grand_total = grand_total + flt(self.transport_charge)
 
     def after_insert(self):
         self.create_purchase_invoice()
@@ -29,14 +35,18 @@ class StationPurchase(Document):
         pi.custom_kra_invoice_number = self.tax_invoice_number
         
         for item in self.items:
-            pi.append("items", {
+            pi_item = {
                 "item_code": item.item,
                 "qty": item.quantity,
                 "rate": item.unit_cost,
                 "warehouse": item.target_location,
                 "received_qty": item.quantity,
                 "expense_account": frappe.get_cached_value("Company", frappe.defaults.get_user_default("Company"), "default_expense_account") or "Cost of Goods Sold"
-            })
+            }
+            if getattr(item, "uom", None):
+                pi_item["uom"] = item.uom
+                
+            pi.append("items", pi_item)
             
         if self.transport_charge and self.transport_charge > 0:
             pi.append("items", {
