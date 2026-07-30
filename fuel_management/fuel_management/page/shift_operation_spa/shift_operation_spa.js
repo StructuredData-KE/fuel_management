@@ -5,6 +5,8 @@ window.SHIFT_TEMPLATES = [];
 
 window.STATION_SETTINGS = {};
 
+console.log("HELLO SPA JS LOADED!");
+
 frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
@@ -30,7 +32,7 @@ frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     });
 
     // Render custom HTML structure
-    $(wrapper).html(frappe.render_template("shift_operation_spa", {}));
+    $(page.main).html(frappe.render_template("shift_operation_spa", {}));
     
     // UI Setup
     setup_tabs(wrapper);
