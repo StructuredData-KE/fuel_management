@@ -90,6 +90,11 @@
                 <span>Purchases</span>
             </a>
             
+            <a href="#" class="nav-item" data-target="tab-inventory">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                <span>Inventory Status</span>
+            </a>
+            
             <div class="nav-section-title mt-4">CLOSURE</div>
             
             <a href="#" class="nav-item" data-target="tab-reconcile">
@@ -1136,6 +1141,32 @@
         </div>
     </div>
 </section>
+
+            <!-- INVENTORY STATUS -->
+            <section id="tab-inventory" class="tab-pane">
+                <div class="pos-header">
+                    <h2>Total Inventory Status</h2>
+                    <p style="color: #64748b; margin-top: 5px;">Real-time stock levels for the station's warehouses.</p>
+                </div>
+                
+                <div class="pos-card" style="margin-top: 1.5rem;">
+                    <div class="table-responsive">
+                        <table class="pos-table" id="table-inventory-status">
+                            <thead>
+                                <tr>
+                                    <th>Item Code</th>
+                                    <th>Item Name</th>
+                                    <th>Warehouse</th>
+                                    <th class="text-right">Available Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody id="list-inventory-status">
+                                <tr><td colspan="4" class="text-center">Loading inventory...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
 
             <!-- PURCHASES -->
 <section id="tab-purchases" class="tab-pane">

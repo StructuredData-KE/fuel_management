@@ -340,3 +340,31 @@ def setup_accounts():
         
     frappe.db.commit()
     return f"Created accounts: {created}. Mapped to {mapped} Fuel Stations."
+
+@frappe.whitelist()
+def get_station_inventory(station_id):
+    if not station_id:
+        frappe.throw("Station ID is required")
+        
+    station = frappe.get_doc("Fuel Station", station_id)
+    warehouses = []
+    if station.default_forecourt_warehouse:
+        warehouses.append(station.default_forecourt_warehouse)
+    if station.default_store_warehouse:
+        warehouses.append(station.default_store_warehouse)
+        
+    if not warehouses:
+        return []
+        
+    # Get all bins for these warehouses
+    bins = frappe.get_all("Bin", 
+        filters={"warehouse": ["in", warehouses]},
+        fields=["item_code", "warehouse", "actual_qty"],
+        order_by="item_code asc"
+    )
+    
+    # Enrich with item name
+    for b in bins:
+        b.item_name = frappe.db.get_value("Item", b.item_code, "item_name") or b.item_code
+        
+    return bins

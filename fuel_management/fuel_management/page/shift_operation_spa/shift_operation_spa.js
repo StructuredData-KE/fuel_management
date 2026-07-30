@@ -1083,6 +1083,11 @@ function setup_tabs(wrapper) {
         const target = $(this).attr('data-target');
         $wrapper.find('#' + target).addClass('active');
         
+        // Check for specific tab renders
+        if (target === 'tab-inventory') {
+            render_inventory_status($wrapper);
+        }
+        
         // Update topbar title
         const tabName = $(this).find('span').text();
         let displayTitle = tabName;
@@ -2960,6 +2965,71 @@ function render_topups($wrapper) {
     });
 }
 
+
+// =========================================================
+// INVENTORY STATUS MODULE
+// =========================================================
+function render_inventory_status() {
+    if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
+    
+    .find('#list-inventory-status').html('<tr><td colspan="4" class="text-center">Loading inventory...</td></tr>');
+    
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_station_inventory",
+        args: { station_id: window.ACTIVE_SHIFT.station },
+        callback: function(r) {
+            let html = '';
+            if(r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let badgeClass = row.actual_qty <= 0 ? 'badge-danger' : 'badge-success';
+                    html +=                         <tr>
+                            <td><strong>\</strong></td>
+                            <td>\</td>
+                            <td>\</td>
+                            <td class="text-right"><span class="badge " style="padding: 5px 10px; font-size: 0.9em; font-weight:bold;">\</span></td>
+                        </tr>
+                    \;
+                });
+            } else {
+                html = '<tr><td colspan="4" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this station.</td></tr>';
+            }
+            .find('#list-inventory-status').html(html);
+        }
+    });
+}
+
+// =========================================================
+// INVENTORY STATUS MODULE
+// =========================================================
+function render_inventory_status($wrapper) {
+    if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
+    
+    $wrapper.find('#list-inventory-status').html('<tr><td colspan="4" class="text-center">Loading inventory...</td></tr>');
+    
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_station_inventory",
+        args: { station_id: window.ACTIVE_SHIFT.station },
+        callback: function(r) {
+            let html = '';
+            if(r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let badgeClass = row.actual_qty <= 0 ? 'badge-danger' : 'badge-success';
+                    html += `
+                        <tr>
+                            <td><strong>${row.item_code}</strong></td>
+                            <td>${row.item_name}</td>
+                            <td>${row.warehouse}</td>
+                            <td class="text-right"><span class="badge ${badgeClass}" style="padding: 5px 10px; font-size: 0.9em; font-weight:bold;">${row.actual_qty}</span></td>
+                        </tr>
+                    `;
+                });
+            } else {
+                html = '<tr><td colspan="4" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this station.</td></tr>';
+            }
+            $wrapper.find('#list-inventory-status').html(html);
+        }
+    });
+}
 
 // =========================================================
 // STATION PURCHASES MODULE
