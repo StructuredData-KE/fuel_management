@@ -1236,20 +1236,9 @@
                     <input type="text" id="pur-item-input" list="pur-items-list" class="spa-input" placeholder="Search item...">
                     <datalist id="pur-items-list"></datalist>
                 </div>
-                <div class="form-group" style="flex: 1.5; min-width: 150px;">
+                <div class="form-group" style="flex: 3; min-width: 250px;">
                     <label>Target</label>
                     <select id="pur-target" class="spa-input"></select>
-                </div>
-                <div class="form-group" style="flex: 1; min-width: 100px;">
-                    <label>UOM</label>
-                    <select id="pur-uom" class="spa-input">
-                        <option value="Nos">Nos</option>
-                        <option value="Liters">Liters</option>
-                        <option value="Box">Box</option>
-                        <option value="Pieces">Pieces</option>
-                        <option value="Kg">Kg</option>
-                        <option value="Pair">Pair</option>
-                    </select>
                 </div>
                 <div class="form-group" style="flex: 1; min-width: 100px;">
                     <label>Quantity</label>
@@ -1302,6 +1291,14 @@
                 <div class="form-group" style="flex: 1; max-width: 200px; margin: 0;">
                     <label>Transport Charge</label>
                     <input type="number" id="pur-transport-charge" class="spa-input" placeholder="0.00" step="0.01">
+                </div>
+                <div class="form-group" style="flex: 1; max-width: 120px; margin: 0;">
+                    <label>Trans. VAT %</label>
+                    <select id="pur-transport-vat" class="spa-input">
+                        <option value="16">16%</option>
+                        <option value="8">8%</option>
+                        <option value="0" selected>0%</option>
+                    </select>
                 </div>
 
                 <div>

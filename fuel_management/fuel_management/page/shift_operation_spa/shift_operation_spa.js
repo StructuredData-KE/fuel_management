@@ -3110,17 +3110,17 @@ function render_purchases($wrapper) {
                 
                 html += `
                     <tr>
-                        <td>${row.item_name} <br><small style="color:var(--text-muted)">${row.uom || ''} | VAT: ${vat_rate}% (${vat_lbl})</small></td>
+                        <td>${row.item_name} <br><small style="color:var(--text-muted)">VAT: ${vat_rate}% (${vat_lbl})</small></td>
                         <td>${row.target_location}</td>
                         <td>${row.quantity}</td>
                         <td>${frappe.format(row.unit_cost, {fieldtype: 'Currency'})}</td>
-                        <td><strong>${frappe.format(amount_grand, {fieldtype: 'Currency'})}</strong></td>
-                        <td><button class="btn btn-xs btn-danger btn-remove-pur-cart" data-idx="${idx}">X</button></td>
+                        <td>${frappe.format(amount_grand, {fieldtype: 'Currency'})}</td>
+                        <td><button class="btn-secondary btn-remove-pur-cart" data-idx="${idx}" style="padding: 4px 8px; font-size: 12px; color: #ef4444; border-color: #fca5a5;">X</button></td>
                     </tr>
                 `;
             });
             
-            if(html === '') {
+            if (window.PURCHASE_CART.length === 0) {
                 html = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>';
             }
             
@@ -3133,7 +3133,12 @@ function render_purchases($wrapper) {
             });
             
             // Update Totals
-            let transport = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+            let transport_base = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+            let transport_vat = parseFloat($wrapper.find('#pur-transport-vat').val()) || 0;
+            let transport = transport_base;
+            if (transport_vat > 0) {
+                transport = transport_base * (1 + (transport_vat / 100));
+            }
             
             let grand_total = items_total + transport;
             
@@ -3141,7 +3146,7 @@ function render_purchases($wrapper) {
             $wrapper.find('#pur-total').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
         };
     
-        $wrapper.find('#pur-transport-charge').on('input', refresh_purchase_cart);
+        $wrapper.find('#pur-transport-charge, #pur-transport-vat').on('input change', refresh_purchase_cart);
         
         let calculate_live_total = function() {
             let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
@@ -3168,7 +3173,6 @@ function render_purchases($wrapper) {
         let target = $wrapper.find('#pur-target').val();
         let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
         let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
-        let uom = $wrapper.find('#pur-uom').val();
         let vat_rate = parseFloat($wrapper.find('#pur-vat-rate').val()) || 0;
         let vat_incl = $wrapper.find('#pur-vat-incl').is(':checked') ? 1 : 0;
         
@@ -3183,7 +3187,6 @@ function render_purchases($wrapper) {
             target_location: target,
             quantity: qty,
             unit_cost: cost,
-            uom: uom,
             vat_rate: vat_rate,
             vat_inclusive: vat_incl
         });
@@ -3247,7 +3250,12 @@ function render_purchases($wrapper) {
         let kra_invoice = $wrapper.find('#pur-kra-invoice').val();
         let rec_date = $wrapper.find('#pur-rec-date').val();
         let doc_date = $wrapper.find('#pur-doc-date').val();
-        let transport = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+        let transport_base = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+        let transport_vat = parseFloat($wrapper.find('#pur-transport-vat').val()) || 0;
+        let transport = transport_base;
+        if (transport_vat > 0) {
+            transport = transport_base * (1 + (transport_vat / 100));
+        }
 
         if (!supplier || !doc_invoice || !rec_date || !doc_date) {
             frappe.show_alert({message: "Supplier, Document Invoice No, Receiving Date and Document Date are required.", indicator: "red"});
@@ -3275,7 +3283,6 @@ function render_purchases($wrapper) {
                     target_location: item.target_location,
                     quantity: item.quantity,
                     unit_cost: item.unit_cost,
-                    uom: item.uom,
                     vat_rate: item.vat_rate,
                     vat_inclusive: item.vat_inclusive
                 };
