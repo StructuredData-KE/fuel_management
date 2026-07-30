@@ -1,13 +1,23 @@
-window.ACTIVE_SHIFT = null;
-window.USERS_LIST = [];
-window.PUMP_GROUPS_LIST = [];
-window.SHIFT_TEMPLATES = [];
-
-window.STATION_SETTINGS = {};
-
-console.log("HELLO SPA JS LOADED!");
-
-frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
+try {
+    window.ACTIVE_SHIFT = null;
+    window.USERS_LIST = [];
+    window.PUMP_GROUPS_LIST = [];
+    window.SHIFT_TEMPLATES = [];
+    
+    window.STATION_SETTINGS = {};
+    
+    console.log("HELLO SPA JS LOADED!");
+    
+    // Find the wrapper dynamically regardless of name!
+    var page_keys = Object.keys(frappe.pages);
+    var my_page_name = 'shift_operation_spa';
+    if (!frappe.pages[my_page_name]) {
+        console.warn("frappe.pages['shift_operation_spa'] is UNDEFINED! Available pages:", page_keys);
+        // use the most recently added page
+        my_page_name = page_keys[page_keys.length - 1];
+    }
+    
+    frappe.pages[my_page_name].on_page_load = function(wrapper) {
     var page = frappe.ui.make_app_page({
         parent: wrapper,
         title: 'Shift Operations',
@@ -4358,3 +4368,10 @@ function render_greasing(wrapper) {
           show_breakdown_modal(title, data, columns);
       }
   });
+
+} catch (e) {
+    console.error('SPA JS GLOBAL ERROR:', e);
+    if (typeof frappe !== 'undefined' && frappe.msgprint) {
+        frappe.msgprint('SPA Global Error: ' + e.message);
+    }
+}
