@@ -137,6 +137,14 @@ function lock_ui_for_active_shift($wrapper) {
     $wrapper.find('#select-head-csa').val(window.ACTIVE_SHIFT.head_csa).prop('disabled', true);
     $wrapper.find('#btn-start-shift').hide();
     
+    if (window.ACTIVE_SHIFT.status === 'Closed') {
+        $wrapper.find('#btn-close-shift').hide();
+        $wrapper.find('#btn-email-shift-report').show();
+    } else {
+        $wrapper.find('#btn-close-shift').show();
+        $wrapper.find('#btn-email-shift-report').hide();
+    }
+    
     // Trigger loading of grid data (Meters, Dips, etc)
     load_shift_data($wrapper);
 }
@@ -1525,6 +1533,37 @@ function setup_actions(wrapper) {
                 }
             });
         });
+    });
+
+    // Email Shift Report Logic
+    $wrapper.find('#btn-email-shift-report').on('click', function() {
+        if(!window.ACTIVE_SHIFT) return;
+        frappe.prompt({
+            label: 'Manager Email',
+            fieldname: 'email',
+            fieldtype: 'Data',
+            options: 'Email',
+            reqd: 1
+        }, (values) => {
+            let btn = $wrapper.find('#btn-email-shift-report');
+            let origHTML = btn.html();
+            btn.html('<span class="spinner-border spinner-border-sm"></span> Sending...').prop('disabled', true);
+            frappe.call({
+                method: "fuel_management.fuel_management.api.email_shift_report",
+                args: {
+                    shift_name: window.ACTIVE_SHIFT.name,
+                    email_address: values.email
+                },
+                callback: function(r) {
+                    btn.html(origHTML).prop('disabled', false);
+                    if(r.message && r.message.status === 'success') {
+                        frappe.show_alert({message: r.message.message, indicator: "green"});
+                    } else {
+                        frappe.show_alert({message: "Failed to send email. Check error logs.", indicator: "red"});
+                    }
+                }
+            });
+        }, 'Email Shift Report', 'Send');
     });
 }
 
@@ -3623,6 +3662,7 @@ function load_reconciliation_history($wrapper) {
                     
                     let var_color = row.variance < 0 ? '#dc2626' : '#16a34a';
                     let edit_btn = window.ACTIVE_SHIFT.status === 'Open' ? `<button class="btn btn-xs btn-danger btn-delete-recon" data-name="${row.name}">Delete</button>` : '';
+                    let print_btn = `<button class="btn btn-xs btn-default btn-print-recon" style="margin-left:5px;" data-name="${row.name}">Print</button>`;
                     
                     let html = `
                         <tr>
@@ -3631,7 +3671,7 @@ function load_reconciliation_history($wrapper) {
                             <td class="text-right">${format_currency(row.expected_cash)}</td>
                             <td class="text-right">${format_currency(row.actual_cash)}</td>
                             <td class="text-right" style="color:${var_color}; font-weight:bold;">${format_currency(row.variance)}</td>
-                            <td>${edit_btn}</td>
+                            <td>${edit_btn}${print_btn}</td>
                         </tr>
                     `;
                     $tbody.append(html);
@@ -3652,6 +3692,13 @@ function load_reconciliation_history($wrapper) {
                             }
                         });
                     });
+                });
+                
+                // Bind print
+                $wrapper.find('.btn-print-recon').off('click').on('click', function() {
+                    let name = $(this).attr('data-name');
+                    let url = frappe.urllib.get_full_url(`/api/method/frappe.utils.print_format.download_pdf?doctype=Shift Cash Reconciliation&name=${name}&format=CSA Reconciliation Sign-Off&no_letterhead=1`);
+                    window.open(url, "_blank");
                 });
             } else {
                 $tbody.append('<tr><td colspan="6" class="text-center text-muted">No reconciliations completed yet.</td></tr>');

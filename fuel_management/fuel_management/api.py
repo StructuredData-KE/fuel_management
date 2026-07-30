@@ -233,3 +233,24 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     data["expenses"] = sum([d.amount for d in expenses_data]) if expenses_data else 0.0
     
     return data
+
+@frappe.whitelist()
+def email_shift_report(shift_name, email_address):
+    try:
+        # Generate the PDF of the Shift End Report
+        pdf = frappe.get_print("Shift", shift_name, "End of Shift Report", as_pdf=True)
+        
+        # Send the email
+        frappe.sendmail(
+            recipients=[email_address],
+            subject=f"End of Shift Report - {shift_name}",
+            message=f"Please find attached the End of Shift Report for Shift {shift_name}.",
+            attachments=[{
+                "fname": f"Shift_Report_{shift_name}.pdf",
+                "fcontent": pdf
+            }]
+        )
+        return {"status": "success", "message": f"Report successfully emailed to {email_address}"}
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), f"Failed to email shift report for {shift_name}")
+        return {"status": "error", "message": str(e)}
