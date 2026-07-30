@@ -235,14 +235,20 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     return data
 
 @frappe.whitelist()
-def email_shift_report(shift_name, email_address):
+def email_shift_report(shift_name):
     try:
+        shift_doc = frappe.get_doc("Shift", shift_name)
+        owner_email = frappe.db.get_value("Fuel Station", shift_doc.station, "owner_email")
+        
+        if not owner_email:
+            return {"status": "error", "message": f"No Owner Email configured for Fuel Station {shift_doc.station}."}
+            
         # Generate the PDF of the Shift End Report
         pdf = frappe.get_print("Shift", shift_name, "End of Shift Report", as_pdf=True)
         
         # Send the email
         frappe.sendmail(
-            recipients=[email_address],
+            recipients=[owner_email],
             subject=f"End of Shift Report - {shift_name}",
             message=f"Please find attached the End of Shift Report for Shift {shift_name}.",
             attachments=[{
@@ -250,7 +256,7 @@ def email_shift_report(shift_name, email_address):
                 "fcontent": pdf
             }]
         )
-        return {"status": "success", "message": f"Report successfully emailed to {email_address}"}
+        return {"status": "success", "message": f"Report successfully emailed to {owner_email}"}
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), f"Failed to email shift report for {shift_name}")
         return {"status": "error", "message": str(e)}

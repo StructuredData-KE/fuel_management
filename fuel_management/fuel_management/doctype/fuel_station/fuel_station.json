@@ -1,59 +1,73 @@
 {
-    "name": "Fuel Station",
-    "module": "Fuel Management",
-    "custom": 0,
-    "fields": [
-        {
-            "fieldname": "station_name",
-            "label": "Station Name",
-            "fieldtype": "Data",
-            "reqd": 1,
-            "unique": 1
-        },
-        {
-            "fieldname": "location",
-            "label": "Location",
-            "fieldtype": "Data"
-        },
-        {
-            "fieldname": "branch",
-            "label": "Branch",
-            "fieldtype": "Link",
-            "options": "Branch"
-        },
-        {
-            "fieldname": "default_store_warehouse",
-            "label": "Default Store Warehouse",
-            "fieldtype": "Link",
-            "options": "Warehouse"
-        },
-        {
-            "fieldname": "default_forecourt_warehouse",
-            "label": "Default Forecourt Warehouse",
-            "fieldtype": "Link",
-            "options": "Warehouse"
-        },
-        {
-            "fieldname": "status",
-            "label": "Status",
-            "fieldtype": "Select",
-            "options": "Active\nInactive",
-            "default": "Active"
-        }
-    ],
-    "permissions": [
-        {
-            "role": "System Manager",
-            "read": 1,
-            "write": 1,
-            "create": 1,
-            "delete": 1
-        }
-    ],
-    "naming_rule": "By fieldname",
-    "autoname": "field:station_name",
-    "doctype": "DocType",
-    "creation": "2024-01-01 12:00:00.000000",
-    "modified": "2024-01-01 12:00:00.000000",
-    "owner": "Administrator"
+ "name": "Fuel Station",
+ "module": "Fuel Management",
+ "custom": 0,
+ "fields": [
+  {
+   "fieldname": "station_name",
+   "label": "Station Name",
+   "fieldtype": "Data",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "location",
+   "label": "Location",
+   "fieldtype": "Data"
+  },
+  {
+   "fieldname": "branch",
+   "label": "Branch",
+   "fieldtype": "Link",
+   "options": "Branch"
+  },
+  {
+   "fieldname": "default_store_warehouse",
+   "label": "Default Store Warehouse",
+   "fieldtype": "Link",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "default_forecourt_warehouse",
+   "label": "Default Forecourt Warehouse",
+   "fieldtype": "Link",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "status",
+   "label": "Status",
+   "fieldtype": "Select",
+   "options": "Active\nInactive",
+   "default": "Active"
+  },
+  {
+   "fieldname": "owner_email",
+   "fieldtype": "Data",
+   "label": "Owner Email (Reports)",
+   "options": "Email",
+   "insert_after": "status"
+  },
+  {
+   "fieldname": "invoice_clearing_account",
+   "fieldtype": "Link",
+   "label": "Invoice Clearing Account",
+   "options": "Account",
+   "insert_after": "owner_email"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ],
+ "naming_rule": "By fieldname",
+ "autoname": "field:station_name",
+ "doctype": "DocType",
+ "creation": "2024-01-01 12:00:00.000000",
+ "modified": "2024-01-01 12:00:00.000000",
+ "owner": "Administrator"
 }

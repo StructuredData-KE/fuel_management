@@ -159,6 +159,14 @@ class Shift(Document):
         if not self.invoices:
             return
             
+        # Get clearing account from Fuel Station
+        station_doc = frappe.get_doc("Fuel Station", self.station)
+        clearing_account = station_doc.invoice_clearing_account
+        if not clearing_account:
+            frappe.throw("Cannot process invoices: Please set an 'Invoice Clearing Account' on the Fuel Station.")
+            
+        company = frappe.defaults.get_user_default("Company")
+            
         for inv in self.invoices:
             if not inv.customer or flt(inv.amount) <= 0:
                 continue
@@ -166,27 +174,37 @@ class Shift(Document):
             if inv.get("sales_invoice_reference"):
                 continue
                 
-            si = frappe.new_doc("Sales Invoice")
-            si.customer = inv.customer
-            si.posting_date = self.shift_date or nowdate()
-            si.po_no = inv.purchase_order
-            si.update_stock = 0
-            si.is_pos = 0
+            # Find AR Account for Customer
+            customer_doc = frappe.get_doc("Customer", inv.customer)
+            ar_account = customer_doc.default_account or frappe.db.get_value("Company", company, "default_receivable_account")
+            if not ar_account:
+                frappe.throw(f"No default receivable account found for customer {inv.customer}")
+                
+            je = frappe.new_doc("Journal Entry")
+            je.voucher_type = "Journal Entry"
+            je.posting_date = self.shift_date or nowdate()
+            je.company = company
             
-            si.append("items", {
-                "item_code": inv.item,
-                "qty": inv.quantity,
-                "rate": inv.rate,
-                "amount": inv.amount
+            je.append("accounts", {
+                "account": ar_account,
+                "party_type": "Customer",
+                "party": inv.customer,
+                "debit_in_account_currency": inv.amount,
+                "reference_type": "Shift",
+                "reference_name": self.name
+            })
+            je.append("accounts", {
+                "account": clearing_account,
+                "credit_in_account_currency": inv.amount
             })
             
-            si.flags.ignore_permissions = True
-            si.insert()
-            si.submit()
+            je.flags.ignore_permissions = True
+            je.insert()
+            je.submit()
             
             # Save the reference back to the Shift Invoice row
-            inv.db_set("sales_invoice_reference", si.name)
-            frappe.msgprint(f"Generated Sales Invoice {si.name} for Customer {inv.customer}")
+            inv.db_set("sales_invoice_reference", je.name)
+            frappe.msgprint(f"Generated Journal Entry {je.name} for Customer {inv.customer} (Invoice Sale)")
 
     def post_cash_variance_to_liability_ledger(self):
         if self.status != "Closed": return
