@@ -560,10 +560,19 @@ function render_meters($wrapper) {
     });
 }
 function render_dips($wrapper) {
-    let html = '';
+    let html = `
+        <div style="margin-bottom: 1rem; display: flex; justify-content: flex-end;">
+            <button class="btn btn-sm btn-secondary" id="btn-auto-fill-dips" style="display: flex; align-items: center; gap: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; color: #475569; font-weight: 500; padding: 0.5rem 1rem; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+                Auto-Fill Dummy Dips
+            </button>
+        </div>
+    `;
     (window.SHIFT_DOC.dip_stick_readings || []).forEach(row => {
         html += `
-            <tr data-name="${row.name}">
+            <tr data-name="${row.name}" data-tank="${row.fuel_tank}">
                 <td style="font-weight: 600; color: var(--text-primary);">${row.fuel_tank}</td>
                 <td><span class="read-only-cell">${row.opening_dip || 0}</span></td>
                 <td>
@@ -573,6 +582,51 @@ function render_dips($wrapper) {
         `;
     });
     $wrapper.find('#dips-container').html(html);
+
+    // Hover effect for button
+    $wrapper.find('#btn-auto-fill-dips').hover(
+        function() { $(this).css({background: '#f1f5f9', color: '#0f172a', borderColor: '#cbd5e1'}); },
+        function() { $(this).css({background: '#f8fafc', color: '#475569', borderColor: '#e2e8f0'}); }
+    );
+
+    // Click handler for Auto-Fill
+    $wrapper.find('#btn-auto-fill-dips').off('click').on('click', function() {
+        let $btn = $(this);
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm" style="width: 14px; height: 14px;"></span> Calculating...').prop('disabled', true);
+        
+        frappe.call({
+            method: "fuel_management.fuel_management.api.get_expected_dips",
+            args: { shift_id: window.ACTIVE_SHIFT.name },
+            callback: function(r) {
+                $btn.html(orig_html).prop('disabled', false);
+                if(r.message) {
+                    let expected_dips = r.message;
+                    let filled_count = 0;
+                    
+                    $wrapper.find('#dips-container tr').each(function() {
+                        let tank = $(this).attr('data-tank');
+                        if (tank && expected_dips[tank] !== undefined) {
+                            let exp_val = expected_dips[tank];
+                            // Round to 2 decimals
+                            exp_val = Math.round(exp_val * 100) / 100;
+                            $(this).find('.dip-closing').val(exp_val);
+                            filled_count++;
+                        }
+                    });
+                    
+                    if(filled_count > 0) {
+                        frappe.show_alert({message: `Successfully populated dummy dips for ${filled_count} tanks.`, indicator: "green"});
+                    } else {
+                        frappe.show_alert({message: "No tanks found to populate.", indicator: "orange"});
+                    }
+                }
+            },
+            error: function() {
+                $btn.html(orig_html).prop('disabled', false);
+            }
+        });
+    });
 }
 
 function render_mpesa($wrapper) {

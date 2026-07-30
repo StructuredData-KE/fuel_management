@@ -260,3 +260,17 @@ def email_shift_report(shift_name):
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), f"Failed to email shift report for {shift_name}")
         return {"status": "error", "message": str(e)}
+
+@frappe.whitelist()
+def get_expected_dips(shift_id):
+    if not shift_id:
+        return {}
+        
+    shift = frappe.get_doc("Shift", shift_id)
+    shift.calculate_expected_stock()
+    
+    expected = {}
+    for row in (shift.dip_stick_readings or []):
+        expected[row.fuel_tank] = row.expected_stock
+        
+    return expected
