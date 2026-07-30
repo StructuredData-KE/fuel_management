@@ -48,11 +48,46 @@
    "insert_after": "status"
   },
   {
-   "fieldname": "invoice_clearing_account",
+   "fieldname": "shift_control_account",
    "fieldtype": "Link",
-   "label": "Invoice Clearing Account",
-   "options": "Account",
-   "insert_after": "owner_email"
+   "label": "Shift Control Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "cash_account",
+   "fieldtype": "Link",
+   "label": "Main Cash Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "fuel_sales_account",
+   "fieldtype": "Link",
+   "label": "Fuel Sales Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "dry_stock_sales_account",
+   "fieldtype": "Link",
+   "label": "Dry Stock Sales Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "greasing_sales_account",
+   "fieldtype": "Link",
+   "label": "Greasing Sales Account",
+   "options": "Account"
+  },
+  {
+   "fieldname": "shortfall_account",
+   "fieldtype": "Link",
+   "label": "Shortfall Account (Staff Liability)",
+   "options": "Account"
+  },
+  {
+   "fieldname": "overage_account",
+   "fieldtype": "Link",
+   "label": "Overage Account (Income)",
+   "options": "Account"
   }
  ],
  "permissions": [

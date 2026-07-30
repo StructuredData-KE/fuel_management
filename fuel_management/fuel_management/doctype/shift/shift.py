@@ -147,64 +147,279 @@ class Shift(Document):
     def on_update(self):
         self.create_stock_entry_on_close()
         self.post_cash_variance_to_liability_ledger()
-        self.create_invoice_accounting_on_close()
+        self.create_revenue_accounting_on_close()
         self.create_topup_accounting_on_close()
 
-    def create_invoice_accounting_on_close(self):
+    def create_revenue_accounting_on_close(self):
         from frappe.utils import nowdate, flt
         
         if self.status != "Closed":
             return
             
-        if not self.invoices:
-            return
-            
-        # Get clearing account from Fuel Station
         station_doc = frappe.get_doc("Fuel Station", self.station)
-        clearing_account = station_doc.invoice_clearing_account
-        if not clearing_account:
-            frappe.throw("Cannot process invoices: Please set an 'Invoice Clearing Account' on the Fuel Station.")
-            
+        
+        # Ensure all configuration fields are present
+        required_accounts = {
+            "shift_control_account": "Shift Control Account",
+            "cash_account": "Main Cash Account",
+            "fuel_sales_account": "Fuel Sales Account",
+            "dry_stock_sales_account": "Dry Stock Sales Account",
+            "greasing_sales_account": "Greasing Sales Account",
+            "shortfall_account": "Shortfall Account",
+            "overage_account": "Overage Account"
+        }
+        
+        for fieldname, label in required_accounts.items():
+            if not getattr(station_doc, fieldname):
+                frappe.throw(f"Accounting Configuration Error: Please set the '{label}' in Fuel Station {self.station}.")
+                
         company = frappe.defaults.get_user_default("Company")
+        if not company:
+            frappe.throw("No default Company found.")
             
-        for inv in self.invoices:
-            if not inv.customer or flt(inv.amount) <= 0:
-                continue
+        # 1. Get nozzle prices to calculate fuel revenue
+        from fuel_management.fuel_management.api import get_nozzle_prices
+        prices = get_nozzle_prices(self.station, self.shift_date)
+        
+        total_fuel_revenue = 0.0
+        for row in (self.pump_meter_readings or []):
+            if getattr(row, "sales_quantity_electronic", 0) > 0:
+                price = prices.get(row.pump_nozzle, {}).get("price", 0.0)
+                total_fuel_revenue += flt(row.sales_quantity_electronic) * flt(price)
                 
-            if inv.get("sales_invoice_reference"):
-                continue
+        # 2. Calculate Dry Stock Revenue
+        total_dry_stock_revenue = 0.0
+        for row in (self.inventory_sales or []):
+            qty = row.total_volume if getattr(row, "total_volume", 0) else row.quantity
+            rate = row.rate if getattr(row, "rate", 0) else 0.0
+            amt = getattr(row, "amount", 0)
+            if amt:
+                total_dry_stock_revenue += flt(amt)
+            else:
+                total_dry_stock_revenue += flt(qty) * flt(rate)
                 
-            # Find AR Account for Customer
-            customer_doc = frappe.get_doc("Customer", inv.customer)
-            ar_account = customer_doc.default_account or frappe.db.get_value("Company", company, "default_receivable_account")
-            if not ar_account:
-                frappe.throw(f"No default receivable account found for customer {inv.customer}")
-                
-            je = frappe.new_doc("Journal Entry")
-            je.voucher_type = "Journal Entry"
-            je.posting_date = self.shift_date or nowdate()
-            je.company = company
+        # 3. Calculate Greasing Revenue
+        total_greasing = flt(getattr(self, "total_greasing_sales", 0))
             
+        total_revenue = total_fuel_revenue + total_dry_stock_revenue + total_greasing
+        
+        # We will create ONE massive Journal Entry for the entire shift closure.
+        je = frappe.new_doc("Journal Entry")
+        je.voucher_type = "Journal Entry"
+        je.posting_date = self.shift_date or nowdate()
+        je.company = company
+        je.user_remark = f"Shift Closure Accounting for Shift {self.name}"
+        
+        # --- REVENUE RECOGNITION (Income Generation) ---
+        if total_revenue > 0:
             je.append("accounts", {
-                "account": ar_account,
-                "party_type": "Customer",
-                "party": inv.customer,
-                "debit_in_account_currency": inv.amount,
-                "reference_type": "Shift",
-                "reference_name": self.name
+                "account": station_doc.shift_control_account,
+                "debit_in_account_currency": total_revenue,
+                "user_remark": f"Total Shift Revenue Expected (Gross)"
             })
-            je.append("accounts", {
-                "account": clearing_account,
-                "credit_in_account_currency": inv.amount
-            })
-            
+            if total_fuel_revenue > 0:
+                je.append("accounts", {
+                    "account": station_doc.fuel_sales_account,
+                    "credit_in_account_currency": total_fuel_revenue,
+                    "user_remark": f"Total Fuel Sales"
+                })
+            if total_dry_stock_revenue > 0:
+                je.append("accounts", {
+                    "account": station_doc.dry_stock_sales_account,
+                    "credit_in_account_currency": total_dry_stock_revenue,
+                    "user_remark": f"Total Dry Stock Sales"
+                })
+            if total_greasing > 0:
+                je.append("accounts", {
+                    "account": station_doc.greasing_sales_account,
+                    "credit_in_account_currency": total_greasing,
+                    "user_remark": f"Total Greasing Sales"
+                })
+                
+        # --- PAYMENT ALLOCATIONS (Clearing the Control Account) ---
+        
+        # A. CSA Cash (Includes Cash from Sales AND Cash from Customer Payments)
+        recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": self.name}, fields=["csa", "actual_cash", "variance", "actual_dry_stock_cash"])
+        for r in recons:
+            tot_cash = flt(r.actual_cash) + flt(r.actual_dry_stock_cash)
+            if tot_cash > 0:
+                csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
+                
+                # Debit Main Cash
+                je.append("accounts", {
+                    "account": station_doc.cash_account,
+                    "debit_in_account_currency": tot_cash,
+                    "user_remark": f"Cash Submitted by {csa_name}"
+                })
+                
+                cust_payments = frappe.db.sql("""
+                    SELECT customer, amount FROM 	abCustomer Payment 
+                    WHERE shift=%s AND csa=%s AND docstatus=1
+                """, (self.name, r.csa), as_dict=True)
+                
+                if not cust_payments:
+                    cust_payments = frappe.db.sql("""
+                        SELECT customer, amount FROM 	abCustomer Payment 
+                        WHERE shift=%s AND csa=%s
+                    """, (self.name, r.csa), as_dict=True)
+                    
+                total_cp = sum([flt(cp.amount) for cp in (cust_payments or [])])
+                cash_for_sales = tot_cash - total_cp
+                
+                # Credit Shift Control (for the Sales portion)
+                if cash_for_sales > 0:
+                    je.append("accounts", {
+                        "account": station_doc.shift_control_account,
+                        "credit_in_account_currency": cash_for_sales,
+                        "user_remark": f"Clear Cash Sales from {csa_name}"
+                    })
+                elif cash_for_sales < 0:
+                    je.append("accounts", {
+                        "account": station_doc.shift_control_account,
+                        "debit_in_account_currency": abs(cash_for_sales),
+                        "user_remark": f"Adjustment for Sales from {csa_name}"
+                    })
+                
+                # Credit Customer AR (for the Customer Payment portion)
+                for cp in (cust_payments or []):
+                    if flt(cp.amount) > 0:
+                        cust_doc = frappe.get_doc("Customer", cp.customer)
+                        ar_acct = cust_doc.default_account or frappe.db.get_value("Company", company, "default_receivable_account")
+                        je.append("accounts", {
+                            "account": ar_acct,
+                            "party_type": "Customer",
+                            "party": cp.customer,
+                            "credit_in_account_currency": cp.amount,
+                            "user_remark": f"Customer Payment collected by {csa_name}"
+                        })
+                
+            # Variances
+            var = flt(r.variance)
+            if var < 0:
+                shortfall = abs(var)
+                csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
+                je.append("accounts", {
+                    "account": station_doc.shortfall_account,
+                    "party_type": "Employee",
+                    "party": r.csa,
+                    "debit_in_account_currency": shortfall,
+                    "user_remark": f"Shortfall for {csa_name}"
+                })
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": shortfall,
+                    "user_remark": f"Clear Shortfall for {csa_name}"
+                })
+            elif var > 0:
+                # Overage
+                csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
+                je.append("accounts", {
+                    "account": station_doc.cash_account,
+                    "debit_in_account_currency": var,
+                    "user_remark": f"Overage Cash Submitted by {csa_name}"
+                })
+                je.append("accounts", {
+                    "account": station_doc.overage_account,
+                    "credit_in_account_currency": var,
+                    "user_remark": f"Overage Income for {csa_name}"
+                })
+
+        # B. Invoices
+        for inv in (self.invoices or []):
+            if flt(inv.amount) > 0:
+                customer_doc = frappe.get_doc("Customer", inv.customer)
+                ar_account = customer_doc.default_account or frappe.db.get_value("Company", company, "default_receivable_account")
+                if not ar_account:
+                    frappe.throw(f"No AR account found for customer {inv.customer}")
+                je.append("accounts", {
+                    "account": ar_account,
+                    "party_type": "Customer",
+                    "party": inv.customer,
+                    "debit_in_account_currency": inv.amount,
+                    "user_remark": f"Credit Sale (Invoice)",
+                    "reference_type": "Shift",
+                    "reference_name": self.name
+                })
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": inv.amount,
+                    "user_remark": f"Clear Invoice for {inv.customer}"
+                })
+                
+        # C. M-Pesa
+        for m in (self.mpesa_payments or []):
+            if flt(m.amount) > 0:
+                mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": m.mpesa_till, "company": company}, "default_account")
+                if not mop_account:
+                    frappe.throw(f"No Default Account mapped for Mode of Payment: {m.mpesa_till}")
+                je.append("accounts", {
+                    "account": mop_account,
+                    "debit_in_account_currency": m.amount,
+                    "user_remark": f"M-Pesa Payment ({m.mpesa_till})"
+                })
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": m.amount,
+                    "user_remark": f"Clear M-Pesa"
+                })
+                
+        # D. Cards
+        for c in (self.card_payments or []):
+            if flt(c.amount) > 0:
+                mop = getattr(c, "mode_of_payment", "Card")
+                mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": mop, "company": company}, "default_account")
+                if not mop_account:
+                    mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": "Card", "company": company}, "default_account")
+                    if not mop_account:
+                        frappe.throw(f"No Default Account mapped for Mode of Payment: Card")
+                je.append("accounts", {
+                    "account": mop_account,
+                    "debit_in_account_currency": c.amount,
+                    "user_remark": f"Card Payment"
+                })
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": c.amount,
+                    "user_remark": f"Clear Card"
+                })
+                
+        # E. Expenses
+        for e in (self.shift_expenses or []):
+            if flt(e.amount) > 0:
+                je.append("accounts", {
+                    "account": e.expense_account,
+                    "debit_in_account_currency": e.amount,
+                    "user_remark": f"Shift Expense: {e.description}"
+                })
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": e.amount,
+                    "user_remark": f"Clear Expense"
+                })
+                
+        # F. Return to Tank (RTT)
+        for rtt in frappe.get_all("Station Return To Tank", filters={"shift": self.name}, fields=["item", "volume_returned"]):
+            if flt(rtt.volume_returned) > 0:
+                price_rec = frappe.get_all("Item Price", filters={"item_code": rtt.item, "price_list": "Standard Selling", "valid_from": ("<=", self.shift_date)}, fields=["price_list_rate"], order_by="valid_from desc", limit=1)
+                price = flt(price_rec[0].price_list_rate) if price_rec else 0.0
+                rtt_val = flt(rtt.volume_returned) * flt(price)
+                if rtt_val > 0:
+                    je.append("accounts", {
+                        "account": station_doc.fuel_sales_account,
+                        "debit_in_account_currency": rtt_val,
+                        "user_remark": f"Reverse RTT Volume: {rtt.volume_returned}"
+                    })
+                    je.append("accounts", {
+                        "account": station_doc.shift_control_account,
+                        "credit_in_account_currency": rtt_val,
+                        "user_remark": f"Clear RTT"
+                    })
+                
+        if len(je.accounts) > 0:
             je.flags.ignore_permissions = True
             je.insert()
             je.submit()
-            
-            # Save the reference back to the Shift Invoice row
-            inv.db_set("sales_invoice_reference", je.name)
-            frappe.msgprint(f"Generated Journal Entry {je.name} for Customer {inv.customer} (Invoice Sale)")
+            frappe.msgprint(f"Generated Shift Control Journal Entry {je.name}")
 
     def post_cash_variance_to_liability_ledger(self):
         if self.status != "Closed": return
