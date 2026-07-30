@@ -276,6 +276,7 @@ def get_expected_dips(shift_id):
     return expected
 
 
+
 @frappe.whitelist()
 def setup_accounts():
     company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
@@ -298,7 +299,7 @@ def setup_accounts():
     if not direct_income: direct_income = income_root
 
     accounts_to_create = [
-        {"account_name": "Shift Control Account", "parent_account": current_assets, "account_type": "Asset", "is_group": 0},
+        {"account_name": "Shift Control Account", "parent_account": current_assets, "account_type": "Current Asset", "is_group": 0},
         {"account_name": "Shift Main Cash", "parent_account": cash_in_hand, "account_type": "Cash", "is_group": 0},
         {"account_name": "Fuel Sales Revenue", "parent_account": direct_income, "account_type": "Income Account", "is_group": 0},
         {"account_name": "Dry Stock Sales Revenue", "parent_account": direct_income, "account_type": "Income Account", "is_group": 0},
