@@ -32,12 +32,22 @@ frappe.pages['shift_operation_spa'].on_page_load = function(wrapper) {
     });
 
     // Render custom HTML structure
-    $(page.main).html(frappe.render_template("shift_operation_spa", {}));
+    try {
+        $(page.main).html(frappe.render_template("shift_operation_spa", {}));
+    } catch (e) {
+        frappe.msgprint("Template Render Error: " + e.message);
+        console.error("TEMPLATE RENDER ERROR:", e);
+    }
     
-    // UI Setup
-    setup_tabs(wrapper);
-    load_dropdowns(wrapper);
-    setup_actions(wrapper);
+    try {
+        // UI Setup
+        setup_tabs(wrapper);
+        load_dropdowns(wrapper);
+        setup_actions(wrapper);
+    } catch(e) {
+        frappe.msgprint("Setup Error: " + e.message);
+        console.error("SETUP ERROR:", e);
+    }
     
     // Fetch Settings then Initialize State
     frappe.call({
