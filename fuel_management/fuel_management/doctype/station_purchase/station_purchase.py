@@ -61,4 +61,8 @@ class StationPurchase(Document):
         pi.insert()
         pi.submit()
         
+        # Suppress auto-generated warning messages about Expense Head changing
+        if hasattr(frappe, "message_log"):
+            frappe.message_log = []
+        
         frappe.msgprint(f"Generated Purchase Invoice {pi.name}")
