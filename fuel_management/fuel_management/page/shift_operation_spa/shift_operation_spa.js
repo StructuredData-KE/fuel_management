@@ -3815,6 +3815,7 @@ function load_reconciliation_history($wrapper) {
                     
                     let var_color = row.variance < 0 ? '#dc2626' : '#16a34a';
                     let edit_btn = window.ACTIVE_SHIFT.status === 'Open' ? `<button class="btn btn-xs btn-danger btn-delete-recon" data-name="${row.name}">Delete</button>` : '';
+                    let print_btn = `<button class="btn btn-xs btn-primary btn-print-recon" data-name="${row.name}" style="margin-left: 5px;">Print</button>`;
                     
                     let html = `
                         <tr>
@@ -3823,16 +3824,16 @@ function load_reconciliation_history($wrapper) {
                             <td class="text-right">${format_currency(row.expected_cash)}</td>
                             <td class="text-right">${format_currency(row.actual_cash)}</td>
                             <td class="text-right" style="color:${var_color}; font-weight:bold;">${format_currency(row.variance)}</td>
-                            <td>${edit_btn}</td>
+                            <td>${edit_btn}${print_btn}</td>
                         </tr>
                     `;
                     $tbody.append(html);
                 });
                 
-                // Bind delete
-                $wrapper.find('.btn-delete-recon').off('click').on('click', function() {
-                    let name = $(this).attr('data-name');
-                    frappe.confirm("Are you sure you want to delete this reconciliation record? You will need to re-enter it.", () => {
+                // Bind actions
+                $tbody.find('.btn-delete-recon').click(function() {
+                    let name = $(this).data('name');
+                    frappe.confirm(`Are you sure you want to delete this reconciliation?`, function() {
                         frappe.call({
                             method: "frappe.client.delete",
                             args: { doctype: "Shift Cash Reconciliation", name: name },
@@ -3844,6 +3845,12 @@ function load_reconciliation_history($wrapper) {
                             }
                         });
                     });
+                });
+
+                $tbody.find('.btn-print-recon').click(function() {
+                    let name = $(this).data('name');
+                    let url = `/printview?doctype=Shift Cash Reconciliation&name=${encodeURIComponent(name)}&format=CSA Reconciliation Sign-Off`;
+                    window.open(url, '_blank');
                 });
             } else {
                 $tbody.append('<tr><td colspan="6" class="text-center text-muted">No reconciliations completed yet.</td></tr>');
