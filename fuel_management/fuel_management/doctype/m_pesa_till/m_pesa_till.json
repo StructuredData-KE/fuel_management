@@ -11,7 +11,8 @@
   "till_number",
   "station",
   "is_active",
-  "pump_groups"
+  "pump_groups",
+  "default_account"
  ],
  "fields": [
   {
@@ -49,6 +50,13 @@
    "fieldtype": "Table",
    "label": "Pump Groups",
    "options": "M-Pesa Till Pump Group"
+  },
+  {
+   "fieldname": "default_account",
+   "fieldtype": "Link",
+   "label": "Default Account",
+   "options": "Account",
+   "in_list_view": 1
   }
  ],
  "grid_page_length": 50,

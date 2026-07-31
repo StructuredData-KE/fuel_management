@@ -377,9 +377,9 @@ class Shift(Document):
         # C. M-Pesa
         for m in (self.mpesa_payments or []):
             if flt(m.amount) > 0:
-                mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": m.mpesa_till, "company": company}, "default_account")
+                mop_account = frappe.db.get_value("M-Pesa Till", m.mpesa_till, "default_account")
                 if not mop_account:
-                    frappe.throw(f"No Default Account mapped for Mode of Payment: {m.mpesa_till}")
+                    frappe.throw(f"No Default Account mapped for M-Pesa Till: {m.mpesa_till}")
                 je.append("accounts", {
                     "account": mop_account,
                     "debit_in_account_currency": m.amount,
