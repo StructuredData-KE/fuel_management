@@ -269,13 +269,13 @@ class Shift(Document):
                 })
                 
                 cust_payments = frappe.db.sql("""
-                    SELECT customer, amount FROM 	abCustomer Payment 
+                    SELECT customer, amount FROM `tabCustomer Payment` 
                     WHERE shift=%s AND csa=%s AND docstatus=1
                 """, (self.name, r.csa), as_dict=True)
                 
                 if not cust_payments:
                     cust_payments = frappe.db.sql("""
-                        SELECT customer, amount FROM 	abCustomer Payment 
+                        SELECT customer, amount FROM `tabCustomer Payment` 
                         WHERE shift=%s AND csa=%s
                     """, (self.name, r.csa), as_dict=True)
                     
