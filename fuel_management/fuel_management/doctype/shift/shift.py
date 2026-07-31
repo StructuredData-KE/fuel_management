@@ -629,7 +629,8 @@ class Shift(Document):
                     "item_code": item_code,
                     "qty": qty,
                     "s_warehouse": station_doc.default_forecourt_warehouse,
-                    "cost_center": frappe.get_cached_value("Company", company, "cost_center") or None
+                    "cost_center": frappe.get_cached_value("Company", company, "cost_center") or None,
+                    "allow_zero_valuation_rate": 1
                 })
 
             se.insert(ignore_permissions=True)
