@@ -364,9 +364,7 @@ class Shift(Document):
                     "party_type": "Customer",
                     "party": inv.customer,
                     "debit_in_account_currency": inv.amount,
-                    "user_remark": f"Credit Sale (Invoice)",
-                    "reference_type": "Shift",
-                    "reference_name": self.name
+                    "user_remark": f"Credit Sale (Invoice)"
                 })
                 je.append("accounts", {
                     "account": station_doc.shift_control_account,
