@@ -427,3 +427,62 @@ def update_pf():
         pf.html = html
         pf.save(ignore_permissions=True)
         frappe.db.commit()
+
+@frappe.whitelist()
+def update_pf2():
+    html = """<div style="font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; border: 1px solid #ddd;">
+    <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px;">
+        <h2>Consolidated CSA Cash Sign-Off</h2>
+        <h4>Shift: {{ doc.get_formatted("shift_date") }} ({{ doc.shift_template }})</h4>
+        <p>Station: {{ doc.station }}</p>
+    </div>
+    
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
+        <thead>
+            <tr style="background-color: #f3f4f6;">
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">CSA Name</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Pump Group</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Expected Cash</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Actual Cash</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Variance</th>
+                <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 25%;">CSA Signature</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": doc.name}, fields=["csa", "expected_cash", "actual_cash", "variance"], order_by="creation asc") %}
+            {% if recons %}
+                {% for r in recons %}
+                {% set pg = namespace(value="") %}
+                {% for ac in doc.assigned_csas %}
+                    {% if ac.csa == r.csa %}
+                        {% set pg.value = ac.pump_group %}
+                    {% endif %}
+                {% endfor %}
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;"><b>{{ frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa }}</b></td>
+                    <td style="padding: 10px; border: 1px solid #ddd;">{{ pg.value or '' }}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">{{ "{:,.2f}".format(r.expected_cash) }}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">{{ "{:,.2f}".format(r.actual_cash) }}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: {% if r.variance < 0 %}#dc2626{% else %}#16a34a{% endif %};">{{ "{:,.2f}".format(r.variance) }}</td>
+                    <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">________________________</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr><td colspan="6" style="padding: 10px; border: 1px solid #ddd; text-align: center;">No CSA Reconciliations found for this shift.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+    
+    <div style="margin-top: 60px; display: flex; justify-content: space-between;">
+        <div style="width: 45%; border-top: 1px solid #333; padding-top: 10px; text-align: center;">
+            <p style="margin: 0;"><b>Manager Signature</b></p>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #666;">Date: ________________</p>
+        </div>
+    </div>
+</div>"""
+    
+    if frappe.db.exists("Print Format", "Consolidated CSA Sign-Off"):
+        pf = frappe.get_doc("Print Format", "Consolidated CSA Sign-Off")
+        pf.html = html
+        pf.save(ignore_permissions=True)
+        frappe.db.commit()
