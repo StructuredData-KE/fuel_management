@@ -255,9 +255,9 @@ class Shift(Document):
         # --- PAYMENT ALLOCATIONS (Clearing the Control Account) ---
         
         # A. CSA Cash (Includes Cash from Sales AND Cash from Customer Payments)
-        recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": self.name}, fields=["csa", "actual_cash", "variance", "actual_dry_stock_cash"])
+        recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": self.name}, fields=["csa", "actual_cash", "variance"])
         for r in recons:
-            tot_cash = flt(r.actual_cash) + flt(r.actual_dry_stock_cash)
+            tot_cash = flt(r.actual_cash)
             if tot_cash > 0:
                 csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
                 
@@ -339,6 +339,20 @@ class Shift(Document):
                     "credit_in_account_currency": var,
                     "user_remark": f"Overage Income for {csa_name}"
                 })
+                
+        # A2. Dry Stock Cash
+        if flt(self.actual_dry_stock_cash) > 0:
+            je.append("accounts", {
+                "account": station_doc.cash_account,
+                "debit_in_account_currency": self.actual_dry_stock_cash,
+                "user_remark": "Dry Stock Cash Submitted"
+            })
+            je.append("accounts", {
+                "account": station_doc.shift_control_account,
+                "credit_in_account_currency": self.actual_dry_stock_cash,
+                "user_remark": "Clear Dry Stock Cash Sales"
+            })
+
 
         # B. Invoices
         for inv in (self.invoices or []):
