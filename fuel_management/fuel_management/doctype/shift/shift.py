@@ -299,8 +299,7 @@ class Shift(Document):
                 # Credit Customer AR (for the Customer Payment portion)
                 for cp in (cust_payments or []):
                     if flt(cp.amount) > 0:
-                        cust_doc = frappe.get_doc("Customer", cp.customer)
-                        ar_acct = cust_doc.default_account or frappe.db.get_value("Company", company, "default_receivable_account")
+                        ar_acct = frappe.db.get_value("Party Account", {"parent": cp.customer, "parenttype": "Customer", "company": company}, "account") or frappe.db.get_value("Company", company, "default_receivable_account")
                         je.append("accounts", {
                             "account": ar_acct,
                             "party_type": "Customer",
@@ -357,8 +356,7 @@ class Shift(Document):
         # B. Invoices
         for inv in (self.invoices or []):
             if flt(inv.amount) > 0:
-                customer_doc = frappe.get_doc("Customer", inv.customer)
-                ar_account = customer_doc.default_account or frappe.db.get_value("Company", company, "default_receivable_account")
+                ar_account = frappe.db.get_value("Party Account", {"parent": inv.customer, "parenttype": "Customer", "company": company}, "account") or frappe.db.get_value("Company", company, "default_receivable_account")
                 if not ar_account:
                     frappe.throw(f"No AR account found for customer {inv.customer}")
                 je.append("accounts", {
