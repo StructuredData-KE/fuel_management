@@ -178,14 +178,30 @@ class Shift(Document):
             frappe.throw("No default Company found.")
             
         # 1. Get nozzle prices to calculate fuel revenue
-        from fuel_management.fuel_management.api import get_nozzle_prices
-        prices = get_nozzle_prices(self.station, self.shift_date)
-        
         total_fuel_revenue = 0.0
+        nozzle_tanks = {}
+        tank_items = {}
+        item_prices = {}
+        
         for row in (self.pump_meter_readings or []):
             if getattr(row, "sales_quantity_electronic", 0) > 0:
-                price = prices.get(row.pump_nozzle, {}).get("price", 0.0)
-                total_fuel_revenue += flt(row.sales_quantity_electronic) * flt(price)
+                if row.pump_nozzle not in nozzle_tanks:
+                    nozzle_tanks[row.pump_nozzle] = frappe.db.get_value("Pump Nozzle", row.pump_nozzle, "fuel_tank")
+                tank = nozzle_tanks[row.pump_nozzle]
+                if not tank: continue
+                
+                if tank not in tank_items:
+                    tank_items[tank] = frappe.db.get_value("Fuel Tank", tank, "fuel_product")
+                item = tank_items[tank]
+                if not item: continue
+                
+                if item not in item_prices:
+                    price = frappe.db.get_value("Item Price", {"item_code": item, "price_list": "Standard Selling"}, "price_list_rate")
+                    if not price:
+                        price = frappe.db.get_value("Item", item, "standard_rate") or 0.0
+                    item_prices[item] = price
+                    
+                total_fuel_revenue += flt(row.sales_quantity_electronic) * flt(item_prices[item])
                 
         # 2. Calculate Dry Stock Revenue
         total_dry_stock_revenue = 0.0
