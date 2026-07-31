@@ -243,12 +243,15 @@ def email_shift_report(shift_name):
         if not owner_email:
             return {"status": "error", "message": f"No Owner Email configured for Fuel Station {shift_doc.station}."}
             
+        # Parse multiple emails if separated by comma or semicolon
+        recipients = [e.strip() for e in owner_email.replace(';', ',').split(',')]
+            
         # Generate the PDF of the Shift End Report
         pdf = frappe.get_print("Shift", shift_name, "End of Shift Report", as_pdf=True)
         
         # Send the email
         frappe.sendmail(
-            recipients=[owner_email],
+            recipients=recipients,
             subject=f"End of Shift Report - {shift_name}",
             message=f"Please find attached the End of Shift Report for Shift {shift_name}.",
             attachments=[{
