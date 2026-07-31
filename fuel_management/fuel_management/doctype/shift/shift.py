@@ -624,11 +624,12 @@ class Shift(Document):
             se.remarks = f"Fuel Sales for Shift {self.name}"
 
             for item_code, qty in sales_per_item.items():
+                company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
                 se.append("items", {
                     "item_code": item_code,
                     "qty": qty,
                     "s_warehouse": station_doc.default_forecourt_warehouse,
-                    "cost_center": frappe.db.get_single_value("Global Defaults", "default_cost_center") or None
+                    "cost_center": frappe.get_cached_value("Company", company, "cost_center") or None
                 })
 
             se.insert(ignore_permissions=True)
