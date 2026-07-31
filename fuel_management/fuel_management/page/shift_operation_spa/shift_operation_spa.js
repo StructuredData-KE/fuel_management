@@ -3855,6 +3855,13 @@ function load_reconciliation_history($wrapper) {
             } else {
                 $tbody.append('<tr><td colspan="6" class="text-center text-muted">No reconciliations completed yet.</td></tr>');
             }
+            
+            // Bind Consolidated Print
+            $wrapper.find('#btn-print-consolidated-recon').off('click').on('click', function() {
+                if(!window.ACTIVE_SHIFT) return;
+                let url = `/printview?doctype=Shift&name=${encodeURIComponent(window.ACTIVE_SHIFT.name)}&format=Consolidated CSA Sign-Off`;
+                window.open(url, '_blank');
+            });
         }
     });
 }
