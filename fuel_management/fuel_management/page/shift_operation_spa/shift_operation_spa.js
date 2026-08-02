@@ -1316,12 +1316,257 @@ function load_dropdowns(wrapper) {
                  <td><select class="spa-input csa-select">${csaOptions}</select></td>
              </tr>
             `;
+            let formattedDate = `${day}${suffix} ${months[d.getMonth()]}`.toUpperCase();
+            
+            let template = window.ACTIVE_SHIFT.shift_template ? `(${window.ACTIVE_SHIFT.shift_template})` : '';
+            let titlePrefix = tabName === "Dry Stock (Inventory)" ? "Inventory sales" : tabName;
+            displayTitle = `${titlePrefix} ${formattedDate} ${template}`;
+        }
+        $wrapper.find('#current-module-title').text(displayTitle);
+    });
+}
+
+window.DRYSTOCK_ITEMS = [];
+window.PENDING_DRYSTOCK = [];
+function load_dropdowns(wrapper) {
+    // Fetch Items for Dry Stock
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Item Price",
+            filters: { price_list: "Standard Selling" },
+            fields: ["item_code", "item_name", "price_list_rate"],
+            limit_page_length: 500
+        },
+        callback: function(r) {
+            if(r.message) {
+                frappe.call({
+                    method: "frappe.client.get_list",
+                    args: { doctype: "Item", fields: ["name", "item_group"], limit_page_length: 500 },
+                    callback: function(r2) {
+                        let groups = {};
+                        if(r2.message) r2.message.forEach(i => groups[i.name] = i.item_group);
+                        r.message.forEach(item => item.item_group = groups[item.item_code] || "");
+                        window.DRYSTOCK_ITEMS = r.message;
+                        let options = '';
+                        r.message.forEach(item => {
+                            options += `<option value="${item.item_name} - ${item.item_code}"></option>`;
+                        });
+                        $(wrapper).find('#drystock-items-list').html(options);
+                    }
+                });
+            }
+        }
+    });
+
+    // Fetch Stations
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Fuel Station",
+            fields: ["name"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                let options = '<option value="">Select Station...</option>';
+                r.message.forEach(st => {
+                    options += `<option value="${st.name}">${st.name}</option>`;
+                });
+                $(wrapper).find('#select-station').html(options);
+            }
+        }
+    });
+
+    // Fetch Fuel Shift Templates
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Fuel Shift Template",
+            fields: ["name", "start_time", "end_time"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.SHIFT_TEMPLATES = r.message;
+                let options = '<option value="">Select Template...</option>';
+                r.message.forEach(t => {
+                    options += `<option value="${t.name}">${t.name} (${t.start_time} - ${t.end_time})</option>`;
+                });
+                $(wrapper).find('#select-shift-template').html(options);
+                auto_suggest_shift($(wrapper));
+            }
+        }
+    });
+
+    function auto_suggest_shift($w) {
+        if (!window.SHIFT_TEMPLATES || window.SHIFT_TEMPLATES.length === 0) return;
+        
+        let now = frappe.datetime.now_datetime(); // e.g. "2024-07-17 08:30:00"
+        let timeParts = now.split(' ')[1].split(':');
+        let currentHour = parseInt(timeParts[0]);
+        
+        // Find suitable template
+        // Simple logic: if current time is between start and end, select it.
+        // For night shifts (e.g. 18:00 to 06:00), if current time >= 18 or < 6, select it.
+        let selectedTemplate = null;
+        let isPastMidnight = false;
+        
+        for (let t of window.SHIFT_TEMPLATES) {
+            let startH = parseInt(t.start_time.split(':')[0]);
+            let endH = parseInt(t.end_time.split(':')[0]);
+            
+            if (startH < endH) {
+                // Day shift e.g. 06 to 18
+                if (currentHour >= startH && currentHour < endH) {
+                    selectedTemplate = t.name;
+                    break;
+                }
+            } else {
+                // Night shift e.g. 18 to 06
+                if (currentHour >= startH || currentHour < endH) {
+                    selectedTemplate = t.name;
+                    if (currentHour < endH) {
+                        isPastMidnight = true;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        if (!selectedTemplate) selectedTemplate = window.SHIFT_TEMPLATES[0].name;
+        
+        let suggestedDate = frappe.datetime.get_today();
+        if (isPastMidnight) {
+            // Subtract one day logically
+            suggestedDate = frappe.datetime.add_days(suggestedDate, -1);
+        }
+        
+        $w.find('#input-shift-date').val(suggestedDate);
+        $w.find('#input-shift-date').attr('max', frappe.datetime.get_today());
+        $w.find('#select-shift-template').val(selectedTemplate);
+    }
+
+    // Fetch Pump Groups
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Pump Group",
+            fields: ["name"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.PUMP_GROUPS_LIST = r.message;
+                render_pump_group_rows($(wrapper));
+            }
+        }
+    });
+
+    // Fetch Head CSAs (Users)
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "User",
+            filters: { enabled: 1 },
+            fields: ["name", "full_name"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                let options = '<option value="">Select Head CSA...</option>';
+                r.message.forEach(u => {
+                    let selected = (u.name === frappe.session.user) ? 'selected' : '';
+                    options += `<option value="${u.name}" ${selected}>${u.full_name}</option>`;
+                });
+                $(wrapper).find('#select-head-csa').html(options);
+            }
+        }
+    });
+
+    // Fetch Employees (for pump attendants, using legacy USERS_LIST variable)
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Employee",
+            filters: { status: "Active" },
+            fields: ["name", "employee_name", "user_id"]
+        },
+        callback: function(r) {
+            if(r.message) {
+                window.USERS_LIST = r.message;
+                render_pump_group_rows($(wrapper));
+            }
+        }
+    });
+
+    function render_pump_group_rows($w) {
+        if(!window.USERS_LIST || window.USERS_LIST.length === 0) return;
+        if(!window.PUMP_GROUPS_LIST || window.PUMP_GROUPS_LIST.length === 0) return;
+        
+        let csaOptions = '<option value="">Select CSA...</option>';
+        window.USERS_LIST.forEach(u => { csaOptions += `<option value="${u.name}">${u.employee_name}</option>`; });
+        
+        let html = '';
+        window.PUMP_GROUPS_LIST.forEach(pg => {
+            html += `
+             <tr data-pg="${pg.name}">
+                 <td style="font-weight: bold; color: #1e293b;">${pg.name}</td>
+                 <td><select class="spa-input csa-select">${csaOptions}</select></td>
+             </tr>
+            `;
         });
         $w.find('#csa-assignment-body').html(html);
     }
 }
 
-function setup_actions(wrapper) {
+window.save_child_table = function(table_name, rows_data, success_msg, btn = null, originalText = null, callback = null) {
+    if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"))) {
+        frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
+        if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
+        return;
+    }
+    frappe.call({
+        method: "frappe.client.get",
+        args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+        callback: function(r) {
+            if(r.message) {
+                let doc = r.message;
+                let modified = false;
+                rows_data.forEach(updated_row => {
+                    let existing = doc[table_name].find(d => d.name === updated_row.name);
+                    if(existing) {
+                        Object.assign(existing, updated_row);
+                        modified = true;
+                    }
+                });
+                
+                if (!modified) {
+                    frappe.msgprint("Warning: Rows were not found in the current shift document. Try refreshing the page.");
+                    if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
+                    return;
+                }
+
+                frappe.call({
+                    method: "frappe.client.save",
+                    args: { doc: doc },
+                    callback: function(r2) {
+                        if(r2.message) {
+                            frappe.show_alert({message: success_msg, indicator: "green"});
+                        }
+                    },
+                    error: function(r) {
+                        frappe.msgprint("Failed to save data. Please check the error logs or refresh the page.");
+                    },
+                    always: function() {
+                        if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
+                        if(callback) callback();
+                    }
+                });
+            } else {
+                frappe.msgprint("Failed to load shift document.");
+                if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
+            }
+        }
+    });
+};
+
     const $wrapper = $(wrapper);
     
     // Bind Dry Stock History Filters
