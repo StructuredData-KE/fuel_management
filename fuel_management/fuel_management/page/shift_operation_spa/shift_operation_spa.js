@@ -1399,6 +1399,7 @@ function setup_actions(wrapper) {
                     if(r.message) {
                         frappe.show_alert({message: "Shift Started Successfully!", indicator: "green"});
                         window.ACTIVE_SHIFT = r.message;
+                        window.SHIFT_DOC = null; // Force reload of new shift data
                         lock_ui_for_active_shift($wrapper);
                     }
                 }
