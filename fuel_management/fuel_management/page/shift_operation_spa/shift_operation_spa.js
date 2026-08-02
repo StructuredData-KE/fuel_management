@@ -1479,56 +1479,7 @@ function setup_actions(wrapper) {
         });
     });
     
-    function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null, callback = null) {
-        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"))) {
-            frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
-            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
-            return;
-        }
-        frappe.call({
-            method: "frappe.client.get",
-            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
-            callback: function(r) {
-                if(r.message) {
-                    let doc = r.message;
-                    let modified = false;
-                    rows_data.forEach(updated_row => {
-                        let existing = doc[table_name].find(d => d.name === updated_row.name);
-                        if(existing) {
-                            Object.assign(existing, updated_row);
-                            modified = true;
-                        }
-                    });
-                    
-                    if (!modified) {
-                        frappe.msgprint("Warning: Rows were not found in the current shift document. Try refreshing the page.");
-                        if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
-                        return;
-                    }
 
-                    frappe.call({
-                        method: "frappe.client.save",
-                        args: { doc: doc },
-                        callback: function(r2) {
-                            if(r2.message) {
-                                frappe.show_alert({message: success_msg, indicator: "green"});
-                            }
-                        },
-                        error: function(r) {
-                            frappe.msgprint("Failed to save data. Please check the error logs or refresh the page.");
-                        },
-                        always: function() {
-                            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
-                            if(callback) callback();
-                        }
-                    });
-                } else {
-                    frappe.msgprint("Failed to load shift document.");
-                    if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
-                }
-            }
-        });
-    }
 
     
     $wrapper.on('click', '#btn-save-drystock', function() {
