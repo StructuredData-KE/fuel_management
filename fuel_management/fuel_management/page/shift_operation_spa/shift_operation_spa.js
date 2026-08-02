@@ -1491,13 +1491,21 @@ function setup_actions(wrapper) {
             callback: function(r) {
                 if(r.message) {
                     let doc = r.message;
+                    let modified = false;
                     rows_data.forEach(updated_row => {
                         let existing = doc[table_name].find(d => d.name === updated_row.name);
                         if(existing) {
                             Object.assign(existing, updated_row);
+                            modified = true;
                         }
                     });
                     
+                    if (!modified) {
+                        frappe.msgprint("Warning: Rows were not found in the current shift document. Try refreshing the page.");
+                        if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
+                        return;
+                    }
+
                     frappe.call({
                         method: "frappe.client.save",
                         args: { doc: doc },
@@ -1505,13 +1513,18 @@ function setup_actions(wrapper) {
                             if(r2.message) {
                                 frappe.show_alert({message: success_msg, indicator: "green"});
                             }
-                            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
-            if(callback) callback(r2);
+                        },
+                        error: function(r) {
+                            frappe.msgprint("Failed to save data. Please check the error logs or refresh the page.");
+                        },
+                        always: function() {
+                            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
+                            if(callback) callback();
                         }
                     });
                 } else {
-                    if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
-            if(callback) callback(r2);
+                    frappe.msgprint("Failed to load shift document.");
+                    if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
                 }
             }
         });
