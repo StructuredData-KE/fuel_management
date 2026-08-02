@@ -1479,10 +1479,6 @@ function setup_actions(wrapper) {
         });
     });
     
-    function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null, callback = null) {
-        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"))) {
-            frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
-            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
             return;
         }
         frappe.call({
@@ -4416,3 +4412,8 @@ function render_greasing(wrapper) {
         frappe.msgprint('SPA Global Error: ' + e.message);
     }
 }
+
+function save_child_table(table_name, rows_data, success_msg, btn = null, originalText = null, callback = null) {
+        if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"))) {
+            frappe.show_alert({message: "This shift is closed. Only System Managers or Fuel Station Owners can modify data.", indicator: "red"});
+            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); }
