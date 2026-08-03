@@ -596,7 +596,7 @@ function render_dips($wrapper) {
         html += `
             <tr data-name="${row.name}" data-tank="${row.fuel_tank}">
                 <td style="font-weight: 600; color: var(--text-primary);">${row.fuel_tank}</td>
-                <td><span class="read-only-cell">${row.opening_dip || 0}</span></td>
+                <td><span class="read-only-cell dip-opening">${row.opening_dip || 0}</span></td>
                 <td>
                     <input type="number" class="spa-input dip-closing highlight-input" data-field="closing_dip" value="${row.closing_dip || ''}" placeholder="Enter Closing">
                 </td>
@@ -1469,7 +1469,7 @@ function setup_actions(wrapper) {
         $wrapper.find('#dips-container tr').each(function() {
             readings.push({
                 name: $(this).attr('data-name'),
-                opening_dip: $(this).find('.dip-opening').val(),
+                opening_dip: parseFloat($(this).find('.dip-opening').text()) || 0,
                 closing_dip: $(this).find('.dip-closing').val()
             });
         });
