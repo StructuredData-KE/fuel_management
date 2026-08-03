@@ -2889,7 +2889,7 @@ function render_topups($wrapper) {
         method: "frappe.client.get_list",
         args: {
             doctype: "Supplier Card",
-            filters: { status: "Active" },
+            filters: { status: "Active", supplier: ["like", "%Rubis%"] },
             fields: ["name", "card_name"]
         },
         callback: function(r) {
