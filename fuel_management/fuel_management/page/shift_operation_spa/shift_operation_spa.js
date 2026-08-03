@@ -804,12 +804,14 @@ function render_drystock($wrapper) {
             
             // Regex to extract multiplier (e.g. 1L, 4L, 500ML, 0.5KG)
             let mult = 1;
-            let m = item.item_name.match(/(\d+(?:\.\d+)?)\s*(L|ML|KG|G|LITRE|LTR)s?\b/i);
-            if(m) {
-                mult = parseFloat(m[1]);
-                let unit = m[2].toUpperCase();
-                if (unit === 'ML' || unit === 'G') {
-                    mult = mult / 1000.0;
+            if (item.item_group !== "ACCESSORIES") {
+                let m = item.item_name.match(/(\d+(?:\.\d+)?)\s*(L|ML|KG|G|LITRE|LTR)s?\b/i);
+                if(m) {
+                    mult = parseFloat(m[1]);
+                    let unit = m[2].toUpperCase();
+                    if (unit === 'ML' || unit === 'G') {
+                        mult = mult / 1000.0;
+                    }
                 }
             }
             $wrapper.find('#drystock-uom').val(mult);
