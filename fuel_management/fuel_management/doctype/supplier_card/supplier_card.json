@@ -28,7 +28,7 @@
             "fieldname": "status",
             "fieldtype": "Select",
             "label": "Status",
-            "options": "Active\\nSuspended\\nClosed",
+            "options": "Active\nSuspended\nClosed",
             "default": "Active"
         }
     ],
