@@ -20,6 +20,7 @@
   "section_break_dips",
   "dip_stick_readings",
   "section_break_accounting",
+  "total_supplier_top_ups",
   "expected_cash",
   "expected_dry_stock_cash",
   "actual_cash",
@@ -142,6 +143,12 @@
    "fieldname": "section_break_accounting",
    "fieldtype": "Section Break",
    "label": "Accounting Reference"
+  },
+  {
+   "fieldname": "total_supplier_top_ups",
+   "fieldtype": "Currency",
+   "label": "Total Supplier Top-Ups",
+   "read_only": 1
   },
   {
    "fieldname": "expected_cash",

@@ -16,6 +16,7 @@
   "inventory_sales",
   "greasing_sales",
   "customer_payments",
+ "supplier_top_ups",
   "total_liabilities",
   "sb_deductions",
   "mpesa",
@@ -102,6 +103,12 @@
    "fieldtype": "Currency",
    "label": "Customer Payments"
   },
+ {
+  "default": "0",
+  "fieldname": "supplier_top_ups",
+  "fieldtype": "Currency",
+  "label": "Supplier Top-Ups"
+ },
   {
    "bold": 1,
    "fieldname": "total_liabilities",

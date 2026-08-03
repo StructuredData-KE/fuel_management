@@ -130,13 +130,20 @@ class Shift(Document):
         if not self.is_new():
             rtt_records = frappe.get_all("Station Return To Tank", filters={"shift": self.name}, fields=["amount"])
             total_rtt_amount = sum(frappe.utils.flt(r.amount) for r in rtt_records)
+            
+        # Add Station Supplier Top Ups
+        total_topup_amount = 0.0
+        if not self.is_new():
+            topup_records = frappe.get_all("Station Supplier Top Up", filters={"shift": self.name}, fields=["amount"])
+            total_topup_amount = sum(frappe.utils.flt(r.amount) for r in topup_records)
+            self.total_supplier_top_ups = total_topup_amount
 
         if not self.is_new():
             fleet_summaries = frappe.get_all("Fleet Card Shift Summary", filters={"shift": self.name, "docstatus": ("<", 2)}, fields=["total_csa_drops"])
             for s in fleet_summaries:
                 total_fleet_drops += flt(s.total_csa_drops)
 
-        self.expected_cash = total_fuel_amount - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops + total_rtt_amount)
+        self.expected_cash = total_fuel_amount + total_topup_amount - (total_mpesa + total_cards + total_invoices + total_expenses + total_procurement + total_fleet_drops + total_rtt_amount)
 
         if getattr(self, "actual_cash", None) is not None:
             self.cash_variance = flt(self.actual_cash) - flt(self.expected_cash)

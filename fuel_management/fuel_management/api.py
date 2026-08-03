@@ -12,6 +12,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         "inventory_sales": 0.0,
         "greasing_sales": 0.0,
         "customer_payments": 0.0,
+        "supplier_top_ups": 0.0,
         "mpesa": 0.0,
         "invoices": 0.0,
         "cards": 0.0,
@@ -182,6 +183,15 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         
     data["customer_payments_breakdown"] = cp_data or []
     data["customer_payments"] = sum([d.amount for d in cp_data]) if cp_data else 0.0
+        
+    # Supplier Top Ups
+    topup_data = frappe.db.sql("""
+        SELECT name, card, amount 
+        FROM `tabStation Supplier Top Up` 
+        WHERE shift=%s AND csa=%s
+    """, (shift_id, csa_id), as_dict=True)
+    data["supplier_top_ups_breakdown"] = topup_data or []
+    data["supplier_top_ups"] = sum([d.amount for d in topup_data]) if topup_data else 0.0
         
     # 5. M-Pesa
     mpesa_data = frappe.db.sql("""

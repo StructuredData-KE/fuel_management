@@ -3714,8 +3714,9 @@ function load_csa_reconciliation($wrapper, csa) {
                 $wrapper.find('#recon-inventory-sales').text(format_currency(r.message.inventory_sales));
                 $wrapper.find('#recon-greasing-sales').text(format_currency(r.message.greasing_sales));
                 $wrapper.find('#recon-customer-payments').text(format_currency(r.message.customer_payments));
+                $wrapper.find('#recon-supplier-top-ups').text(format_currency(r.message.supplier_top_ups));
                 
-                let tot_liab = r.message.meter_sales + r.message.inventory_sales + r.message.greasing_sales + r.message.customer_payments;
+                let tot_liab = r.message.meter_sales + r.message.inventory_sales + r.message.greasing_sales + r.message.customer_payments + r.message.supplier_top_ups;
                 $wrapper.find('#recon-total-liabilities').text(format_currency(tot_liab));
                 window.CURRENT_RECON.total_liabilities = tot_liab;
                 
@@ -3782,7 +3783,7 @@ function save_csa_reconciliation($wrapper) {
                 inventory_sales: window.CURRENT_RECON.inventory_sales,
                 greasing_sales: window.CURRENT_RECON.greasing_sales,
                 customer_payments: window.CURRENT_RECON.customer_payments,
-                
+                supplier_top_ups: window.CURRENT_RECON.supplier_top_ups,
                 mpesa: window.CURRENT_RECON.mpesa,
                 invoices: window.CURRENT_RECON.invoices,
                 cards: window.CURRENT_RECON.cards,
@@ -4363,6 +4364,14 @@ function render_greasing(wrapper) {
           columns = [
               {label: 'Ref', key: 'name'},
               {label: 'Customer', key: 'customer'},
+              {label: 'Amount', key: 'amount', format: 'currency'}
+          ];
+      } else if(type === 'supplier_top_ups') {
+          title = "Supplier Top-Ups Breakdown";
+          data = window.CURRENT_RECON.supplier_top_ups_breakdown || [];
+          columns = [
+              {label: 'Ref', key: 'name'},
+              {label: 'Card', key: 'card'},
               {label: 'Amount', key: 'amount', format: 'currency'}
           ];
       } else if(type === 'mpesa') {

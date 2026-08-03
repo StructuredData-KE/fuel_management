@@ -8,7 +8,8 @@ class ShiftCashReconciliation(Document):
             flt(self.meter_sales) + 
             flt(self.inventory_sales) + 
             flt(self.greasing_sales) + 
-            flt(self.customer_payments)
+            flt(self.customer_payments) +
+            flt(self.supplier_top_ups)
         )
         
         self.total_deductions = (
