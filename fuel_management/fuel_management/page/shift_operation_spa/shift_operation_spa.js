@@ -3048,6 +3048,62 @@ function render_inventory_status($wrapper) {
     $wrapper.find('#btn-refresh-inventory-report').off('click').on('click', function() {
         fetch_inventory_report($wrapper);
     });
+    
+    // Zoom Controls
+    let currentZoom = parseFloat($wrapper.find('.inventory-report-wrapper').css('--table-scale')) || 1.0;
+    
+    $wrapper.find('#btn-zoom-in').off('click').on('click', function() {
+        if(currentZoom < 1.5) {
+            currentZoom += 0.1;
+            updateZoom();
+        }
+    });
+    
+    $wrapper.find('#btn-zoom-out').off('click').on('click', function() {
+        if(currentZoom > 0.5) {
+            currentZoom -= 0.1;
+            updateZoom();
+        }
+    });
+    
+    $wrapper.find('#btn-zoom-reset').off('click').on('click', function() {
+        currentZoom = 1.0;
+        updateZoom();
+    });
+    
+    function updateZoom() {
+        $wrapper.find('.inventory-report-wrapper').css('--table-scale', currentZoom.toFixed(1));
+        $wrapper.find('#zoom-level').text(Math.round(currentZoom * 100) + '%');
+    }
+    
+    // Compact Mode Toggle
+    $wrapper.find('#toggle-compact').off('change').on('change', function() {
+        if($(this).is(':checked')) {
+            $wrapper.find('.inventory-report-wrapper').addClass('compact-mode');
+        } else {
+            $wrapper.find('.inventory-report-wrapper').removeClass('compact-mode');
+        }
+    });
+    
+    // Collapse Columns
+    // Need event delegation because headers might be re-rendered? No, headers are static.
+    $wrapper.find('.collapse-icon').off('click').on('click', function() {
+        let target = $(this).data('target'); // 'op' or 'cl'
+        let table = $wrapper.find('.inventory-report-table');
+        let isCollapsed = table.hasClass('collapsed-' + target);
+        
+        if (isCollapsed) {
+            table.removeClass('collapsed-' + target);
+            $(this).text('[-]');
+            // update colspan
+            $wrapper.find('#th-' + target + '-group').attr('colspan', 3);
+        } else {
+            table.addClass('collapsed-' + target);
+            $(this).text('[+]');
+            $wrapper.find('#th-' + target + '-group').attr('colspan', 1);
+        }
+    });
+
 
     fetch_inventory_report($wrapper);
 }
@@ -3101,15 +3157,15 @@ function fetch_inventory_report($wrapper) {
                                 <td class="sticky-col th-no">${no++}</td>
                                 <td class="sticky-col th-product">${row.item_name}</td>
                                 
-                                <td>${row.op_store || 0}</td>
-                                <td>${row.op_forecourt || 0}</td>
+                                <td class="col-op">${row.op_store || 0}</td>
+                                <td class="col-op">${row.op_forecourt || 0}</td>
                                 <td style="font-weight:bold;">${row.op_total || 0}</td>
                                 
                                 <td>${row.purchases || 0}</td>
                                 <td>${row.sales || 0}</td>
                                 
-                                <td>${row.cl_store || 0}</td>
-                                <td>${row.cl_forecourt || 0}</td>
+                                <td class="col-cl">${row.cl_store || 0}</td>
+                                <td class="col-cl">${row.cl_forecourt || 0}</td>
                                 <td style="font-weight:bold;">${row.cl_total || 0}</td>
                             </tr>
                         `;
