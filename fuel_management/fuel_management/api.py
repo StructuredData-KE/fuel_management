@@ -628,3 +628,46 @@ def get_inventory_status_report(station_id, from_date, to_date):
         grouped[ig].append(row)
         
     return {"company": company_name, "data": grouped}
+
+def create_borrowed_doctypes():
+    import frappe
+    # 1. Borrowed Product Item (Child Table)
+    if not frappe.db.exists("DocType", "Borrowed Product Item"):
+        doc = frappe.get_doc({
+            "doctype": "DocType",
+            "name": "Borrowed Product Item",
+            "module": "Fuel Management",
+            "custom": 1,
+            "istable": 1,
+            "fields": [
+                {"fieldname": "item_code", "label": "Item Code", "fieldtype": "Link", "options": "Item", "in_list_view": 1, "reqd": 1},
+                {"fieldname": "qty", "label": "Quantity", "fieldtype": "Float", "in_list_view": 1, "reqd": 1}
+            ]
+        })
+        doc.insert()
+        print("Created Borrowed Product Item")
+
+    # 2. Borrowed Product (Parent)
+    if not frappe.db.exists("DocType", "Borrowed Product"):
+        doc = frappe.get_doc({
+            "doctype": "DocType",
+            "name": "Borrowed Product",
+            "module": "Fuel Management",
+            "custom": 1,
+            "autoname": "format:BOR-{YYYY}-{MM}-{####}",
+            "fields": [
+                {"fieldname": "station", "label": "Station", "fieldtype": "Link", "options": "Fuel Station", "reqd": 1},
+                {"fieldname": "type", "label": "Type", "fieldtype": "Select", "options": "Borrowed In\nBorrowed Out", "reqd": 1},
+                {"fieldname": "date", "label": "Date", "fieldtype": "Date", "reqd": 1},
+                {"fieldname": "counterparty", "label": "Counterparty", "fieldtype": "Data", "reqd": 1},
+                {"fieldname": "memo", "label": "Memo", "fieldtype": "Data"},
+                {"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "Pending Return\nReturned", "default": "Pending Return"},
+                {"fieldname": "stock_entry", "label": "Stock Entry", "fieldtype": "Link", "options": "Stock Entry", "read_only": 1},
+                {"fieldname": "return_stock_entry", "label": "Return Stock Entry", "fieldtype": "Link", "options": "Stock Entry", "read_only": 1},
+                {"fieldname": "items", "label": "Items", "fieldtype": "Table", "options": "Borrowed Product Item", "reqd": 1}
+            ]
+        })
+        doc.insert()
+        print("Created Borrowed Product")
+        
+    frappe.db.commit()
