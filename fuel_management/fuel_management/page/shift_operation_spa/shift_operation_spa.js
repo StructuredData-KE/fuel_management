@@ -1699,11 +1699,17 @@ function render_invoices($wrapper) {
     // Remove duplicates
     allowed_csas = [...new Set(allowed_csas)];
     
-    allowed_csas.forEach(csa => {
-        let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.employee_name : csa;
-        csaOptions += `<option value="${csa}">${name}</option>`;
+    
+    let sorted_csas = allowed_csas.map(csa => {
+        let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === csa) : null;
+        let name = u ? (u.employee_name || u.full_name) : csa;
+        return {csa, name};
+    }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    
+    sorted_csas.forEach(item => {
+        csaOptions += `<option value="${item.csa}">${item.name}</option>`;
     });
+
     $wrapper.find('#invoice-csa').html(csaOptions);
     $wrapper.find('#invoice-inventory-csa').html(csaOptions);
 
@@ -2342,11 +2348,17 @@ function render_fleet_cards($wrapper) {
     // Remove duplicates
     allowed_csas = [...new Set(allowed_csas)];
     
-    allowed_csas.forEach(csa => {
-        let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.employee_name : csa;
-        csaOptions += `<option value="${csa}">${name}</option>`;
+    
+    let sorted_csas = allowed_csas.map(csa => {
+        let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === csa) : null;
+        let name = u ? (u.employee_name || u.full_name) : csa;
+        return {csa, name};
+    }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    
+    sorted_csas.forEach(item => {
+        csaOptions += `<option value="${item.csa}">${item.name}</option>`;
     });
+
     $wrapper.find('#sc-csa').html(csaOptions);
 
     // 3. Populate Cards (from Station Card Type DocType)
@@ -2496,11 +2508,17 @@ function render_station_expenses($wrapper) {
     // Remove duplicates
     allowed_csas = [...new Set(allowed_csas)];
     
-    allowed_csas.forEach(csa => {
-        let u = window.USERS_LIST.find(u => u.name === csa);
-        let name = u ? u.employee_name : csa;
-        csaOptions += `<option value="${csa}">${name}</option>`;
+    
+    let sorted_csas = allowed_csas.map(csa => {
+        let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === csa) : null;
+        let name = u ? (u.employee_name || u.full_name) : csa;
+        return {csa, name};
+    }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    
+    sorted_csas.forEach(item => {
+        csaOptions += `<option value="${item.csa}">${item.name}</option>`;
     });
+
     $wrapper.find('#se-csa').html(csaOptions);
 
     // 3. Populate Categories (from Expense Claim Type)
@@ -3664,11 +3682,17 @@ function render_reconcile(wrapper) {
     }
     allowed_csas = [...new Set(allowed_csas)];
     
-    allowed_csas.forEach(csa => {
+    
+    let sorted_csas = allowed_csas.map(csa => {
         let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === csa) : null;
         let name = u ? (u.employee_name || u.full_name) : csa;
-        csaOptions += `<option value="${csa}">${name}</option>`;
+        return {csa, name};
+    }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    
+    sorted_csas.forEach(item => {
+        csaOptions += `<option value="${item.csa}">${item.name}</option>`;
     });
+
     
     $wrapper.find('#recon-csa-select').html(csaOptions);
     
@@ -3916,11 +3940,17 @@ function render_station_cards($wrapper) {
     // Remove duplicates
     allowed_csas = [...new Set(allowed_csas)];
     
-    allowed_csas.forEach(csa => {
-        let u = window.USERS_LIST.find(u => u.name === csa);
+    
+    let sorted_csas = allowed_csas.map(csa => {
+        let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === csa) : null;
         let name = u ? (u.employee_name || u.full_name) : csa;
-        csaOptions += `<option value="${csa}">${name}</option>`;
+        return {csa, name};
+    }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    
+    sorted_csas.forEach(item => {
+        csaOptions += `<option value="${item.csa}">${item.name}</option>`;
     });
+
     $wrapper.find('#sc-csa').html(csaOptions);
 
     // 3. Populate Cards (from Station Card Type DocType)
@@ -4138,17 +4168,21 @@ function render_greasing(wrapper) {
     // Populate CSA Dropdown
     let csa_html = '<option value="">Select CSA...</option>';
     let csa_count = 0;
-    (window.SHIFT_DOC.assigned_csas || []).forEach(csa_row => {
-        if(csa_row.csa) {
-            csa_count++;
-            let csa_name = csa_row.csa;
-            if(window.USERS_LIST) {
-                let u = window.USERS_LIST.find(user => user.name === csa_row.csa);
-                if(u) csa_name = u.employee_name || u.full_name;
-            }
-            csa_html += `<option value="${csa_row.csa}">${csa_name}</option>`;
+    
+    let sorted_greasing = (window.SHIFT_DOC.assigned_csas || []).filter(r => r.csa).map(csa_row => {
+        let csa_name = csa_row.csa;
+        if(window.USERS_LIST) {
+            let u = window.USERS_LIST.find(user => user.name === csa_row.csa);
+            if(u) csa_name = u.employee_name || u.full_name;
         }
+        return {csa: csa_row.csa, name: csa_name};
+    }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    
+    sorted_greasing.forEach(item => {
+        csa_count++;
+        csa_html += `<option value="${item.csa}">${item.name}</option>`;
     });
+
     $wrapper.find('#greasing-csa').html(csa_html);
 
     // Fetch and Populate Vehicle Types
