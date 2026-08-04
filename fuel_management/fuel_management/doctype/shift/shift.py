@@ -529,6 +529,22 @@ class Shift(Document):
                     "opening_electronic_meter": opening_elec,
                     "opening_manual_meter": opening_manual
                 })
+        elif self.pump_meter_readings and self.station and self.status == "Open":
+            for row in self.pump_meter_readings:
+                found = False
+                if last_shift_doc:
+                    for prev_row in last_shift_doc.pump_meter_readings:
+                        if prev_row.pump_nozzle == row.pump_nozzle:
+                            row.opening_electronic_meter = prev_row.closing_electronic_meter
+                            row.opening_manual_meter = prev_row.closing_manual_meter
+                            found = True
+                            break
+                if not found and station_opening:
+                    for prev_row in station_opening.nozzle_balances:
+                        if getattr(prev_row, "pump_nozzle", None) == row.pump_nozzle:
+                            row.opening_electronic_meter = prev_row.opening_electronic_meter
+                            row.opening_manual_meter = prev_row.opening_manual_meter
+                            break
 
         if not self.dip_stick_readings and self.station:
             tanks = frappe.get_all("Fuel Tank", filters={"station": self.station}, fields=["name"])
@@ -552,6 +568,20 @@ class Shift(Document):
                     "fuel_tank": tank.name,
                     "opening_dip": opening_dip
                 })
+        elif self.dip_stick_readings and self.station and self.status == "Open":
+            for row in self.dip_stick_readings:
+                found = False
+                if last_shift_doc:
+                    for prev_row in (last_shift_doc.dip_stick_readings or []):
+                        if getattr(prev_row, "fuel_tank", None) == row.fuel_tank:
+                            row.opening_dip = prev_row.closing_dip or 0.0
+                            found = True
+                            break
+                if not found and station_opening:
+                    for prev_row in (station_opening.get("dip_balances") or []):
+                        if getattr(prev_row, "fuel_tank", None) == row.fuel_tank:
+                            row.opening_dip = prev_row.opening_dip or 0.0
+                            break
 
         if not self.mpesa_payments and self.station:
             tills = frappe.get_all("M-Pesa Till", filters={"station": self.station, "is_active": 1}, fields=["name"])
@@ -576,6 +606,20 @@ class Shift(Document):
                     "closing_balance": 0,
                     "transfers_made": 0
                 })
+        elif self.mpesa_payments and self.station and self.status == "Open":
+            for row in self.mpesa_payments:
+                found = False
+                if last_shift_doc:
+                    for prev_row in (last_shift_doc.mpesa_payments or []):
+                        if getattr(prev_row, "mpesa_till", None) == row.mpesa_till:
+                            row.opening_balance = prev_row.closing_balance or 0
+                            found = True
+                            break
+                if not found and station_opening:
+                    for prev_row in (station_opening.mpesa_balances or []):
+                        if getattr(prev_row, "mpesa_till", None) == row.mpesa_till:
+                            row.opening_balance = prev_row.opening_balance or 0
+                            break
 
     def calculate_expected_stock(self):
         from frappe.utils import flt
