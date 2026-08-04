@@ -493,9 +493,30 @@ class Shift(Document):
         last_shift_doc = None
         station_opening = None
         if self.station:
-            last_shift = frappe.get_all("Shift", filters={"station": self.station, "status": "Closed", "name": ("!=", self.name)}, order_by="creation desc", limit=1)
+            # Strictly find the chronologically previous shift
+            query = """
+                SELECT name FROM 	abShift
+                WHERE station = %s AND name != %s
+                AND (shift_date < %s OR (shift_date = %s AND start_time < %s))
+                ORDER BY shift_date DESC, start_time DESC, creation DESC
+                LIMIT 1
+            """
+            # If start_time is None, treat it as early morning "00:00:00"
+            s_time = self.start_time or "00:00:00"
+            last_shift = frappe.db.sql(query, (self.station, self.name, self.shift_date, self.shift_date, s_time), as_dict=True)
+            
             if last_shift:
                 last_shift_doc = frappe.get_doc("Shift", last_shift[0].name)
+            else:
+                # Fallback: maybe there is a shift on the same date with no start_time, created before this one
+                fallback = frappe.db.sql("""
+                    SELECT name FROM 	abShift
+                    WHERE station = %s AND name != %s AND shift_date <= %s
+                    ORDER BY shift_date DESC, creation DESC
+                    LIMIT 1
+                """, (self.station, self.name, self.shift_date), as_dict=True)
+                if fallback:
+                    last_shift_doc = frappe.get_doc("Shift", fallback[0].name)
                 
             sob = frappe.get_all("Station Opening Balance", filters={"station": self.station, "docstatus": 1}, order_by="date desc, creation desc", limit=1)
             if sob:
@@ -535,8 +556,11 @@ class Shift(Document):
                 if last_shift_doc:
                     for prev_row in last_shift_doc.pump_meter_readings:
                         if prev_row.pump_nozzle == row.pump_nozzle:
-                            row.opening_electronic_meter = prev_row.closing_electronic_meter
-                            row.opening_manual_meter = prev_row.closing_manual_meter
+                            # Only overwrite if we found a valid number, otherwise keep what's there
+                            if prev_row.closing_electronic_meter is not None:
+                                row.opening_electronic_meter = prev_row.closing_electronic_meter
+                            if prev_row.closing_manual_meter is not None:
+                                row.opening_manual_meter = prev_row.closing_manual_meter
                             found = True
                             break
                 if not found and station_opening:
@@ -574,7 +598,8 @@ class Shift(Document):
                 if last_shift_doc:
                     for prev_row in (last_shift_doc.dip_stick_readings or []):
                         if getattr(prev_row, "fuel_tank", None) == row.fuel_tank:
-                            row.opening_dip = prev_row.closing_dip or 0.0
+                            if prev_row.closing_dip is not None:
+                                row.opening_dip = prev_row.closing_dip
                             found = True
                             break
                 if not found and station_opening:
@@ -612,7 +637,8 @@ class Shift(Document):
                 if last_shift_doc:
                     for prev_row in (last_shift_doc.mpesa_payments or []):
                         if getattr(prev_row, "mpesa_till", None) == row.mpesa_till:
-                            row.opening_balance = prev_row.closing_balance or 0
+                            if prev_row.closing_balance is not None:
+                                row.opening_balance = prev_row.closing_balance
                             found = True
                             break
                 if not found and station_opening:
