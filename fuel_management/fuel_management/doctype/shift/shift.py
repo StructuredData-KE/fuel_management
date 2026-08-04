@@ -493,7 +493,7 @@ class Shift(Document):
         last_shift_doc = None
         station_opening = None
         if self.station:
-            last_shift = frappe.get_all("Shift", filters={"station": self.station, "status": "Closed", "name": ("!=", self.name)}, order_by="end_time desc", limit=1)
+            last_shift = frappe.get_all("Shift", filters={"station": self.station, "status": "Closed", "name": ("!=", self.name)}, order_by="creation desc", limit=1)
             if last_shift:
                 last_shift_doc = frappe.get_doc("Shift", last_shift[0].name)
                 
