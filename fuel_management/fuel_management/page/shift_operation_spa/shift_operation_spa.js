@@ -1277,6 +1277,7 @@ function load_dropdowns(wrapper) {
         },
         callback: function(r) {
             if(r.message) {
+                r.message.sort((a,b) => (a.full_name || "").localeCompare(b.full_name || ""));
                 let options = '<option value="">Select Head CSA...</option>';
                 r.message.forEach(u => {
                     let selected = (u.name === frappe.session.user) ? 'selected' : '';
@@ -1298,6 +1299,7 @@ function load_dropdowns(wrapper) {
         callback: function(r) {
             if(r.message) {
                 window.USERS_LIST = r.message;
+                window.USERS_LIST.sort((a,b) => (a.employee_name || a.full_name || a.name || "").localeCompare(b.employee_name || b.full_name || b.name || ""));
                 render_pump_group_rows($(wrapper));
             }
         }
