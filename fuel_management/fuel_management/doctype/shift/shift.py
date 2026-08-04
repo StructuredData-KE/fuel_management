@@ -495,7 +495,7 @@ class Shift(Document):
         if self.station:
             # Strictly find the chronologically previous shift
             query = """
-                SELECT name FROM 	abShift
+                SELECT name FROM `tabShift`
                 WHERE station = %s AND name != %s
                 AND (shift_date < %s OR (shift_date = %s AND start_time < %s))
                 ORDER BY shift_date DESC, start_time DESC, creation DESC
@@ -510,7 +510,7 @@ class Shift(Document):
             else:
                 # Fallback: maybe there is a shift on the same date with no start_time, created before this one
                 fallback = frappe.db.sql("""
-                    SELECT name FROM 	abShift
+                    SELECT name FROM `tabShift`
                     WHERE station = %s AND name != %s AND shift_date <= %s
                     ORDER BY shift_date DESC, creation DESC
                     LIMIT 1
