@@ -3039,7 +3039,18 @@ function render_inventory_status($wrapper) {
         args: { station_id: window.ACTIVE_SHIFT.station },
         callback: function(r) {
             let html = '';
+            
             if(r.message && r.message.length > 0) {
+                let unique_items = [];
+                let item_opts = '<option value="">Select Item...</option>';
+                r.message.forEach(row => {
+                    if(!unique_items.includes(row.item_code)) {
+                        unique_items.push(row.item_code);
+                        item_opts += `<option value="` + row.item_code + `">` + row.item_name + `</option>`;
+                    }
+                });
+                $wrapper.find('#stock-transfer-item').html(item_opts);
+
                 r.message.forEach(row => {
                     let badgeClass = row.actual_qty <= 0 ? 'badge-danger' : 'badge-success';
                     html += `
@@ -3054,7 +3065,47 @@ function render_inventory_status($wrapper) {
             } else {
                 html = '<tr><td colspan="4" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this station.</td></tr>';
             }
-            $wrapper.find('#list-inventory-status').html(html);
+            
+    $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
+        let item = $wrapper.find('#stock-transfer-item').val();
+        let qty = $wrapper.find('#stock-transfer-qty').val();
+        
+        if(!item || !qty) {
+            frappe.show_alert({message: "Please select an item and enter a quantity.", indicator: "orange"});
+            return;
+        }
+        
+        let $btn = $(this);
+        $btn.find('.spinner').removeClass('hidden');
+        $btn.prop('disabled', true);
+        
+        frappe.call({
+            method: "fuel_management.fuel_management.api.create_spa_stock_transfer",
+            args: {
+                station_id: window.ACTIVE_SHIFT.station,
+                item_code: item,
+                qty: qty
+            },
+            callback: function(r) {
+                $btn.find('.spinner').addClass('hidden');
+                $btn.prop('disabled', false);
+                
+                if(r.message && r.message.status === "success") {
+                    frappe.show_alert({message: r.message.message, indicator: "green"});
+                    $wrapper.find('#stock-transfer-item').val('');
+                    $wrapper.find('#stock-transfer-qty').val('');
+                    // Refresh the inventory
+                    render_inventory_status($wrapper);
+                }
+            },
+            error: function() {
+                $btn.find('.spinner').addClass('hidden');
+                $btn.prop('disabled', false);
+            }
+        });
+    });
+    
+    $wrapper.find('#list-inventory-status').html(html);
         }
     });
 }

@@ -489,3 +489,39 @@ def update_pf2():
         pf.html = html
         pf.save(ignore_permissions=True)
         frappe.db.commit()
+
+@frappe.whitelist()
+def create_spa_stock_transfer(station_id, item_code, qty):
+    if not station_id or not item_code or not qty:
+        frappe.throw("Station ID, Item, and Quantity are required")
+        
+    try:
+        qty = float(qty)
+        if qty <= 0:
+            frappe.throw("Quantity must be greater than 0")
+    except ValueError:
+        frappe.throw("Invalid quantity")
+        
+    station = frappe.get_doc("Fuel Station", station_id)
+    
+    if not station.default_store_warehouse or not station.default_forecourt_warehouse:
+        frappe.throw("Station must have both Default Store Warehouse and Default Forecourt Warehouse set.")
+        
+    se = frappe.new_doc("Stock Entry")
+    se.stock_entry_type = "Material Transfer"
+    se.company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
+    se.from_warehouse = station.default_store_warehouse
+    se.to_warehouse = station.default_forecourt_warehouse
+    
+    se.append("items", {
+        "item_code": item_code,
+        "qty": qty,
+        "uom": frappe.db.get_value("Item", item_code, "stock_uom"),
+        "s_warehouse": station.default_store_warehouse,
+        "t_warehouse": station.default_forecourt_warehouse
+    })
+    
+    se.insert()
+    se.submit()
+    
+    return {"status": "success", "message": f"Successfully transferred {qty} of {item_code} to Forecourt.", "name": se.name}
