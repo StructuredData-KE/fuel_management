@@ -625,8 +625,8 @@ class Shift(Document):
             # Deduct Dry Stock / Inventory Sales
             for row in (self.inventory_sales or []):
                 if getattr(row, "item", None) and getattr(row, "quantity", 0) and row.quantity > 0:
-                    # Use total_volume as the base quantity if available, else fallback to quantity
-                    qty = row.total_volume if getattr(row, "total_volume", 0) else row.quantity
+                    # Deduct the base quantity (pieces/bottles) instead of volume
+                    qty = row.quantity
                     sales_per_item[row.item] = sales_per_item.get(row.item, 0) + qty
 
             # Note: Credit Invoice Non-Fuel Items are already injected into inventory_sales
