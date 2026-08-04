@@ -1108,7 +1108,7 @@ function setup_tabs(wrapper) {
         $wrapper.find('#' + target).addClass('active');
         
         // Check for specific tab renders
-        if (target === 'tab-inventory') {
+        if (target === 'tab-inventory' || target === 'tab-stock-transfer') {
             render_inventory_status($wrapper);
         }
         

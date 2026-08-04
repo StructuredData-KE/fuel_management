@@ -90,9 +90,14 @@
                 <span>Purchases</span>
             </a>
             
+            <div class="nav-section-title mt-4">STOCKS</div>
             <a href="#" class="nav-item" data-target="tab-inventory">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-                <span>Inventory Status</span>
+                <span>Total Inventory Status</span>
+            </a>
+            <a href="#" class="nav-item" data-target="tab-stock-transfer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3v18"/><path d="M10 14l7 7 7-7"/><path d="M7 21V3"/><path d="M14 10L7 3 0 10"/></svg>
+                <span>Stock Transfer</span>
             </a>
             
             <div class="nav-section-title mt-4">CLOSURE</div>
@@ -1140,44 +1145,15 @@
     </div>
 </section>
 
-            <!-- INVENTORY STATUS -->
-            <section id="tab-inventory" class="tab-pane">
-                <div class="pos-header">
-                    <h2>Total Inventory Status</h2>
-                    <p style="color: #64748b; margin-top: 5px;">Real-time stock levels for the station&apos;s warehouses.</p>
-                </div>
-                
-                <div class="pos-card" style="margin-top: 1.5rem;">
-                  <h3>Transfer Stock</h3>
-                  <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1rem;">Move inventory between the Station Store and Forecourt.</p>
-                  <div style="display: grid; grid-template-columns: 1fr 2fr 1fr auto; gap: 1rem; align-items: end;">
-                      <div>
-                          <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Direction</label>
-                          <select class="spa-input" id="stock-transfer-direction">
-                              <option value="Store to Forecourt">Store to Forecourt</option>
-                              <option value="Forecourt to Store">Forecourt to Store</option>
-                          </select>
-                      </div>
-                      <div>
-                          <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Item</label>
-                          <select class="spa-input" id="stock-transfer-item">
-                              <option value="">Select Item...</option>
-                          </select>
-                      </div>
-                      <div>
-                          <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Quantity</label>
-                          <input type="number" class="spa-input" id="stock-transfer-qty" min="0.01" step="0.01" placeholder="Qty">
-                      </div>
-                      <div>
-                          <button class="btn-primary" id="btn-submit-stock-transfer" style="height: 42px; padding: 0 1.5rem;">
-                              <span class="spinner hidden"></span> Transfer
-                          </button>
-                      </div>
+              <!-- INVENTORY STATUS -->
+              <section id="tab-inventory" class="tab-pane">
+                  <div class="pos-header">
+                      <h2>Total Inventory Status</h2>
+                      <p style="color: #64748b; margin-top: 5px;">Real-time stock levels for the station&apos;s warehouses.</p>
                   </div>
-              </div>
-
-                <div class="pos-card" style="margin-top: 1.5rem;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+                  
+                  <div class="pos-card" style="margin-top: 1.5rem;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
                       <div>
                           <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">Inventory Status Report</h3>
                           <p style="margin:0; font-size: 0.85rem; color: #64748b;" id="inventory-report-company">Loading...</p>
@@ -1225,6 +1201,41 @@
                               <tr><td colspan="10" class="text-center">Loading inventory report...</td></tr>
                           </tbody>
                       </table>
+                  </div>
+              </div>
+            </section>
+
+            <!-- STOCK TRANSFER -->
+            <section id="tab-stock-transfer" class="tab-pane">
+                <div class="pos-header">
+                    <h2>Stock Transfer</h2>
+                    <p style="color: #64748b; margin-top: 5px;">Transfer physical inventory between your station's warehouses.</p>
+                </div>
+                
+                <div class="pos-card" style="margin-top: 1.5rem;">
+                  <div style="display: grid; grid-template-columns: 1fr 2fr 1fr auto; gap: 1rem; align-items: end;">
+                      <div>
+                          <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Direction</label>
+                          <select class="spa-input" id="stock-transfer-direction">
+                              <option value="Store to Forecourt">Store to Forecourt</option>
+                              <option value="Forecourt to Store">Forecourt to Store</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Item</label>
+                          <select class="spa-input" id="stock-transfer-item">
+                              <option value="">Select Item...</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Quantity</label>
+                          <input type="number" class="spa-input" id="stock-transfer-qty" min="0.01" step="0.01" placeholder="Qty">
+                      </div>
+                      <div>
+                          <button class="btn-primary" id="btn-submit-stock-transfer" style="height: 42px; padding: 0 1.5rem;">
+                              <span class="spinner hidden"></span> Transfer
+                          </button>
+                      </div>
                   </div>
               </div>
             </section>
