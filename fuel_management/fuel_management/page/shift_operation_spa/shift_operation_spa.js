@@ -3032,82 +3032,138 @@ function render_topups($wrapper) {
 function render_inventory_status($wrapper) {
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
     
-    $wrapper.find('#list-inventory-status').html('<tr><td colspan="4" class="text-center">Loading inventory...</td></tr>');
+    // Set default dates to first and last of current month if not set
+    let fromInput = $wrapper.find('#inventory-date-from');
+    let toInput = $wrapper.find('#inventory-date-to');
+    
+    if (!fromInput.val()) {
+        let d = new Date();
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]); // 1st of month
+    }
+    if (!toInput.val()) {
+        let d = new Date();
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]); // last of month
+    }
+
+    $wrapper.find('#btn-refresh-inventory-report').off('click').on('click', function() {
+        fetch_inventory_report($wrapper);
+    });
+
+    fetch_inventory_report($wrapper);
+}
+
+function fetch_inventory_report($wrapper) {
+    let fromDate = $wrapper.find('#inventory-date-from').val();
+    let toDate = $wrapper.find('#inventory-date-to').val();
+    
+    $wrapper.find('#btn-refresh-inventory-report .spinner').removeClass('hidden');
+    $wrapper.find('#list-inventory-status').html('<tr><td colspan="10" class="text-center">Loading inventory report...</td></tr>');
     
     frappe.call({
-        method: "fuel_management.fuel_management.api.get_station_inventory",
-        args: { station_id: window.ACTIVE_SHIFT.station },
+        method: "fuel_management.fuel_management.api.get_inventory_status_report",
+        args: { 
+            station_id: window.ACTIVE_SHIFT.station,
+            from_date: fromDate,
+            to_date: toDate
+        },
         callback: function(r) {
+            $wrapper.find('#btn-refresh-inventory-report .spinner').addClass('hidden');
             let html = '';
             
-            if(r.message && r.message.length > 0) {
+            if(r.message && r.message.data && Object.keys(r.message.data).length > 0) {
+                // Update Company Name
+                $wrapper.find('#inventory-report-company').text(r.message.company);
+                
+                let data = r.message.data;
+                let no = 1;
+                
+                // Populate Dropdown for transfer
                 let unique_items = [];
                 let item_opts = '<option value="">Select Item...</option>';
-                r.message.forEach(row => {
-                    if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
-                        unique_items.push(row.item_code);
-                        item_opts += `<option value="` + row.item_code + `">` + row.item_name + `</option>`;
-                    }
-                });
-                $wrapper.find('#stock-transfer-item').html(item_opts);
-
-                r.message.forEach(row => {
-                    let badgeClass = row.actual_qty <= 0 ? 'badge-danger' : 'badge-success';
+                
+                Object.keys(data).forEach(group => {
+                    // Group Header
                     html += `
-                        <tr>
-                            <td><strong>${row.item_code}</strong></td>
-                            <td>${row.item_name}</td>
-                            <td>${row.warehouse}</td>
-                            <td class="text-right"><span class="badge ${badgeClass}" style="padding: 5px 10px; font-size: 0.9em; font-weight:bold;">${row.actual_qty}</span></td>
+                        <tr class="row-group-header">
+                            <td colspan="10">${group.toUpperCase()}</td>
                         </tr>
                     `;
+                    
+                    data[group].forEach(row => {
+                        // Dropdown logic
+                        if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
+                            unique_items.push(row.item_code);
+                            item_opts += `<option value="${row.item_code}">${row.item_name}</option>`;
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td class="sticky-col th-no">${no++}</td>
+                                <td class="sticky-col th-product">${row.item_name}</td>
+                                
+                                <td>${row.op_store || 0}</td>
+                                <td>${row.op_forecourt || 0}</td>
+                                <td style="font-weight:bold;">${row.op_total || 0}</td>
+                                
+                                <td>${row.purchases || 0}</td>
+                                <td>${row.sales || 0}</td>
+                                
+                                <td>${row.cl_store || 0}</td>
+                                <td>${row.cl_forecourt || 0}</td>
+                                <td style="font-weight:bold;">${row.cl_total || 0}</td>
+                            </tr>
+                        `;
+                    });
                 });
+                
+                $wrapper.find('#stock-transfer-item').html(item_opts);
+                
             } else {
-                html = '<tr><td colspan="4" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this station.</td></tr>';
+                html = '<tr><td colspan="10" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>';
             }
             
-    $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
-        let item = $wrapper.find('#stock-transfer-item').val();
-        let qty = $wrapper.find('#stock-transfer-qty').val();
-        let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
-        
-        if(!item || !qty) {
-            frappe.show_alert({message: "Please select an item and enter a quantity.", indicator: "orange"});
-            return;
-        }
-        
-        let $btn = $(this);
-        $btn.find('.spinner').removeClass('hidden');
-        $btn.prop('disabled', true);
-        
-        frappe.call({
-            method: "fuel_management.fuel_management.api.create_spa_stock_transfer",
-            args: {
-                station_id: window.ACTIVE_SHIFT.station,
-                item_code: item,
-                qty: qty,
-                direction: direction
-            },
-            callback: function(r) {
-                $btn.find('.spinner').addClass('hidden');
-                $btn.prop('disabled', false);
+            $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
+                let item = $wrapper.find('#stock-transfer-item').val();
+                let qty = $wrapper.find('#stock-transfer-qty').val();
+                let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
                 
-                if(r.message && r.message.status === "success") {
-                    frappe.show_alert({message: r.message.message, indicator: "green"});
-                    $wrapper.find('#stock-transfer-item').val('');
-                    $wrapper.find('#stock-transfer-qty').val('');
-                    // Refresh the inventory
-                    render_inventory_status($wrapper);
+                if(!item || !qty) {
+                    frappe.show_alert({message: "Please select an item and enter a quantity.", indicator: "orange"});
+                    return;
                 }
-            },
-            error: function() {
-                $btn.find('.spinner').addClass('hidden');
-                $btn.prop('disabled', false);
-            }
-        });
-    });
-    
-    $wrapper.find('#list-inventory-status').html(html);
+                
+                let $btn = $(this);
+                $btn.find('.spinner').removeClass('hidden');
+                $btn.prop('disabled', true);
+                
+                frappe.call({
+                    method: "fuel_management.fuel_management.api.create_spa_stock_transfer",
+                    args: {
+                        station_id: window.ACTIVE_SHIFT.station,
+                        item_code: item,
+                        qty: qty,
+                        direction: direction
+                    },
+                    callback: function(res) {
+                        $btn.find('.spinner').addClass('hidden');
+                        $btn.prop('disabled', false);
+                        
+                        if(res.message && res.message.status === "success") {
+                            frappe.show_alert({message: res.message.message, indicator: "green"});
+                            $wrapper.find('#stock-transfer-item').val('');
+                            $wrapper.find('#stock-transfer-qty').val('');
+                            // Refresh the inventory
+                            fetch_inventory_report($wrapper);
+                        }
+                    },
+                    error: function() {
+                        $btn.find('.spinner').addClass('hidden');
+                        $btn.prop('disabled', false);
+                    }
+                });
+            });
+            
+            $wrapper.find('#list-inventory-status').html(html);
         }
     });
 }

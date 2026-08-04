@@ -530,3 +530,101 @@ def create_spa_stock_transfer(station_id, item_code, qty, direction="Store to Fo
     se.submit()
     
     return {"status": "success", "message": f"Successfully transferred {qty} of {item_code} ({direction}).", "name": se.name}
+
+@frappe.whitelist()
+def get_inventory_status_report(station_id, from_date, to_date):
+    if not station_id or not from_date or not to_date:
+        frappe.throw("Station ID, From Date, and To Date are required")
+        
+    station = frappe.get_doc("Fuel Station", station_id)
+    warehouses = []
+    if station.default_forecourt_warehouse:
+        warehouses.append(station.default_forecourt_warehouse)
+    if station.default_store_warehouse:
+        warehouses.append(station.default_store_warehouse)
+        
+    s_warehouse = station.default_store_warehouse
+    f_warehouse = station.default_forecourt_warehouse
+    
+    if not s_warehouse or not f_warehouse:
+        frappe.throw("Station must have both Default Store Warehouse and Default Forecourt Warehouse set.")
+        
+    company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
+    company_name = frappe.db.get_value("Company", company, "company_name") or company
+
+    sles = frappe.get_all("Stock Ledger Entry",
+        filters={"warehouse": ["in", warehouses], "is_cancelled": 0},
+        fields=["item_code", "warehouse", "actual_qty", "posting_date", "voucher_type", "voucher_no"]
+    )
+    
+    data = {}
+    for sle in sles:
+        item = sle.item_code
+        if item not in data:
+            data[item] = {
+                "item_code": item,
+                "item_name": frappe.db.get_value("Item", item, "item_name") or item,
+                "item_group": frappe.db.get_value("Item", item, "item_group"),
+                "op_store": 0,
+                "op_forecourt": 0,
+                "purchases": 0,
+                "sales": 0,
+                "vouchers": {}
+            }
+        
+        pdate = str(sle.posting_date)
+        
+        # Opening
+        if pdate < from_date:
+            if sle.warehouse == s_warehouse:
+                data[item]["op_store"] += sle.actual_qty
+            elif sle.warehouse == f_warehouse:
+                data[item]["op_forecourt"] += sle.actual_qty
+        
+        # Transactions
+        if from_date <= pdate <= to_date:
+            vid = sle.voucher_type + "|" + sle.voucher_no
+            if vid not in data[item]["vouchers"]:
+                data[item]["vouchers"][vid] = 0
+            data[item]["vouchers"][vid] += sle.actual_qty
+            
+    # Process transactions & recalculate closing properly from ALL SLEs <= to_date
+    for sle in sles:
+        pdate = str(sle.posting_date)
+        if pdate <= to_date:
+            item = sle.item_code
+            if "cl_store" not in data[item]:
+                data[item]["cl_store"] = 0
+                data[item]["cl_forecourt"] = 0
+            if sle.warehouse == s_warehouse:
+                data[item]["cl_store"] += sle.actual_qty
+            elif sle.warehouse == f_warehouse:
+                data[item]["cl_forecourt"] += sle.actual_qty
+
+    for item, row in data.items():
+        if "vouchers" in row:
+            for vid, qty in row["vouchers"].items():
+                if qty > 0:
+                    row["purchases"] += qty
+                elif qty < 0:
+                    row["sales"] += abs(qty)
+            del row["vouchers"]
+            
+        row["op_total"] = row["op_store"] + row["op_forecourt"]
+        
+        if "cl_store" not in row:
+            row["cl_store"] = 0
+        if "cl_forecourt" not in row:
+            row["cl_forecourt"] = 0
+            
+        row["cl_total"] = row["cl_store"] + row["cl_forecourt"]
+            
+    # Group by item group
+    grouped = {}
+    for item, row in data.items():
+        ig = row["item_group"] or "Other"
+        if ig not in grouped:
+            grouped[ig] = []
+        grouped[ig].append(row)
+        
+    return {"company": company_name, "data": grouped}

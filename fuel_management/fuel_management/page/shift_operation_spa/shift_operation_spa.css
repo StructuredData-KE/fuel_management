@@ -697,3 +697,88 @@
 .compact-input { height: 35px !important; padding: 4px 8px !important; font-size: 0.95em !important; }
 .history-table th { font-weight: bold; }
 .history-table td { vertical-align: middle; }
+
+/* Inventory Report Table */
+.inventory-report-wrapper {
+    max-height: 70vh;
+    overflow: auto;
+}
+.inventory-report-table {
+    white-space: nowrap;
+    border-collapse: separate !important; /* Required for sticky */
+    border-spacing: 0;
+}
+.inventory-report-table th, .inventory-report-table td {
+    border: 1px solid #cbd5e1;
+    padding: 0.5rem;
+    text-align: center;
+    border-top: none;
+    border-left: none;
+}
+.inventory-report-table thead th {
+    font-weight: 700;
+    font-size: 0.85rem;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-top: 1px solid #cbd5e1;
+}
+.inventory-report-table tbody tr td:first-child, .inventory-report-table thead tr th:first-child {
+    border-left: 1px solid #cbd5e1;
+}
+.inventory-report-table thead .header-sub th {
+    top: 36px; /* Adjust based on main header height */
+    z-index: 2;
+}
+.inventory-report-table .sticky-col {
+    position: sticky;
+    left: 0;
+    background: #f8fafc;
+    z-index: 3;
+    font-weight: bold;
+    text-align: left;
+}
+.inventory-report-table thead .sticky-col {
+    z-index: 4; /* Top left corner needs highest z-index */
+    background: #65a30d !important; /* Green for first two cols */
+    color: white;
+}
+.inventory-report-table tbody .sticky-col:nth-child(2) {
+    left: 45px; /* width of first col */
+}
+.inventory-report-table thead .sticky-col:nth-child(2) {
+    left: 45px;
+}
+.inventory-report-table .th-no { width: 45px; min-width: 45px; }
+.inventory-report-table .th-product { width: 250px; min-width: 250px; }
+
+/* Colors matching reference */
+.th-group-opening, .th-group-closing {
+    background-color: #93c5fd !important;
+    color: #1e3a8a;
+}
+.th-sub-op, .th-sub-cl {
+    background-color: #bfdbfe !important;
+    color: #1e3a8a;
+    font-size: 0.75rem !important;
+}
+.th-group-trans {
+    background-color: #86efac !important;
+    color: #14532d;
+}
+.th-sub-tr {
+    background-color: #bbf7d0 !important;
+    color: #14532d;
+    font-size: 0.75rem !important;
+}
+.inventory-report-table .row-group-header td {
+    background-color: #16a34a;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    padding: 0.75rem;
+    font-size: 1.1rem;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+}
