@@ -4621,3 +4621,246 @@ function render_greasing(wrapper) {
         frappe.msgprint('SPA Global Error: ' + e.message);
     }
 }
+
+function setup_borrowed_products($wrapper) {
+    let current_borrow_type = "Borrowed In";
+    let items = [];
+    
+    // Type Dropdown Toggle
+    $wrapper.find('#borrow-type-selected').off('click').on('click', function() {
+        $wrapper.find('#borrow-type-options').toggle();
+    });
+    
+    $wrapper.find('.borrow-option').off('click').on('click', function() {
+        let val = $(this).data('value');
+        let text = $(this).text();
+        current_borrow_type = val;
+        
+        let $selected = $wrapper.find('#borrow-type-selected');
+        $selected.text(text);
+        
+        if (val === "Borrowed In") {
+            $selected.removeClass('pill-red').addClass('pill-green');
+        } else {
+            $selected.removeClass('pill-green').addClass('pill-red');
+        }
+        
+        $wrapper.find('#borrow-type-options').hide();
+    });
+    
+    // Click outside to close
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#borrow-type-dropdown').length) {
+            $wrapper.find('#borrow-type-options').hide();
+        }
+    });
+    
+    // Default date to today
+    $wrapper.find('#borrow-date').val(frappe.datetime.get_today());
+    
+    // Add first item row
+    add_borrow_item_row($wrapper);
+    
+    // Add Item Button
+    $wrapper.find('#btn-add-borrowed-item').off('click').on('click', function() {
+        add_borrow_item_row($wrapper);
+    });
+    
+    // Submit Button
+    $wrapper.find('#btn-submit-borrowed').off('click').on('click', function() {
+        submit_borrowed_product($wrapper, current_borrow_type);
+    });
+    
+    // Report tab events
+    $wrapper.find('.nav-item[data-target="tab-borrowed-report"]').off('click').on('click', function() {
+        fetch_borrowed_report($wrapper);
+    });
+    
+    $wrapper.find('#btn-refresh-borrow-report').off('click').on('click', function() {
+        fetch_borrowed_report($wrapper);
+    });
+}
+
+function add_borrow_item_row($wrapper) {
+    let container = $wrapper.find('#borrowed-items-container');
+    let row_id = frappe.utils.get_random(8);
+    
+    let html = `
+        <div class="borrowed-item-card" id="borrow-row-${row_id}">
+            <div>
+                <label class="mobile-only" style="display:none; font-weight:bold; font-size:0.8rem; margin-bottom:2px;">PRODUCT</label>
+                <select class="spa-input borrow-item-code" style="padding: 0.5rem;"></select>
+            </div>
+            <div>
+                <label class="mobile-only" style="display:none; font-weight:bold; font-size:0.8rem; margin-bottom:2px;">QTY</label>
+                <input type="number" class="spa-input borrow-qty" placeholder="Qty" style="padding: 0.5rem;">
+            </div>
+            <div style="text-align: center;">
+                <button class="btn-remove-item" onclick="$(this).closest('.borrowed-item-card').remove();">&times;</button>
+            </div>
+        </div>
+    `;
+    
+    let $row = $(html);
+    container.append($row);
+    
+    // Populate items
+    if (window.cached_items) {
+        let select = $row.find('.borrow-item-code');
+        select.append('<option value="">Select Product...</option>');
+        window.cached_items.forEach(item => {
+            select.append(`<option value="${item.name}">${item.item_name}</option>`);
+        });
+    } else {
+        frappe.call({
+            method: 'fuel_management.fuel_management.api.get_station_items',
+            args: { station: window.current_station },
+            callback: function(r) {
+                if (r.message) {
+                    window.cached_items = r.message;
+                    let select = $row.find('.borrow-item-code');
+                    select.append('<option value="">Select Product...</option>');
+                    r.message.forEach(item => {
+                        select.append(`<option value="${item.name}">${item.item_name}</option>`);
+                    });
+                }
+            }
+        });
+    }
+}
+
+function submit_borrowed_product($wrapper, type) {
+    let date = $wrapper.find('#borrow-date').val();
+    let counterparty = $wrapper.find('#borrow-counterparty').val();
+    let memo = $wrapper.find('#borrow-memo').val();
+    
+    if (!counterparty) {
+        frappe.msgprint("Please enter a Counterparty (FROM/TO).");
+        return;
+    }
+    
+    let items = [];
+    let has_error = false;
+    
+    $wrapper.find('.borrowed-item-card').each(function() {
+        let item_code = $(this).find('.borrow-item-code').val();
+        let qty = parseFloat($(this).find('.borrow-qty').val());
+        
+        if (item_code && qty > 0) {
+            items.push({
+                item_code: item_code,
+                qty: qty
+            });
+        } else if (item_code || qty) {
+            has_error = true;
+        }
+    });
+    
+    if (has_error || items.length === 0) {
+        frappe.msgprint("Please select a product and enter a valid quantity for all rows.");
+        return;
+    }
+    
+    let payload = {
+        station: window.current_station,
+        type: type,
+        date: date,
+        counterparty: counterparty,
+        memo: memo,
+        items: items
+    };
+    
+    let $btn = $wrapper.find('#btn-submit-borrowed');
+    $btn.find('.spinner').removeClass('hidden');
+    $btn.prop('disabled', true);
+    
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.create_borrowed_product',
+        args: { payload: JSON.stringify(payload) },
+        callback: function(r) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            
+            if (!r.exc && r.message) {
+                frappe.show_alert({message: "Successfully recorded " + type, indicator: "green"});
+                // Reset form
+                $wrapper.find('#borrow-counterparty').val('');
+                $wrapper.find('#borrow-memo').val('');
+                $wrapper.find('#borrowed-items-container').empty();
+                add_borrow_item_row($wrapper);
+            }
+        }
+    });
+}
+
+function fetch_borrowed_report($wrapper) {
+    let status = $wrapper.find('#borrow-report-status').val() || "All";
+    
+    let $btn = $wrapper.find('#btn-refresh-borrow-report');
+    $btn.find('.spinner').removeClass('hidden');
+    $btn.prop('disabled', true);
+    
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.get_borrowed_products',
+        args: { station: window.current_station, status: status },
+        callback: function(r) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            
+            let tbody = $wrapper.find('#table-borrowed-report tbody');
+            tbody.empty();
+            
+            if (r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let type_html = row.type === 'Borrowed In' 
+                        ? `<span class="badge pill-green" style="color:white; padding:0.4rem;">IN</span>` 
+                        : `<span class="badge pill-red" style="color:white; padding:0.4rem;">OUT</span>`;
+                        
+                    let status_html = row.status === 'Pending Return'
+                        ? `<span class="badge badge-pending">Pending Return</span>`
+                        : `<span class="badge badge-returned">Returned</span>`;
+                        
+                    let items_html = row.items.map(i => `${i.qty}x ${i.item_code}`).join('<br>');
+                    
+                    let action_html = "";
+                    if (row.status === 'Pending Return') {
+                        action_html = `<button class="btn-primary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" onclick="mark_borrowed_returned('${row.name}')">Mark Returned</button>`;
+                    }
+                    
+                    let tr = `
+                        <tr>
+                            <td>${row.name}</td>
+                            <td>${row.date}</td>
+                            <td>${row.counterparty}</td>
+                            <td>${type_html}</td>
+                            <td>${items_html}</td>
+                            <td>${status_html}</td>
+                            <td>${action_html}</td>
+                        </tr>
+                    `;
+                    tbody.append(tr);
+                });
+            } else {
+                tbody.append('<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>');
+            }
+        }
+    });
+}
+
+window.mark_borrowed_returned = function(docname) {
+    frappe.confirm(
+        `Are you sure you want to mark ${docname} as Returned? This will automatically post a reverse Stock Entry.`,
+        function() {
+            frappe.call({
+                method: 'fuel_management.fuel_management.api.return_borrowed_product',
+                args: { docname: docname },
+                callback: function(r) {
+                    if (!r.exc) {
+                        frappe.show_alert({message: "Successfully returned!", indicator: "green"});
+                        fetch_borrowed_report($('.shift-operation-spa'));
+                    }
+                }
+            });
+        }
+    );
+};

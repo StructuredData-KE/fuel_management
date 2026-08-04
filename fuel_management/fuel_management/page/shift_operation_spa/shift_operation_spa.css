@@ -814,3 +814,73 @@
     left: 0;
     z-index: 1;
 }
+
+/* Borrowed Products */
+.pill-green {
+    background-color: #15803d;
+}
+.pill-red {
+    background-color: #b91c1c;
+}
+.borrow-type-options .borrow-option:hover {
+    opacity: 0.9;
+}
+.borrowed-item-card {
+    display: grid;
+    grid-template-columns: 3fr 1fr 50px;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+}
+.borrowed-item-card select, .borrowed-item-card input {
+    width: 100%;
+}
+.btn-remove-item {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 1.5rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+.badge {
+    display: inline-block;
+    padding: 0.25em 0.6em;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.375rem;
+}
+.badge-pending {
+    background-color: #fef08a;
+    color: #854d0e;
+}
+.badge-returned {
+    background-color: #bbf7d0;
+    color: #166534;
+}
+
+@media (max-width: 768px) {
+    .borrowed-meta-grid {
+        grid-template-columns: 1fr !important;
+    }
+    .desktop-only {
+        display: none !important;
+    }
+    .borrowed-item-card {
+        grid-template-columns: 1fr;
+        background: #f8fafc;
+        padding: 1rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        position: relative;
+    }
+    .btn-remove-item {
+        position: absolute;
+        top: 5px;
+        right: 10px;
+    }
+}
