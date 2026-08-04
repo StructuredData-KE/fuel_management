@@ -671,3 +671,165 @@ def create_borrowed_doctypes():
         print("Created Borrowed Product")
         
     frappe.db.commit()
+
+
+def get_or_create_transit_warehouse(station, company):
+    import frappe
+    warehouse_name = f"{station} - Borrowed Transit"
+    if not frappe.db.exists("Warehouse", {"warehouse_name": warehouse_name, "company": company}):
+        # Need to find the parent warehouse for the station
+        station_doc = frappe.get_doc("Fuel Station", station)
+        store_warehouse = station_doc.default_store_warehouse
+        
+        if not store_warehouse:
+            frappe.throw("Station default store warehouse is not configured.")
+            
+        store_doc = frappe.get_doc("Warehouse", store_warehouse)
+        parent_warehouse = store_doc.parent_warehouse
+        
+        new_wh = frappe.get_doc({
+            "doctype": "Warehouse",
+            "warehouse_name": warehouse_name,
+            "company": company,
+            "parent_warehouse": parent_warehouse,
+            "is_group": 0
+        })
+        new_wh.insert(ignore_permissions=True)
+        return new_wh.name
+    else:
+        return frappe.db.get_value("Warehouse", {"warehouse_name": warehouse_name, "company": company}, "name")
+
+@frappe.whitelist()
+def create_borrowed_product(payload):
+    import frappe
+    import json
+    data = json.loads(payload)
+    
+    station = data.get("station")
+    b_type = data.get("type")
+    date = data.get("date")
+    counterparty = data.get("counterparty")
+    memo = data.get("memo")
+    items = data.get("items", [])
+    
+    if not station or not items:
+        frappe.throw("Missing station or items")
+        
+    station_doc = frappe.get_doc("Fuel Station", station)
+    company = station_doc.company
+    store_warehouse = station_doc.default_store_warehouse
+    
+    doc = frappe.get_doc({
+        "doctype": "Borrowed Product",
+        "station": station,
+        "type": b_type,
+        "date": date,
+        "counterparty": counterparty,
+        "memo": memo,
+        "status": "Pending Return"
+    })
+    
+    for item in items:
+        doc.append("items", {
+            "item_code": item.get("item_code"),
+            "qty": item.get("qty")
+        })
+        
+    doc.insert(ignore_permissions=True)
+    
+    # Handle Stock Entry
+    se = frappe.new_doc("Stock Entry")
+    se.posting_date = date
+    se.company = company
+    
+    if b_type == "Borrowed In":
+        se.stock_entry_type = "Material Receipt"
+        for item in items:
+            se.append("items", {
+                "item_code": item.get("item_code"),
+                "qty": item.get("qty"),
+                "t_warehouse": store_warehouse
+            })
+    else: # Borrowed Out
+        se.stock_entry_type = "Material Transfer"
+        transit_warehouse = get_or_create_transit_warehouse(station, company)
+        for item in items:
+            se.append("items", {
+                "item_code": item.get("item_code"),
+                "qty": item.get("qty"),
+                "s_warehouse": store_warehouse,
+                "t_warehouse": transit_warehouse
+            })
+            
+    se.insert(ignore_permissions=True)
+    se.submit()
+    
+    doc.db_set("stock_entry", se.name)
+    
+    return doc.name
+
+@frappe.whitelist()
+def get_borrowed_products(station, status="All"):
+    import frappe
+    filters = {"station": station}
+    if status != "All":
+        filters["status"] = status
+        
+    records = frappe.get_all("Borrowed Product", 
+        filters=filters,
+        fields=["name", "date", "counterparty", "type", "status", "memo"],
+        order_by="creation desc"
+    )
+    
+    for r in records:
+        items = frappe.get_all("Borrowed Product Item", 
+            filters={"parent": r.name},
+            fields=["item_code", "qty"]
+        )
+        r["items"] = items
+        
+    return records
+
+@frappe.whitelist()
+def return_borrowed_product(docname):
+    import frappe
+    doc = frappe.get_doc("Borrowed Product", docname)
+    
+    if doc.status == "Returned":
+        frappe.throw("Already returned")
+        
+    station_doc = frappe.get_doc("Fuel Station", doc.station)
+    company = station_doc.company
+    store_warehouse = station_doc.default_store_warehouse
+    
+    # Handle reverse Stock Entry
+    se = frappe.new_doc("Stock Entry")
+    se.posting_date = frappe.utils.today()
+    se.company = company
+    
+    if doc.type == "Borrowed In":
+        se.stock_entry_type = "Material Issue"
+        for item in doc.items:
+            se.append("items", {
+                "item_code": item.item_code,
+                "qty": item.qty,
+                "s_warehouse": store_warehouse
+            })
+    else: # Borrowed Out
+        se.stock_entry_type = "Material Transfer"
+        transit_warehouse = get_or_create_transit_warehouse(doc.station, company)
+        for item in doc.items:
+            se.append("items", {
+                "item_code": item.item_code,
+                "qty": item.qty,
+                "s_warehouse": transit_warehouse,
+                "t_warehouse": store_warehouse
+            })
+            
+    se.insert(ignore_permissions=True)
+    se.submit()
+    
+    doc.db_set("status", "Returned")
+    doc.db_set("return_stock_entry", se.name)
+    
+    return True
