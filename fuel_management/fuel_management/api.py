@@ -833,3 +833,29 @@ def return_borrowed_product(docname):
     doc.db_set("return_stock_entry", se.name)
     
     return True
+
+
+def create_counterparty_doctype():
+    import frappe
+    if not frappe.db.exists("DocType", "Borrowing Counterparty"):
+        doc = frappe.get_doc({
+            "doctype": "DocType",
+            "name": "Borrowing Counterparty",
+            "module": "Fuel Management",
+            "custom": 1,
+            "autoname": "field:counterparty_name",
+            "fields": [
+                {"fieldname": "counterparty_name", "label": "Counterparty Name", "fieldtype": "Data", "reqd": 1, "unique": 1, "in_list_view": 1}
+            ]
+        })
+        doc.insert()
+        print("Created Borrowing Counterparty")
+    else:
+        print("Borrowing Counterparty already exists")
+        
+    frappe.db.commit()
+
+@frappe.whitelist()
+def get_borrowing_counterparties():
+    import frappe
+    return frappe.get_all("Borrowing Counterparty", fields=["name as value", "counterparty_name as label"])
