@@ -3044,7 +3044,7 @@ function render_inventory_status($wrapper) {
                 let unique_items = [];
                 let item_opts = '<option value="">Select Item...</option>';
                 r.message.forEach(row => {
-                    if(!unique_items.includes(row.item_code)) {
+                    if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
                         unique_items.push(row.item_code);
                         item_opts += `<option value="` + row.item_code + `">` + row.item_name + `</option>`;
                     }
@@ -3069,6 +3069,7 @@ function render_inventory_status($wrapper) {
     $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
         let item = $wrapper.find('#stock-transfer-item').val();
         let qty = $wrapper.find('#stock-transfer-qty').val();
+        let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
         
         if(!item || !qty) {
             frappe.show_alert({message: "Please select an item and enter a quantity.", indicator: "orange"});
@@ -3084,7 +3085,8 @@ function render_inventory_status($wrapper) {
             args: {
                 station_id: window.ACTIVE_SHIFT.station,
                 item_code: item,
-                qty: qty
+                qty: qty,
+                direction: direction
             },
             callback: function(r) {
                 $btn.find('.spinner').addClass('hidden');

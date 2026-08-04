@@ -1148,9 +1148,16 @@
                 </div>
                 
                 <div class="pos-card" style="margin-top: 1.5rem;">
-                  <h3>Transfer Stock to Forecourt</h3>
-                  <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1rem;">Move inventory from the Station Store to the Forecourt.</p>
-                  <div style="display: grid; grid-template-columns: 2fr 1fr auto; gap: 1rem; align-items: end;">
+                  <h3>Transfer Stock</h3>
+                  <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1rem;">Move inventory between the Station Store and Forecourt.</p>
+                  <div style="display: grid; grid-template-columns: 1fr 2fr 1fr auto; gap: 1rem; align-items: end;">
+                      <div>
+                          <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Direction</label>
+                          <select class="spa-input" id="stock-transfer-direction">
+                              <option value="Store to Forecourt">Store to Forecourt</option>
+                              <option value="Forecourt to Store">Forecourt to Store</option>
+                          </select>
+                      </div>
                       <div>
                           <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Item</label>
                           <select class="spa-input" id="stock-transfer-item">

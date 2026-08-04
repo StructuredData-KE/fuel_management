@@ -369,6 +369,7 @@ def get_station_inventory(station_id):
     # Enrich with item name
     for b in bins:
         b.item_name = frappe.db.get_value("Item", b.item_code, "item_name") or b.item_code
+        b.item_group = frappe.db.get_value("Item", b.item_code, "item_group")
         
     return bins
 
@@ -491,7 +492,7 @@ def update_pf2():
         frappe.db.commit()
 
 @frappe.whitelist()
-def create_spa_stock_transfer(station_id, item_code, qty):
+def create_spa_stock_transfer(station_id, item_code, qty, direction="Store to Forecourt"):
     if not station_id or not item_code or not qty:
         frappe.throw("Station ID, Item, and Quantity are required")
         
@@ -510,18 +511,22 @@ def create_spa_stock_transfer(station_id, item_code, qty):
     se = frappe.new_doc("Stock Entry")
     se.stock_entry_type = "Material Transfer"
     se.company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
-    se.from_warehouse = station.default_store_warehouse
-    se.to_warehouse = station.default_forecourt_warehouse
+    if direction == "Forecourt to Store":
+        se.from_warehouse = station.default_forecourt_warehouse
+        se.to_warehouse = station.default_store_warehouse
+    else:
+        se.from_warehouse = station.default_store_warehouse
+        se.to_warehouse = station.default_forecourt_warehouse
     
     se.append("items", {
         "item_code": item_code,
         "qty": qty,
         "uom": frappe.db.get_value("Item", item_code, "stock_uom"),
-        "s_warehouse": station.default_store_warehouse,
-        "t_warehouse": station.default_forecourt_warehouse
+        "s_warehouse": se.from_warehouse,
+        "t_warehouse": se.to_warehouse
     })
     
     se.insert()
     se.submit()
     
-    return {"status": "success", "message": f"Successfully transferred {qty} of {item_code} to Forecourt.", "name": se.name}
+    return {"status": "success", "message": f"Successfully transferred {qty} of {item_code} ({direction}).", "name": se.name}
