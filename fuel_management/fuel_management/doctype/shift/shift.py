@@ -712,9 +712,7 @@ class Shift(Document):
                 "party_type": "Supplier",
                 "party": supplier,
                 "credit_in_account_currency": amount,
-                "reference_type": "Station Supplier Top Up",
-                "reference_name": t.name,
-                "user_remark": f"Top-Up RRN: {t.rrn_number}"
+                "user_remark": f"Top-Up RRN: {t.rrn_number} (Ref: {t.name})"
             })
             
             # Determine Debit Account based on Mode of Payment
