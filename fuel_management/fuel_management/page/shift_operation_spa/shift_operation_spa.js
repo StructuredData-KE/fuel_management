@@ -4658,6 +4658,20 @@ function setup_borrowed_products($wrapper) {
     // Default date to today
     $wrapper.find('#borrow-date').val(frappe.datetime.get_today());
     
+    // Fetch Counterparties
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.get_borrowing_counterparties',
+        callback: function(r) {
+            if(r.message) {
+                let select = $wrapper.find('#borrow-counterparty');
+                select.empty().append('<option value="">Select Counterparty...</option>');
+                r.message.forEach(c => {
+                    select.append(`<option value="${c.value}">${c.label}</option>`);
+                });
+            }
+        }
+    });
+    
     // Add first item row
     add_borrow_item_row($wrapper);
     
