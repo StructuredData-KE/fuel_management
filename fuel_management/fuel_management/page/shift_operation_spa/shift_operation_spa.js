@@ -804,7 +804,7 @@ function render_drystock($wrapper) {
             
             // Regex to extract multiplier (e.g. 1L, 4L, 500ML, 0.5KG)
             let mult = 1;
-            if (item.item_group === "GAS" || item.item_group === "LUBES") {
+            if (item.item_group === "GAS") {
                 let m = item.item_name.match(/(\d+(?:\.\d+)?)\s*(L|ML|KG|G|LITRE|LTR)s?\b/i);
                 if(m) {
                     mult = parseFloat(m[1]);
