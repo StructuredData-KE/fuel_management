@@ -78,6 +78,7 @@ class StationPurchase(Document):
                         
             pi.append("items", {
                 "item_code": item_code,
+                "warehouse": self.items[0].target_location if self.items else None,
                 "item_name": "Transport Charge",
                 "description": "Transport Charge",
                 "qty": 1,
