@@ -11,7 +11,7 @@
   "shift_template",
   "shift_name_display",
   "status",
-    "report_sent",
+  "report_sent",
   "column_break_1",
   "start_time",
   "end_time",
@@ -277,10 +277,17 @@
    "fieldtype": "Table",
    "label": "Greasing Sales",
    "options": "Shift Greasing Sale"
+  },
+  {
+   "fieldname": "report_sent",
+   "fieldtype": "Check",
+   "label": "Report Sent",
+   "default": "0",
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2026-08-06 16:30:00.000000",
+ "modified": "2026-08-06 16:31:54.917272",
  "modified_by": "Administrator",
  "module": "Fuel Management",
  "name": "Shift",
