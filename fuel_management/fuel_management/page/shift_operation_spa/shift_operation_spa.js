@@ -4901,3 +4901,193 @@ window.mark_borrowed_returned = function(docname) {
         }
     );
 };
+
+
+
+// =========================================================
+// END SHIFT REPORT MODULE
+// =========================================================
+window.generate_end_shift_report = function($wrapper) {
+    if (!window.ACTIVE_SHIFT) return;
+    let doc = window.ACTIVE_SHIFT;
+    
+    let html = `<div class="report-header">
+        <h1>${frappe.defaults.get_default("company") || "END OF SHIFT REPORT"}</h1>
+        <p><strong>Station:</strong> ${doc.station} | <strong>Shift:</strong> ${doc.shift_template || ''} | <strong>Date:</strong> ${frappe.datetime.str_to_user(doc.shift_date)} | <strong>Head CSA:</strong> ${doc.head_csa || ''}</p>
+    </div>`;
+    
+    // 1. METER READINGS (Grouped by Pump)
+    html += `<div class="report-section">
+        <div class="report-section-title">PUMP METER READINGS</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th class="text-left">PUMP</th>
+                    <th class="text-left">NOZZLE</th>
+                    <th>OPENING (E)</th>
+                    <th>CLOSING (E)</th>
+                    <th>OPENING (M)</th>
+                    <th>CLOSING (M)</th>
+                    <th>SALES (LTS)</th>
+                    <th>UNIT PRICE</th>
+                    <th>TOTAL CASH</th>
+                </tr>
+            </thead>
+            <tbody>`;
+            
+    let total_pump_liters = 0;
+    let total_pump_cash = 0;
+    
+    if (doc.pump_meter_readings && doc.pump_meter_readings.length > 0) {
+        // Group by pump
+        let pumps = {};
+        doc.pump_meter_readings.forEach(row => {
+            let nozzle_doc = (window.PUMP_NOZZLES || []).find(n => n.name === row.pump_nozzle);
+            let pump = nozzle_doc ? nozzle_doc.pump_group : "UNKNOWN";
+            if (!pumps[pump]) pumps[pump] = [];
+            pumps[pump].push(row);
+        });
+        
+        Object.keys(pumps).sort().forEach(pump => {
+            let pump_rows = pumps[pump];
+            pump_rows.forEach((row, idx) => {
+                let nozzle_doc = (window.PUMP_NOZZLES || []).find(n => n.name === row.pump_nozzle);
+                let item = nozzle_doc ? nozzle_doc.fuel_item : "";
+                let price = (window.FUEL_PRICES && window.FUEL_PRICES[item]) ? window.FUEL_PRICES[item] : 0;
+                
+                let sales_lts = Math.max(0, (row.closing_electronic_meter || 0) - (row.opening_electronic_meter || 0));
+                let cash = sales_lts * price;
+                
+                total_pump_liters += sales_lts;
+                total_pump_cash += cash;
+                
+                html += `<tr>
+                    ${idx === 0 ? `<td class="text-left bold" rowspan="${pump_rows.length}">${pump}</td>` : ''}
+                    <td class="text-left">${row.pump_nozzle} (${item})</td>
+                    <td>${frappe.format(row.opening_electronic_meter || 0, {fieldtype: 'Float'})}</td>
+                    <td>${frappe.format(row.closing_electronic_meter || 0, {fieldtype: 'Float'})}</td>
+                    <td>${frappe.format(row.opening_manual_meter || 0, {fieldtype: 'Float'})}</td>
+                    <td>${frappe.format(row.closing_manual_meter || 0, {fieldtype: 'Float'})}</td>
+                    <td class="bold">${frappe.format(sales_lts, {fieldtype: 'Float'})}</td>
+                    <td>${frappe.format(price, {fieldtype: 'Currency'})}</td>
+                    <td class="bold">${frappe.format(cash, {fieldtype: 'Currency'})}</td>
+                </tr>`;
+            });
+        });
+    } else {
+        html += `<tr><td colspan="9" class="text-center">No meter readings found.</td></tr>`;
+    }
+    
+    html += `</tbody>
+        <tfoot>
+            <tr>
+                <th colspan="6" class="text-left">GRAND TOTAL METERS</th>
+                <th class="text-right">${frappe.format(total_pump_liters, {fieldtype: 'Float'})}</th>
+                <th></th>
+                <th class="text-right">${frappe.format(total_pump_cash, {fieldtype: 'Currency'})}</th>
+            </tr>
+        </tfoot>
+    </table></div>`;
+    
+    
+    // 2. WET STOCK INFORMATION
+    html += `<div class="report-section">
+        <div class="report-section-title green">WET STOCK INFORMATION (DIPS)</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th class="text-left">TANK</th>
+                    <th>OPENING DIP</th>
+                    <th>PURCHASES (LTS)</th>
+                    <th>CLOSING DIP</th>
+                    <th>TANK SALES</th>
+                    <th>METER SALES</th>
+                    <th>DAILY VARIANCE</th>
+                </tr>
+            </thead>
+            <tbody>`;
+            
+    if (doc.dip_stick_readings && doc.dip_stick_readings.length > 0) {
+        doc.dip_stick_readings.forEach(row => {
+            html += `<tr>
+                <td class="text-left bold">${row.fuel_tank}</td>
+                <td>${frappe.format(row.opening_dip || 0, {fieldtype: 'Float'})}</td>
+                <td>${frappe.format(row.injected_purchases || 0, {fieldtype: 'Float'})}</td>
+                <td>${frappe.format(row.closing_dip || 0, {fieldtype: 'Float'})}</td>
+                <td class="bold">${frappe.format(row.sales_quantity || 0, {fieldtype: 'Float'})}</td>
+                <td>${frappe.format(row.meter_sales || 0, {fieldtype: 'Float'})}</td>
+                <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Float'})}</td>
+            </tr>`;
+        });
+    } else {
+        html += `<tr><td colspan="7" class="text-center">No dip stick readings found.</td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+
+
+    // 3. CSA RECONCILIATION SUMMARY
+    html += `<div class="report-section">
+        <div class="report-section-title">CSA RECONCILIATION SUMMARY</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th class="text-left">CSA NAME</th>
+                    <th class="text-left">PUMP GROUP</th>
+                    <th>METER SALES</th>
+                    <th>INVOICES & CARDS</th>
+                    <th>MPESA</th>
+                    <th>EXPENSES/ADV</th>
+                    <th>EXPECTED CASH</th>
+                    <th>SUBMITTED CASH</th>
+                    <th>EXCESS/SHORT</th>
+                </tr>
+            </thead>
+            <tbody>`;
+            
+    if (doc.csa_reconciliation && doc.csa_reconciliation.length > 0) {
+        doc.csa_reconciliation.forEach(row => {
+            let name = row.csa_name || row.csa;
+            let inv = (row.invoices || 0) + (row.cards || 0);
+            let exp = (row.expenses || 0) + (row.advance || 0);
+            html += `<tr>
+                <td class="text-left">${name}</td>
+                <td class="text-left">${row.pump_group || ''}</td>
+                <td>${frappe.format(row.sales_amount || 0, {fieldtype: 'Currency'})}</td>
+                <td>${frappe.format(inv, {fieldtype: 'Currency'})}</td>
+                <td>${frappe.format(row.mpesa || 0, {fieldtype: 'Currency'})}</td>
+                <td>${frappe.format(exp, {fieldtype: 'Currency'})}</td>
+                <td class="bold">${frappe.format(row.expected_cash || 0, {fieldtype: 'Currency'})}</td>
+                <td>${frappe.format(row.submitted_cash || 0, {fieldtype: 'Currency'})}</td>
+                <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Currency'})}</td>
+            </tr>`;
+        });
+    } else {
+        html += `<tr><td colspan="9" class="text-center">No reconciliation data found.</td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+    
+    
+    // 4. GRAND RECONCILIATION
+    let calc_expected = (total_pump_cash) - ((doc.total_invoices || 0) + (doc.total_cards || 0) + (doc.total_mpesa || 0) + (doc.total_expenses || 0) + (doc.total_advance || 0));
+    
+    html += `<div class="report-section">
+        <div class="report-section-title green">GRAND RECONCILIATION</div>
+        <div class="report-grid-2">
+            <div class="summary-box">
+                <div class="summary-row"><span>Total Meter Sales (Cash + Digital)</span> <span>${frappe.format(total_pump_cash || 0, {fieldtype: 'Currency'})}</span></div>
+                <div class="summary-row"><span>Total Invoices</span> <span>${frappe.format(doc.total_invoices || 0, {fieldtype: 'Currency'})}</span></div>
+                <div class="summary-row"><span>Total Cards (Rubis/Equity/KCB)</span> <span>${frappe.format(doc.total_cards || 0, {fieldtype: 'Currency'})}</span></div>
+                <div class="summary-row"><span>Total MPesa Receipts</span> <span>${frappe.format(doc.total_mpesa || 0, {fieldtype: 'Currency'})}</span></div>
+                <div class="summary-row"><span>Total Expenses & Advances</span> <span>${frappe.format((doc.total_expenses || 0) + (doc.total_advance || 0), {fieldtype: 'Currency'})}</span></div>
+                <div class="summary-row total"><span>GRAND EXPECTED CASH</span> <span>${frappe.format(calc_expected, {fieldtype: 'Currency'})}</span></div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-row"><span>Total Cash Submitted by CSAs</span> <span>${frappe.format(doc.total_submitted_cash || 0, {fieldtype: 'Currency'})}</span></div>
+                <div class="summary-row"><span>Non-Shift Payments / Top-Ups</span> <span>0.00</span></div>
+                <div class="summary-row total" style="color: ${(doc.total_variance || 0) < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(doc.total_variance || 0, {fieldtype: 'Currency'})}</span></div>
+            </div>
+        </div>
+    </div>`;
+    
+    $wrapper.find('#shift-report-container').html(html);
+};
