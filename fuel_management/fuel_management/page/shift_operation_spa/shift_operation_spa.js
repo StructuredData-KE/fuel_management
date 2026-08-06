@@ -209,7 +209,7 @@ function render_meters($wrapper) {
         method: "frappe.client.get_list",
         args: {
             doctype: "Pump Nozzle",
-            fields: ["name", "pump_group", "fuel_item"],
+            fields: ["name", "pump_group"],
             limit_page_length: 500
         },
         callback: function(r1) {
@@ -226,6 +226,10 @@ function render_meters($wrapper) {
                 callback: function(r2) {
                     let nozzle_prices = r2.message || {};
                     let grouped = {};
+                  window.NOZZLE_ITEMS = {};
+                  Object.keys(nozzle_prices).forEach(noz => {
+                      window.NOZZLE_ITEMS[noz] = nozzle_prices[noz].item;
+                  });
                     (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
                         let pg = nozzle_to_pg[row.pump_nozzle] || "Ungrouped";
                         if(!grouped[pg]) grouped[pg] = [];
@@ -4958,8 +4962,7 @@ window.generate_end_shift_report = function($wrapper) {
             Object.keys(pumps).sort().forEach(pump => {
                 let pump_rows = pumps[pump];
                 pump_rows.forEach((row, idx) => {
-                    let nozzle_doc = (window.PUMP_NOZZLES || []).find(n => n.name === row.pump_nozzle);
-                    let item = nozzle_doc ? nozzle_doc.fuel_item : "";
+                    let item = (window.NOZZLE_ITEMS && window.NOZZLE_ITEMS[row.pump_nozzle]) ? window.NOZZLE_ITEMS[row.pump_nozzle] : "";
                     let price = (window.FUEL_PRICES && window.FUEL_PRICES[item]) ? window.FUEL_PRICES[item] : 0;
                     
                     let sales_lts = Math.max(0, (row.closing_electronic_meter || 0) - (row.opening_electronic_meter || 0));
