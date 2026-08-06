@@ -483,6 +483,10 @@ class Shift(Document):
                 if missing:
                     frappe.throw(f"Cannot close shift. The following CSAs have not been reconciled: {', '.join(missing)}")
 
+    def validate_report_sent(self):
+        if self.status == "Closed" and not self.report_sent:
+            frappe.throw("You must send the End Shift Report to the owner before closing the shift.")
+
     def lock_shift_if_closed_for_csa(self):
         if not self.is_new():
             old_status = frappe.db.get_value("Shift", self.name, "status")
