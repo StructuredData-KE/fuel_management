@@ -382,14 +382,15 @@ function render_meters($wrapper) {
                             let user = window.USERS_LIST.find(u => u.name === assigned_csa_id);
                             if (user) csa_name = user.employee_name;
                         }
-                        let csa_text = csa_name ? `<div style="font-size: 0.85em; color: var(--primary); margin-top: 5px;">Assigned CSA: <strong>${csa_name}</strong></div>` : "";
+                        let csa_text = csa_name ? `<div style="font-size: 0.875rem; color: #475569;">Assigned CSA: <strong style="font-weight: 700; color: #0f172a;">${csa_name}</strong></div>` : "";
                         
                         let html = `
-                            <div class="pump-group-card" style="margin-bottom: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 2px solid var(--primary-light);">
-                                <div class="pump-group-header" style="background: var(--primary-light); color: var(--primary); padding: 12px 20px; font-size: 1.1em;">
-                                    ${pg} ${csa_text}
+                            <div class="pump-group-card" style="margin-bottom: 0;">
+                                <div class="pump-group-header" style="padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 2px solid #1e3a8a;">
+                                    <div style="font-size: 1.25rem; font-weight: 700; color: #172554;">${pg}</div>
+                                    ${csa_text}
                                 </div>
-                                <div class="pump-nozzles-list" style="padding: 10px;">
+                                <div class="pump-nozzles-list">
                         `;
                         
                         rows.forEach(row => {
@@ -407,29 +408,29 @@ function render_meters($wrapper) {
                             let fuel_type = is_ago ? 'AGO' : (is_pms ? 'PMS' : (item_code || 'UNKNOWN'));
                             
                             html += `
-                                <div class="meter-row" data-name="${row.name}" data-fuel-type="${fuel_type}" style="padding: 10px 15px; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
-                                    <div class="nozzle-col" style="flex: 0 0 150px;">
-                                        <div class="nozzle-name" style="font-size: 1.1em; color: var(--primary); font-weight: bold;">${row.pump_nozzle}</div>
-                                        <div style="font-size: 0.85em; color: #64748b; background: #f1f5f9; display: inline-block; padding: 2px 6px; border-radius: 4px; margin-top: 4px;">${fuel_type} @ ${price.toFixed(2)}</div>
+                                <div class="meter-row" data-name="${row.name}" data-fuel-type="${fuel_type}" style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; padding: 1rem 0; border-bottom: 1px solid #f1f5f9; align-items: center; transition: background-color 0.2s;">
+                                    <div style="grid-column: span 2 / span 2;">
+                                        <span style="display: block; font-size: 1.125rem; font-weight: 700; color: #1e293b; margin-bottom: 0.25rem;">${row.pump_nozzle}</span>
+                                        <span style="display: inline-block; background-color: #172554; color: #fbbf24; font-size: 0.75rem; font-weight: 600; padding: 0.25rem 0.625rem; border-radius: 0.375rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">${fuel_type} @ ${price.toFixed(2)}</span>
                                     </div>
                                     
-                                    <div class="elec-col" style="flex: 1; padding: 0 10px;">
-                                        <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Electronic</div>
-                                        <div class="reading-label" style="font-size: 0.8em;">Opening: <span class="read-only-cell" style="font-weight: bold;">${row.opening_electronic_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-elec highlight-input" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Closing Elec" style="padding: 6px; font-size: 1em; height: 35px;" ${disable_attr}>
-                                        <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-elec font-weight-bold">0.00</span></div>
+                                    <div style="grid-column: span 4 / span 4;">
+                                        <span style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 0.5rem;">ELECTRONIC</span>
+                                        <div style="font-size: 0.875rem; margin-bottom: 0.5rem;">Opening: <span class="read-only-cell" style="background-color: #f1f5f9; border: 1px solid #e2e8f0; color: #475569; font-family: monospace; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">${row.opening_electronic_meter}</span></div>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-elec" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Closing Elec" style="width: 100%; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #0f172a; font-family: monospace; outline: none; transition: all 0.2s;" ${disable_attr}>
+                                        <div style="font-size: 0.75rem; font-weight: 500; color: #64748b; margin-top: 0.25rem;">Sales: <span class="meter-sales-elec" style="font-weight: 700;">0.00</span></div>
                                     </div>
                                     
-                                    <div class="manual-col" style="flex: 1; padding: 0 10px;">
-                                        <div class="col-title" style="font-size: 0.8em; margin-bottom: 2px;">Manual</div>
-                                        <div class="reading-label" style="font-size: 0.8em;">Opening: <span class="read-only-cell" style="font-weight: bold;">${row.opening_manual_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-manual highlight-input" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Closing Manual" style="padding: 6px; font-size: 1em; height: 35px;" ${disable_attr}>
-                                        <div class="sales-value" style="font-size: 0.85em; margin-top: 4px;">Sales: <span class="meter-sales-manual font-weight-bold">0.00</span></div>
+                                    <div style="grid-column: span 4 / span 4;">
+                                        <span style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 0.5rem;">MANUAL</span>
+                                        <div style="font-size: 0.875rem; margin-bottom: 0.5rem;">Opening: <span class="read-only-cell" style="background-color: #f1f5f9; border: 1px solid #e2e8f0; color: #475569; font-family: monospace; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">${row.opening_manual_meter}</span></div>
+                                        <input type="number" step="0.01" class="spa-input meter-closing-manual" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Closing Manual" style="width: 100%; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #0f172a; font-family: monospace; outline: none; transition: all 0.2s;" ${disable_attr}>
+                                        <div style="font-size: 0.75rem; font-weight: 500; color: #64748b; margin-top: 0.25rem;">Sales: <span class="meter-sales-manual" style="font-weight: 700;">0.00</span></div>
                                     </div>
                                     
-                                    <div class="summary-col" style="flex: 1; text-align: right; justify-content: center;">
-                                        <div class="variance-box" style="font-size: 0.9em; margin-bottom: 5px;">Var: <span class="meter-variance font-weight-bold">0.00</span></div>
-                                        <div class="total-box" style="font-size: 1em; color: var(--primary);">Value: <br><span class="meter-total-value font-weight-bold">0.00</span></div>
+                                    <div style="grid-column: span 2 / span 2; text-align: right;">
+                                        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem;">Variance: <span class="meter-variance">0.00</span></div>
+                                        <div style="font-size: 1.125rem; font-weight: 700; color: #172554;">Value: <br><span class="meter-total-value">0.00</span></div>
                                     </div>
                                 </div>
                             `;
