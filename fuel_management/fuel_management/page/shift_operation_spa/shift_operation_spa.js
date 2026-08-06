@@ -73,12 +73,19 @@ try {
             }
             fetch_active_shift(wrapper);
             
-            // Load Vue 3 via CDN for Debtors Dashboard
-            frappe.require('https://unpkg.com/vue@3/dist/vue.global.js', function() {
-                if (typeof setup_vue_debtors === 'function') {
+            // Initialize Debtors Dashboard safely
+            if (typeof setup_vue_debtors === 'function') {
+                if (typeof Vue !== 'undefined') {
                     setup_vue_debtors(wrapper);
+                } else {
+                    var script = document.createElement('script');
+                    script.src = 'https://unpkg.com/vue@3/dist/vue.global.js';
+                    script.onload = function() {
+                        setup_vue_debtors(wrapper);
+                    };
+                    document.head.appendChild(script);
                 }
-            });
+            }
         }
     });
 }
@@ -5250,9 +5257,10 @@ ${e.stack}</pre>
 };
 
 function setup_vue_debtors(wrapper) {
+	console.log("Initializing Debtors Vue Dashboard...");
 	// Create mount point
 	$(wrapper).find("#debtors-app").html(`
-		<div id="debtors-app"></div>
+		<div id="debtors-vue-root"></div>
 	`);
 
 	const { createApp, ref, computed } = Vue;
@@ -5554,5 +5562,5 @@ function setup_vue_debtors(wrapper) {
 		}
 	});
 
-	app.mount('#debtors-app');
+	app.mount('#debtors-vue-root');
 }
