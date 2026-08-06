@@ -3547,6 +3547,29 @@ function render_petty_cash(wrapper) {
         $wrapper.find('#tab-petty-cash .view-pane').removeClass('active');
         $wrapper.find('#pc-' + view + '-view').addClass('active');
     });
+
+    $wrapper.find('.nav-item').on('click', function(e) {
+        e.preventDefault();
+        if(!window.ACTIVE_SHIFT && $(this).attr('data-target') !== 'tab-start') {
+            frappe.show_alert({message: "Start or resume a shift first.", indicator: "orange"});
+            return;
+        }
+        
+        $wrapper.find('.nav-item').removeClass('active');
+        $(this).addClass('active');
+        
+        let target = $(this).attr('data-target');
+        $wrapper.find('.tab-pane').removeClass('active');
+        $wrapper.find('#' + target).addClass('active');
+        
+        if (target === 'tab-report') {
+            generate_end_shift_report($wrapper);
+        }
+    });
+
+    $wrapper.find('#btn-print-report').on('click', function() {
+        window.print();
+    });
     
     // Load active accounts
     frappe.call({
