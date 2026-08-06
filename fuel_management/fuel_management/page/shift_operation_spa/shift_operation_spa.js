@@ -4913,15 +4913,27 @@ window.mark_borrowed_returned = function(docname) {
 // END SHIFT REPORT MODULE
 // =========================================================
 window.generate_end_shift_report = function($wrapper) {
-    try {
-        if (!window.SHIFT_DOC) {
-            $wrapper.find('#shift-report-container').html('<div style="text-align:center; padding:3rem;">Loading report data...</div>');
-            setTimeout(() => window.generate_end_shift_report($wrapper), 1000);
-            return;
-        }
-        let doc = window.SHIFT_DOC;
-        
-        let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults.company : "END OF SHIFT REPORT";
+    if (!window.SHIFT_DOC) {
+        $wrapper.find('#shift-report-container').html('<div style="text-align:center; padding:3rem;">Loading report data...</div>');
+        setTimeout(() => window.generate_end_shift_report($wrapper), 1000);
+        return;
+    }
+    
+    // Fetch CSA Reconciliation data first
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Shift Cash Reconciliation",
+            filters: { shift: window.SHIFT_DOC.name },
+            fields: ["csa", "pump_group", "sales_amount", "invoices", "cards", "mpesa", "expenses", "advance", "expected_cash", "actual_cash", "variance"],
+            limit_page_length: 500
+        },
+        callback: function(r) {
+            try {
+                let doc = window.SHIFT_DOC;
+                doc.csa_reconciliation = r.message || [];
+                
+let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults.company : "END OF SHIFT REPORT";
         let html = `<div class="report-header">
             <h1>${company}</h1>
             <p><strong>Station:</strong> ${doc.station || ''} | <strong>Shift:</strong> ${doc.shift_template || ''} | <strong>Date:</strong> ${frappe.datetime.str_to_user(doc.shift_date || '')} | <strong>Head CSA:</strong> ${doc.head_csa || ''}</p>
@@ -5146,4 +5158,6 @@ ${e.stack}</pre>
             <p style="margin-top: 1rem;">Please take a screenshot of this error and share it with support.</p>
         </div>`);
     }
+        }
+    });
 };
