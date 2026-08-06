@@ -5136,26 +5136,49 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
         
         
         // 4. GRAND RECONCILIATION
-        let calc_expected = (total_pump_cash) - ((doc.total_invoices || 0) + (doc.total_cards || 0) + (doc.total_mpesa || 0) + (doc.total_expenses || 0) + (doc.total_advance || 0));
-        
-        html += `<div class="report-section">
-            <div class="report-section-title green">GRAND RECONCILIATION</div>
-            <div class="report-grid-2">
-                <div class="summary-box">
-                    <div class="summary-row"><span>Total Meter Sales (Cash + Digital)</span> <span>${frappe.format(total_pump_cash || 0, {fieldtype: 'Currency'})}</span></div>
-                    <div class="summary-row"><span>Total Invoices</span> <span>${frappe.format(doc.total_invoices || 0, {fieldtype: 'Currency'})}</span></div>
-                    <div class="summary-row"><span>Total Cards (Rubis/Equity/KCB)</span> <span>${frappe.format(doc.total_cards || 0, {fieldtype: 'Currency'})}</span></div>
-                    <div class="summary-row"><span>Total MPesa Receipts</span> <span>${frappe.format(doc.total_mpesa || 0, {fieldtype: 'Currency'})}</span></div>
-                    <div class="summary-row"><span>Total Expenses & Advances</span> <span>${frappe.format((doc.total_expenses || 0) + (doc.total_advance || 0), {fieldtype: 'Currency'})}</span></div>
-                    <div class="summary-row total"><span>GRAND EXPECTED CASH</span> <span>${frappe.format(calc_expected, {fieldtype: 'Currency'})}</span></div>
-                </div>
-                <div class="summary-box">
-                    <div class="summary-row"><span>Total Cash Submitted by CSAs</span> <span>${frappe.format(doc.total_submitted_cash || 0, {fieldtype: 'Currency'})}</span></div>
-                    <div class="summary-row"><span>Non-Shift Payments / Top-Ups</span> <span>0.00</span></div>
-                    <div class="summary-row total" style="color: ${(doc.total_variance || 0) < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(doc.total_variance || 0, {fieldtype: 'Currency'})}</span></div>
-                </div>
-            </div>
-        </div>`;
+          let total_invoices = 0;
+          let total_cards = 0;
+          let total_mpesa = 0;
+          let total_expenses = 0;
+          let total_submitted_cash = 0;
+          let total_variance = 0;
+
+          if (doc.csa_reconciliation && doc.csa_reconciliation.length > 0) {
+              doc.csa_reconciliation.forEach(row => {
+                  total_invoices += (row.invoices || 0);
+                  total_cards += (row.cards || 0);
+                  total_mpesa += (row.mpesa || 0);
+                  total_expenses += (row.expenses || 0);
+                  total_submitted_cash += (row.actual_cash || 0);
+                  total_variance += (row.variance || 0);
+              });
+          }
+
+          let calc_expected = (total_pump_cash) - (total_invoices + total_cards + total_mpesa + total_expenses);
+          
+          html += `<div class="report-section">
+              <div class="report-section-title green">GRAND RECONCILIATION</div>
+              <div class="report-grid-2">
+                  <div class="summary-box">
+                      <div class="summary-row"><span>Total Meter Sales (Cash + Digital)</span> <span>${frappe.format(total_pump_cash || 0, {fieldtype: 'Currency'})}</span></div>
+                      <div class="summary-row"><span>Total Invoices</span> <span>${frappe.format(total_invoices, {fieldtype: 'Currency'})}</span></div>
+                      <div class="summary-row"><span>Total Cards (Rubis/Equity/KCB)</span> <span>${frappe.format(total_cards, {fieldtype: 'Currency'})}</span></div>
+                      <div class="summary-row"><span>Total MPesa Receipts</span> <span>${frappe.format(total_mpesa, {fieldtype: 'Currency'})}</span></div>
+                      <div class="summary-row"><span>Total Expenses & Advances</span> <span>${frappe.format(total_expenses, {fieldtype: 'Currency'})}</span></div>
+                      <div class="summary-row total"><span>GRAND EXPECTED CASH</span> <span>${frappe.format(calc_expected, {fieldtype: 'Currency'})}</span></div>
+                  </div>
+                  <div class="summary-box">
+                      <div class="summary-row"><span>Total Cash Submitted by CSAs</span> <span>${frappe.format(total_submitted_cash, {fieldtype: 'Currency'})}</span></div>
+                      <div class="summary-row"><span>Non-Shift Payments / Top-Ups</span> <span>0.00</span></div>
+                      <div class="summary-row total" style="color: ${total_variance < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(total_variance, {fieldtype: 'Currency'})}</span></div>
+                  </div>
+              </div>
+          </div>
+          
+          <div class="report-section" style="margin-top: 2rem;">
+              <div class="report-section-title" style="background: #e2e8f0; color: #1e293b; padding: 10px; font-weight: bold; font-size: 14px;">SHIFT NOTES / VARIANCE EXPLANATION</div>
+              <textarea id="shift-notes-input" style="width: 100%; min-height: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 15px; margin-top: 10px; font-family: inherit; font-size: 14px; resize: vertical;" placeholder="Type notes here to explain variances before printing..."></textarea>
+          </div>`;
         
         $wrapper.find('#shift-report-container').html(html);
         console.log("Report generated successfully!");
