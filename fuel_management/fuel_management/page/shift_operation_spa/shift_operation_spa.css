@@ -889,32 +889,30 @@
    PRINT STYLES FOR END SHIFT REPORT
    ========================================================================== */
 @media print {
-    body {
-        background: #fff;
-        margin: 0;
-        padding: 0;
+    body * {
+        visibility: hidden;
     }
-    .pos-layout {
-        display: block !important;
-        background: #fff;
-    }
-    .pos-sidebar, .pos-header, .pos-tabs, .segmented-control-wrapper, .pos-btn, .loader-overlay {
-        display: none !important;
+    #tab-report, #tab-report * {
+        visibility: visible;
     }
     #tab-report {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
         display: block !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        position: static !important;
     }
-    .dash-card {
-        box-shadow: none !important;
-        border: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        max-width: 100% !important;
+    .pos-header { display: none !important; }
+    
+    /* Ensure colors print */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
-    .printable-report {
+}
+.printable-report {
         padding: 0 !important;
     }
     

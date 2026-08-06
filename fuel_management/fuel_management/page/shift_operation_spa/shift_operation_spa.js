@@ -4908,8 +4908,12 @@ window.mark_borrowed_returned = function(docname) {
 // END SHIFT REPORT MODULE
 // =========================================================
 window.generate_end_shift_report = function($wrapper) {
-    if (!window.ACTIVE_SHIFT) return;
-    let doc = window.ACTIVE_SHIFT;
+    if (!window.SHIFT_DOC) {
+        $wrapper.find('#shift-report-container').html('<div style="text-align:center; padding:3rem;">Loading report data...</div>');
+        setTimeout(() => window.generate_end_shift_report($wrapper), 1000);
+        return;
+    }
+    let doc = window.SHIFT_DOC;
     
     let html = `<div class="report-header">
         <h1>${frappe.defaults.get_default("company") || "END OF SHIFT REPORT"}</h1>
