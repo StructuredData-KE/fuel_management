@@ -4999,18 +4999,18 @@ window.generate_end_shift_report = function($wrapper) {
             
         Object.keys(total_by_item).sort().forEach(item => {
             html += `<tr>
-                <th colspan="6" class="text-left" style="background: #f8fafc;">TOTAL ${item}</th>
-                <th class="text-right" style="background: #f8fafc;">${frappe.format(total_by_item[item].liters, {fieldtype: 'Float'})}</th>
-                <th style="background: #f8fafc;"></th>
-                <th class="text-right" style="background: #f8fafc;">${frappe.format(total_by_item[item].cash, {fieldtype: 'Currency'})}</th>
+                <th colspan="6" class="text-left" style="background: #f1f5f9; font-size: 14px; font-weight: 800; color: #1e293b;">TOTAL ${item.toUpperCase()}</th>
+                <th class="text-right" style="background: #f1f5f9; font-size: 14px; font-weight: 900; color: #0f172a;">${Math.round(total_by_item[item].liters).toLocaleString()}</th>
+                <th style="background: #f1f5f9;"></th>
+                <th class="text-right" style="background: #f1f5f9; font-size: 14px; font-weight: 900; color: #0f172a;">Sh ${Math.round(total_by_item[item].cash).toLocaleString()}</th>
             </tr>`;
         });
             
         html += `<tr>
-                    <th colspan="6" class="text-left">GRAND TOTAL METERS</th>
-                    <th class="text-right">${frappe.format(total_pump_liters, {fieldtype: 'Float'})}</th>
-                    <th></th>
-                    <th class="text-right">${frappe.format(total_pump_cash, {fieldtype: 'Currency'})}</th>
+                    <th colspan="6" class="text-left" style="background: #e2e8f0; font-size: 15px; font-weight: 900; color: #0f172a; text-transform: uppercase;">GRAND TOTAL METERS</th>
+                    <th class="text-right" style="background: #e2e8f0; font-size: 15px; font-weight: 900; color: #0f172a;">${Math.round(total_pump_liters).toLocaleString()}</th>
+                    <th style="background: #e2e8f0;"></th>
+                    <th class="text-right" style="background: #e2e8f0; font-size: 15px; font-weight: 900; color: #0f172a;">Sh ${Math.round(total_pump_cash).toLocaleString()}</th>
                 </tr>
             </tfoot>
         </table></div>`;
