@@ -5253,9 +5253,6 @@ ${e.stack}</pre>
         }
     });
 };
-	});
-};
-
 function setup_vue_debtors(wrapper) {
 	console.log("Initializing Debtors Vue Dashboard...");
 	// Create mount point
