@@ -4925,7 +4925,7 @@ window.generate_end_shift_report = function($wrapper) {
         args: {
             doctype: "Shift Cash Reconciliation",
             filters: { shift: window.SHIFT_DOC.name },
-            fields: ["csa", "pump_group", "sales_amount", "invoices", "cards", "mpesa", "expenses", "advance", "expected_cash", "actual_cash", "variance"],
+            fields: ["csa", "meter_sales", "invoices", "cards", "mpesa", "expenses", "expected_cash", "actual_cash", "variance"],
             limit_page_length: 500
         },
         callback: function(r) {
@@ -5105,12 +5105,20 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
         if (doc.csa_reconciliation && doc.csa_reconciliation.length > 0) {
             doc.csa_reconciliation.forEach(row => {
                 let name = row.csa_name || row.csa || '';
-                let inv = (row.invoices || 0) + (row.cards || 0);
-                let exp = (row.expenses || 0) + (row.advance || 0);
-                html += `<tr>
-                    <td class="text-left">${name}</td>
-                    <td class="text-left">${row.pump_group || ''}</td>
-                    <td>${frappe.format(row.sales_amount || 0, {fieldtype: 'Currency'})}</td>
+                  if (window.USERS_LIST) {
+                      let u = window.USERS_LIST.find(u => u.name === name);
+                      if (u) name = u.employee_name || u.full_name;
+                  }
+                  
+                  let pg_row = (window.SHIFT_DOC.assigned_csas || []).find(c => c.csa === row.csa);
+                  let pump_group = pg_row ? pg_row.pump_group : '';
+                  
+                  let inv = (row.invoices || 0) + (row.cards || 0);
+                  let exp = (row.expenses || 0);
+                  html += `<tr>
+                      <td class="text-left">${name}</td>
+                      <td class="text-left">${pump_group}</td>
+                      <td>${frappe.format(row.meter_sales || 0, {fieldtype: 'Currency'})}</td>
                     <td>${frappe.format(inv, {fieldtype: 'Currency'})}</td>
                     <td>${frappe.format(row.mpesa || 0, {fieldtype: 'Currency'})}</td>
                     <td>${frappe.format(exp, {fieldtype: 'Currency'})}</td>
