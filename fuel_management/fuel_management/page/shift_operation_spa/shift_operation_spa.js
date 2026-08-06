@@ -209,12 +209,13 @@ function render_meters($wrapper) {
         method: "frappe.client.get_list",
         args: {
             doctype: "Pump Nozzle",
-            fields: ["name", "pump_group"],
+            fields: ["name", "pump_group", "fuel_item"],
             limit_page_length: 500
         },
         callback: function(r1) {
             let nozzle_to_pg = {};
             if(r1.message) {
+                  window.PUMP_NOZZLES = r1.message;
                 r1.message.forEach(n => { nozzle_to_pg[n.name] = n.pump_group || "Ungrouped"; });
             }
             
