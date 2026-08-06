@@ -3563,7 +3563,7 @@ function render_petty_cash(wrapper) {
         $wrapper.find('#' + target).addClass('active');
         
         if (target === 'tab-report') {
-            generate_end_shift_report($wrapper);
+            window.generate_end_shift_report($wrapper);
         }
     });
 
