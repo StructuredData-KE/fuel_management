@@ -13,6 +13,7 @@ class Shift(Document):
         self.calculate_expected_cash()
         self.auto_inject_dry_stock_from_invoices()
         self.validate_csa_reconciliation()
+        self.validate_report_sent()
 
     def calculate_sales_quantity(self):
         from frappe.utils import flt
@@ -888,3 +889,59 @@ def get_nozzle_prices(station, shift_date):
 @frappe.whitelist()
 def get_till_pump_groups():
     return frappe.db.sql("SELECT parent, pump_group FROM `tabM-Pesa Till Pump Group` WHERE parenttype = 'M-Pesa Till'", as_dict=True)
+
+@frappe.whitelist()
+def send_end_shift_report(shift_name, html_content):
+    shift = frappe.get_doc("Shift", shift_name)
+    if not shift.station:
+        frappe.throw("No Fuel Station linked to this shift.")
+        
+    station = frappe.get_doc("Fuel Station", shift.station)
+    owner_email = station.owner_email
+    if not owner_email:
+        frappe.throw("Please configure an Owner Email in the Fuel Station document before sending the report.")
+        
+    # Inject minimal styling for PDF
+    styled_html = f"""
+    <html>
+    <head>
+        <style>
+            body {{ font-family: sans-serif; font-size: 12px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 6px; text-align: left; }}
+            th {{ background-color: #f4f4f4; }}
+            .text-right {{ text-align: right; }}
+            .text-center {{ text-align: center; }}
+            .bold {{ font-weight: bold; }}
+            .report-section-title {{ font-size: 14px; font-weight: bold; margin-bottom: 10px; background-color: #0f172a; color: white; padding: 8px; }}
+            .report-section-title.green {{ background-color: #16a34a; }}
+            .report-grid-2 {{ display: block; }}
+            .summary-box {{ border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }}
+            .summary-row {{ display: flex; justify-content: space-between; border-bottom: 1px dotted #ccc; padding: 4px 0; }}
+            .summary-row.total {{ font-weight: bold; font-size: 14px; border-top: 2px solid #000; margin-top: 5px; }}
+            textarea {{ display: none; }} /* Don't print the textarea element itself */
+        </style>
+    </head>
+    <body>
+        <div style="font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 20px;">
+            END OF SHIFT REPORT<br>
+            <span style="font-size: 14px; font-weight: normal;">{shift.station} - {shift.shift_date}</span>
+        </div>
+        {html_content}
+    </body>
+    </html>
+    """
+    
+    pdf_bytes = frappe.utils.pdf.get_pdf(styled_html)
+    
+    frappe.sendmail(
+        recipients=[owner_email],
+        subject=f"End Shift Report: {shift.name} ({shift.shift_date})",
+        message="Please find the attached End Shift Report.",
+        attachments=[{"fname": f"{shift.name}.pdf", "fcontent": pdf_bytes}]
+    )
+    
+    frappe.db.set_value("Shift", shift.name, "report_sent", 1)
+    frappe.db.commit()
+    
+    return "Sent"

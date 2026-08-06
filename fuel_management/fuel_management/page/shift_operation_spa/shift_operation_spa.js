@@ -1602,6 +1602,15 @@ function setup_actions(wrapper) {
     // Close Shift Logic
     $wrapper.find('#btn-close-shift').on('click', function() {
         if(!window.ACTIVE_SHIFT) return;
+          
+          if (!window.ACTIVE_SHIFT.report_sent) {
+              frappe.msgprint({
+                  title: __('Action Required'),
+                  indicator: 'orange',
+                  message: __('You must generate and send the End Shift Report to the owner before closing this shift. Please go to the "End Shift Report" tab and click "Send Report to Owner".')
+              });
+              return;
+          }
         
         const cashCaptured = $wrapper.find('#chk-cash-captured').is(':checked');
         const reportsPrinted = $wrapper.find('#chk-reports-printed').is(':checked');
@@ -5179,9 +5188,45 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
               <div class="report-section-title" style="background: #e2e8f0; color: #1e293b; padding: 10px; font-weight: bold; font-size: 14px;">SHIFT NOTES / VARIANCE EXPLANATION</div>
               <textarea id="shift-notes-input" style="width: 100%; min-height: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 15px; margin-top: 10px; font-family: inherit; font-size: 14px; resize: vertical;" placeholder="Type notes here to explain variances before printing..."></textarea>
           </div>`;
+          html += `<div style="margin-top: 20px; text-align: center;">
+                <button id="btn-send-owner-report" class="btn btn-success btn-lg" style="padding: 10px 30px; font-size: 16px; font-weight: bold; background-color: #16a34a; border-color: #16a34a;">
+                    Send Report to Owner
+                </button>
+            </div>`;
         
         $wrapper.find('#shift-report-container').html(html);
         console.log("Report generated successfully!");
+          
+          $wrapper.find('#btn-send-owner-report').on('click', function() {
+              let $btn = $(this);
+              let notes = $wrapper.find('#shift-notes-input').val();
+              
+              let $reportClone = $wrapper.find('#shift-report-container').clone();
+              
+              $reportClone.find('#shift-notes-input').replaceWith(`<div style="padding: 15px; border: 1px solid #cbd5e1; min-height: 120px; white-space: pre-wrap; font-size: 14px;">${notes || 'No notes provided.'}</div>`);
+              $reportClone.find('#btn-send-owner-report').parent().remove();
+              
+              let html_content = $reportClone.html();
+              
+              $btn.prop('disabled', true).text('Sending...');
+              
+              frappe.call({
+                  method: "fuel_management.fuel_management.doctype.shift.shift.send_end_shift_report",
+                  args: {
+                      shift_name: window.SHIFT_DOC.name,
+                      html_content: html_content
+                  },
+                  callback: function(r) {
+                      if (!r.exc) {
+                          frappe.show_alert({message: "Report successfully emailed to owner!", indicator: "green"});
+                          $btn.text('Sent Successfully').removeClass('btn-success').addClass('btn-primary').css('background-color', '#2563eb');
+                          window.ACTIVE_SHIFT.report_sent = 1;
+                      } else {
+                          $btn.prop('disabled', false).text('Send Report to Owner');
+                      }
+                  }
+              });
+          });
     } catch (e) {
         console.error("REPORT GENERATION ERROR:", e);
         $wrapper.find('#shift-report-container').html(`<div style="padding: 2rem; background: #fee2e2; color: #991b1b; border-radius: 8px;">
