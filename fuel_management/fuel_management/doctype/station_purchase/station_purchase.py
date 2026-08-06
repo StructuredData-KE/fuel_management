@@ -49,7 +49,35 @@ class StationPurchase(Document):
             pi.append("items", pi_item)
             
         if self.transport_charge and self.transport_charge > 0:
+            item_code = "Transport Charge"
+            if not frappe.db.exists("Item", item_code):
+                try:
+                    frappe.get_doc({
+                        "doctype": "Item",
+                        "item_code": item_code,
+                        "item_name": "Transport Charge",
+                        "item_group": "Services",
+                        "is_stock_item": 0,
+                        "is_fixed_asset": 0,
+                        "stock_uom": "Nos"
+                    }).insert(ignore_permissions=True)
+                except Exception:
+                    # Fallback if Services doesn't exist
+                    try:
+                        frappe.get_doc({
+                            "doctype": "Item",
+                            "item_code": item_code,
+                            "item_name": "Transport Charge",
+                            "item_group": "All Item Groups",
+                            "is_stock_item": 0,
+                            "is_fixed_asset": 0,
+                            "stock_uom": "Nos"
+                        }).insert(ignore_permissions=True)
+                    except Exception:
+                        pass
+                        
             pi.append("items", {
+                "item_code": item_code,
                 "item_name": "Transport Charge",
                 "description": "Transport Charge",
                 "qty": 1,
