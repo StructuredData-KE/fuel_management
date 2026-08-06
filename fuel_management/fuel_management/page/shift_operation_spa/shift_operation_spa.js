@@ -227,9 +227,11 @@ function render_meters($wrapper) {
                     let nozzle_prices = r2.message || {};
                     let grouped = {};
                   window.NOZZLE_ITEMS = {};
-                  Object.keys(nozzle_prices).forEach(noz => {
-                      window.NOZZLE_ITEMS[noz] = nozzle_prices[noz].item;
-                  });
+                    window.FUEL_PRICES = {};
+                    Object.keys(nozzle_prices).forEach(noz => {
+                        window.NOZZLE_ITEMS[noz] = nozzle_prices[noz].item;
+                        window.FUEL_PRICES[nozzle_prices[noz].item] = nozzle_prices[noz].price;
+                    });
                     (window.SHIFT_DOC.pump_meter_readings || []).forEach(row => {
                         let pg = nozzle_to_pg[row.pump_nozzle] || "Ungrouped";
                         if(!grouped[pg]) grouped[pg] = [];
