@@ -4943,6 +4943,7 @@ window.generate_end_shift_report = function($wrapper) {
                 
         let total_pump_liters = 0;
         let total_pump_cash = 0;
+        let total_by_item = {};
         
         if (doc.pump_meter_readings && doc.pump_meter_readings.length > 0) {
             let pumps = {};
@@ -4966,6 +4967,12 @@ window.generate_end_shift_report = function($wrapper) {
                     total_pump_liters += sales_lts;
                     total_pump_cash += cash;
                     
+                    if(item) {
+                        if(!total_by_item[item]) total_by_item[item] = { liters: 0, cash: 0 };
+                        total_by_item[item].liters += sales_lts;
+                        total_by_item[item].cash += cash;
+                    }
+                    
                     html += `<tr>
                         ${idx === 0 ? `<td class="text-left bold" rowspan="${pump_rows.length}">${pump}</td>` : ''}
                         <td class="text-left">${row.pump_nozzle} (${item})</td>
@@ -4984,8 +4991,18 @@ window.generate_end_shift_report = function($wrapper) {
         }
         
         html += `</tbody>
-            <tfoot>
-                <tr>
+            <tfoot>`;
+            
+        Object.keys(total_by_item).sort().forEach(item => {
+            html += `<tr>
+                <th colspan="6" class="text-left" style="background: #f8fafc;">TOTAL ${item}</th>
+                <th class="text-right" style="background: #f8fafc;">${frappe.format(total_by_item[item].liters, {fieldtype: 'Float'})}</th>
+                <th style="background: #f8fafc;"></th>
+                <th class="text-right" style="background: #f8fafc;">${frappe.format(total_by_item[item].cash, {fieldtype: 'Currency'})}</th>
+            </tr>`;
+        });
+            
+        html += `<tr>
                     <th colspan="6" class="text-left">GRAND TOTAL METERS</th>
                     <th class="text-right">${frappe.format(total_pump_liters, {fieldtype: 'Float'})}</th>
                     <th></th>
@@ -4996,8 +5013,10 @@ window.generate_end_shift_report = function($wrapper) {
         
         
         // 2. WET STOCK INFORMATION
+        let is_day_shift = (doc.shift_template || '').toLowerCase().includes('day');
+        
         html += `<div class="report-section">
-            <div class="report-section-title green">WET STOCK INFORMATION (DIPS)</div>
+            <div class="report-section-title green">WET STOCK INFORMATION (DIPS) ${is_day_shift ? '- DAY SHIFT (N/A)' : ''}</div>
             <table class="report-table">
                 <thead>
                     <tr>
@@ -5012,20 +5031,38 @@ window.generate_end_shift_report = function($wrapper) {
                 </thead>
                 <tbody>`;
                 
-        if (doc.dip_stick_readings && doc.dip_stick_readings.length > 0) {
-            doc.dip_stick_readings.forEach(row => {
+        if (is_day_shift) {
+            // Show dummy empty readings for day shift
+            let tanks = window.STATION_SETTINGS && window.STATION_SETTINGS.tanks ? window.STATION_SETTINGS.tanks : ['Tank 1 - Petrol', 'Tank 2 - Diesel'];
+            tanks.forEach(tank => {
+                let tank_name = typeof tank === 'string' ? tank : tank.fuel_tank;
                 html += `<tr>
-                    <td class="text-left bold">${row.fuel_tank || ''}</td>
-                    <td>${frappe.format(row.opening_dip || 0, {fieldtype: 'Float'})}</td>
-                    <td>${frappe.format(row.injected_purchases || 0, {fieldtype: 'Float'})}</td>
-                    <td>${frappe.format(row.closing_dip || 0, {fieldtype: 'Float'})}</td>
-                    <td class="bold">${frappe.format(row.sales_quantity || 0, {fieldtype: 'Float'})}</td>
-                    <td>${frappe.format(row.meter_sales || 0, {fieldtype: 'Float'})}</td>
-                    <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Float'})}</td>
+                    <td class="text-left bold" style="color: #94a3b8;">${tank_name}</td>
+                    <td style="color: #94a3b8;">-</td>
+                    <td style="color: #94a3b8;">-</td>
+                    <td style="color: #94a3b8;">-</td>
+                    <td style="color: #94a3b8;">-</td>
+                    <td style="color: #94a3b8;">-</td>
+                    <td style="color: #94a3b8;">-</td>
                 </tr>`;
             });
+            html += `<tr><td colspan="7" class="text-center" style="color: #64748b; font-style: italic;">Dips are recorded at the end of the Night Shift for the entire 24h period.</td></tr>`;
         } else {
-            html += `<tr><td colspan="7" class="text-center">No dip stick readings found.</td></tr>`;
+            if (doc.dip_stick_readings && doc.dip_stick_readings.length > 0) {
+                doc.dip_stick_readings.forEach(row => {
+                    html += `<tr>
+                        <td class="text-left bold">${row.fuel_tank || ''}</td>
+                        <td>${frappe.format(row.opening_dip || 0, {fieldtype: 'Float'})}</td>
+                        <td>${frappe.format(row.injected_purchases || 0, {fieldtype: 'Float'})}</td>
+                        <td>${frappe.format(row.closing_dip || 0, {fieldtype: 'Float'})}</td>
+                        <td class="bold">${frappe.format(row.sales_quantity || 0, {fieldtype: 'Float'})}</td>
+                        <td>${frappe.format(row.meter_sales || 0, {fieldtype: 'Float'})}</td>
+                        <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Float'})}</td>
+                    </tr>`;
+                });
+            } else {
+                html += `<tr><td colspan="7" class="text-center">No dip stick readings found.</td></tr>`;
+            }
         }
         html += `</tbody></table></div>`;
 
