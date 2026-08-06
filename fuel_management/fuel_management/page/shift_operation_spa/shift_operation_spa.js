@@ -5125,7 +5125,7 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
                     <td>${frappe.format(row.mpesa || 0, {fieldtype: 'Currency'})}</td>
                     <td>${frappe.format(exp, {fieldtype: 'Currency'})}</td>
                     <td class="bold">${frappe.format(row.expected_cash || 0, {fieldtype: 'Currency'})}</td>
-                    <td>${frappe.format(row.actual_cash || 0, {fieldtype: \'Currency\'})}</td>
+                    <td>${frappe.format(row.actual_cash || 0, {fieldtype: 'Currency'})}</td>
                     <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Currency'})}</td>
                 </tr>`;
             });
