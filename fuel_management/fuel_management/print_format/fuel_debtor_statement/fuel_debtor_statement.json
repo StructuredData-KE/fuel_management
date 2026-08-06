@@ -1,0 +1,20 @@
+{
+ "creation": "2026-08-06 19:45:00.000000",
+ "custom_format": 1,
+ "doc_type": "Customer",
+ "docstatus": 0,
+ "doctype": "Print Format",
+ "font": "Default",
+ "format_data": "[]",
+ "idx": 0,
+ "line_breaks": 0,
+ "modified": "2026-08-06 19:45:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fuel Management",
+ "name": "Fuel Debtor Statement",
+ "owner": "Administrator",
+ "print_format_builder_beta": 0,
+ "print_format_type": "Jinja",
+ "show_empty_items": 0,
+ "standard": "Yes"
+}

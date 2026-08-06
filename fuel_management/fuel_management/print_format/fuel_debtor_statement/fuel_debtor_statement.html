@@ -1,0 +1,227 @@
+<style>
+	.statement-page {
+		font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+		font-size: 12px;
+		color: #333;
+		line-height: 1.5;
+	}
+	.header-table {
+		width: 100%;
+		display: table;
+		margin-bottom: 30px;
+	}
+	.header-cell {
+		display: table-cell;
+		vertical-align: top;
+	}
+	.header-right {
+		text-align: right;
+	}
+	.statement-title {
+		font-size: 24px;
+		font-weight: bold;
+		color: #1a202c;
+		margin-bottom: 5px;
+	}
+	.info-section {
+		display: table;
+		width: 100%;
+		margin-bottom: 20px;
+	}
+	.box-container {
+		display: table-cell;
+		width: 48%;
+		vertical-align: top;
+	}
+	.box-spacer {
+		display: table-cell;
+		width: 4%;
+	}
+	.box {
+		border: 1px solid #e2e8f0;
+		border-radius: 4px;
+		padding: 15px;
+		background-color: #f7fafc;
+	}
+	.box-title {
+		font-weight: bold;
+		margin-bottom: 10px;
+		text-transform: uppercase;
+		font-size: 11px;
+		color: #4a5568;
+		border-bottom: 1px solid #cbd5e0;
+		padding-bottom: 5px;
+	}
+	.data-table {
+		width: 100%;
+		border-collapse: collapse;
+		margin-bottom: 20px;
+	}
+	.data-table th {
+		background-color: #2d3748;
+		color: #ffffff;
+		padding: 10px;
+		font-size: 11px;
+		text-transform: uppercase;
+		text-align: left;
+		border: 1px solid #4a5568;
+	}
+	.data-table td {
+		padding: 8px 10px;
+		border: 1px solid #e2e8f0;
+	}
+	.data-table tr:nth-child(even) {
+		background-color: #f7fafc;
+	}
+	.text-right {
+		text-align: right !important;
+	}
+	.font-weight-bold {
+		font-weight: bold;
+	}
+	.footer-section {
+		margin-top: 40px;
+		font-size: 10px;
+		color: #718096;
+		border-top: 1px solid #e2e8f0;
+		padding-top: 15px;
+	}
+</style>
+
+<div class="statement-page">
+	<!-- HEADER -->
+	<div class="header-table">
+		<div class="header-cell">
+			<h2 style="margin:0; color:#2b6cb0;">{{ frappe.db.get_value("Company", doc.company or frappe.defaults.get_user_default("Company"), "company_name") or "Fuel Management Ltd" }}</h2>
+			<div>P.O. Box 12345, Nairobi</div>
+			<div>Tel: +254 700 000000</div>
+			<div><strong>Tax PIN:</strong> P000000000X</div>
+		</div>
+		<div class="header-cell header-right">
+			<div class="statement-title">STATEMENT OF ACCOUNT</div>
+			<div><strong>Date:</strong> {{ frappe.utils.formatdate(frappe.utils.nowdate()) }}</div>
+		</div>
+	</div>
+
+	{% set from_date = frappe.form_dict.get("from_date") or frappe.utils.add_months(frappe.utils.nowdate(), -1) %}
+	{% set to_date = frappe.form_dict.get("to_date") or frappe.utils.nowdate() %}
+
+	<!-- INFO SECTION -->
+	<div class="info-section">
+		<div class="box-container">
+			<div class="box">
+				<div class="box-title">Bill To</div>
+				<div class="font-weight-bold" style="font-size: 14px;">{{ doc.customer_name }}</div>
+				<div><strong>Account No:</strong> {{ doc.name }}</div>
+				<div><strong>Fleet Card Ref:</strong> {{ doc.custom_fleet_card_reference or 'N/A' }}</div>
+			</div>
+		</div>
+		<div class="box-spacer"></div>
+		<div class="box-container">
+			<div class="box">
+				<div class="box-title">Account Summary</div>
+				<div><strong>Period:</strong> {{ frappe.utils.formatdate(from_date) }} to {{ frappe.utils.formatdate(to_date) }}</div>
+				<div><strong>Credit Limit:</strong> {{ frappe.utils.fmt_money(doc.credit_limit or 0, currency="KES") }}</div>
+				<!-- Closing balance calculated below -->
+			</div>
+		</div>
+	</div>
+
+	{# Calculate mock transactions and opening balance since this is a UI scaffold #}
+	{% set opening_balance = 150000.0 %}
+	
+	<!-- SUMMARY TABLE -->
+	<table class="data-table" style="margin-bottom: 30px;">
+		<thead>
+			<tr>
+				<th>Opening Balance</th>
+				<th class="text-right">Total Invoiced</th>
+				<th class="text-right">Total Payments</th>
+				<th class="text-right">Closing Balance</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<td>{{ frappe.utils.fmt_money(opening_balance) }}</td>
+				<td class="text-right">{{ frappe.utils.fmt_money(380000.0) }}</td>
+				<td class="text-right">{{ frappe.utils.fmt_money(180000.0) }}</td>
+				<td class="text-right font-weight-bold">{{ frappe.utils.fmt_money(opening_balance + 380000.0 - 180000.0) }}</td>
+			</tr>
+		</tbody>
+	</table>
+
+	<!-- TRANSACTION TABLE -->
+	<table class="data-table">
+		<thead>
+			<tr>
+				<th>Date</th>
+				<th>Reference</th>
+				<th>Vehicle / Details</th>
+				<th>Product</th>
+				<th class="text-right">Debit</th>
+				<th class="text-right">Credit</th>
+				<th class="text-right">Balance</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<td colspan="6" class="text-right font-weight-bold">OPENING BALANCE</td>
+				<td class="text-right font-weight-bold">{{ frappe.utils.fmt_money(opening_balance) }}</td>
+			</tr>
+			
+			{# Mocked rows for PDF generation as requested #}
+			{% set running = opening_balance %}
+			
+			{% set running = running + 300000.0 %}
+			<tr>
+				<td>{{ frappe.utils.formatdate(from_date) }}</td>
+				<td>INV010</td>
+				<td>KDD 001D</td>
+				<td>Diesel</td>
+				<td class="text-right">{{ frappe.utils.fmt_money(300000.0) }}</td>
+				<td class="text-right">-</td>
+				<td class="text-right font-weight-bold">{{ frappe.utils.fmt_money(running) }}</td>
+			</tr>
+
+			{% set running = running - 100000.0 %}
+			<tr>
+				<td>{{ frappe.utils.formatdate(frappe.utils.add_days(from_date, 5)) }}</td>
+				<td>PAY-042</td>
+				<td>Cheque Deposit</td>
+				<td>-</td>
+				<td class="text-right">-</td>
+				<td class="text-right">{{ frappe.utils.fmt_money(100000.0) }}</td>
+				<td class="text-right font-weight-bold">{{ frappe.utils.fmt_money(running) }}</td>
+			</tr>
+
+			{% set running = running - 80000.0 %}
+			<tr>
+				<td>{{ frappe.utils.formatdate(frappe.utils.add_days(from_date, 10)) }}</td>
+				<td>PAY-045</td>
+				<td>Bank Transfer</td>
+				<td>-</td>
+				<td class="text-right">-</td>
+				<td class="text-right">{{ frappe.utils.fmt_money(80000.0) }}</td>
+				<td class="text-right font-weight-bold">{{ frappe.utils.fmt_money(running) }}</td>
+			</tr>
+
+			{% set running = running + 80000.0 %}
+			<tr>
+				<td>{{ frappe.utils.formatdate(to_date) }}</td>
+				<td>INV015</td>
+				<td>KEE 234E</td>
+				<td>Petrol</td>
+				<td class="text-right">{{ frappe.utils.fmt_money(80000.0) }}</td>
+				<td class="text-right">-</td>
+				<td class="text-right font-weight-bold">{{ frappe.utils.fmt_money(running) }}</td>
+			</tr>
+		</tbody>
+	</table>
+
+	<!-- FOOTER -->
+	<div class="footer-section">
+		<div><strong>PAYMENT TERMS:</strong> All accounts are due 30 days from the date of the statement. Overdue accounts may be subject to a 2% late fee.</div>
+		<div style="margin-top: 5px;"><strong>BANK DETAILS:</strong> Fuel Management Ltd | KCB Bank | Acc No: 1234567890 | Branch: Nairobi Main</div>
+		<div style="margin-top: 15px; text-align: center; font-style: italic;">Thank you for your business.</div>
+	</div>
+</div>
