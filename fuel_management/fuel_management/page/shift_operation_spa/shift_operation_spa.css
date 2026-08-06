@@ -69,10 +69,23 @@
     font-weight: 700;
 }
 
-.logo-text {
+.logo-text-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.logo-text-main {
     color: var(--sidebar-text-active);
-    font-size: 1.125rem;
+    font-size: 0.9rem;
     font-weight: 700;
+    line-height: 1.2;
+}
+
+.logo-text-sub {
+    color: var(--sidebar-amber);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
 }
 
 .sidebar-nav {
