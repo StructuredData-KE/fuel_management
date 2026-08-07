@@ -629,11 +629,16 @@ def get_inventory_status_report(station_id, from_date, to_date):
     grouped = {}
     for item, row in data.items():
         ig = row["item_group"] or "Other"
+        
+        # Skip Fuels completely
+        if ig.upper() in ["FUELS", "FUEL"]:
+            continue
+            
         if ig not in grouped:
             grouped[ig] = []
         grouped[ig].append(row)
         
-    return {"company": company_name, "data": grouped}
+    return {"status": "success", "company": company_name, "from_date": from_date, "to_date": to_date, "data": grouped}
 
 def create_borrowed_doctypes():
     import frappe
