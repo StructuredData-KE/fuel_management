@@ -784,7 +784,7 @@
 .inventory-report-table thead .sticky-col {
     z-index: 4; /* Top left corner needs highest z-index */
     background: #0f172a !important; /* Dark blue for first two cols */
-    color: white;
+    color: white !important;
 }
 .inventory-report-table tbody .sticky-col:nth-child(2) {
     left: calc(45px * var(--table-scale)); /* width of first col */
@@ -821,20 +821,20 @@
 
 .th-group-opening, .th-group-closing {
     background-color: #334155 !important;
-    color: #f8fafc;
+    color: #f8fafc !important;
 }
 .th-sub-op, .th-sub-cl {
     background-color: #475569 !important;
-    color: #f1f5f9;
+    color: #f1f5f9 !important;
     font-size: calc(var(--table-sub-font-size) * var(--table-scale)) !important;
 }
 .th-group-trans {
     background-color: #1e293b !important;
-    color: #f8fafc;
+    color: #f8fafc !important;
 }
 .th-sub-tr {
     background-color: #334155 !important;
-    color: #f1f5f9;
+    color: #f1f5f9 !important;
     font-size: calc(var(--table-sub-font-size) * var(--table-scale)) !important;
 }
 .inventory-report-table .row-group-header td {
