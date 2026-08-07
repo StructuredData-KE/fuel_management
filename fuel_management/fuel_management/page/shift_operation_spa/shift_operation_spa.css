@@ -29,22 +29,24 @@
 .dashboard-wrapper {
     font-family: 'Inter', sans-serif;
     display: flex;
-    min-height: calc(100vh - 50px);
+    height: calc(100vh - 60px);
+    overflow: hidden;
     background: var(--main-bg);
-    width: 100%;
+    width: calc(100% + 30px);
     margin: -15px; /* offset frappe padding */
 }
 
 /* Sidebar */
 .sidebar {
     width: 256px;
-    height: 100vh;
+    height: 100%;
     background: var(--sidebar-bg);
     color: var(--sidebar-text);
     display: flex;
     flex-direction: column;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    z-index: 10;
     flex-shrink: 0;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .sidebar-header {
@@ -146,6 +148,8 @@
     display: flex;
     flex-direction: column;
     overflow-x: hidden;
+    overflow-y: auto;
+    height: 100%;
 }
 
 /* Topbar */
