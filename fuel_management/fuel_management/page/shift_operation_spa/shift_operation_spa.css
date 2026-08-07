@@ -783,7 +783,7 @@
 }
 .inventory-report-table thead .sticky-col {
     z-index: 4; /* Top left corner needs highest z-index */
-    background: #65a30d !important; /* Green for first two cols */
+    background: #0f172a !important; /* Dark blue for first two cols */
     color: white;
 }
 .inventory-report-table tbody .sticky-col:nth-child(2) {
@@ -820,21 +820,21 @@
 }
 
 .th-group-opening, .th-group-closing {
-    background-color: #93c5fd !important;
-    color: #1e3a8a;
+    background-color: #334155 !important;
+    color: #f8fafc;
 }
 .th-sub-op, .th-sub-cl {
-    background-color: #bfdbfe !important;
-    color: #1e3a8a;
+    background-color: #475569 !important;
+    color: #f1f5f9;
     font-size: calc(var(--table-sub-font-size) * var(--table-scale)) !important;
 }
 .th-group-trans {
-    background-color: #86efac !important;
-    color: #14532d;
+    background-color: #1e293b !important;
+    color: #f8fafc;
 }
 .th-sub-tr {
-    background-color: #bbf7d0 !important;
-    color: #14532d;
+    background-color: #334155 !important;
+    color: #f1f5f9;
     font-size: calc(var(--table-sub-font-size) * var(--table-scale)) !important;
 }
 .inventory-report-table .row-group-header td {
