@@ -552,7 +552,7 @@ def get_inventory_status_report(station_id, from_date, to_date):
     company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
     company_name = frappe.db.get_value("Company", company, "company_name") or company
 
-    allowed_items = frappe.get_all("Item", filters={"item_group": ["!=", "Fuels"]}, pluck="name")
+    allowed_items = frappe.get_all("Item", filters={"item_group": ["not in", ["Fuels", "FUELS", "Fuel", "FUEL"]]}, pluck="name")
     
     if not allowed_items:
         return {"status": "success", "company": company_name, "from_date": from_date, "to_date": to_date, "data": []}
