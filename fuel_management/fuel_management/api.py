@@ -554,7 +554,8 @@ def get_inventory_status_report(station_id, from_date, to_date):
 
     sles = frappe.get_all("Stock Ledger Entry",
         filters={"warehouse": ["in", warehouses], "is_cancelled": 0},
-        fields=["item_code", "warehouse", "actual_qty", "posting_date", "voucher_type", "voucher_no"]
+        fields=["item_code", "warehouse", "actual_qty", "qty_after_transaction", "posting_date", "posting_time", "creation", "voucher_type", "voucher_no"],
+        order_by="posting_date asc, posting_time asc, creation asc"
     )
     
     data = {}
@@ -574,12 +575,12 @@ def get_inventory_status_report(station_id, from_date, to_date):
         
         pdate = str(sle.posting_date)
         
-        # Opening
+        # Opening - continuous overwrite until the last entry before from_date
         if pdate < from_date:
             if sle.warehouse == s_warehouse:
-                data[item]["op_store"] += sle.actual_qty
+                data[item]["op_store"] = sle.qty_after_transaction
             elif sle.warehouse == f_warehouse:
-                data[item]["op_forecourt"] += sle.actual_qty
+                data[item]["op_forecourt"] = sle.qty_after_transaction
         
         # Transactions
         if from_date <= pdate <= to_date:
@@ -597,9 +598,9 @@ def get_inventory_status_report(station_id, from_date, to_date):
                 data[item]["cl_store"] = 0
                 data[item]["cl_forecourt"] = 0
             if sle.warehouse == s_warehouse:
-                data[item]["cl_store"] += sle.actual_qty
+                data[item]["cl_store"] = sle.qty_after_transaction
             elif sle.warehouse == f_warehouse:
-                data[item]["cl_forecourt"] += sle.actual_qty
+                data[item]["cl_forecourt"] = sle.qty_after_transaction
 
     for item, row in data.items():
         if "vouchers" in row:
