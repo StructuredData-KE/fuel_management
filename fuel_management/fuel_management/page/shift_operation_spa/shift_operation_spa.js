@@ -3183,21 +3183,25 @@ function fetch_inventory_report($wrapper) {
                             item_opts += `<option value="${row.item_code}">${row.item_name}</option>`;
                         }
                         
+                        let cl_store_cls = (row.cl_store < 0) ? 'negative-val' : '';
+                        let cl_fc_cls = (row.cl_forecourt < 0) ? 'negative-val' : '';
+                        let cl_tot_cls = (row.cl_total < 0) ? 'negative-val' : '';
+                        
                         html += `
-                            <tr>
+                            <tr class="data-row">
                                 <td class="sticky-col th-no">${no++}</td>
                                 <td class="sticky-col th-product">${row.item_name}</td>
                                 
-                                <td class="col-op">${row.op_store || 0}</td>
-                                <td class="col-op">${row.op_forecourt || 0}</td>
-                                <td style="font-weight:bold;">${row.op_total || 0}</td>
+                                <td class="col-op text-right">${row.op_store || 0}</td>
+                                <td class="col-op text-right">${row.op_forecourt || 0}</td>
+                                <td class="text-right" style="font-weight:bold;">${row.op_total || 0}</td>
                                 
-                                <td>${row.purchases || 0}</td>
-                                <td>${row.sales || 0}</td>
+                                <td class="text-right">${row.purchases || 0}</td>
+                                <td class="text-right">${row.sales || 0}</td>
                                 
-                                <td class="col-cl">${row.cl_store || 0}</td>
-                                <td class="col-cl">${row.cl_forecourt || 0}</td>
-                                <td style="font-weight:bold;">${row.cl_total || 0}</td>
+                                <td class="col-cl text-right ${cl_store_cls}">${row.cl_store || 0}</td>
+                                <td class="col-cl text-right ${cl_fc_cls}">${row.cl_forecourt || 0}</td>
+                                <td class="text-right ${cl_tot_cls}" style="font-weight:bold;">${row.cl_total || 0}</td>
                             </tr>
                         `;
                     });
