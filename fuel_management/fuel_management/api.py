@@ -281,6 +281,95 @@ def get_expected_dips(shift_id):
 
 
 @frappe.whitelist()
+def get_daily_dip_summary(shift_id):
+    """
+    Returns dip data for the ENTIRE DAY corresponding to a night shift.
+    - Opening Dip: from previous night shift's closing dip (stored on dip_stick_readings)
+    - Closing Dip: from the current night shift's dip_stick_readings
+    - Purchases: all Station Purchases across ALL shifts on the same date
+    - Meter Sales: combined meter sales from ALL shifts on the same date (day + night)
+    - Tank Sales: Opening + Purchases - Closing
+    - Variance: Tank Sales - Meter Sales
+    """
+    from frappe.utils import flt
+
+    if not shift_id:
+        return []
+
+    night_shift = frappe.get_doc("Shift", shift_id)
+
+    if not night_shift.dip_stick_readings:
+        return []
+
+    shift_date = night_shift.shift_date
+    station = night_shift.station
+
+    # Get ALL shifts on the same date for this station
+    all_shifts_on_date = frappe.get_all(
+        "Shift",
+        filters={"station": station, "shift_date": shift_date, "docstatus": ["!=", 2]},
+        pluck="name"
+    )
+
+    # --- Meter Sales: sum sales from all shifts on the date, grouped by fuel tank ---
+    meter_sales_by_tank = {}  # {tank_name: liters}
+    for s_name in all_shifts_on_date:
+        s_doc = frappe.get_doc("Shift", s_name)
+        for row in (s_doc.pump_meter_readings or []):
+            tank_name = frappe.db.get_value("Pump Nozzle", row.pump_nozzle, "fuel_tank") if row.pump_nozzle else None
+            if tank_name:
+                sales_lts = max(0, flt(row.closing_electronic_meter) - flt(row.opening_electronic_meter))
+                meter_sales_by_tank[tank_name] = meter_sales_by_tank.get(tank_name, 0) + sales_lts
+
+    # --- Purchases: sum all Station Purchase quantities across all shifts on the date, grouped by tank ---
+    purchases_by_tank = {}  # {tank_name: liters}
+    shift_purchases = frappe.get_all(
+        "Station Purchase",
+        filters={"shift": ["in", all_shifts_on_date], "docstatus": 1},
+        pluck="name"
+    )
+    if shift_purchases:
+        pur_items = frappe.get_all(
+            "Station Purchase Item",
+            filters={"parent": ["in", shift_purchases]},
+            fields=["item_code", "qty"]
+        )
+        for pi in pur_items:
+            # Find which tank uses this fuel product
+            tanks_for_item = frappe.get_all(
+                "Fuel Tank",
+                filters={"station": station, "fuel_product": pi.item_code},
+                pluck="name"
+            )
+            for t in tanks_for_item:
+                purchases_by_tank[t] = purchases_by_tank.get(t, 0) + flt(pi.qty)
+
+    # --- Build final result using the night shift's dip_stick_readings ---
+    result = []
+    for row in night_shift.dip_stick_readings:
+        tank = row.fuel_tank or ""
+        opening_dip = flt(row.opening_dip)
+        closing_dip = flt(row.closing_dip)
+        purchases = purchases_by_tank.get(tank, 0)
+        meter_sales = meter_sales_by_tank.get(tank, 0)
+        tank_sales = opening_dip + purchases - closing_dip
+        variance = tank_sales - meter_sales
+
+        result.append({
+            "fuel_tank": tank,
+            "opening_dip": opening_dip,
+            "closing_dip": closing_dip,
+            "injected_purchases": purchases,
+            "meter_sales": meter_sales,
+            "sales_quantity": tank_sales,
+            "variance": variance,
+        })
+
+    return result
+
+
+
+@frappe.whitelist()
 def setup_accounts():
     company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
     if not company:

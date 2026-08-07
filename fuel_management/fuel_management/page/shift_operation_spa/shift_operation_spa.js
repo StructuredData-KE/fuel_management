@@ -5061,8 +5061,8 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
         // 2. WET STOCK INFORMATION
         let is_day_shift = (doc.shift_template || '').toLowerCase().includes('day');
         
-        html += `<div class="report-section">
-            <div class="report-section-title green">WET STOCK INFORMATION (DIPS) ${is_day_shift ? '- DAY SHIFT (N/A)' : ''}</div>
+        let dip_section_header = `<div class="report-section">
+            <div class="report-section-title green">WET STOCK INFORMATION (DIPS) ${is_day_shift ? '- DAY SHIFT (N/A)' : '- DAILY SUMMARY'}</div>
             <table class="report-table">
                 <thead>
                     <tr>
@@ -5071,152 +5071,110 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
                         <th>PURCHASES (LTS)</th>
                         <th>CLOSING DIP</th>
                         <th>TANK SALES</th>
-                        <th>METER SALES</th>
+                        <th>METER SALES (FULL DAY)</th>
                         <th>DAILY VARIANCE</th>
                     </tr>
                 </thead>
-                <tbody>`;
-                
-        if (is_day_shift) {
-            // Show dummy empty readings for day shift
-            let tanks = window.STATION_SETTINGS && window.STATION_SETTINGS.tanks ? window.STATION_SETTINGS.tanks : ['Tank 1 - Petrol', 'Tank 2 - Diesel'];
-            tanks.forEach(tank => {
-                let tank_name = typeof tank === 'string' ? tank : tank.fuel_tank;
-                html += `<tr>
-                    <td class="text-left bold" style="color: #94a3b8;">${tank_name}</td>
-                    <td style="color: #94a3b8;">-</td>
-                    <td style="color: #94a3b8;">-</td>
-                    <td style="color: #94a3b8;">-</td>
-                    <td style="color: #94a3b8;">-</td>
-                    <td style="color: #94a3b8;">-</td>
-                    <td style="color: #94a3b8;">-</td>
-                </tr>`;
-            });
-            html += `<tr><td colspan="7" class="text-center" style="color: #64748b; font-style: italic;">Dips are recorded at the end of the Night Shift for the entire 24h period.</td></tr>`;
-        } else {
-            if (doc.dip_stick_readings && doc.dip_stick_readings.length > 0) {
-                doc.dip_stick_readings.forEach(row => {
-                    html += `<tr>
-                        <td class="text-left bold">${row.fuel_tank || ''}</td>
-                        <td>${frappe.format(row.opening_dip || 0, {fieldtype: 'Float'})}</td>
-                        <td>${frappe.format(row.injected_purchases || 0, {fieldtype: 'Float'})}</td>
-                        <td>${frappe.format(row.closing_dip || 0, {fieldtype: 'Float'})}</td>
-                        <td class="bold">${frappe.format(row.sales_quantity || 0, {fieldtype: 'Float'})}</td>
-                        <td>${frappe.format(row.meter_sales || 0, {fieldtype: 'Float'})}</td>
-                        <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Float'})}</td>
+                <tbody id="dips-tbody">`;
+        
+        // Helper: builds sections 3–end and writes to DOM
+        function render_report_tail(base_html, doc, $wrapper) {
+            let h = base_html;
+            
+            // 3. CSA RECONCILIATION SUMMARY
+            h += `<div class="report-section">
+                <div class="report-section-title">CSA RECONCILIATION SUMMARY</div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th class="text-left">CSA NAME</th>
+                            <th class="text-left">PUMP GROUP</th>
+                            <th>METER SALES</th>
+                            <th>INVOICES &amp; CARDS</th>
+                            <th>MPESA</th>
+                            <th>EXPENSES/ADV</th>
+                            <th>EXPECTED CASH</th>
+                            <th>SUBMITTED CASH</th>
+                            <th>EXCESS/SHORT</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            if (doc.csa_reconciliation && doc.csa_reconciliation.length > 0) {
+                doc.csa_reconciliation.forEach(row => {
+                    let name = row.csa_name || row.csa || '';
+                    if (window.USERS_LIST) {
+                        let u = window.USERS_LIST.find(u => u.name === name);
+                        if (u) name = u.employee_name || u.full_name;
+                    }
+                    let pg_row = (window.SHIFT_DOC.assigned_csas || []).find(c => c.csa === row.csa);
+                    let pump_group = pg_row ? pg_row.pump_group : '';
+                    let inv = (row.invoices || 0) + (row.cards || 0);
+                    let exp = (row.expenses || 0);
+                    h += `<tr>
+                        <td class="text-left">${name}</td>
+                        <td class="text-left">${pump_group}</td>
+                        <td>${frappe.format(row.meter_sales || 0, {fieldtype: 'Currency'})}</td>
+                        <td>${frappe.format(inv, {fieldtype: 'Currency'})}</td>
+                        <td>${frappe.format(row.mpesa || 0, {fieldtype: 'Currency'})}</td>
+                        <td>${frappe.format(exp, {fieldtype: 'Currency'})}</td>
+                        <td class="bold">${frappe.format(row.expected_cash || 0, {fieldtype: 'Currency'})}</td>
+                        <td>${frappe.format(row.actual_cash || 0, {fieldtype: 'Currency'})}</td>
+                        <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Currency'})}</td>
                     </tr>`;
                 });
             } else {
-                html += `<tr><td colspan="7" class="text-center">No dip stick readings found.</td></tr>`;
+                h += `<tr><td colspan="9" class="text-center">No reconciliation data found.</td></tr>`;
             }
-        }
-        html += `</tbody></table></div>`;
-
-
-        // 3. CSA RECONCILIATION SUMMARY
-        html += `<div class="report-section">
-            <div class="report-section-title">CSA RECONCILIATION SUMMARY</div>
-            <table class="report-table">
-                <thead>
-                    <tr>
-                        <th class="text-left">CSA NAME</th>
-                        <th class="text-left">PUMP GROUP</th>
-                        <th>METER SALES</th>
-                        <th>INVOICES & CARDS</th>
-                        <th>MPESA</th>
-                        <th>EXPENSES/ADV</th>
-                        <th>EXPECTED CASH</th>
-                        <th>SUBMITTED CASH</th>
-                        <th>EXCESS/SHORT</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-                
-        if (doc.csa_reconciliation && doc.csa_reconciliation.length > 0) {
-            doc.csa_reconciliation.forEach(row => {
-                let name = row.csa_name || row.csa || '';
-                  if (window.USERS_LIST) {
-                      let u = window.USERS_LIST.find(u => u.name === name);
-                      if (u) name = u.employee_name || u.full_name;
-                  }
-                  
-                  let pg_row = (window.SHIFT_DOC.assigned_csas || []).find(c => c.csa === row.csa);
-                  let pump_group = pg_row ? pg_row.pump_group : '';
-                  
-                  let inv = (row.invoices || 0) + (row.cards || 0);
-                  let exp = (row.expenses || 0);
-                  html += `<tr>
-                      <td class="text-left">${name}</td>
-                      <td class="text-left">${pump_group}</td>
-                      <td>${frappe.format(row.meter_sales || 0, {fieldtype: 'Currency'})}</td>
-                    <td>${frappe.format(inv, {fieldtype: 'Currency'})}</td>
-                    <td>${frappe.format(row.mpesa || 0, {fieldtype: 'Currency'})}</td>
-                    <td>${frappe.format(exp, {fieldtype: 'Currency'})}</td>
-                    <td class="bold">${frappe.format(row.expected_cash || 0, {fieldtype: 'Currency'})}</td>
-                    <td>${frappe.format(row.actual_cash || 0, {fieldtype: 'Currency'})}</td>
-                    <td class="bold" style="color: ${(row.variance || 0) < 0 ? 'red' : 'green'}">${frappe.format(row.variance || 0, {fieldtype: 'Currency'})}</td>
-                </tr>`;
-            });
-        } else {
-            html += `<tr><td colspan="9" class="text-center">No reconciliation data found.</td></tr>`;
-        }
-        html += `</tbody></table></div>`;
-        
-        
-        // 4. GRAND RECONCILIATION
-          let total_invoices = 0;
-          let total_cards = 0;
-          let total_mpesa = 0;
-          let total_expenses = 0;
-          let total_submitted_cash = 0;
-          let total_variance = 0;
-
-          if (doc.csa_reconciliation && doc.csa_reconciliation.length > 0) {
-              doc.csa_reconciliation.forEach(row => {
-                  total_invoices += (row.invoices || 0);
-                  total_cards += (row.cards || 0);
-                  total_mpesa += (row.mpesa || 0);
-                  total_expenses += (row.expenses || 0);
-                  total_submitted_cash += (row.actual_cash || 0);
-                  total_variance += (row.variance || 0);
-              });
-          }
-
-          let calc_expected = (total_pump_cash) - (total_invoices + total_cards + total_mpesa + total_expenses);
-          
-          html += `<div class="report-section">
-              <div class="report-section-title green">GRAND RECONCILIATION</div>
-              <div class="report-grid-2">
-                  <div class="summary-box">
-                      <div class="summary-row"><span>Total Meter Sales (Cash + Digital)</span> <span>${frappe.format(total_pump_cash || 0, {fieldtype: 'Currency'})}</span></div>
-                      <div class="summary-row"><span>Total Invoices</span> <span>${frappe.format(total_invoices, {fieldtype: 'Currency'})}</span></div>
-                      <div class="summary-row"><span>Total Cards (Rubis/Equity/KCB)</span> <span>${frappe.format(total_cards, {fieldtype: 'Currency'})}</span></div>
-                      <div class="summary-row"><span>Total MPesa Receipts</span> <span>${frappe.format(total_mpesa, {fieldtype: 'Currency'})}</span></div>
-                      <div class="summary-row"><span>Total Expenses & Advances</span> <span>${frappe.format(total_expenses, {fieldtype: 'Currency'})}</span></div>
-                      <div class="summary-row total"><span>GRAND EXPECTED CASH</span> <span>${frappe.format(calc_expected, {fieldtype: 'Currency'})}</span></div>
-                  </div>
-                  <div class="summary-box">
-                      <div class="summary-row"><span>Total Cash Submitted by CSAs</span> <span>${frappe.format(total_submitted_cash, {fieldtype: 'Currency'})}</span></div>
-                      <div class="summary-row"><span>Non-Shift Payments / Top-Ups</span> <span>0.00</span></div>
-                      <div class="summary-row total" style="color: ${total_variance < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(total_variance, {fieldtype: 'Currency'})}</span></div>
-                  </div>
-              </div>
-          </div>
-          
-          <div class="report-section" style="margin-top: 2rem;">
-              <div class="report-section-title" style="background: #e2e8f0; color: #1e293b; padding: 10px; font-weight: bold; font-size: 14px;">SHIFT NOTES / VARIANCE EXPLANATION</div>
-              <textarea id="shift-notes-input" style="width: 100%; min-height: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 15px; margin-top: 10px; font-family: inherit; font-size: 14px; resize: vertical;" placeholder="Type notes here to explain variances before printing..."></textarea>
-          </div>`;
-          html += `<div style="margin-top: 20px; text-align: center;">
+            h += `</tbody></table></div>`;
+            
+            // 4. GRAND RECONCILIATION
+            let total_invoices = 0, total_cards = 0, total_mpesa = 0, total_expenses = 0, total_submitted_cash = 0, total_variance = 0;
+            if (doc.csa_reconciliation && doc.csa_reconciliation.length > 0) {
+                doc.csa_reconciliation.forEach(row => {
+                    total_invoices += (row.invoices || 0);
+                    total_cards += (row.cards || 0);
+                    total_mpesa += (row.mpesa || 0);
+                    total_expenses += (row.expenses || 0);
+                    total_submitted_cash += (row.actual_cash || 0);
+                    total_variance += (row.variance || 0);
+                });
+            }
+            let calc_expected = (total_pump_cash) - (total_invoices + total_cards + total_mpesa + total_expenses);
+            
+            h += `<div class="report-section">
+                <div class="report-section-title green">GRAND RECONCILIATION</div>
+                <div class="report-grid-2">
+                    <div class="summary-box">
+                        <div class="summary-row"><span>Total Meter Sales (Cash + Digital)</span> <span>${frappe.format(total_pump_cash || 0, {fieldtype: 'Currency'})}</span></div>
+                        <div class="summary-row"><span>Total Invoices</span> <span>${frappe.format(total_invoices, {fieldtype: 'Currency'})}</span></div>
+                        <div class="summary-row"><span>Total Cards (Rubis/Equity/KCB)</span> <span>${frappe.format(total_cards, {fieldtype: 'Currency'})}</span></div>
+                        <div class="summary-row"><span>Total MPesa Receipts</span> <span>${frappe.format(total_mpesa, {fieldtype: 'Currency'})}</span></div>
+                        <div class="summary-row"><span>Total Expenses &amp; Advances</span> <span>${frappe.format(total_expenses, {fieldtype: 'Currency'})}</span></div>
+                        <div class="summary-row total"><span>GRAND EXPECTED CASH</span> <span>${frappe.format(calc_expected, {fieldtype: 'Currency'})}</span></div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-row"><span>Total Cash Submitted by CSAs</span> <span>${frappe.format(total_submitted_cash, {fieldtype: 'Currency'})}</span></div>
+                        <div class="summary-row"><span>Non-Shift Payments / Top-Ups</span> <span>0.00</span></div>
+                        <div class="summary-row total" style="color: ${total_variance < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(total_variance, {fieldtype: 'Currency'})}</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="report-section" style="margin-top: 2rem;">
+                <div class="report-section-title" style="background: #e2e8f0; color: #1e293b; padding: 10px; font-weight: bold; font-size: 14px;">SHIFT NOTES / VARIANCE EXPLANATION</div>
+                <textarea id="shift-notes-input" style="width: 100%; min-height: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 15px; margin-top: 10px; font-family: inherit; font-size: 14px; resize: vertical;" placeholder="Type notes here to explain variances before printing..."></textarea>
+            </div>`;
+            h += `<div style="margin-top: 20px; text-align: center;">
                 <button id="btn-send-owner-report" class="btn btn-success btn-lg" style="padding: 10px 30px; font-size: 16px; font-weight: bold; background-color: #16a34a; border-color: #16a34a;">
                     Send Report to Owner
                 </button>
             </div>`;
-        
-        $wrapper.find('#shift-report-container').html(html);
-        console.log("Report generated successfully!");
-          
-          $wrapper.find('#btn-send-owner-report').on('click', function() {
+            
+            $wrapper.find('#shift-report-container').html(h);
+            console.log("Report generated successfully!");
+            
+            $wrapper.find('#btn-send-owner-report').on('click', function() {
               let $btn = $(this);
               let notes = $wrapper.find('#shift-notes-input').val();
               
@@ -5246,6 +5204,63 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
                   }
               });
           });
+        } // end render_report_tail
+        
+        // --- Build dip section and invoke render_report_tail ---
+        if (is_day_shift) {
+            // Day shift: show placeholder rows
+            let dip_body = '';
+            let tanks = window.STATION_SETTINGS && window.STATION_SETTINGS.tanks ? window.STATION_SETTINGS.tanks : ['Tank 1 - Petrol', 'Tank 2 - Diesel'];
+            tanks.forEach(tank => {
+                let tn = typeof tank === 'string' ? tank : tank.fuel_tank;
+                dip_body += `<tr>
+                    <td class="text-left bold" style="color:#94a3b8">${tn}</td>
+                    <td style="color:#94a3b8">-</td><td style="color:#94a3b8">-</td>
+                    <td style="color:#94a3b8">-</td><td style="color:#94a3b8">-</td>
+                    <td style="color:#94a3b8">-</td><td style="color:#94a3b8">-</td>
+                </tr>`;
+            });
+            dip_body += `<tr><td colspan="7" class="text-center" style="color:#64748b;font-style:italic;">Dips are recorded at the end of the Night Shift for the entire 24h period.</td></tr>`;
+            
+            let full_html = html + dip_section_header + dip_body + `</tbody></table></div>`;
+            render_report_tail(full_html, doc, $wrapper);
+        } else {
+            // Night shift: show loading placeholder, then fetch full-day dip summary
+            let placeholder_html = html + dip_section_header + 
+                `<tr><td colspan="7" class="text-center" style="color:#64748b">Loading daily dip summary...</td></tr>` +
+                `</tbody></table></div>`;
+            
+            // Render sections 3–end immediately so user sees the rest of the report
+            render_report_tail(placeholder_html, doc, $wrapper);
+            
+            // Then asynchronously replace the dip tbody with real data
+            frappe.call({
+                method: 'fuel_management.fuel_management.api.get_daily_dip_summary',
+                args: { shift_id: doc.name },
+                callback: function(dip_res) {
+                    let dip_rows = dip_res.message || [];
+                    let dip_html = '';
+                    if (dip_rows.length > 0) {
+                        dip_rows.forEach(row => {
+                            let vc = (row.variance || 0) < 0 ? 'red' : 'green';
+                            dip_html += `<tr>
+                                <td class="text-left bold">${row.fuel_tank || ''}</td>
+                                <td>${frappe.format(row.opening_dip || 0, {fieldtype:'Float'})}</td>
+                                <td>${frappe.format(row.injected_purchases || 0, {fieldtype:'Float'})}</td>
+                                <td>${frappe.format(row.closing_dip || 0, {fieldtype:'Float'})}</td>
+                                <td class="bold">${frappe.format(row.sales_quantity || 0, {fieldtype:'Float'})}</td>
+                                <td>${frappe.format(row.meter_sales || 0, {fieldtype:'Float'})}</td>
+                                <td class="bold" style="color:${vc}">${frappe.format(row.variance || 0, {fieldtype:'Float'})}</td>
+                            </tr>`;
+                        });
+                    } else {
+                        dip_html = `<tr><td colspan="7" class="text-center">No dip stick readings found.</td></tr>`;
+                    }
+                    $wrapper.find('#dips-tbody').html(dip_html);
+                }
+            });
+        }
+
     } catch (e) {
         console.error("REPORT GENERATION ERROR:", e);
         $wrapper.find('#shift-report-container').html(`<div style="padding: 2rem; background: #fee2e2; color: #991b1b; border-radius: 8px;">
