@@ -1155,9 +1155,9 @@ def test_payment_hook():
     frappe.delete_doc("Customer Payment", payment_id)
     print(f"Deleted Customer Payment: {payment_id}")
 
-    je_exists = frappe.db.exists("Journal Entry", je_name)
-    print(f"Journal Entry still exists in database: {je_exists}")
-    assert not je_exists, "Failed: Journal Entry was not deleted after deleting Customer Payment!"
+    je_status = frappe.db.get_value("Journal Entry", je_name, "docstatus")
+    print(f"Journal Entry docstatus: {je_status}")
+    assert je_status == 2, f"Failed: Journal Entry was not cancelled (status: {je_status}) after deleting Customer Payment!"
 
     print("SUCCESS: All payment integration verification tests passed successfully!")
     return "SUCCESS"

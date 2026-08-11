@@ -87,5 +87,6 @@ class CustomerPayment(Document):
             if je.docstatus == 1:
                 je_doc.flags.ignore_permissions = True
                 je_doc.cancel()
-            frappe.delete_doc("Journal Entry", je.name, ignore_permissions=True)
+            elif je.docstatus == 0:
+                frappe.delete_doc("Journal Entry", je.name, ignore_permissions=True)
 
