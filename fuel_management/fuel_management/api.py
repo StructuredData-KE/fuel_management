@@ -1113,11 +1113,18 @@ def test_payment_hook():
             }).insert(ignore_permissions=True)
             print(f"Mapped Mode of Payment Cash to account: {default_cash}")
 
+    # Get latest shift to satisfy mandatory field
+    shift_name = frappe.db.get_value("Shift", {}, "name", order_by="creation desc")
+    if not shift_name:
+        raise Exception("No Shift found in database to run tests!")
+    print(f"Using Shift: {shift_name} for test payment")
+
     # 2. Record Customer Payment
     pay = frappe.get_doc({
         "doctype": "Customer Payment",
         "date": frappe.utils.nowdate(),
         "customer": customer_id,
+        "shift": shift_name,
         "mode_of_payment": mode,
         "amount": 25000.0,
         "trans_no": "TEST-TRAN-101",
