@@ -1084,7 +1084,7 @@ def get_customer_transactions(customer_id):
 def test_recon_logic():
     import frappe
     from frappe.utils import flt
-    from fuel_management.fuel_management.fuel_management.api import get_csa_reconciliation_data
+
 
     print("Initializing reconciliation logic test...")
 
