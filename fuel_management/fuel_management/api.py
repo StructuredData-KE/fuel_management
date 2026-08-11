@@ -166,22 +166,23 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     data["greasing_breakdown"] = greasing_data or []
     data["greasing_sales"] = sum([d.amount for d in greasing_data]) if greasing_data else 0.0
     
-    # 4. Customer Payments (Only Cash payments are liabilities for the CSA cash recon)
+    # 4. Customer Payments (All customer payments count as liabilities for the CSA)
+    from frappe.utils import flt
     cp_data = frappe.db.sql("""
-        SELECT name, customer, amount 
+        SELECT name, customer, amount, mode_of_payment 
         FROM `tabCustomer Payment` 
-        WHERE shift=%s AND csa=%s AND mode_of_payment='Cash' AND docstatus=1
+        WHERE shift=%s AND csa=%s AND docstatus=1
     """, (shift_id, csa_id), as_dict=True)
     
     if not cp_data:
         cp_data = frappe.db.sql("""
-            SELECT name, customer, amount 
+            SELECT name, customer, amount, mode_of_payment 
             FROM `tabCustomer Payment` 
-            WHERE shift=%s AND csa=%s AND mode_of_payment='Cash'
+            WHERE shift=%s AND csa=%s
         """, (shift_id, csa_id), as_dict=True)
         
     data["customer_payments_breakdown"] = cp_data or []
-    data["customer_payments"] = sum([d.amount for d in cp_data]) if cp_data else 0.0
+    data["customer_payments"] = sum([flt(d.amount) for d in cp_data]) if cp_data else 0.0
         
     # 5. M-Pesa
     mpesa_data = frappe.db.sql("""
@@ -202,7 +203,12 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         )
     """, (shift_id, shift_id, csa_id), as_dict=True)
     data["mpesa_breakdown"] = mpesa_data or []
-    data["mpesa"] = sum([d.amount for d in mpesa_data]) if mpesa_data else 0.0
+    data["mpesa"] = sum([flt(d.amount) for d in mpesa_data]) if mpesa_data else 0.0
+    
+    # Add non-cash M-Pesa customer payments to M-Pesa deductions
+    for cp in (cp_data or []):
+        if cp.mode_of_payment == "M-Pesa":
+            data["mpesa"] += flt(cp.amount)
     
     # 6. Invoices
     invoices_data = frappe.db.sql("""
@@ -211,7 +217,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         WHERE parent=%s AND parenttype='Shift' AND csa=%s
     """, (shift_id, csa_id), as_dict=True)
     data["invoices_breakdown"] = invoices_data or []
-    data["invoices"] = sum([d.amount for d in invoices_data]) if invoices_data else 0.0
+    data["invoices"] = sum([flt(d.amount) for d in invoices_data]) if invoices_data else 0.0
     
     # 7. Cards
     cards_data = frappe.db.sql("""
@@ -220,7 +226,12 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         WHERE shift=%s AND csa=%s
     """, (shift_id, csa_id), as_dict=True)
     data["cards_breakdown"] = cards_data or []
-    data["cards"] = sum([d.amount for d in cards_data]) if cards_data else 0.0
+    data["cards"] = sum([flt(d.amount) for d in cards_data]) if cards_data else 0.0
+    
+    # Add other non-cash customer payments (Bank Transfer, Card, etc.) to Card/Bank deductions
+    for cp in (cp_data or []):
+        if cp.mode_of_payment and cp.mode_of_payment not in ["Cash", "M-Pesa"]:
+            data["cards"] += flt(cp.amount)
     
     # 8. Expenses
     expenses_data = frappe.db.sql("""
@@ -230,7 +241,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     """, (shift_id, csa_id), as_dict=True)
     
     data["expenses_breakdown"] = expenses_data or []
-    data["expenses"] = sum([d.amount for d in expenses_data]) if expenses_data else 0.0
+    data["expenses"] = sum([flt(d.amount) for d in expenses_data]) if expenses_data else 0.0
     
     return data
 
