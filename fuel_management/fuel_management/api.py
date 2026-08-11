@@ -1097,6 +1097,36 @@ def test_recon_logic():
 
     customer_id = frappe.db.get_value("Customer", {}, "name")
     
+    # Safely find or create M-Pesa Mode of Payment
+    mode = "M-Pesa"
+    if not frappe.db.exists("Mode of Payment", mode):
+        for m in ["Mpesa", "M-PESA", "MPESA"]:
+            if frappe.db.exists("Mode of Payment", m):
+                mode = m
+                break
+        else:
+            frappe.get_doc({
+                "doctype": "Mode of Payment",
+                "mode_of_payment": mode
+            }).insert()
+            print("Created Mode of Payment: M-Pesa")
+
+    # Map a default account for test M-Pesa mode
+    company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company")[0].name
+    mop_acc = frappe.db.get_value("Mode of Payment Account", {"parent": mode, "company": company}, "default_account")
+    if not mop_acc:
+        default_cash = frappe.db.get_value("Company", company, "default_cash_account") or frappe.db.get_value("Account", {"account_type": "Cash", "company": company}, "name")
+        if default_cash:
+            frappe.get_doc({
+                "doctype": "Mode of Payment Account",
+                "parent": mode,
+                "parentfield": "accounts",
+                "parenttype": "Mode of Payment",
+                "company": company,
+                "default_account": default_cash
+            }).insert(ignore_permissions=True)
+            print(f"Mapped Mode of Payment {mode} to account: {default_cash}")
+
     # 2. Record Customer Payment with mode M-Pesa
     pay = frappe.get_doc({
         "doctype": "Customer Payment",
@@ -1104,14 +1134,14 @@ def test_recon_logic():
         "customer": customer_id,
         "shift": shift_name,
         "csa": csa_id,
-        "mode_of_payment": "M-Pesa",
+        "mode_of_payment": mode,
         "amount": 15000.0,
         "trans_no": "TEST-RECON-101",
         "memo": "Test Payment for Recon"
     })
     pay.insert()
     payment_id = pay.name
-    print(f"Created M-Pesa Customer Payment: {payment_id}")
+    print(f"Created M-Pesa Customer Payment: {payment_id} using Mode of Payment: {mode}")
 
     try:
         # 3. Retrieve reconciliation data
