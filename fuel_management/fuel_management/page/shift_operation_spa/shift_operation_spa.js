@@ -837,9 +837,25 @@ function render_drystock($wrapper) {
                 }
             }
             $wrapper.find('#drystock-uom').val(mult);
+
+            // Fetch forecourt stock balance
+            $wrapper.find('#drystock-fc-stock').val('Loading...');
+            frappe.call({
+                method: "fuel_management.fuel_management.api.get_item_forecourt_balance",
+                args: {
+                    station_id: window.ACTIVE_SHIFT.station,
+                    item_code: item.item_code
+                },
+                callback: function(r) {
+                    let bal = r.message !== undefined ? r.message : 0;
+                    item.fc_balance = bal;
+                    $wrapper.find('#drystock-fc-stock').val(bal);
+                }
+            });
         } else {
             $wrapper.find('#drystock-price').val('0.00');
             $wrapper.find('#drystock-uom').val('0');
+            $wrapper.find('#drystock-fc-stock').val('0');
         }
         calc_drystock();
     });
@@ -859,6 +875,30 @@ function render_drystock($wrapper) {
         
         if (!item || qty <= 0) {
             frappe.show_alert({message: "Please search for a valid Item and enter quantity.", indicator: "red"});
+            return;
+        }
+
+        // Validate stock balance
+        let fc_stock = parseFloat($wrapper.find('#drystock-fc-stock').val());
+        if (isNaN(fc_stock)) {
+            fc_stock = item.fc_balance !== undefined ? item.fc_balance : 0;
+        }
+
+        let existing_qty = 0;
+        if (window.PENDING_DRYSTOCK) {
+            window.PENDING_DRYSTOCK.forEach(row => {
+                if (row.item === item.item_code) {
+                    existing_qty += row.quantity;
+                }
+            });
+        }
+
+        if ((qty + existing_qty) > fc_stock) {
+            frappe.msgprint({
+                title: __('Insufficient Stock'),
+                indicator: 'red',
+                message: __('Cannot add <b>{0}</b>. Only <b>{1}</b> available in the Forecourt, and you already have <b>{2}</b> in the cart. Please perform a stock transfer first.', [item.item_name, fc_stock, existing_qty])
+            });
             return;
         }
 
@@ -1130,8 +1170,14 @@ function setup_tabs(wrapper) {
         $wrapper.find('#' + target).addClass('active');
         
         // Check for specific tab renders
-        if (target === 'tab-inventory' || target === 'tab-stock-transfer') {
+        if (target === 'tab-inventory') {
             render_inventory_status($wrapper);
+        } else if (target === 'tab-forecourt-inventory') {
+            render_warehouse_inventory($wrapper, 'forecourt');
+        } else if (target === 'tab-store-inventory') {
+            render_warehouse_inventory($wrapper, 'store');
+        } else if (target === 'tab-stock-transfer') {
+            render_stock_transfer($wrapper);
         }
         
         // Update topbar title
@@ -3058,7 +3104,7 @@ function render_topups($wrapper) {
 
 
 // =========================================================
-// INVENTORY STATUS MODULE
+// TOTAL INVENTORY STATUS MODULE
 // =========================================================
 function render_inventory_status($wrapper) {
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
@@ -3117,7 +3163,6 @@ function render_inventory_status($wrapper) {
     });
     
     // Collapse Columns
-    // Need event delegation because headers might be re-rendered? No, headers are static.
     $wrapper.find('.collapse-icon').off('click').on('click', function() {
         let target = $(this).data('target'); // 'op' or 'cl'
         let table = $wrapper.find('.inventory-report-table');
@@ -3126,7 +3171,6 @@ function render_inventory_status($wrapper) {
         if (isCollapsed) {
             table.removeClass('collapsed-' + target);
             $(this).text('[-]');
-            // update colspan
             $wrapper.find('#th-' + target + '-group').attr('colspan', 3);
         } else {
             table.addClass('collapsed-' + target);
@@ -3135,13 +3179,24 @@ function render_inventory_status($wrapper) {
         }
     });
 
-
     fetch_inventory_report($wrapper);
 }
 
 function fetch_inventory_report($wrapper) {
-    let fromDate = $wrapper.find('#inventory-date-from').val();
-    let toDate = $wrapper.find('#inventory-date-to').val();
+    let fromInput = $wrapper.find('#inventory-date-from');
+    let toInput = $wrapper.find('#inventory-date-to');
+    
+    if (!fromInput.val()) {
+        let d = new Date();
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
+    }
+    if (!toInput.val()) {
+        let d = new Date();
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
+    }
+    
+    let fromDate = fromInput.val();
+    let toDate = toInput.val();
     
     $wrapper.find('#btn-refresh-inventory-report .spinner').removeClass('hidden');
     $wrapper.find('#list-inventory-status').html('<tr><td colspan="10" class="text-center">Loading inventory report...</td></tr>');
@@ -3164,9 +3219,8 @@ function fetch_inventory_report($wrapper) {
                 let data = r.message.data;
                 let no = 1;
                 
-                // Populate Dropdown for transfer
                 let unique_items = [];
-                let item_opts = '<option value="">Select Item...</option>';
+                let item_opts = '';
                 
                 Object.keys(data).forEach(group => {
                     // Group Header
@@ -3177,10 +3231,9 @@ function fetch_inventory_report($wrapper) {
                     `;
                     
                     data[group].forEach(row => {
-                        // Dropdown logic
                         if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
                             unique_items.push(row.item_code);
-                            item_opts += `<option value="${row.item_code}">${row.item_name}</option>`;
+                            item_opts += `<option data-value="${row.item_code}" value="${row.item_name} (${row.item_code})"></option>`;
                         }
                         
                         let cl_store_cls = (row.cl_store < 0) ? 'negative-val' : '';
@@ -3207,56 +3260,345 @@ function fetch_inventory_report($wrapper) {
                     });
                 });
                 
-                $wrapper.find('#stock-transfer-item').html(item_opts);
+                if ($wrapper.find('#stock-transfer-item-list').children().length === 0) {
+                    $wrapper.find('#stock-transfer-item-list').html(item_opts);
+                }
                 
             } else {
                 html = '<tr><td colspan="10" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>';
             }
             
-            $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
-                let item = $wrapper.find('#stock-transfer-item').val();
-                let qty = $wrapper.find('#stock-transfer-qty').val();
-                let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
-                
-                if(!item || !qty) {
-                    frappe.show_alert({message: "Please select an item and enter a quantity.", indicator: "orange"});
-                    return;
-                }
-                
-                let $btn = $(this);
-                $btn.find('.spinner').removeClass('hidden');
-                $btn.prop('disabled', true);
-                
-                frappe.call({
-                    method: "fuel_management.fuel_management.api.create_spa_stock_transfer",
-                    args: {
-                        station_id: window.ACTIVE_SHIFT.station,
-                        item_code: item,
-                        qty: qty,
-                        direction: direction
-                    },
-                    callback: function(res) {
-                        $btn.find('.spinner').addClass('hidden');
-                        $btn.prop('disabled', false);
-                        
-                        if(res.message && res.message.status === "success") {
-                            frappe.show_alert({message: res.message.message, indicator: "green"});
-                            $wrapper.find('#stock-transfer-item').val('');
-                            $wrapper.find('#stock-transfer-qty').val('');
-                            // Refresh the inventory
-                            fetch_inventory_report($wrapper);
-                        }
-                    },
-                    error: function() {
-                        $btn.find('.spinner').addClass('hidden');
-                        $btn.prop('disabled', false);
-                    }
-                });
-            });
-            
             $wrapper.find('#list-inventory-status').html(html);
         }
     });
+}
+
+
+// =========================================================
+// WAREHOUSE INVENTORY MODULE
+// =========================================================
+function render_warehouse_inventory($wrapper, warehouse_type) {
+    if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
+    
+    let fromInput = $wrapper.find(`#${warehouse_type}-inventory-date-from`);
+    let toInput = $wrapper.find(`#${warehouse_type}-inventory-date-to`);
+    
+    if (!fromInput.val()) {
+        let d = new Date();
+        // 1st of current month
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
+    }
+    if (!toInput.val()) {
+        let d = new Date();
+        // last of current month
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
+    }
+
+    $wrapper.find(`#btn-refresh-${warehouse_type}-inventory`).off('click').on('click', function() {
+        fetch_warehouse_inventory_report($wrapper, warehouse_type);
+    });
+    
+    fetch_warehouse_inventory_report($wrapper, warehouse_type);
+}
+
+function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
+    let fromInput = $wrapper.find(`#${warehouse_type}-inventory-date-from`);
+    let toInput = $wrapper.find(`#${warehouse_type}-inventory-date-to`);
+    
+    if (!fromInput.val()) {
+        let d = new Date();
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
+    }
+    if (!toInput.val()) {
+        let d = new Date();
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
+    }
+    
+    let fromDate = fromInput.val();
+    let toDate = toInput.val();
+    let $tbody = $wrapper.find(`#list-${warehouse_type}-inventory`);
+    let $spinner = $wrapper.find(`#btn-refresh-${warehouse_type}-inventory .spinner`);
+    
+    $spinner.removeClass('hidden');
+    $tbody.html('<tr><td colspan="6" class="text-center">Loading inventory report...</td></tr>');
+    
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_inventory_status_report",
+        args: { 
+            station_id: window.ACTIVE_SHIFT.station,
+            from_date: fromDate,
+            to_date: toDate,
+            warehouse_type: warehouse_type
+        },
+        callback: function(r) {
+            $spinner.addClass('hidden');
+            let html = '';
+            
+            if (!window.INVENTORY_DATA) window.INVENTORY_DATA = {};
+            window.INVENTORY_DATA[warehouse_type] = r.message ? r.message.data : null;
+            
+            if(r.message && r.message.data && Object.keys(r.message.data).length > 0) {
+                // Update Company Name
+                $wrapper.find(`#${warehouse_type}-inventory-report-company`).text(r.message.company);
+                
+                let data = r.message.data;
+                let no = 1;
+                
+                let item_opts = '';
+                let unique_items = [];
+                
+                Object.keys(data).forEach(group => {
+                    html += `
+                        <tr class="row-group-header">
+                            <td colspan="6">${group.toUpperCase()}</td>
+                        </tr>
+                    `;
+                    
+                    data[group].forEach(row => {
+                        if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
+                            unique_items.push(row.item_code);
+                            item_opts += `<option data-value="${row.item_code}" value="${row.item_name} (${row.item_code})"></option>`;
+                        }
+                        
+                        let op_val = (warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0;
+                        let cl_val = (warehouse_type === "forecourt" ? row.cl_forecourt : row.cl_store) || 0;
+                        let cl_cls = (cl_val < 0) ? 'negative-val' : '';
+                        
+                        html += `
+                            <tr class="data-row">
+                                <td style="text-align: center;">${no++}</td>
+                                <td style="font-weight: 600; color: #1e293b;">${row.item_name}</td>
+                                <td class="text-right">${op_val}</td>
+                                <td class="text-right">${row.purchases || 0}</td>
+                                <td class="text-right">${row.sales || 0}</td>
+                                <td class="text-right ${cl_cls}" style="font-weight:bold;">${cl_val}</td>
+                            </tr>
+                        `;
+                    });
+                });
+                
+                if ($wrapper.find('#stock-transfer-item-list').children().length === 0) {
+                    $wrapper.find('#stock-transfer-item-list').html(item_opts);
+                }
+                
+            } else {
+                html = '<tr><td colspan="6" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>';
+            }
+            
+            $tbody.html(html);
+            
+            $wrapper.find(`#btn-print-${warehouse_type}-sheet`).off('click').on('click', function() {
+                let data = window.INVENTORY_DATA[warehouse_type];
+                if (data) {
+                    print_stock_sheet(warehouse_type, data, r.message.company);
+                } else {
+                    frappe.show_alert({message: "No inventory data to print. Please refresh.", indicator: "orange"});
+                }
+            });
+        }
+    });
+}
+
+function render_stock_transfer($wrapper) {
+    if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
+
+    if ($wrapper.find('#stock-transfer-item-list').children().length === 0) {
+        fetch_warehouse_inventory_report($wrapper, 'store');
+    }
+    
+    $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
+        let item_val = $wrapper.find('#stock-transfer-item').val();
+        let selected_option = $wrapper.find(`#stock-transfer-item-list option[value="${item_val}"]`);
+        if (!selected_option.length) {
+            selected_option = $wrapper.find(`#stock-transfer-item-list option[data-value="${item_val}"]`);
+        }
+        let item = selected_option.length ? selected_option.attr('data-value') : item_val;
+        
+        let qty = $wrapper.find('#stock-transfer-qty').val();
+        let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
+        
+        if(!item || !qty) {
+            frappe.show_alert({message: "Please select an item and enter a quantity.", indicator: "orange"});
+            return;
+        }
+        
+        let $btn = $(this);
+        $btn.find('.spinner').removeClass('hidden');
+        $btn.prop('disabled', true);
+        
+        frappe.call({
+            method: "fuel_management.fuel_management.api.create_spa_stock_transfer",
+            args: {
+                station_id: window.ACTIVE_SHIFT.station,
+                item_code: item,
+                qty: qty,
+                direction: direction
+            },
+            callback: function(res) {
+                $btn.find('.spinner').addClass('hidden');
+                $btn.prop('disabled', false);
+                
+                if(res.message && res.message.status === "success") {
+                    frappe.show_alert({message: res.message.message, indicator: "green"});
+                    $wrapper.find('#stock-transfer-item').val('');
+                    $wrapper.find('#stock-transfer-qty').val('');
+                }
+            },
+            error: function() {
+                $btn.find('.spinner').addClass('hidden');
+                $btn.prop('disabled', false);
+            }
+        });
+    });
+}
+
+function print_stock_sheet(warehouse_type, data, company) {
+    if (!window.ACTIVE_SHIFT) return;
+    
+    let station_name = window.ACTIVE_SHIFT.station || "";
+    let display_company = company || "K INVESTMENTS";
+    
+    let d = new Date(window.ACTIVE_SHIFT.shift_date || new Date());
+    let formatted_date = ("0" + d.getDate()).slice(-2) + "." + ("0" + (d.getMonth() + 1)).slice(-2) + "." + d.getFullYear();
+    
+    let shift_name = (window.ACTIVE_SHIFT.shift_template || "").toUpperCase();
+    if (shift_name.includes("DAY")) {
+        shift_name = "DAY";
+    } else if (shift_name.includes("NIGHT")) {
+        shift_name = "NIGHT";
+    }
+    
+    let assigned_names = [];
+    if (window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas) {
+        window.SHIFT_DOC.assigned_csas.forEach(c => {
+            let name = c.csa_name || c.csa;
+            if (window.USERS_LIST) {
+                let u = window.USERS_LIST.find(u => u.name === name);
+                if (u) name = u.employee_name || u.full_name;
+            }
+            assigned_names.push(name.toUpperCase());
+        });
+    }
+    let name_str = assigned_names.join(".");
+    if (!name_str) name_str = "STEVE.BEATRICE.SHADDY";
+    
+    let title = (warehouse_type === "forecourt" ? "FORECOURT STOCK SHEET" : "STORE STOCK SHEET");
+    
+    let print_html = `
+    <html>
+    <head>
+        <title>${title}</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #000; }
+            .header { text-align: center; margin-bottom: 20px; }
+            .company { font-size: 24px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; color: #1e3a8a; }
+            .station { font-size: 16px; font-weight: bold; text-transform: uppercase; color: #475569; }
+            
+            .meta-bar { 
+                display: flex; 
+                justify-content: space-between; 
+                border: 2px solid #1e3a8a; 
+                padding: 10px 15px; 
+                margin-bottom: 15px; 
+                font-weight: bold;
+                font-size: 14px;
+            }
+            
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #94a3b8; padding: 10px 12px; font-size: 13px; vertical-align: middle; }
+            th { font-weight: bold; background-color: #1e3a8a; color: #ffffff; text-transform: uppercase; border: 1px solid #1e3a8a; }
+            
+            .text-left { text-align: left; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            
+            tr.group-header td { 
+                background-color: #f1f5f9; 
+                color: #1e3a8a; 
+                font-weight: bold; 
+                font-size: 14px;
+                border: 1px solid #94a3b8;
+            }
+            
+            @media print {
+                body { padding: 0; }
+                @page { margin: 1cm; }
+            }
+            
+            .data-row td { height: 32px; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company">${display_company}</div>
+            <div class="station">${station_name}</div>
+        </div>
+        
+        <div class="meta-bar">
+            <div>DATE: ${formatted_date}</div>
+            <div>SHIFT: ${shift_name}</div>
+            <div>NAME: ${name_str}</div>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50px;" class="text-center">NO.</th>
+                    <th class="text-left">PRODUCT</th>
+                    <th style="width: 80px;" class="text-center">O.STOCK</th>
+                    <th style="width: 95px;" class="text-center">ADDITION</th>
+                    <th style="width: 95px;" class="text-center">C.STOCK</th>
+                    <th style="width: 90px;" class="text-center">U.SOLD</th>
+                    <th style="width: 90px;" class="text-center">U.PRICE</th>
+                    <th style="width: 100px;" class="text-center">AMOUNT</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    let no = 1;
+    let groups = Object.keys(data).sort();
+    groups.forEach(group => {
+        print_html += `
+            <tr class="group-header">
+                <td colspan="8" class="text-left">${group.toUpperCase()}</td>
+            </tr>
+        `;
+        
+        data[group].forEach(row => {
+            let o_stock = (warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0;
+            let price = row.unit_price || 0;
+            
+            print_html += `
+                <tr class="data-row">
+                    <td class="text-center">${no++}</td>
+                    <td class="text-left" style="font-weight: bold;">${row.item_name}</td>
+                    <td class="text-center">${o_stock}</td>
+                    <td class="text-center"></td>
+                    <td></td>
+                    <td></td>
+                    <td class="text-center">${price}</td>
+                    <td></td>
+                </tr>
+            `;
+        });
+    });
+    
+    print_html += `
+            </tbody>
+        </table>
+    </body>
+    </html>
+    `;
+    
+    let print_win = window.open('', '_blank');
+    print_win.document.write(print_html);
+    print_win.document.close();
+    print_win.focus();
+    setTimeout(() => {
+        print_win.print();
+        print_win.close();
+    }, 500);
 }
 
 // =========================================================

@@ -1,43 +1,57 @@
 {
-    "name": "Pump Nozzle",
-    "module": "Fuel Management",
-    "custom": 0,
-    "fields": [
-        {
-            "fieldname": "nozzle_name",
-            "label": "Nozzle Name",
-            "fieldtype": "Data",
-            "reqd": 1,
-            "unique": 1
-        },
-        {
-            "fieldname": "pump_group",
-            "label": "Pump Group",
-            "fieldtype": "Link",
-            "options": "Pump Group",
-            "reqd": 1
-        },
-        {
-            "fieldname": "fuel_tank",
-            "label": "Linked Fuel Tank",
-            "fieldtype": "Link",
-            "options": "Fuel Tank",
-            "reqd": 1
-        }
-    ],
-    "permissions": [
-        {
-            "role": "System Manager",
-            "read": 1,
-            "write": 1,
-            "create": 1,
-            "delete": 1
-        }
-    ],
-    "naming_rule": "By fieldname",
-    "autoname": "field:nozzle_name",
-    "doctype": "DocType",
-    "creation": "2024-01-01 12:00:00.000000",
-    "modified": "2024-01-01 12:00:00.000000",
-    "owner": "Administrator"
+ "autoname": "field:nozzle_name",
+ "creation": "2024-01-01 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "fields": [
+  {
+   "fieldname": "nozzle_name",
+   "fieldtype": "Data",
+   "label": "Nozzle Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "pump_group",
+   "fieldtype": "Link",
+   "label": "Pump Group",
+   "options": "Pump Group",
+   "reqd": 1
+  },
+  {
+   "fieldname": "fuel_tank",
+   "fieldtype": "Link",
+   "label": "Linked Fuel Tank",
+   "options": "Fuel Tank",
+   "reqd": 1
+  }
+ ],
+ "modified": "2024-01-01 12:00:00.000000",
+ "module": "Fuel Management",
+ "name": "Pump Nozzle",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fuel Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fleet Manager",
+   "write": 1
+  }
+ ]
 }

@@ -54,9 +54,9 @@
   {
    "fieldname": "default_account",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Default Account",
-   "options": "Account",
-   "in_list_view": 1
+   "options": "Account"
   }
  ],
  "grid_page_length": 50,
@@ -77,6 +77,30 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Fuel Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Fleet Manager",
    "share": 1,
    "write": 1
   }

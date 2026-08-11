@@ -98,6 +98,14 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
                 <span>Total Inventory Status</span>
             </a>
+            <a href="#" class="nav-item" data-target="tab-forecourt-inventory">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                <span>Forecourt Inventory</span>
+            </a>
+            <a href="#" class="nav-item" data-target="tab-store-inventory">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                <span>Store Inventory</span>
+            </a>
             <a href="#" class="nav-item" data-target="tab-stock-transfer">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3v18"/><path d="M10 14l7 7 7-7"/><path d="M7 21V3"/><path d="M14 10L7 3 0 10"/></svg>
                 <span>Stock Transfer</span>
@@ -732,6 +740,11 @@
                     <datalist id="drystock-items-list"></datalist>
                 </div>
                 
+                <div class="form-group pos-small" style="min-width: 80px;">
+                    <label>FC Stock</label>
+                    <input type="text" id="drystock-fc-stock" class="spa-input" placeholder="0" readonly style="font-weight: bold; color: #047857; background-color: #f0fdf4;">
+                </div>
+                
                 <div class="form-group pos-small">
                     <label>Qty</label>
                     <input type="number" id="drystock-qty" class="spa-input" placeholder="0">
@@ -1186,11 +1199,11 @@
                           </div>
                           <div style="display: flex; align-items: center; gap: 0.5rem;">
                               <label style="font-weight:600; font-size:0.875rem; color:#475569;">From</label>
-                              <input type="date" id="inventory-date-from" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none; transition: box-shadow 0.2s;">
+                              <input type="date" id="inventory-date-from" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
                           </div>
                           <div style="display: flex; align-items: center; gap: 0.5rem;">
                               <label style="font-weight:600; font-size:0.875rem; color:#475569;">To</label>
-                              <input type="date" id="inventory-date-to" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none; transition: box-shadow 0.2s;">
+                              <input type="date" id="inventory-date-to" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
                           </div>
                           <button id="btn-refresh-inventory-report" style="background-color: #172554; color: #ffffff; font-weight: 600; padding: 0.5rem 1.25rem; border-radius: 0.5rem; transition: background-color 0.2s; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
                               <span class="spinner hidden" style="width: 14px; height: 14px; border-width: 2px;"></span> Refresh
@@ -1199,20 +1212,20 @@
                   </div>
                   
                   <style>
-                  .new-inv-table { width: 100%; font-size: 0.875rem; text-align: left; border-collapse: collapse; }
-                  .new-inv-table th, .new-inv-table td { transition: all 0.2s; }
-                  .new-inv-table .header-main th { background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; text-align: center; padding: 0.75rem; }
-                  .new-inv-table .header-sub th { background-color: #f8fafc; border-bottom: 2px solid #1e3a8a; color: #475569; font-size: 0.75rem; font-weight: 600; padding: 0.5rem 1rem; text-align: right; }
-                  .new-inv-table .header-sub th.text-left { text-align: left; }
-                  .new-inv-table .row-group-header td { background-color: #172554; color: #fbbf24; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.5rem 1rem; }
-                  .new-inv-table tbody tr.data-row:hover { background-color: #f8fafc; }
-                  .new-inv-table tbody td { border-bottom: 1px solid #f1f5f9; padding: 0.5rem 1rem; }
-                  .new-inv-table .text-right { text-align: right; font-family: monospace; }
-                  .new-inv-table .negative-val { color: #dc2626; font-weight: 700; }
+                  .new-inv-table-unified { width: 100%; font-size: 0.875rem; text-align: left; border-collapse: collapse; }
+                  .new-inv-table-unified th, .new-inv-table-unified td { transition: all 0.2s; }
+                  .new-inv-table-unified .header-main th { background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; text-align: center; padding: 0.75rem; }
+                  .new-inv-table-unified .header-sub th { background-color: #f8fafc; border-bottom: 2px solid #1e3a8a; color: #475569; font-size: 0.75rem; font-weight: 600; padding: 0.5rem 1rem; text-align: right; }
+                  .new-inv-table-unified .header-sub th.text-left { text-align: left; }
+                  .new-inv-table-unified .row-group-header td { background-color: #172554; color: #fbbf24; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.5rem 1rem; }
+                  .new-inv-table-unified tbody tr.data-row:hover { background-color: #f8fafc; }
+                  .new-inv-table-unified tbody td { border-bottom: 1px solid #f1f5f9; padding: 0.5rem 1rem; }
+                  .new-inv-table-unified .text-right { text-align: right; font-family: monospace; }
+                  .new-inv-table-unified .negative-val { color: #dc2626; font-weight: 700; }
                   </style>
 
-                    <div class="inventory-report-wrapper" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
-                        <table class="new-inv-table inventory-report-table collapsed-op collapsed-cl" id="table-inventory-status">
+                  <div class="inventory-report-wrapper" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); overflow-x: auto;">
+                      <table class="new-inv-table-unified inventory-report-table collapsed-op collapsed-cl" id="table-inventory-status">
                           <thead>
                               <tr class="header-main">
                                   <th rowspan="2" class="sticky-col th-no">NO.</th>
@@ -1242,6 +1255,109 @@
                   </div>
               </section>
 
+              <!-- FORECOURT INVENTORY -->
+              <section id="tab-forecourt-inventory" class="tab-pane">
+                  
+                  <div style="background-color: #ffffff; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                      <div>
+                          <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">Forecourt Inventory Status Report</h3>
+                          <p style="margin:0; font-size: 0.85rem; color: #64748b;" id="forecourt-inventory-report-company">Loading...</p>
+                      </div>
+                      <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                          <button id="btn-print-forecourt-sheet" class="btn btn-primary" style="background-color: #059669; color: #ffffff; font-weight: 600; padding: 0.5rem 1.25rem; border-radius: 0.5rem; transition: background-color 0.2s; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                              <svg style="width:16px;height:16px;stroke:currentColor" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4"/></svg>
+                              Print Stock Sheet
+                          </button>
+                          <div style="display: flex; align-items: center; gap: 0.5rem;">
+                              <label style="font-weight:600; font-size:0.875rem; color:#475569;">From</label>
+                              <input type="date" id="forecourt-inventory-date-from" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
+                          </div>
+                          <div style="display: flex; align-items: center; gap: 0.5rem;">
+                              <label style="font-weight:600; font-size:0.875rem; color:#475569;">To</label>
+                              <input type="date" id="forecourt-inventory-date-to" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
+                          </div>
+                          <button id="btn-refresh-forecourt-inventory" style="background-color: #172554; color: #ffffff; font-weight: 600; padding: 0.5rem 1.25rem; border-radius: 0.5rem; transition: background-color 0.2s; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                              <span class="spinner hidden" style="width: 14px; height: 14px; border-width: 2px;"></span> Refresh
+                          </button>
+                      </div>
+                  </div>
+                  
+                  <style>
+                  .new-inv-table { width: 100%; font-size: 0.875rem; text-align: left; border-collapse: collapse; }
+                  .new-inv-table th, .new-inv-table td { transition: all 0.2s; }
+                  .new-inv-table .header-main th { background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; text-align: center; padding: 0.75rem; }
+                  .new-inv-table .row-group-header td { background-color: #172554; color: #fbbf24; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.5rem 1rem; }
+                  .new-inv-table tbody tr.data-row:hover { background-color: #f8fafc; }
+                  .new-inv-table tbody td { border-bottom: 1px solid #f1f5f9; padding: 0.5rem 1rem; }
+                  .new-inv-table .text-right { text-align: right; font-family: monospace; }
+                  .new-inv-table .negative-val { color: #dc2626; font-weight: 700; }
+                  </style>
+                  
+                  <div class="inventory-report-wrapper" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); overflow-x: auto;">
+                      <table class="new-inv-table" id="table-forecourt-inventory">
+                          <thead>
+                              <tr class="header-main">
+                                  <th style="width: 60px; text-align: center;">NO.</th>
+                                  <th style="text-align: left;">PRODUCT</th>
+                                  <th style="text-align: right; width: 150px;">OPENING STOCK</th>
+                                  <th style="text-align: right; width: 150px;">PURCHASES</th>
+                                  <th style="text-align: right; width: 150px;">SALES</th>
+                                  <th style="text-align: right; width: 150px;">CLOSING STOCK</th>
+                              </tr>
+                          </thead>
+                          <tbody id="list-forecourt-inventory">
+                              <tr><td colspan="6" class="text-center" style="padding: 2rem;">Loading forecourt inventory report...</td></tr>
+                          </tbody>
+                      </table>
+                  </div>
+              </section>
+
+              <!-- STORE INVENTORY -->
+              <section id="tab-store-inventory" class="tab-pane">
+                  
+                  <div style="background-color: #ffffff; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                      <div>
+                          <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">Store Inventory Status Report</h3>
+                          <p style="margin:0; font-size: 0.85rem; color: #64748b;" id="store-inventory-report-company">Loading...</p>
+                      </div>
+                      <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                          <button id="btn-print-store-sheet" class="btn btn-primary" style="background-color: #059669; color: #ffffff; font-weight: 600; padding: 0.5rem 1.25rem; border-radius: 0.5rem; transition: background-color 0.2s; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                              <svg style="width:16px;height:16px;stroke:currentColor" fill="none" viewBox="0 0 24 24" stroke-width="2"><path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4"/></svg>
+                              Print Stock Sheet
+                          </button>
+                          <div style="display: flex; align-items: center; gap: 0.5rem;">
+                              <label style="font-weight:600; font-size:0.875rem; color:#475569;">From</label>
+                              <input type="date" id="store-inventory-date-from" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
+                          </div>
+                          <div style="display: flex; align-items: center; gap: 0.5rem;">
+                              <label style="font-weight:600; font-size:0.875rem; color:#475569;">To</label>
+                              <input type="date" id="store-inventory-date-to" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
+                          </div>
+                          <button id="btn-refresh-store-inventory" style="background-color: #172554; color: #ffffff; font-weight: 600; padding: 0.5rem 1.25rem; border-radius: 0.5rem; transition: background-color 0.2s; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                              <span class="spinner hidden" style="width: 14px; height: 14px; border-width: 2px;"></span> Refresh
+                          </button>
+                      </div>
+                  </div>
+                  
+                  <div class="inventory-report-wrapper" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); overflow-x: auto;">
+                      <table class="new-inv-table" id="table-store-inventory">
+                          <thead>
+                              <tr class="header-main">
+                                  <th style="width: 60px; text-align: center;">NO.</th>
+                                  <th style="text-align: left;">PRODUCT</th>
+                                  <th style="text-align: right; width: 150px;">OPENING STOCK</th>
+                                  <th style="text-align: right; width: 150px;">PURCHASES</th>
+                                  <th style="text-align: right; width: 150px;">SALES</th>
+                                  <th style="text-align: right; width: 150px;">CLOSING STOCK</th>
+                              </tr>
+                          </thead>
+                          <tbody id="list-store-inventory">
+                              <tr><td colspan="6" class="text-center" style="padding: 2rem;">Loading store inventory report...</td></tr>
+                          </tbody>
+                      </table>
+                  </div>
+              </section>
+
             <!-- STOCK TRANSFER -->
             <section id="tab-stock-transfer" class="tab-pane">
                 <div class="pos-header">
@@ -1260,9 +1376,8 @@
                       </div>
                       <div>
                           <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Item</label>
-                          <select class="spa-input" id="stock-transfer-item">
-                              <option value="">Select Item...</option>
-                          </select>
+                          <input type="text" class="spa-input" id="stock-transfer-item" list="stock-transfer-item-list" placeholder="Type to search product...">
+                          <datalist id="stock-transfer-item-list"></datalist>
                       </div>
                       <div>
                           <label style="display:block; margin-bottom:0.5rem; font-weight:600; color:#475569;">Quantity</label>

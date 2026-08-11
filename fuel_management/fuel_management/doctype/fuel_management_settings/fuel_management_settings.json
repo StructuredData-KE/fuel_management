@@ -1,39 +1,53 @@
 {
-    "name": "Fuel Management Settings",
-    "module": "Fuel Management",
-    "custom": 0,
-    "fields": [
-        {
-            "fieldname": "enable_petty_cash",
-            "label": "Enable Petty Cash",
-            "fieldtype": "Check",
-            "default": "1"
-        },
-        {
-            "fieldname": "enable_fleet_cards",
-            "label": "Enable Fleet Cards",
-            "fieldtype": "Check",
-            "default": "1"
-        },
-        {
-            "fieldname": "enable_cash_meter_readings",
-            "label": "Enable Cash Meter Readings",
-            "fieldtype": "Check",
-            "default": "1"
-        }
-    ],
-    "permissions": [
-        {
-            "role": "System Manager",
-            "read": 1,
-            "write": 1,
-            "create": 1,
-            "delete": 1
-        }
-    ],
-    "issingle": 1,
-    "doctype": "DocType",
-    "creation": "2024-01-01 12:00:00.000000",
-    "modified": "2024-01-01 12:00:00.000000",
-    "owner": "Administrator"
+ "creation": "2024-01-01 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enable_petty_cash",
+   "fieldtype": "Check",
+   "label": "Enable Petty Cash"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_fleet_cards",
+   "fieldtype": "Check",
+   "label": "Enable Fleet Cards"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_cash_meter_readings",
+   "fieldtype": "Check",
+   "label": "Enable Cash Meter Readings"
+  }
+ ],
+ "issingle": 1,
+ "modified": "2024-01-01 12:00:00.000000",
+ "module": "Fuel Management",
+ "name": "Fuel Management Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fuel Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fleet Manager",
+   "write": 1
+  }
+ ]
 }

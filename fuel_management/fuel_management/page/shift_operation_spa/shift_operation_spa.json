@@ -13,6 +13,12 @@
  "roles": [
   {
    "role": "System Manager"
+  },
+  {
+   "role": "Fuel Manager"
+  },
+  {
+   "role": "Fleet Manager"
   }
  ],
  "script": null,

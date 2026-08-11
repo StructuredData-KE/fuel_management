@@ -269,19 +269,7 @@ class Shift(Document):
                     "user_remark": f"Cash Submitted by {csa_name}"
                 })
                 
-                cust_payments = frappe.db.sql("""
-                    SELECT customer, amount FROM `tabCustomer Payment` 
-                    WHERE shift=%s AND csa=%s AND docstatus=1
-                """, (self.name, r.csa), as_dict=True)
-                
-                if not cust_payments:
-                    cust_payments = frappe.db.sql("""
-                        SELECT customer, amount FROM `tabCustomer Payment` 
-                        WHERE shift=%s AND csa=%s
-                    """, (self.name, r.csa), as_dict=True)
-                    
-                total_cp = sum([flt(cp.amount) for cp in (cust_payments or [])])
-                cash_for_sales = tot_cash - total_cp
+                cash_for_sales = tot_cash
                 
                 # Credit Shift Control (for the Sales portion)
                 if cash_for_sales > 0:
@@ -296,18 +284,6 @@ class Shift(Document):
                         "debit_in_account_currency": abs(cash_for_sales),
                         "user_remark": f"Adjustment for Sales from {csa_name}"
                     })
-                
-                # Credit Customer AR (for the Customer Payment portion)
-                for cp in (cust_payments or []):
-                    if flt(cp.amount) > 0:
-                        ar_acct = frappe.db.get_value("Party Account", {"parent": cp.customer, "parenttype": "Customer", "company": company}, "account") or frappe.db.get_value("Company", company, "default_receivable_account")
-                        je.append("accounts", {
-                            "account": ar_acct,
-                            "party_type": "Customer",
-                            "party": cp.customer,
-                            "credit_in_account_currency": cp.amount,
-                            "user_remark": f"Customer Payment collected by {csa_name}"
-                        })
                 
             # Variances
             var = flt(r.variance)

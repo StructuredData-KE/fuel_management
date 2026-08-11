@@ -279,10 +279,10 @@
    "options": "Shift Greasing Sale"
   },
   {
+   "default": "0",
    "fieldname": "report_sent",
    "fieldtype": "Check",
    "label": "Report Sent",
-   "default": "0",
    "read_only": 1
   }
  ],
@@ -299,6 +299,20 @@
    "delete": 1,
    "read": 1,
    "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fuel Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fleet Manager",
    "write": 1
   }
  ],

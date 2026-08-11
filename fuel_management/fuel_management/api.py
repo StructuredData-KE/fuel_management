@@ -166,18 +166,18 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     data["greasing_breakdown"] = greasing_data or []
     data["greasing_sales"] = sum([d.amount for d in greasing_data]) if greasing_data else 0.0
     
-    # 4. Customer Payments
+    # 4. Customer Payments (Only Cash payments are liabilities for the CSA cash recon)
     cp_data = frappe.db.sql("""
         SELECT name, customer, amount 
         FROM `tabCustomer Payment` 
-        WHERE shift=%s AND csa=%s AND docstatus=1
+        WHERE shift=%s AND csa=%s AND mode_of_payment='Cash' AND docstatus=1
     """, (shift_id, csa_id), as_dict=True)
     
     if not cp_data:
         cp_data = frappe.db.sql("""
             SELECT name, customer, amount 
             FROM `tabCustomer Payment` 
-            WHERE shift=%s AND csa=%s
+            WHERE shift=%s AND csa=%s AND mode_of_payment='Cash'
         """, (shift_id, csa_id), as_dict=True)
         
     data["customer_payments_breakdown"] = cp_data or []
@@ -344,11 +344,42 @@ def get_daily_dip_summary(shift_id):
             for t in tanks_for_item:
                 purchases_by_tank[t] = purchases_by_tank.get(t, 0) + flt(pi.qty)
 
-    # --- Build final result using the night shift's dip_stick_readings ---
+    # --- Opening Dip: find the PREVIOUS night shift's closing dip for each tank ---
+    # Strategy: find the most recent NIGHT shift BEFORE this shift's date (or on the same date but earlier)
+    # and use its closing_dip per tank.
+    prev_night_shift_query = """
+        SELECT name FROM `tabShift`
+        WHERE station = %s
+          AND name != %s
+          AND (shift_date < %s OR (shift_date = %s AND LOWER(shift_template) LIKE %s))
+          AND LOWER(shift_template) LIKE %s
+          AND docstatus != 2
+        ORDER BY shift_date DESC, creation DESC
+        LIMIT 1
+    """
+    prev_night = frappe.db.sql(prev_night_shift_query, (
+        station, shift_id,
+        shift_date, shift_date, "%night%",
+        "%night%"
+    ), as_dict=True)
+
+    opening_dip_by_tank = {}
+    if prev_night:
+        prev_doc = frappe.get_doc("Shift", prev_night[0].name)
+        for r in (prev_doc.dip_stick_readings or []):
+            if r.fuel_tank and r.closing_dip is not None:
+                opening_dip_by_tank[r.fuel_tank] = flt(r.closing_dip)
+
+    # If no previous night shift found, fall back to opening_dip stored on this shift's readings
+    for row in night_shift.dip_stick_readings:
+        if row.fuel_tank not in opening_dip_by_tank and flt(row.opening_dip) != 0:
+            opening_dip_by_tank[row.fuel_tank] = flt(row.opening_dip)
+
+    # --- Build final result ---
     result = []
     for row in night_shift.dip_stick_readings:
         tank = row.fuel_tank or ""
-        opening_dip = flt(row.opening_dip)
+        opening_dip = opening_dip_by_tank.get(tank, 0)
         closing_dip = flt(row.closing_dip)
         purchases = purchases_by_tank.get(tank, 0)
         meter_sales = meter_sales_by_tank.get(tank, 0)
@@ -621,22 +652,28 @@ def create_spa_stock_transfer(station_id, item_code, qty, direction="Store to Fo
     return {"status": "success", "message": f"Successfully transferred {qty} of {item_code} ({direction}).", "name": se.name}
 
 @frappe.whitelist()
-def get_inventory_status_report(station_id, from_date, to_date):
+def get_inventory_status_report(station_id, from_date, to_date, warehouse_type=None):
+    from frappe.utils import flt
     if not station_id or not from_date or not to_date:
         frappe.throw("Station ID, From Date, and To Date are required")
         
     station = frappe.get_doc("Fuel Station", station_id)
-    warehouses = []
-    if station.default_forecourt_warehouse:
-        warehouses.append(station.default_forecourt_warehouse)
-    if station.default_store_warehouse:
-        warehouses.append(station.default_store_warehouse)
-        
     s_warehouse = station.default_store_warehouse
     f_warehouse = station.default_forecourt_warehouse
     
     if not s_warehouse or not f_warehouse:
         frappe.throw("Station must have both Default Store Warehouse and Default Forecourt Warehouse set.")
+        
+    warehouses = []
+    if warehouse_type == "store":
+        warehouses = [s_warehouse]
+    elif warehouse_type == "forecourt":
+        warehouses = [f_warehouse]
+    else:
+        if station.default_forecourt_warehouse:
+            warehouses.append(station.default_forecourt_warehouse)
+        if station.default_store_warehouse:
+            warehouses.append(station.default_store_warehouse)
         
     company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
     company_name = frappe.db.get_value("Company", company, "company_name") or company
@@ -645,6 +682,14 @@ def get_inventory_status_report(station_id, from_date, to_date):
     
     if not allowed_items:
         return {"status": "success", "company": company_name, "from_date": from_date, "to_date": to_date, "data": []}
+
+    # Fetch Standard Selling rates for all items in one query
+    price_records = frappe.get_all(
+        "Item Price",
+        filters={"price_list": "Standard Selling"},
+        fields=["item_code", "price_list_rate"]
+    )
+    item_prices = {p.item_code: flt(p.price_list_rate) for p in price_records}
 
     sles = frappe.get_all("Stock Ledger Entry",
         filters={"warehouse": ["in", warehouses], "is_cancelled": 0, "item_code": ["in", allowed_items]},
@@ -664,6 +709,7 @@ def get_inventory_status_report(station_id, from_date, to_date):
                 "op_forecourt": 0,
                 "purchases": 0,
                 "sales": 0,
+                "unit_price": item_prices.get(item, 0),
                 "vouchers": {}
             }
         
@@ -959,3 +1005,67 @@ def create_counterparty_doctype():
 def get_borrowing_counterparties():
     import frappe
     return frappe.get_all("Borrowing Counterparty", fields=["name as value", "counterparty_name as label"])
+
+@frappe.whitelist()
+def debug_prices():
+    import frappe
+    prices = frappe.get_all('Item Price', filters={'price_list': 'Standard Selling'}, fields=['item_code', 'price_list_rate'], limit=20)
+    return [f"{p.item_code}: {p.price_list_rate}" for p in prices]
+
+@frappe.whitelist()
+def get_item_forecourt_balance(station_id, item_code):
+    from frappe.utils import flt
+    if not station_id or not item_code:
+        return 0.0
+    station = frappe.get_doc("Fuel Station", station_id)
+    f_warehouse = station.default_forecourt_warehouse
+    if not f_warehouse:
+        return 0.0
+    
+    balance = frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": f_warehouse}, "actual_qty")
+    return flt(balance)
+
+@frappe.whitelist()
+def reload_spa_page():
+    import frappe
+    frappe.reload_doc("fuel_management", "page", "shift_operation_spa", force=True)
+    frappe.db.commit()
+    return "Reloaded successfully"
+
+@frappe.whitelist()
+def get_customer_transactions(customer_id):
+    if not customer_id:
+        return []
+        
+    # Get invoices (debits)
+    invoices = frappe.db.sql("""
+        SELECT 
+            si.name as id, 
+            s.shift_date as date, 
+            'Shift Invoice' as ref_type, 
+            CONCAT(IFNULL(si.entry_number, ''), ' - ', IFNULL(si.vehicle_registration, ''), ' - ', IFNULL(si.item, '')) as description, 
+            si.amount as debit, 
+            0.0 as credit 
+        FROM `tabShift Invoice` si
+        JOIN `tabShift` s ON si.parent = s.name
+        WHERE si.customer = %s AND s.docstatus < 2
+    """, (customer_id,), as_dict=True)
+
+    # Get payments (credits)
+    payments = frappe.db.sql("""
+        SELECT 
+            name as id, 
+            date as date, 
+            'Customer Payment' as ref_type, 
+            CONCAT('Payment via ', IFNULL(mode_of_payment, ''), ' - Ref: ', IFNULL(trans_no, '')) as description, 
+            0.0 as debit, 
+            amount as credit 
+        FROM `tabCustomer Payment` 
+        WHERE customer = %s AND docstatus < 2
+    """, (customer_id,), as_dict=True)
+
+    transactions = invoices + payments
+    # Sort by date
+    transactions.sort(key=lambda x: x['date'] if x['date'] else '')
+    return transactions
+

@@ -57,19 +57,26 @@ def get_debtors_data():
     for cust in customers:
         inv = invoice_map.get(cust, {})
         pay = payment_map.get(cust, {})
-        
         total_invoiced = flt(inv.get('total_invoiced', 0))
         total_paid = flt(pay.get('total_paid', 0))
         last_payment_date = pay.get('last_payment_date', None)
-        
         balance = total_invoiced - total_paid
+
+        # Get credit limit safely
+        credit_limit = frappe.db.get_value("Customer", cust, "credit_limit")
+        if not credit_limit:
+            credit_limit = frappe.db.get_value("Customer Credit Limit", {"parent": cust}, "credit_limit") or 0.0
+            
+        credit_limit = flt(credit_limit)
         
-        if balance > 100000:
-            status = 'Overdue'
+        status = 'Safe'
+        if credit_limit > 0:
+            if balance >= credit_limit:
+                status = 'Overdue'
+            elif balance >= 0.8 * credit_limit:
+                status = 'Near Limit'
         elif balance > 0:
             status = 'Near Limit'
-        else:
-            status = 'Healthy'
             
         results.append({
             'id': cust,
@@ -80,7 +87,7 @@ def get_debtors_data():
             'total_paid': total_paid,
             'balance': balance,
             'status': status,
-            'credit_limit': 0
+            'credit_limit': credit_limit
         })
         
     results.sort(key=lambda x: x['balance'], reverse=True)

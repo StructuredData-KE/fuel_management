@@ -191,27 +191,39 @@ function setup_vue_app(page) {
 			const searchQuery = ref('');
 			const showOverdueOnly = ref(false);
 			const selectedDebtor = ref(null);
-			const startDate = ref('2026-08-01');
-			const endDate = ref('2026-08-31');
+			
+			let today = frappe.datetime.nowdate();
+			let month_start = today.substring(0, 8) + '01';
+			const startDate = ref(month_start);
+			const endDate = ref(today);
 
-			// Mock Data: Debtors
-			const debtors = ref([
-				{ id: 1, name: 'Acme Logistics Ltd', fleet_id: 'FLT-001', last_payment_date: '2026-08-02', total_invoiced: 450000, total_paid: 300000, balance: 150000, status: 'Near Limit', credit_limit: 160000 },
-				{ id: 2, name: 'Global Transport Corp', fleet_id: 'FLT-042', last_payment_date: '2026-07-15', total_invoiced: 800000, total_paid: 500000, balance: 300000, status: 'Overdue', credit_limit: 250000 },
-				{ id: 3, name: 'Swift Delivery Services', fleet_id: 'FLT-103', last_payment_date: '2026-08-05', total_invoiced: 120000, total_paid: 120000, balance: 0, status: 'Safe', credit_limit: 100000 },
-				{ id: 4, name: 'County Government Transport', fleet_id: 'FLT-099', last_payment_date: '2026-06-10', total_invoiced: 1500000, total_paid: 900000, balance: 600000, status: 'Overdue', credit_limit: 500000 },
-				{ id: 5, name: 'Apex Hauliers', fleet_id: 'FLT-015', last_payment_date: '2026-08-01', total_invoiced: 300000, total_paid: 250000, balance: 50000, status: 'Safe', credit_limit: 200000 },
-			]);
+			const debtors = ref([]);
+			const allTransactions = ref([]);
 
-			// Mock Data: Transactions
-			const allTransactions = ref([
-				{ id: 101, customer_id: 1, date: '2026-07-28', ref_type: 'Shift Invoice', description: 'INV001 - KCA 123A - Diesel', debit: 50000, credit: 0 },
-				{ id: 102, customer_id: 1, date: '2026-07-29', ref_type: 'Shift Invoice', description: 'INV002 - KCB 456B - Petrol', debit: 30000, credit: 0 },
-				{ id: 103, customer_id: 1, date: '2026-07-30', ref_type: 'Customer Payment', description: 'Bank Transfer Receipt', debit: 0, credit: 80000 },
-				{ id: 104, customer_id: 1, date: '2026-08-02', ref_type: 'Shift Invoice', description: 'INV055 - KCC 789C - Diesel', debit: 150000, credit: 0 },
-				{ id: 105, customer_id: 2, date: '2026-07-01', ref_type: 'Shift Invoice', description: 'INV010 - KDD 001D - Diesel', debit: 300000, credit: 0 },
-				{ id: 106, customer_id: 2, date: '2026-07-15', ref_type: 'Customer Payment', description: 'Cheque Deposit', debit: 0, credit: 100000 },
-			]);
+			const fetch_debtors = () => {
+				frappe.call({
+					method: 'fuel_management.fuel_management.page.shift_operation_spa.shift_operation_spa.get_debtors_data',
+					callback: function(r) {
+						if(r.message) {
+							debtors.value = r.message;
+						}
+					}
+				});
+			};
+
+			const fetch_transactions = (customer_id) => {
+				frappe.call({
+					method: 'fuel_management.fuel_management.fuel_management.api.get_customer_transactions',
+					args: { customer_id: customer_id },
+					callback: function(r) {
+						if(r.message) {
+							allTransactions.value = r.message;
+						}
+					}
+				});
+			};
+
+			fetch_debtors();
 
 			// Computed properties for Dashboard
 			const filteredDebtors = computed(() => {
@@ -239,9 +251,7 @@ function setup_vue_app(page) {
 			const customerTransactions = computed(() => {
 				if (!selectedDebtor.value) return [];
 				// Sort chronologically
-				return allTransactions.value
-					.filter(t => t.customer_id === selectedDebtor.value.id)
-					.sort((a, b) => new Date(a.date) - new Date(b.date));
+				return allTransactions.value.sort((a, b) => new Date(a.date) - new Date(b.date));
 			});
 
 			const openingBalance = computed(() => {
@@ -296,6 +306,7 @@ function setup_vue_app(page) {
 			const openStatement = (debtor) => {
 				selectedDebtor.value = debtor;
 				activeView.value = 'statement';
+				fetch_transactions(debtor.id);
 			};
 
 			const printStatement = () => {

@@ -1,36 +1,50 @@
 {
-    "name": "Pump Group",
-    "module": "Fuel Management",
-    "custom": 0,
-    "fields": [
-        {
-            "fieldname": "group_name",
-            "label": "Group/Island Name",
-            "fieldtype": "Data",
-            "reqd": 1,
-            "unique": 1
-        },
-        {
-            "fieldname": "station",
-            "label": "Fuel Station",
-            "fieldtype": "Link",
-            "options": "Fuel Station",
-            "reqd": 1
-        }
-    ],
-    "permissions": [
-        {
-            "role": "System Manager",
-            "read": 1,
-            "write": 1,
-            "create": 1,
-            "delete": 1
-        }
-    ],
-    "naming_rule": "By fieldname",
-    "autoname": "field:group_name",
-    "doctype": "DocType",
-    "creation": "2024-01-01 12:00:00.000000",
-    "modified": "2024-01-01 12:00:00.000000",
-    "owner": "Administrator"
+ "autoname": "field:group_name",
+ "creation": "2024-01-01 12:00:00.000000",
+ "custom": 0,
+ "doctype": "DocType",
+ "fields": [
+  {
+   "fieldname": "group_name",
+   "fieldtype": "Data",
+   "label": "Group/Island Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "station",
+   "fieldtype": "Link",
+   "label": "Fuel Station",
+   "options": "Fuel Station",
+   "reqd": 1
+  }
+ ],
+ "modified": "2024-01-01 12:00:00.000000",
+ "module": "Fuel Management",
+ "name": "Pump Group",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fuel Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Fleet Manager",
+   "write": 1
+  }
+ ]
 }
