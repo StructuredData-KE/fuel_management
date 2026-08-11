@@ -1069,3 +1069,90 @@ def get_customer_transactions(customer_id):
     transactions.sort(key=lambda x: x['date'] if x['date'] else '')
     return transactions
 
+@frappe.whitelist()
+def test_payment_hook():
+    import frappe
+    from frappe.utils import flt
+
+    print("Initializing payment verification test...")
+
+    # 1. Fetch test dependencies
+    customer_id = frappe.db.get_value("Customer", {}, "name")
+    if not customer_id:
+        cust = frappe.get_doc({
+            "doctype": "Customer",
+            "customer_name": "Test Customer for Payments"
+        })
+        cust.insert()
+        customer_id = cust.name
+        print(f"Created temporary Customer: {customer_id}")
+    else:
+        print(f"Using existing Customer: {customer_id}")
+
+    mode = "Cash"
+    if not frappe.db.exists("Mode of Payment", mode):
+        frappe.get_doc({
+            "doctype": "Mode of Payment",
+            "mode_of_payment": mode
+        }).insert()
+        print("Created Cash Mode of Payment")
+
+    # Make sure Mode of Payment has a default account mapped
+    company = frappe.defaults.get_user_default("Company") or frappe.get_all("Company")[0].name
+    mop_acc = frappe.db.get_value("Mode of Payment Account", {"parent": mode, "company": company}, "default_account")
+    if not mop_acc:
+        default_cash = frappe.db.get_value("Company", company, "default_cash_account") or frappe.db.get_value("Account", {"account_type": "Cash", "company": company}, "name")
+        if default_cash:
+            frappe.get_doc({
+                "doctype": "Mode of Payment Account",
+                "parent": mode,
+                "parentfield": "accounts",
+                "parenttype": "Mode of Payment",
+                "company": company,
+                "default_account": default_cash
+            }).insert(ignore_permissions=True)
+            print(f"Mapped Mode of Payment Cash to account: {default_cash}")
+
+    # 2. Record Customer Payment
+    pay = frappe.get_doc({
+        "doctype": "Customer Payment",
+        "date": frappe.utils.nowdate(),
+        "customer": customer_id,
+        "mode_of_payment": mode,
+        "amount": 25000.0,
+        "trans_no": "TEST-TRAN-101",
+        "memo": "Test Payment verification"
+    })
+    pay.insert()
+    payment_id = pay.name
+    print(f"Created Customer Payment: {payment_id}")
+
+    # 3. Check if Journal Entry was created and submitted
+    je_name = frappe.db.get_value("Journal Entry", {"user_remark": f"Customer Payment Reference: {payment_id}"}, "name")
+    if je_name:
+        je = frappe.get_doc("Journal Entry", je_name)
+        print(f"Journal Entry created successfully: {je_name}, Status: {je.docstatus}")
+        debit_account = je.accounts[0].account
+        credit_account = je.accounts[1].account
+        print(f"Debit Account: {debit_account} ({je.accounts[0].debit}), Credit Account: {credit_account} ({je.accounts[1].credit})")
+        
+        assert je.docstatus == 1, "Failed: Journal Entry is not submitted!"
+        assert flt(je.accounts[0].debit) == 25000.0, "Failed: Debit amount does not match!"
+        assert flt(je.accounts[1].credit) == 25000.0, "Failed: Credit amount does not match!"
+        print("Accounting verification checks passed.")
+    else:
+        print("Failed: Journal Entry was not created!")
+        raise Exception("Journal Entry not found!")
+
+    # 4. Delete the Customer Payment and check cleanup
+    frappe.delete_doc("Customer Payment", payment_id)
+    print(f"Deleted Customer Payment: {payment_id}")
+
+    je_exists = frappe.db.exists("Journal Entry", je_name)
+    print(f"Journal Entry still exists in database: {je_exists}")
+    assert not je_exists, "Failed: Journal Entry was not deleted after deleting Customer Payment!"
+
+    print("SUCCESS: All payment integration verification tests passed successfully!")
+    return "SUCCESS"
+
+
