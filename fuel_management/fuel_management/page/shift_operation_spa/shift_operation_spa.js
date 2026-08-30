@@ -146,6 +146,12 @@ function lock_ui_for_no_shift($wrapper) {
     $wrapper.find('#active-shift-badge').text('No Active Shift');
     $wrapper.find('#active-shift-badge').css('background', 'rgba(255,255,255,0.15)');
     $wrapper.find('#user-greeting-desktop').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
+    let hour = new Date().getHours();
+    let time_greeting = "Good morning";
+    if (hour >= 12 && hour < 17) time_greeting = "Good afternoon";
+    else if (hour >= 17) time_greeting = "Good evening";
+    let fname = frappe.session.user_fullname || frappe.session.user || "User";
+    $wrapper.find('#home-greeting').text(`${time_greeting}, ${fname}`);
     
     // Switch to Home Shift tab
     $wrapper.find('.nav-item[data-target="tab-home"]').click();
@@ -163,6 +169,12 @@ function lock_ui_for_active_shift($wrapper) {
     $wrapper.find('#active-shift-badge').text(`Active Shift: ${formattedDate} (${bShiftName})`);
     $wrapper.find('#active-shift-badge').css('background', '#16a34a'); // Green badge for active
     $wrapper.find('#user-greeting-desktop').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
+    let hour = new Date().getHours();
+    let time_greeting = "Good morning";
+    if (hour >= 12 && hour < 17) time_greeting = "Good afternoon";
+    else if (hour >= 17) time_greeting = "Good evening";
+    let fname = frappe.session.user_fullname || frappe.session.user || "User";
+    $wrapper.find('#home-greeting').text(`${time_greeting}, ${fname}`);
     
     // Switch to Home tab automatically
     $wrapper.find('.nav-item[data-target="tab-home"]').click();
