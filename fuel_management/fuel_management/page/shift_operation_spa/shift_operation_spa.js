@@ -1268,6 +1268,12 @@ function load_dropdowns(wrapper) {
                     options += `<option value="${st.name}">${st.name}</option>`;
                 });
                 $(wrapper).find('#select-station').html(options);
+                
+                let default_station = frappe.defaults.get_user_default("Fuel Station") || frappe.defaults.get_user_default("station");
+                if (default_station) {
+                    $(wrapper).find('#select-station').val(default_station);
+                }
+                
                 $(wrapper).find('#select-station').on('change', function() {
                     let station = $(this).val();
                     if(station) {
