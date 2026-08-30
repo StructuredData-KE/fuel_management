@@ -4850,28 +4850,19 @@ function render_station_cards($wrapper) {
 
     // 4. Fetch and Render History
     let fetch_history = function() {
-        let filters = { shift: window.ACTIVE_SHIFT.name };
         let date_from = $wrapper.find('#sc-filter-date-from').val();
         let date_to = $wrapper.find('#sc-filter-date-to').val();
         let card_filter = $wrapper.find('#sc-filter-card').val();
-        
-        if (date_from && date_to) {
-            filters.date = ["between", [date_from, date_to]];
-        } else if (date_from) {
-            filters.date = [">=", date_from];
-        } else if (date_to) {
-            filters.date = ["<=", date_to];
-        }
-        
-        if (card_filter) filters.card = card_filter;
+        let csa_filter = $wrapper.find('#sc-filter-csa').val();
 
         frappe.call({
-            method: "frappe.client.get_list",
+            method: "fuel_management.fuel_management.api.get_station_cards_history",
             args: {
-                doctype: "Station Cards",
-                filters: filters,
-                fields: ["name", "date", "shift", "creation", "card", "csa", "receipt_no", "amount", "memo"],
-                order_by: "name desc"
+                station: window.ACTIVE_SHIFT.station,
+                from_date: date_from,
+                to_date: date_to,
+                card: card_filter,
+                csa: csa_filter
             },
             callback: function(r) {
                 let html = '';
@@ -4886,18 +4877,25 @@ function render_station_cards($wrapper) {
                             if (u) csa_name = u.employee_name || u.full_name;
                         }
                         
+                        let can_edit = row.shift === window.ACTIVE_SHIFT.name && window.ACTIVE_SHIFT.status === 'Open';
+                        let action_html = can_edit ? `
+                            <button class="btn btn-xs btn-secondary btn-edit-sc">Edit</button>
+                            <button class="btn btn-xs btn-danger btn-delete-sc" style="margin-left: 5px;">Delete</button>
+                        ` : `
+                            <button class="btn btn-xs btn-secondary" disabled>Edit</button>
+                            <button class="btn btn-xs btn-danger" disabled style="margin-left: 5px;">Delete</button>
+                        `;
+                        let shift_name = row.shift_template || window.ACTIVE_SHIFT.shift_template || row.shift;
+                        
                         html += `
                             <tr data-name="${row.name}" data-card="${row.card}" data-csa="${row.csa}" data-receipt="${row.receipt_no}" data-amount="${row.amount}" data-memo="${row.memo || ''}">
                                 <td>${row.name}</td>
-                                <td>${frappe.datetime.str_to_user(row.date)} (${window.ACTIVE_SHIFT.shift_template || ""})</td>
+                                <td>${row.date ? frappe.datetime.str_to_user(row.date) : ''} (${shift_name})</td>
                                 <td><a href="/app/station-cards/${row.name}">${row.receipt_no}</a></td>
                                 <td>${row.card}</td>
                                 <td>${csa_name}</td>
                                 <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                                <td>
-                                    <button class="btn btn-xs btn-secondary btn-edit-sc">Edit</button>
-                                    <button class="btn btn-xs btn-danger btn-delete-sc" style="margin-left: 5px;">Delete</button>
-                                </td>
+                                <td>${action_html}</td>
                             </tr>
                         `;
                     });
@@ -4938,7 +4936,7 @@ function render_station_cards($wrapper) {
     };
     fetch_history();
 
-    $wrapper.find('#sc-filter-date-from, #sc-filter-date-to, #sc-filter-card').on('change', fetch_history);
+    $wrapper.find('#sc-filter-date-from, #sc-filter-date-to, #sc-filter-card, #sc-filter-csa').on('change', fetch_history);
 
     // 5. Save Station Card Payment
     $wrapper.find('#btn-save-station-card').off('click').on('click', function() {
