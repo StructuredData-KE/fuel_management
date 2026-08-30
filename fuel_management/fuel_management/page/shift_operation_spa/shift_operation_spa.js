@@ -1415,7 +1415,7 @@ function load_dropdowns(wrapper) {
                     let selected = (u.name === frappe.session.user) ? 'selected' : '';
                     options += `<option value="${u.name}" ${selected}>${u.full_name}</option>`;
                 });
-                $(wrapper).find('#select-head-csa').html(options);
+                $(wrapper).find('#select-head-csa').html(options).prop('disabled', true).css({'background-color': '#f1f5f9', 'cursor': 'not-allowed'});
             }
         }
     });
