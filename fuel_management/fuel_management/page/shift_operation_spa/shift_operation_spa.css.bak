@@ -26,10 +26,33 @@
 [data-page-route="shift_operation_spa"] .layout-main-section { padding: 0 !important; }
 [data-page-route="shift_operation_spa"] .frappe-card { margin: 0 !important; padding: 0 !important; border: none !important; }
 
-
+.dashboard-wrapper {
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    height: calc(100vh - 60px);
+    overflow: hidden;
+    background: var(--main-bg);
+    width: calc(100% + 30px);
+    margin: -15px; /* offset frappe padding */
+}
 
 /* Sidebar */
+.sidebar {
+    width: 256px;
+    height: 100%;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    z-index: 10;
+    flex-shrink: 0;
+    transition: margin-left 0.3s ease;
+}
 
+.sidebar-collapsed {
+    margin-left: -256px;
+}
 
 .sidebar-header {
     height: 64px;
@@ -125,10 +148,27 @@
 }
 
 /* Main Content */
-
+.main-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: 100%;
+}
 
 /* Topbar */
-
+.topbar {
+    background: #ffffff;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
 
 .topbar-left h2 {
     display: none;
@@ -359,7 +399,18 @@
 .mb-4 { margin-bottom: 1.5rem; }
 .center-content { text-align: center; }
 
-
+/* Responsive Sidebar */
+@media (max-width: 768px) {
+    .dashboard-wrapper { flex-direction: column; }
+    .sidebar { width: 100%; flex-direction: row; align-items: center; padding: 0; }
+    .sidebar-header { padding: 1rem; }
+    .sidebar-nav { display: flex; overflow-x: auto; padding: 0 1rem; gap: 0.5rem; }
+    .nav-section-title { display: none; }
+    .nav-item { padding: 0.5rem; border-radius: 50px; }
+    .nav-item span { display: none; }
+    .topbar { padding: 1rem; }
+    .search-bar { display: none; }
+}
 
 /* Meter Center Cards */
 .center-card {

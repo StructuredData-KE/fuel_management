@@ -30,7 +30,7 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Date",
-   "read_only": 1,
+   "read_only": 0,
    "reqd": 1
   },
   {

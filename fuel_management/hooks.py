@@ -218,3 +218,18 @@ after_install = "fuel_management.install.after_install"
 # auth_hooks = [
 #	"fuel_management.auth.validate"
 # ]
+
+
+doc_events = {
+    "Staff Shortage Correction": {
+        "on_submit": "fuel_management.fuel_management.api.on_submit_shortage_correction",
+        "on_cancel": "fuel_management.fuel_management.api.on_cancel_shortage_correction"
+    },
+    "Staff Shortage Payment": {
+        "on_submit": "fuel_management.fuel_management.api.on_submit_shortage_payment",
+        "on_cancel": "fuel_management.fuel_management.api.on_cancel_shortage_payment"
+    },
+    "Borrowed Product": {
+        "after_insert": "fuel_management.fuel_management.api.on_borrowed_product_inserted"
+    }
+}

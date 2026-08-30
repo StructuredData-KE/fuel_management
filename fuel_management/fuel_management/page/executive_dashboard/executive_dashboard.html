@@ -1,0 +1,781 @@
+<style>
+/* Reset and Base Styles */
+.exec-dash-wrapper {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    background-color: #f8fafc;
+    min-height: 100vh;
+    margin: -15px; /* Offset frappe default padding */
+    width: calc(100% + 30px);
+    display: flex;
+    box-sizing: border-box;
+}
+
+.exec-dash-wrapper * {
+    box-sizing: border-box;
+}
+
+/* Sidebar */
+.exec-sidebar {
+    width: 250px;
+    background-color: #f4f7fa;
+    border-right: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 0;
+    flex-shrink: 0;
+    position: fixed;
+    height: 100vh;
+    left: 0;
+    top: 0;
+    z-index: 100;
+}
+
+.exec-brand {
+    padding: 0 24px;
+    margin-bottom: 32px;
+}
+
+.exec-brand-title {
+    color: #f59e0b; /* Orange */
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    display: block;
+}
+
+.exec-brand-subtitle {
+    color: #059669; /* Green */
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: block;
+    margin-top: 4px;
+}
+
+.exec-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 16px;
+    flex: 1;
+}
+
+.exec-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.exec-nav-item:hover {
+    background-color: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.exec-nav-item.active {
+    background-color: #f59e0b;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+}
+
+.exec-nav-item .material-symbols-outlined {
+    font-size: 20px;
+}
+
+.exec-nav-bottom {
+    margin-top: auto;
+    padding: 24px 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Main Content */
+.exec-main {
+    flex: 1;
+    margin-left: 250px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.exec-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.exec-header-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.2;
+    margin: 0;
+}
+
+.exec-header-subtitle {
+    font-size: 13px;
+    font-family: "JetBrains Mono", monospace;
+    color: #64748b;
+    margin: 4px 0 0 0;
+}
+
+.exec-btn {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.exec-btn:hover {
+    background-color: #f8fafc;
+}
+
+/* KPI Grid */
+.exec-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.exec-card {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+}
+
+.exec-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.exec-card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.exec-card-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: #0f172a;
+    font-family: "JetBrains Mono", monospace;
+}
+
+/* Mini Bars */
+.exec-progress-bar {
+    height: 4px;
+    background-color: #e2e8f0;
+    border-radius: 4px;
+    margin-top: 16px;
+    overflow: hidden;
+}
+
+.exec-progress-fill {
+    height: 100%;
+    background-color: #059669;
+    border-radius: 4px;
+}
+
+.exec-progress-text {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 8px;
+    text-align: right;
+    font-family: "JetBrains Mono", monospace;
+}
+
+.exec-multi-bar {
+    display: flex;
+    gap: 4px;
+    margin-top: 16px;
+}
+
+.exec-multi-bar-segment {
+    height: 6px;
+    border-radius: 4px;
+}
+
+.exec-multi-legend {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 12px;
+    font-size: 12px;
+    color: #64748b;
+    font-family: "JetBrains Mono", monospace;
+}
+
+.exec-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.exec-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+/* Variance */
+.exec-variance-value {
+    color: #dc2626;
+}
+
+.exec-variance-footer {
+    margin-top: auto;
+    padding-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.exec-badge {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Main Charts Grid */
+.exec-charts-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    flex: 1;
+}
+
+/* Chart Area */
+.exec-chart-area {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+}
+
+.exec-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.exec-chart-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+}
+
+.exec-chart-canvas {
+    flex: 1;
+    border-bottom: 1px solid #e2e8f0;
+    position: relative;
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+    padding-bottom: 10px;
+    min-height: 250px;
+}
+
+.exec-grid-line {
+    position: absolute;
+    width: 100%;
+    border-top: 1px solid #f1f5f9;
+    left: 0;
+}
+
+.exec-bar-group {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    z-index: 10;
+    height: 100%;
+}
+
+.exec-bar {
+    width: 24px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+.exec-bar-prev {
+    background-color: #e2e8f0;
+    border: 1px solid #cbd5e1;
+    border-bottom: none;
+}
+
+.exec-bar-curr {
+    background-color: #f59e0b;
+}
+
+.exec-bar-label {
+    text-align: center;
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 8px;
+    font-family: "JetBrains Mono", monospace;
+}
+
+/* Alerts */
+.exec-alerts-area {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+}
+
+.exec-alerts-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+
+.exec-active-badge {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+
+.exec-alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.exec-alert-item {
+    background-color: #f8fafc;
+    padding: 12px;
+    border-radius: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.exec-alert-item.alert-error {
+    border-left: 3px solid #dc2626;
+}
+.exec-alert-item.alert-warning {
+    border-left: 3px solid #f59e0b;
+}
+.exec-alert-item.alert-info {
+    border-left: 3px solid #059669;
+}
+
+.exec-alert-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.exec-alert-desc {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.exec-btn-primary {
+    background-color: #f59e0b;
+    color: #ffffff;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 16px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(245, 158, 11, 0.2);
+}
+
+/* Frappe overrides */
+.page-body, .page-content, .layout-main-section, .container {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+}
+
+/* Fix mobile */
+@media (max-width: 768px) {
+    .exec-sidebar {
+        display: none;
+    }
+    .exec-main {
+        margin-left: 0;
+        padding: 16px;
+    }
+    .exec-kpi-grid, .exec-charts-grid {
+        grid-template-columns: 1fr;
+    }
+    .exec-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+}
+</style>
+<div class="exec-dash-wrapper">
+    <!-- Sidebar -->
+    <nav class="exec-sidebar">
+        <div class="exec-brand">
+            <span class="exec-brand-title">Executive Panel</span>
+            <span class="exec-brand-subtitle">Operational Overview</span>
+        </div>
+        
+        <div class="exec-nav">
+            <a class="exec-nav-item active" data-tab="tab-dashboard">
+                <span class="material-symbols-outlined">dashboard</span>
+                Dashboard
+            </a>
+            <a class="exec-nav-item" data-tab="tab-financials">
+                <span class="material-symbols-outlined">payments</span>
+                Financials
+            </a>
+            <a class="exec-nav-item" data-tab="tab-inventory">
+                <span class="material-symbols-outlined">inventory_2</span>
+                Inventory
+            </a>
+            <a class="exec-nav-item" data-tab="tab-reconciliations">
+                <span class="material-symbols-outlined">account_balance_wallet</span>
+                Reconciliations
+            </a>
+            <a class="exec-nav-item" data-tab="tab-topups">
+                <span class="material-symbols-outlined">payments</span>
+                Top Ups
+            </a>
+            <a class="exec-nav-item" data-tab="tab-customers">
+                <span class="material-symbols-outlined">group</span>
+                Customers
+            </a>
+            <a class="exec-nav-item" data-tab="tab-hr">
+                <span class="material-symbols-outlined">badge</span>
+                HR
+            </a>
+        </div>
+
+
+
+        <div class="exec-nav-bottom">
+            <a class="exec-nav-item">
+                <span class="material-symbols-outlined">help</span>
+                Support
+            </a>
+            <a class="exec-nav-item">
+                <span class="material-symbols-outlined">logout</span>
+                Logout
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="exec-main" id="tab-dashboard">
+        <!-- Header Row -->
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title">System Overview</h1>
+                <p class="exec-header-subtitle">Real-time telemetry & financial metrics.</p>
+            </div>
+            
+            <div style="display:flex; gap:16px; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:12px; font-weight:600; color:#64748b; text-transform:uppercase;">Date Range:</span>
+                    <input type="date" id="exec-global-from" style="font-size:12px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; outline:none;">
+                    <span style="font-size:12px; color:#64748b;">to</span>
+                    <input type="date" id="exec-global-to" style="font-size:12px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; outline:none;">
+                    <button class="exec-btn-primary" id="exec-global-apply" style="padding:6px 12px; font-size:12px; margin-top:0;">Apply</button>
+                </div>
+
+                <button class="exec-btn">
+                <span class="material-symbols-outlined" style="font-size: 18px;">download</span>
+                Export Shift Report
+                </button>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="exec-charts-grid" style="grid-template-columns: 1fr;">
+            <!-- Fuel Sales Section -->
+            <div class="exec-chart-area">
+                <div class="exec-chart-header">
+                    <h2 class="exec-chart-title">Fuel Sales Volume (Liters)</h2>
+                </div>
+                <div style="width:100%; height:300px; margin-top:16px;" id="exec-fuel-chart"></div>
+                <div id="exec-fuel-table" style="margin-top:24px;"></div>
+            </div>
+
+            <!-- Dry Stock Sales Section (Grid) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
+                <!-- Lubes -->
+                <div class="exec-chart-area">
+                    <h2 class="exec-chart-title">Lubes</h2>
+                    <div id="exec-analytics-lubes" style="margin-top:16px;">
+                        <div style="color:#64748b; font-size:12px;">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Gas & Cylinders -->
+                <div class="exec-chart-area">
+                    <h2 class="exec-chart-title">Gas & Cylinders</h2>
+                    <div id="exec-analytics-gas" style="margin-top:16px;">
+                        <div style="color:#64748b; font-size:12px;">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- Accessories & Filters -->
+                <div class="exec-chart-area">
+                    <h2 class="exec-chart-title">Accessories & Filters</h2>
+                    <div id="exec-analytics-accessories" style="margin-top:16px;">
+                        <div style="color:#64748b; font-size:12px;">Loading...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Alerts -->
+            <div class="exec-alerts-area">
+                <div class="exec-alerts-header">
+                    <h2 class="exec-chart-title">System Alerts</h2>
+                    <div class="exec-active-badge" id="exec-alerts-badge">0 Active</div>
+                </div>
+                
+                <div class="exec-alerts-list" id="exec-alerts-list">
+                    <div style="text-align:center; color:#94a3b8; font-size:12px; margin-top: 20px;">
+                        Loading alerts...
+                    </div>
+                </div>
+                <button class="exec-btn-primary" id="exec-ack-btn" style="display:none;">ACKNOWLEDGE ALL ALERTS</button>
+            </div>
+        </div>
+
+        <!-- KPI Grid -->
+        <div class="exec-kpi-grid">
+            <!-- Total Sales -->
+            <div class="exec-card">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Total Sales (Today)</span>
+                    <span class="material-symbols-outlined" style="color:#059669; font-size:18px;">trending_up</span>
+                </div>
+                <div class="exec-card-value" id="exec-total-sales">$0.00</div>
+                <div class="exec-progress-bar">
+                    <div class="exec-progress-fill" id="exec-sales-progress" style="width: 0%;"></div>
+                </div>
+                <div class="exec-progress-text" id="exec-sales-progress-text">Loading...</div>
+            </div>
+
+            <!-- Collections -->
+            <div class="exec-card">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Collections Split</span>
+                    <span class="material-symbols-outlined" style="color:#0ea5e9; font-size:18px;">account_balance</span>
+                </div>
+                <div class="exec-card-value" id="exec-collections-total">$0.00</div>
+                <div class="exec-multi-bar">
+                    <div class="exec-multi-bar-segment" id="exec-bar-mpesa" style="background-color: #f59e0b; width: 0%;"></div>
+                    <div class="exec-multi-bar-segment" id="exec-bar-cards" style="background-color: #0ea5e9; width: 0%;"></div>
+                    <div class="exec-multi-bar-segment" id="exec-bar-cash" style="background-color: #059669; width: 0%;"></div>
+                </div>
+                <div class="exec-multi-legend">
+                    <div class="exec-legend-item"><div class="exec-dot" style="background-color: #f59e0b;"></div> M-Pesa</div>
+                    <div class="exec-legend-item"><div class="exec-dot" style="background-color: #0ea5e9;"></div> Cards</div>
+                    <div class="exec-legend-item"><div class="exec-dot" style="background-color: #059669;"></div> Cash</div>
+                </div>
+            </div>
+
+            <!-- Variance -->
+            <div class="exec-card">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Net Variance (Liters)</span>
+                    <span class="material-symbols-outlined" style="color:#dc2626; font-size:18px;">warning</span>
+                </div>
+                <div class="exec-card-value exec-variance-value" id="exec-net-variance">0 L</div>
+                <div class="exec-variance-footer">
+                    <div class="exec-badge" id="exec-variance-badge">
+                        <span class="material-symbols-outlined" style="font-size: 14px;">pending</span>
+                        Calculating
+                    </div>
+                    <span style="font-size: 12px; color: #64748b;">vs. expected</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Financials Tab -->
+    <main class="exec-main" id="tab-financials" style="display:none;">
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title">Financial Overview</h1>
+                <p class="exec-header-subtitle" id="exec-pnl-period">Loading...</p>
+            </div>
+        </div>
+
+        <div class="exec-kpi-grid">
+            <div class="exec-card">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Total Income</span>
+                    <span class="material-symbols-outlined" style="color:#059669; font-size:18px;">arrow_upward</span>
+                </div>
+                <div class="exec-card-value" id="exec-pnl-income">$0.00</div>
+            </div>
+            <div class="exec-card">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Total Expenses</span>
+                    <span class="material-symbols-outlined" style="color:#dc2626; font-size:18px;">arrow_downward</span>
+                </div>
+                <div class="exec-card-value" id="exec-pnl-expense">$0.00</div>
+            </div>
+            <div class="exec-card">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Net Profit</span>
+                    <span class="material-symbols-outlined" style="color:#f59e0b; font-size:18px;">account_balance</span>
+                </div>
+                <div class="exec-card-value" id="exec-pnl-profit">$0.00</div>
+            </div>
+        </div>
+
+        <div class="exec-charts-grid" style="margin-top:24px; grid-template-columns: 1fr 1fr;">
+            <div class="exec-chart-area">
+                <h2 class="exec-chart-title">Income Breakdown</h2>
+                <div id="exec-pnl-income-table" style="margin-top:16px;">
+                    <div style="color:#64748b; font-size:12px;">Loading...</div>
+                </div>
+            </div>
+            <div class="exec-chart-area">
+                <h2 class="exec-chart-title">Expenses Breakdown</h2>
+                <div id="exec-pnl-expense-table" style="margin-top:16px;">
+                    <div style="color:#64748b; font-size:12px;">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Other tabs placeholders -->
+    <main class="exec-main" id="tab-inventory" style="display:none;">
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title">Inventory Position</h1>
+                <p class="exec-header-subtitle">Tank levels and fast moving stock.</p>
+            </div>
+        </div>
+        <div class="exec-chart-area" style="margin-top:24px;">
+            <h2 class="exec-chart-title">Current Tank Volumes</h2>
+            <div id="exec-tank-levels" style="margin-top: 16px; display:flex; gap:16px;">
+                <div style="color:#64748b; font-size:12px;">Loading...</div>
+            </div>
+        </div>
+    </main>
+    
+    <main class="exec-main" id="tab-reconciliations" style="display:none;">
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title">Reconciliations</h1>
+                <p class="exec-header-subtitle">Loss prevention and variance.</p>
+            </div>
+        </div>
+    </main>
+
+    <main class="exec-main" id="tab-topups" style="display:none;">
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title">Top Ups</h1>
+                <p class="exec-header-subtitle">Supplier top-ups and holding account.</p>
+            </div>
+        </div>
+        <div class="exec-kpi-grid" style="margin-top: 24px;">
+            <div class="exec-card" style="border: 1px solid #f59e0b;">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Pending Supplier Top-ups</span>
+                    <span class="material-symbols-outlined" style="color:#f59e0b; font-size:18px;">payments</span>
+                </div>
+                <div class="exec-card-value" id="exec-holding-balance">Loading...</div>
+                <div class="exec-progress-text" style="color: #64748b; margin-top: 8px;">
+                    Unreconciled Top-up Holding Balance
+                </div>
+                <div style="margin-top: 16px;">
+                    <button id="btn-reconcile-topups" class="exec-btn-primary" style="width: 100%; background-color: #f59e0b; border: none;">Reconcile with Statement</button>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <main class="exec-main" id="tab-customers" style="display:none;">
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title">Customers</h1>
+                <p class="exec-header-subtitle">Debtors and credit exposure.</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="exec-btn-primary exec-debtors-nav" data-debtors-view="dashboard">Balances</button>
+                <button class="exec-btn exec-debtors-nav" data-debtors-view="statement">Statement</button>
+            </div>
+        </div>
+        <div id="debtors-app" style="margin-top: 24px;">
+            <div style="color:#64748b; font-size:12px;">Loading Debtors App...</div>
+        </div>
+    </main>
+    
+    <main class="exec-main" id="tab-hr" style="display:none;">
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title">HR</h1>
+                <p class="exec-header-subtitle">Staff performance and shifts.</p>
+            </div>
+        </div>
+        <div class="exec-chart-area" style="margin-top:24px;">
+            <h2 class="exec-chart-title">Employee Shorts (This Month)</h2>
+            <div id="exec-hr-shorts-table" style="margin-top:16px;">
+                <div style="color:#64748b; font-size:12px;">Loading...</div>
+            </div>
+        </div>
+    </main>
+    
+
+</div>

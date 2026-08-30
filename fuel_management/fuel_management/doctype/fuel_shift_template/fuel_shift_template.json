@@ -8,7 +8,9 @@
  "field_order": [
   "template_name",
   "start_time",
-  "end_time"
+  "end_time",
+  "next_shift_template",
+  "rolls_over_date"
  ],
  "fields": [
   {
@@ -32,6 +34,18 @@
    "in_list_view": 1,
    "label": "End Time",
    "reqd": 1
+  },
+  {
+   "fieldname": "next_shift_template",
+   "fieldtype": "Link",
+   "options": "Fuel Shift Template",
+   "label": "Next Shift Template"
+  },
+  {
+   "default": "0",
+   "fieldname": "rolls_over_date",
+   "fieldtype": "Check",
+   "label": "Rolls Over to Next Day"
   }
  ],
  "index_web_pages_for_search": 1,

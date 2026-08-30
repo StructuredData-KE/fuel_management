@@ -12,7 +12,8 @@
   "station",
   "is_active",
   "pump_groups",
-  "default_account"
+  "default_account",
+  "bank_account"
  ],
  "fields": [
   {
@@ -57,6 +58,13 @@
    "in_list_view": 1,
    "label": "Default Account",
    "options": "Account"
+  },
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Bank Account (For Transfers)",
+   "options": "Account",
+   "in_list_view": 0
   }
  ],
  "grid_page_length": 50,

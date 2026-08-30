@@ -104,35 +104,15 @@ def get_csa_reconciliation_data(shift_id, csa_id):
                 for g, v in group_totals.items()
             ]
                 
-            # 9. RTT Deductions
-            # RTT is also tied to Nozzles
-            rtts = frappe.get_all(
-                "Shift Return To Tank",
-                filters={"parent": shift_id, "parenttype": "Shift", "pump_nozzle": ["in", nozzle_names]},
-                fields=["pump_nozzle", "quantity"]
-            )
-            
-            for r in rtts:
-                qty = r.quantity or 0.0
-                if qty <= 0: continue
-                
-                tank = nozzle_tanks.get(r.pump_nozzle)
-                if not tank: continue
-                
-                if tank not in tank_items:
-                    tank_items[tank] = frappe.db.get_value("Fuel Tank", tank, "fuel_product")
-                    
-                item = tank_items[tank]
-                if not item: continue
-                
-                if item not in item_prices:
-                    price = frappe.db.get_value("Item Price", {"item_code": item, "price_list": "Standard Selling"}, "price_list_rate")
-                    if not price:
-                        price = frappe.db.get_value("Item", item, "standard_rate") or 0.0
-                    item_prices[item] = price
-                    
-                data["rtt_deductions"] += qty * item_prices[item]
-                
+    # 9. RTT Deductions
+    rtts = frappe.get_all(
+        "Station Return To Tank",
+        filters={"shift": shift_id, "csa": csa_id},
+        fields=["amount", "item", "volume_returned as quantity"]
+    )
+    data["rtt_breakdown"] = rtts or []
+    data["rtt_deductions"] = sum([r.amount for r in rtts]) if rtts else 0.0
+    
     # 2. Inventory Sales
     is_lubes_assigned = assigned_groups and "Lubes & Accessories" in assigned_groups
     
@@ -171,7 +151,8 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     cp_data = frappe.db.sql("""
         SELECT name, customer, amount, mode_of_payment 
         FROM `tabCustomer Payment` 
-        WHERE shift=%s AND csa=%s AND docstatus=1
+        WHERE shift=%s AND csa=%s AND docstatus=1 
+        AND mode_of_payment IN ('Cash', 'M-Pesa', 'Mpesa')
     """, (shift_id, csa_id), as_dict=True)
     
     if not cp_data:
@@ -179,6 +160,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
             SELECT name, customer, amount, mode_of_payment 
             FROM `tabCustomer Payment` 
             WHERE shift=%s AND csa=%s
+            AND mode_of_payment IN ('Cash', 'M-Pesa', 'Mpesa')
         """, (shift_id, csa_id), as_dict=True)
         
     data["customer_payments_breakdown"] = cp_data or []
@@ -246,6 +228,76 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     return data
 
 @frappe.whitelist()
+def get_shift_report_data(shift_id):
+    recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": shift_id}, fields=["csa", "meter_sales", "inventory_sales", "greasing_sales", "invoices", "cards", "mpesa", "expenses", "expected_cash", "actual_cash", "variance"])
+    
+    # Customer Payments
+    payments_breakdown = frappe.db.sql("""
+        SELECT IFNULL(c.customer_name, p.customer) as customer, SUM(p.amount) as amount 
+        FROM `tabCustomer Payment` p
+        LEFT JOIN `tabCustomer` c ON p.customer = c.name
+        WHERE p.shift=%s AND p.docstatus < 2
+        GROUP BY p.customer
+    """, (shift_id,), as_dict=True)
+    customer_payments_total = sum([p.amount for p in payments_breakdown]) if payments_breakdown else 0.0
+    
+    # Top Ups
+    top_ups = frappe.db.sql("""
+        SELECT amount 
+        FROM `tabStation Supplier Top Up` 
+        WHERE shift=%s AND docstatus < 2
+    """, (shift_id,), as_dict=True)
+    topups_total = sum([t.amount for t in top_ups]) if top_ups else 0.0
+    
+    # Cards Breakdown
+    cards_breakdown = frappe.db.sql("""
+        SELECT card as card_type, SUM(amount) as amount
+        FROM `tabStation Cards`
+        WHERE shift=%s
+        GROUP BY card
+    """, (shift_id,), as_dict=True)
+    
+    # Invoices Breakdown by Customer
+    invoices_breakdown = frappe.db.sql("""
+        SELECT IFNULL(c.customer_name, i.customer) as customer, SUM(i.amount) as amount
+        FROM `tabShift Invoice` i
+        LEFT JOIN `tabCustomer` c ON i.customer = c.name
+        WHERE i.parent=%s AND i.parenttype='Shift'
+        GROUP BY i.customer
+    """, (shift_id,), as_dict=True)
+    
+    return {
+        "reconciliations": recons,
+        "customer_payments_total": customer_payments_total,
+        "customer_payments_breakdown": payments_breakdown,
+        "topups_total": topups_total,
+        "cards_breakdown": cards_breakdown,
+        "invoices_breakdown": invoices_breakdown
+    }
+
+@frappe.whitelist()
+def get_active_item_prices():
+    sql = """
+        SELECT ip.item_code, ip.item_name, ip.price_list_rate, i.item_group
+        FROM `tabItem Price` ip
+        LEFT JOIN `tabItem` i ON ip.item_code = i.name
+        WHERE ip.price_list = 'Standard Selling' 
+        AND (ip.valid_from <= CURDATE() OR ip.valid_from IS NULL)
+        AND (ip.valid_upto >= CURDATE() OR ip.valid_upto IS NULL)
+        ORDER BY ip.valid_from DESC, ip.creation DESC
+    """
+    prices = frappe.db.sql(sql, as_dict=True)
+    
+    active_prices = []
+    seen = set()
+    for p in prices:
+        if p.item_code not in seen:
+            active_prices.append(p)
+            seen.add(p.item_code)
+            
+    return active_prices
+
+@frappe.whitelist()
 def email_shift_report(shift_name):
     try:
         shift_doc = frappe.get_doc("Shift", shift_name)
@@ -294,13 +346,8 @@ def get_expected_dips(shift_id):
 @frappe.whitelist()
 def get_daily_dip_summary(shift_id):
     """
-    Returns dip data for the ENTIRE DAY corresponding to a night shift.
-    - Opening Dip: from previous night shift's closing dip (stored on dip_stick_readings)
-    - Closing Dip: from the current night shift's dip_stick_readings
-    - Purchases: all Station Purchases across ALL shifts on the same date
-    - Meter Sales: combined meter sales from ALL shifts on the same date (day + night)
-    - Tank Sales: Opening + Purchases - Closing
-    - Variance: Tank Sales - Meter Sales
+    Returns dip data for the ENTIRE DAY corresponding to a night shift,
+    GROUPED BY FUEL PRODUCT (to combine multiple tanks for the same product into one row).
     """
     from frappe.utils import flt
 
@@ -315,6 +362,11 @@ def get_daily_dip_summary(shift_id):
     shift_date = night_shift.shift_date
     station = night_shift.station
 
+    # Map tanks to fuel products
+    tank_to_product = {}
+    for tank in frappe.get_all("Fuel Tank", filters={"station": station}, fields=["name", "fuel_product"]):
+        tank_to_product[tank.name] = tank.fuel_product or tank.name
+
     # Get ALL shifts on the same date for this station
     all_shifts_on_date = frappe.get_all(
         "Shift",
@@ -322,42 +374,35 @@ def get_daily_dip_summary(shift_id):
         pluck="name"
     )
 
-    # --- Meter Sales: sum sales from all shifts on the date, grouped by fuel tank ---
-    meter_sales_by_tank = {}  # {tank_name: liters}
+    # --- Meter Sales: grouped by product ---
+    meter_sales_by_product = {}  
     for s_name in all_shifts_on_date:
         s_doc = frappe.get_doc("Shift", s_name)
         for row in (s_doc.pump_meter_readings or []):
             tank_name = frappe.db.get_value("Pump Nozzle", row.pump_nozzle, "fuel_tank") if row.pump_nozzle else None
             if tank_name:
+                product = tank_to_product.get(tank_name, tank_name)
                 sales_lts = max(0, flt(row.closing_electronic_meter) - flt(row.opening_electronic_meter))
-                meter_sales_by_tank[tank_name] = meter_sales_by_tank.get(tank_name, 0) + sales_lts
+                meter_sales_by_product[product] = meter_sales_by_product.get(product, 0) + sales_lts
 
-    # --- Purchases: sum all Station Purchase quantities across all shifts on the date, grouped by tank ---
-    purchases_by_tank = {}  # {tank_name: liters}
+    # --- Purchases: grouped by product ---
+    purchases_by_product = {} 
     shift_purchases = frappe.get_all(
         "Station Purchase",
-        filters={"shift": ["in", all_shifts_on_date], "docstatus": 1},
+        filters={"shift": ["in", all_shifts_on_date], "docstatus": ["in", [0, 1]]},
         pluck="name"
     )
     if shift_purchases:
         pur_items = frappe.get_all(
             "Station Purchase Item",
             filters={"parent": ["in", shift_purchases]},
-            fields=["item_code", "qty"]
+            fields=["item", "quantity"]
         )
         for pi in pur_items:
-            # Find which tank uses this fuel product
-            tanks_for_item = frappe.get_all(
-                "Fuel Tank",
-                filters={"station": station, "fuel_product": pi.item_code},
-                pluck="name"
-            )
-            for t in tanks_for_item:
-                purchases_by_tank[t] = purchases_by_tank.get(t, 0) + flt(pi.qty)
+            product = pi.item
+            purchases_by_product[product] = purchases_by_product.get(product, 0) + flt(pi.quantity)
 
-    # --- Opening Dip: find the PREVIOUS night shift's closing dip for each tank ---
-    # Strategy: find the most recent NIGHT shift BEFORE this shift's date (or on the same date but earlier)
-    # and use its closing_dip per tank.
+    # --- Opening Dip: per tank ---
     prev_night_shift_query = """
         SELECT name FROM `tabShift`
         WHERE station = %s
@@ -381,24 +426,49 @@ def get_daily_dip_summary(shift_id):
             if r.fuel_tank and r.closing_dip is not None:
                 opening_dip_by_tank[r.fuel_tank] = flt(r.closing_dip)
 
-    # If no previous night shift found, fall back to opening_dip stored on this shift's readings
     for row in night_shift.dip_stick_readings:
         if row.fuel_tank not in opening_dip_by_tank and flt(row.opening_dip) != 0:
             opening_dip_by_tank[row.fuel_tank] = flt(row.opening_dip)
 
-    # --- Build final result ---
-    result = []
+    # --- Group dips into product ---
+    product_summary = {}
+
     for row in night_shift.dip_stick_readings:
         tank = row.fuel_tank or ""
+        product = tank_to_product.get(tank, tank)
+        
         opening_dip = opening_dip_by_tank.get(tank, 0)
         closing_dip = flt(row.closing_dip)
-        purchases = purchases_by_tank.get(tank, 0)
-        meter_sales = meter_sales_by_tank.get(tank, 0)
+        
+        if product not in product_summary:
+            product_summary[product] = {
+                "opening_dip": 0.0,
+                "closing_dip": 0.0,
+                "tanks": []
+            }
+            
+        product_summary[product]["opening_dip"] += opening_dip
+        product_summary[product]["closing_dip"] += closing_dip
+        if tank not in product_summary[product]["tanks"]:
+            product_summary[product]["tanks"].append(tank)
+
+    # --- Build final result ---
+    result = []
+    for product in sorted(product_summary.keys()):
+        data = product_summary[product]
+        
+        opening_dip = data["opening_dip"]
+        closing_dip = data["closing_dip"]
+        purchases = purchases_by_product.get(product, 0)
+        meter_sales = meter_sales_by_product.get(product, 0)
+        
         tank_sales = opening_dip + purchases - closing_dip
-        variance = tank_sales - meter_sales
+        variance = meter_sales - tank_sales
+
+        label = f"TOTAL {str(product).upper()}"
 
         result.append({
-            "fuel_tank": tank,
+            "fuel_tank": label,
             "opening_dip": opening_dip,
             "closing_dip": closing_dip,
             "injected_purchases": purchases,
@@ -622,45 +692,70 @@ def update_pf2():
         pf.save(ignore_permissions=True)
         frappe.db.commit()
 
+
 @frappe.whitelist()
-def create_spa_stock_transfer(station_id, item_code, qty, direction="Store to Forecourt"):
-    if not station_id or not item_code or not qty:
-        frappe.throw("Station ID, Item, and Quantity are required")
+def create_spa_stock_transfer(station_id, item_code=None, qty=None, direction="Store to Forecourt", items=None):
+    if not station_id:
+        frappe.throw("Station ID is required")
         
-    try:
-        qty = float(qty)
-        if qty <= 0:
-            frappe.throw("Quantity must be greater than 0")
-    except ValueError:
-        frappe.throw("Invalid quantity")
+    import json
+    
+    parsed_items = []
+    if items:
+        try:
+            parsed_items = json.loads(items)
+        except Exception:
+            frappe.throw("Invalid items array")
+    elif item_code and qty:
+        parsed_items = [{"item": item_code, "qty": qty, "direction": direction}]
+        
+    if not parsed_items:
+        frappe.throw("No items to transfer")
         
     station = frappe.get_doc("Fuel Station", station_id)
     
     if not station.default_store_warehouse or not station.default_forecourt_warehouse:
         frappe.throw("Station must have both Default Store Warehouse and Default Forecourt Warehouse set.")
         
+    company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
+    
+    # We will create ONE stock entry per unique direction just to be safe, 
+    # but the UI usually sends one direction or multiple. Wait, Stock Entry requires ONE from_warehouse and ONE to_warehouse in the header.
+    # Actually, ERPNext v14+ allows Material Transfer to have different from/to per row if the header is blank!
+    # But usually, it's better to just set it per row.
+    
     se = frappe.new_doc("Stock Entry")
     se.stock_entry_type = "Material Transfer"
-    se.company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
-    if direction == "Forecourt to Store":
-        se.from_warehouse = station.default_forecourt_warehouse
-        se.to_warehouse = station.default_store_warehouse
-    else:
-        se.from_warehouse = station.default_store_warehouse
-        se.to_warehouse = station.default_forecourt_warehouse
+    se.company = company
     
-    se.append("items", {
-        "item_code": item_code,
-        "qty": qty,
-        "uom": frappe.db.get_value("Item", item_code, "stock_uom"),
-        "s_warehouse": se.from_warehouse,
-        "t_warehouse": se.to_warehouse
-    })
-    
+    for row in parsed_items:
+        r_item = row.get("item")
+        r_qty = float(row.get("qty") or 0)
+        r_dir = row.get("direction") or direction
+        
+        if r_qty <= 0: continue
+        
+        from_w = station.default_store_warehouse
+        to_w = station.default_forecourt_warehouse
+        
+        if r_dir == "Forecourt to Store":
+            from_w = station.default_forecourt_warehouse
+            to_w = station.default_store_warehouse
+            
+        se.append("items", {
+            "item_code": r_item,
+            "qty": r_qty,
+            "s_warehouse": from_w,
+            "t_warehouse": to_w
+        })
+        
+    if not se.items:
+        frappe.throw("No valid items with quantity > 0")
+        
     se.insert()
     se.submit()
     
-    return {"status": "success", "message": f"Successfully transferred {qty} of {item_code} ({direction}).", "name": se.name}
+    return {"status": "success", "message": f"Successfully created Stock Transfer: {se.name}", "name": se.name}
 
 @frappe.whitelist()
 def get_inventory_status_report(station_id, from_date, to_date, warehouse_type=None):
@@ -719,6 +814,8 @@ def get_inventory_status_report(station_id, from_date, to_date, warehouse_type=N
                 "op_store": 0,
                 "op_forecourt": 0,
                 "purchases": 0,
+            "borrowed_in": 0,
+            "borrowed_out": 0,
                 "sales": 0,
                 "unit_price": item_prices.get(item, 0),
                 "vouchers": {}
@@ -753,10 +850,26 @@ def get_inventory_status_report(station_id, from_date, to_date, warehouse_type=N
             elif sle.warehouse == f_warehouse:
                 data[item]["cl_forecourt"] = sle.qty_after_transaction
 
+
+    borrowed_docs = frappe.get_all("Borrowed Product", filters={"docstatus": ["!=", 2]}, fields=["stock_entry", "return_stock_entry", "type"])
+    borrowed_in_ses = set()
+    borrowed_out_ses = set()
+    for b in borrowed_docs:
+        if b.type == "Borrowed In":
+            if b.stock_entry: borrowed_in_ses.add(b.stock_entry)
+            if b.return_stock_entry: borrowed_out_ses.add(b.return_stock_entry)
+        else:
+            if b.stock_entry: borrowed_out_ses.add(b.stock_entry)
+            if b.return_stock_entry: borrowed_in_ses.add(b.return_stock_entry)
     for item, row in data.items():
         if "vouchers" in row:
             for vid, qty in row["vouchers"].items():
-                if qty > 0:
+                v_type, v_no = vid.split('|')
+                if v_type == 'Stock Entry' and v_no in borrowed_in_ses:
+                    row['borrowed_in'] += qty
+                elif v_type == 'Stock Entry' and v_no in borrowed_out_ses:
+                    row['borrowed_out'] += abs(qty)
+                elif qty > 0:
                     row["purchases"] += qty
                 elif qty < 0:
                     row["sales"] += abs(qty)
@@ -773,6 +886,17 @@ def get_inventory_status_report(station_id, from_date, to_date, warehouse_type=N
             
     # Group by item group
     grouped = {}
+
+    borrowed_docs = frappe.get_all("Borrowed Product", filters={"docstatus": ["!=", 2]}, fields=["stock_entry", "return_stock_entry", "type"])
+    borrowed_in_ses = set()
+    borrowed_out_ses = set()
+    for b in borrowed_docs:
+        if b.type == "Borrowed In":
+            if b.stock_entry: borrowed_in_ses.add(b.stock_entry)
+            if b.return_stock_entry: borrowed_out_ses.add(b.return_stock_entry)
+        else:
+            if b.stock_entry: borrowed_out_ses.add(b.stock_entry)
+            if b.return_stock_entry: borrowed_in_ses.add(b.return_stock_entry)
     for item, row in data.items():
         ig = row["item_group"] or "Other"
         
@@ -783,6 +907,9 @@ def get_inventory_status_report(station_id, from_date, to_date, warehouse_type=N
         if ig not in grouped:
             grouped[ig] = []
         grouped[ig].append(row)
+        
+    for ig in grouped:
+        grouped[ig].sort(key=lambda x: str(x.get("item_name") or ""))
         
     return {"status": "success", "company": company_name, "from_date": from_date, "to_date": to_date, "data": grouped}
 
@@ -873,7 +1000,7 @@ def create_borrowed_product(payload):
         frappe.throw("Missing station or items")
         
     station_doc = frappe.get_doc("Fuel Station", station)
-    company = station_doc.company
+    company = station_doc.company if hasattr(station_doc, "company") and station_doc.company else frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
     store_warehouse = station_doc.default_store_warehouse
     
     doc = frappe.get_doc({
@@ -926,11 +1053,21 @@ def create_borrowed_product(payload):
     return doc.name
 
 @frappe.whitelist()
-def get_borrowed_products(station, status="All"):
+def get_borrowed_products(station, status="All", from_date=None, to_date=None, counterparty=None):
     import frappe
     filters = {"station": station}
     if status != "All":
         filters["status"] = status
+        
+    if from_date and to_date:
+        filters["date"] = ["between", [from_date, to_date]]
+    elif from_date:
+        filters["date"] = [">=", from_date]
+    elif to_date:
+        filters["date"] = ["<=", to_date]
+        
+    if counterparty:
+        filters["counterparty"] = ["like", f"%{counterparty}%"]
         
     records = frappe.get_all("Borrowed Product", 
         filters=filters,
@@ -938,58 +1075,21 @@ def get_borrowed_products(station, status="All"):
         order_by="creation desc"
     )
     
-    for r in records:
-        items = frappe.get_all("Borrowed Product Item", 
-            filters={"parent": r.name},
-            fields=["item_code", "qty"]
+    if records:
+        names = [r.name for r in records]
+        all_items = frappe.get_all("Borrowed Product Item",
+            filters={"parent": ["in", names]},
+            fields=["parent", "item_code", "qty"]
         )
-        r["items"] = items
+        items_map = {}
+        for item in all_items:
+            items_map.setdefault(item.parent, []).append(item)
+        for r in records:
+            r["items"] = items_map.get(r.name, [])
         
     return records
 
-@frappe.whitelist()
-def return_borrowed_product(docname):
-    import frappe
-    doc = frappe.get_doc("Borrowed Product", docname)
-    
-    if doc.status == "Returned":
-        frappe.throw("Already returned")
-        
-    station_doc = frappe.get_doc("Fuel Station", doc.station)
-    company = station_doc.company
-    store_warehouse = station_doc.default_store_warehouse
-    
-    # Handle reverse Stock Entry
-    se = frappe.new_doc("Stock Entry")
-    se.posting_date = frappe.utils.today()
-    se.company = company
-    
-    if doc.type == "Borrowed In":
-        se.stock_entry_type = "Material Issue"
-        for item in doc.items:
-            se.append("items", {
-                "item_code": item.item_code,
-                "qty": item.qty,
-                "s_warehouse": store_warehouse
-            })
-    else: # Borrowed Out
-        se.stock_entry_type = "Material Transfer"
-        transit_warehouse = get_or_create_transit_warehouse(doc.station, company)
-        for item in doc.items:
-            se.append("items", {
-                "item_code": item.item_code,
-                "qty": item.qty,
-                "s_warehouse": transit_warehouse,
-                "t_warehouse": store_warehouse
-            })
-            
-    se.insert(ignore_permissions=True)
-    se.submit()
-    
-    doc.db_set("status", "Returned")
-    doc.db_set("return_stock_entry", se.name)
-    
-    return True
+
 
 
 def create_counterparty_doctype():
@@ -1079,6 +1179,1056 @@ def get_customer_transactions(customer_id):
     # Sort by date
     transactions.sort(key=lambda x: x['date'] if x['date'] else '')
     return transactions
+
+
+
+from frappe.utils import today, add_days
+
+@frappe.whitelist()
+def get_tank_levels(station=None):
+    if not station:
+        station = frappe.db.get_value("Fuel Station", None, "name")
+        
+    tanks = frappe.get_all("Fuel Tank", filters={"station": station}, fields=["name as tank_name", "fuel_product", "capacity", "current_volume", "reorder_threshold", "variance_tolerance"])
+    
+    res = []
+    
+    tank_names = [t.tank_name for t in tanks]
+    latest_dips = {}
+    if tank_names:
+        dips = frappe.db.sql("""
+            SELECT * FROM (
+                SELECT child.fuel_tank, child.closing_dip as reading, parent.shift_date as posting_date, parent.end_time as posting_time, child.variance,
+                ROW_NUMBER() OVER(PARTITION BY child.fuel_tank ORDER BY parent.shift_date DESC, parent.end_time DESC) as rn
+                FROM `tabDip Stick Reading` child
+                JOIN `tabShift` parent ON child.parent = parent.name
+                WHERE child.fuel_tank IN %s AND parent.docstatus IN (0, 1) AND child.closing_dip > 0
+                AND parent.shift_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            ) as ranked
+            WHERE rn = 1
+        """, (tuple(tank_names),), as_dict=1)
+        for d in dips:
+            latest_dips[d.fuel_tank] = d
+
+    for t in tanks:
+        latest_dip = latest_dips.get(t.tank_name)
+        
+        dip_val = latest_dip.reading if latest_dip and latest_dip.reading is not None else t.current_volume
+        variance = latest_dip.variance if latest_dip and latest_dip.variance is not None else 0.0
+        ts = f"{latest_dip.posting_date} {latest_dip.posting_time}" if latest_dip else ""
+        
+        pct = (dip_val / t.capacity) * 100 if t.capacity else 0
+        
+        status = "Normal"
+        if t.variance_tolerance and abs(variance) > t.variance_tolerance:
+            status = "Variance flagged"
+        elif t.reorder_threshold and pct <= t.reorder_threshold:
+            status = "Low"
+            
+        res.append({
+            "name": t.tank_name,
+            "product": t.fuel_product,
+            "capacity": t.capacity,
+            "latest_dip": dip_val,
+            "percent_full": round(pct, 1),
+            "reorder_threshold": t.reorder_threshold,
+            "variance": variance,
+            "status": status,
+            "timestamp": ts
+        })
+    return res
+
+
+@frappe.whitelist()
+def get_available_shifts(station=None, filter_date=None):
+    if not station:
+        station = frappe.db.get_value("Fuel Station", None, "name")
+    filters = {"station": station}
+    if filter_date:
+        filters["shift_date"] = filter_date
+    shifts = frappe.get_all("Shift", filters=filters, fields=["name", "shift_date", "creation", "status"], order_by="creation desc", limit=50)
+    return shifts
+
+@frappe.whitelist()
+def get_homepage_kpis(station=None, shift_id=None, from_date=None, to_date=None):
+
+    from frappe.utils import today, get_first_day
+    
+    if not station:
+        station = frappe.db.get_value("Fuel Station", None, "name")
+        
+    is_date_range = bool(from_date and to_date)
+    
+    if is_date_range:
+        context_date = f"{from_date} to {to_date}"
+        context_shift = "Multiple Shifts"
+        context_status = "Date Range"
+        context_creation = None
+    elif shift_id:
+        shifts = frappe.get_all("Shift", filters={"name": shift_id}, fields=["name", "shift_date", "creation", "status"], limit=1)
+        if shifts:
+            shift = shifts[0]
+            context_date = shift.shift_date
+            context_shift = shift.name
+            context_status = shift.status
+            context_creation = shift.creation
+        else:
+            context_date = today()
+            context_shift = None
+            context_status = None
+            context_creation = None
+    else:
+        shifts = frappe.get_all("Shift", filters={"station": station}, fields=["name", "shift_date", "creation", "status"], order_by="creation desc", limit=1)
+        if shifts:
+            shift = shifts[0]
+            context_date = shift.shift_date
+            context_shift = shift.name
+            context_status = shift.status
+            context_creation = shift.creation
+        else:
+            context_date = today()
+            context_shift = None
+            context_status = None
+            context_creation = None
+        
+    fuel_breakdown = {}
+    if is_date_range:
+        fuel_data = frappe.db.sql("""
+            SELECT tank.fuel_product, SUM(child.sales_quantity_electronic) as qty
+            FROM `tabPump Meter Reading` child
+            JOIN `tabPump Nozzle` nozzle ON child.pump_nozzle = nozzle.name
+            JOIN `tabFuel Tank` tank ON nozzle.fuel_tank = tank.name
+            JOIN `tabShift` parent ON child.parent = parent.name
+            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus IN (0, 1)
+            GROUP BY tank.fuel_product
+        """, (station, from_date, to_date), as_dict=True)
+        for row in fuel_data:
+            if row.fuel_product:
+                fuel_breakdown[row.fuel_product] = row.qty or 0
+    elif context_shift and context_shift != "Multiple Shifts":
+        fuel_data = frappe.db.sql("""
+            SELECT tank.fuel_product, SUM(child.sales_quantity_electronic) as qty
+            FROM `tabPump Meter Reading` child
+            JOIN `tabPump Nozzle` nozzle ON child.pump_nozzle = nozzle.name
+            JOIN `tabFuel Tank` tank ON nozzle.fuel_tank = tank.name
+            WHERE child.parent = %s
+            GROUP BY tank.fuel_product
+        """, (context_shift,), as_dict=True)
+        for row in fuel_data:
+            if row.fuel_product:
+                fuel_breakdown[row.fuel_product] = row.qty or 0
+    
+    litres_sold = sum(fuel_breakdown.values())
+    
+    lubes_qty = 0
+    gas_qty = 0
+    top_selling_item = "None"
+    top_selling_qty = 0
+    
+    gas_breakdown = {}
+    cylinders_sold = 0
+    
+    inventory_sales = []
+    if is_date_range:
+        inventory_sales = frappe.db.sql("""
+            SELECT item.item_group, item.item_name, SUM(child.quantity) as qty
+            FROM `tabShift Inventory Sale` child
+            JOIN `tabItem` item ON child.item = item.name
+            JOIN `tabShift` parent ON child.parent = parent.name
+            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus IN (0, 1)
+            GROUP BY item.item_name, item.item_group
+        """, (station, from_date, to_date), as_dict=True)
+    elif context_shift and context_shift != "Multiple Shifts":
+        inventory_sales = frappe.db.sql("""
+            SELECT item.item_group, item.item_name, SUM(child.quantity) as qty
+            FROM `tabShift Inventory Sale` child
+            JOIN `tabItem` item ON child.item = item.name
+            WHERE child.parent = %s
+            GROUP BY item.item_name, item.item_group
+        """, (context_shift,), as_dict=True)
+        
+    if inventory_sales:
+        import re
+        for sale in inventory_sales:
+            group = sale.item_group.lower() if sale.item_group else ""
+            qty = sale.qty or 0
+            if "lube" in group or "lubricant" in group or "oil" in group:
+                lubes_qty += qty
+            elif "gas" in group or "lpg" in group:
+                cylinders_sold += qty
+                # Extract KG from item name e.g. "6KG GAS"
+                match = re.search(r'(\d+)KG', sale.item_name, re.IGNORECASE)
+                kg_per_cyl = int(match.group(1)) if match else 0
+                gas_breakdown[sale.item_name] = qty * kg_per_cyl
+                gas_qty += (qty * kg_per_cyl)
+                
+            if qty > top_selling_qty:
+                top_selling_qty = qty
+                top_selling_item = sale.item_name
+    
+    cash_reconciled = 0
+    mpesa_posted = 0
+        
+    # Dip Variance Flags
+    if is_date_range:
+        flags = frappe.db.sql("""
+            SELECT count(*) as count
+            FROM `tabDip Stick Reading` child
+            JOIN `tabShift` parent ON child.parent = parent.name
+            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND child.variance != 0 AND parent.docstatus = 1
+        """, (station, from_date, to_date))[0][0]
+    elif context_shift and context_shift != "Multiple Shifts":
+        flags = frappe.db.sql("""
+            SELECT count(*) as count
+            FROM `tabDip Stick Reading` child
+            WHERE child.parent = %s AND child.variance != 0
+        """, (context_shift,))[0][0]
+    else:
+        tanks = get_tank_levels(station)
+        flags = len([t for t in tanks if t.get("status") == "Variance flagged"])
+        
+    # Monthly KPIs
+    if is_date_range:
+        target_date = from_date
+    elif context_shift and context_shift != "Multiple Shifts":
+        target_date = context_date
+    else:
+        target_date = today()
+        
+    start_of_month = get_first_day(target_date)
+    end_of_month = frappe.utils.get_last_day(target_date)
+    
+    month_meters = frappe.db.sql("""
+        SELECT SUM(child.sales_quantity_electronic) as qty
+        FROM `tabPump Meter Reading` child
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus = 1
+    """, (station, start_of_month, end_of_month), as_dict=True)
+    monthly_litres = month_meters[0].qty if month_meters and month_meters[0].qty else 0
+    
+    monthly_revenue = 0
+    
+    return {
+        "context_shift": context_shift,
+        "context_date": context_date,
+        "context_status": context_status,
+        "context_creation": context_creation,
+        "litres_sold": litres_sold,
+        "fuel_breakdown": fuel_breakdown,
+        "lubes_qty": lubes_qty,
+        "gas_qty": gas_qty,
+        "gas_breakdown": gas_breakdown,
+        "cylinders_sold": cylinders_sold,
+        "top_selling_item": top_selling_item,
+        "top_selling_qty": top_selling_qty,
+        "cash_reconciled": cash_reconciled,
+        "mpesa_posted": mpesa_posted,
+        "dip_flags": flags,
+        "monthly_litres": monthly_litres,
+        "monthly_revenue": monthly_revenue
+    }
+
+@frappe.whitelist()
+def get_homepage_trend(station=None):
+    # Last 7 days
+    start_date = add_days(today(), -6)
+    meters = frappe.db.sql("""
+        SELECT parent.shift_date as posting_date, tank.fuel_product, SUM(child.sales_quantity_electronic) as qty
+        FROM `tabPump Meter Reading` child
+        JOIN `tabShift` parent ON child.parent = parent.name
+        JOIN `tabPump Nozzle` nozzle ON child.pump_nozzle = nozzle.name
+        JOIN `tabFuel Tank` tank ON nozzle.fuel_tank = tank.name
+        WHERE parent.shift_date >= %s AND parent.docstatus = 1
+        GROUP BY parent.shift_date, tank.fuel_product
+    """, (start_date,), as_dict=True)
+    
+    trend = {}
+    for i in range(7):
+        dt = str(add_days(start_date, i))
+        trend[dt] = {"Petrol": 0, "Diesel": 0}
+        
+    mix = {"Petrol": 0, "Diesel": 0, "Kerosene": 0, "Lubricants": 0}
+    
+    for m in meters:
+        dt = str(m.posting_date)
+        prod = m.fuel_product or ""
+        qty = m.qty or 0
+        
+        if dt not in trend: continue
+        
+        # Map products
+        if "Petrol" in prod or "PMS" in prod or "Super" in prod:
+            trend[dt]["Petrol"] += qty
+            if dt == today(): mix["Petrol"] += qty
+        elif "Diesel" in prod or "AGO" in prod:
+            trend[dt]["Diesel"] += qty
+            if dt == today(): mix["Diesel"] += qty
+        elif "Kerosene" in prod or "IK" in prod:
+            if dt == today(): mix["Kerosene"] += qty
+        else:
+            if dt == today(): mix["Lubricants"] += qty
+                
+    # formatting for charts
+    dates = list(trend.keys())
+    dates.sort()
+    
+    return {
+        "trend_dates": dates,
+        "trend_petrol": [trend[d]["Petrol"] for d in dates],
+        "trend_diesel": [trend[d]["Diesel"] for d in dates],
+        "fuel_mix": mix
+    }
+
+@frappe.whitelist()
+def get_homepage_activity(station=None):
+    # recent 5 shifts opened
+    shifts = frappe.get_all("Shift", fields=["name", "creation", "shift_template", "status"], order_by="creation desc", limit=3)
+    # recent 5 meter readings
+    meters = frappe.get_all("Pump Meter Reading", fields=["name", "creation", "pump_nozzle"], order_by="creation desc", limit=3)
+    # recent 5 dip sticks
+    dips = frappe.get_all("Dip Stick Reading", fields=["name", "creation", "fuel_tank", "variance"], order_by="creation desc", limit=3)
+    
+    activity = []
+    for s in shifts:
+        activity.append({"time": str(s.creation), "msg": f"Shift {s.name} ({s.shift_template}) was created.", "type": "shift"})
+    for m in meters:
+        activity.append({"time": str(m.creation), "msg": f"Meter reading posted for {m.pump_nozzle}.", "type": "meter"})
+    for d in dips:
+        status = "variance flagged" if abs(d.variance or 0) > 50 else "normal"
+        activity.append({"time": str(d.creation), "msg": f"Dip reading for {d.fuel_tank} posted ({status}).", "type": "dip", "variance": d.variance})
+        
+    activity.sort(key=lambda x: x["time"], reverse=True)
+    return activity[:8]
+
+# ---------------------------------------------------------
+# Shortage Management Hooks & API
+# ---------------------------------------------------------
+
+@frappe.whitelist()
+def get_shortage_form_data(station=None):
+    employees = frappe.get_all('Employee', fields=['name', 'employee_name', 'status'], filters={'status': 'Active'}, order_by='employee_name asc')
+    cash_accounts = frappe.get_all('Account', fields=['name', 'account_name'], filters={'account_type': ['in', ['Cash', 'Bank']], 'is_group': 0, 'company': frappe.defaults.get_user_default('company')})
+    # Add dummy current_balance so frontend JS doesn't break
+    for acc in cash_accounts:
+        acc['current_balance'] = 0.0
+    
+    return {
+        'employees': employees,
+        'cash_accounts': cash_accounts
+    }
+
+@frappe.whitelist()
+def submit_shortage_correction(from_employee, to_employee, amount, date, remarks=None):
+    if float(amount) <= 0:
+        frappe.throw('Amount must be positive.')
+    
+    doc = frappe.get_doc({
+        'doctype': 'Staff Shortage Correction',
+        'from_employee': from_employee,
+        'to_employee': to_employee,
+        'amount': amount,
+        'date': date,
+        'remarks': remarks
+    })
+    doc.insert(ignore_permissions=True)
+    doc.submit()
+    return doc.name
+
+@frappe.whitelist()
+def update_shift_assignments(shift_name, assignments):
+    import json
+    if isinstance(assignments, str):
+        assignments = json.loads(assignments)
+        
+    doc = frappe.get_doc("Shift", shift_name)
+    doc.set("assigned_csas", [])
+    for row in assignments:
+        doc.append("assigned_csas", {
+            "csa": row.get("csa"),
+            "pump_group": row.get("pump_group")
+        })
+    doc.save(ignore_permissions=True)
+    return "success"
+
+@frappe.whitelist()
+def submit_shortage_payment(employee, payment_mode, amount, date, shift_reference=None, cash_account=None, reference_no=None, remarks=None):
+    if float(amount) <= 0:
+        frappe.throw('Amount must be positive.')
+        
+    doc = frappe.get_doc({
+        'doctype': 'Staff Shortage Payment',
+        'employee': employee,
+        'payment_mode': payment_mode,
+        'amount': amount,
+        'date': date,
+        'shift_reference': shift_reference,
+        'cash_account': cash_account,
+        'reference_no': reference_no,
+        'remarks': remarks
+    })
+    doc.insert(ignore_permissions=True)
+    doc.submit()
+    return doc.name
+
+def on_submit_shortage_correction(doc, method):
+    # Reference field in Staff Liability Ledger: we should set a custom field or use 'amended_from' to link?
+    # We can just link it in 'reason' for now.
+    from frappe.utils import nowdate
+    
+    frappe.get_doc({
+        'doctype': 'Staff Liability Ledger',
+        'employee': doc.from_employee,
+        'date': doc.date,
+        'amount': -doc.amount,
+        'reason': f'Correction/Transfer to {doc.to_employee} (Ref: {doc.name})',
+        'status': 'Deducted'
+    }).insert(ignore_permissions=True).submit()
+    
+    frappe.get_doc({
+        'doctype': 'Staff Liability Ledger',
+        'employee': doc.to_employee,
+        'date': doc.date,
+        'amount': doc.amount,
+        'reason': f'Correction/Transfer from {doc.from_employee} (Ref: {doc.name})',
+        'status': 'Unpaid'
+    }).insert(ignore_permissions=True).submit()
+
+def on_cancel_shortage_correction(doc, method):
+    ledgers = frappe.get_all('Staff Liability Ledger', filters={'reason': ['like', f'%Ref: {doc.name}%'], 'docstatus': 1})
+    for l in ledgers:
+        ldoc = frappe.get_doc('Staff Liability Ledger', l.name)
+        ldoc.cancel()
+
+
+def on_submit_shortage_payment(doc, method):
+    frappe.get_doc({
+        'doctype': 'Staff Liability Ledger',
+        'employee': doc.employee,
+        'date': doc.date,
+        'shift': doc.shift_reference,
+        'amount': -float(doc.amount),
+        'reason': f'{doc.payment_mode} Payment (Ref: {doc.name})',
+        'status': 'Deducted'
+    }).insert(ignore_permissions=True).submit()
+    
+    company = frappe.defaults.get_user_default("company")
+    if not company:
+        company = frappe.db.get_value("Global Defaults", None, "default_company")
+        
+    station_id = frappe.defaults.get_user_default("station")
+    if not station_id:
+        stations = frappe.get_all("Fuel Station", limit=1)
+        if stations:
+            station_id = stations[0].name
+        
+    if station_id:
+        station = frappe.get_doc("Fuel Station", station_id)
+        shortfall_account = station.shortfall_account
+        
+        debit_account = frappe.db.get_value("Mode of Payment Account", {"parent": doc.payment_mode, "company": company}, "default_account")
+            
+        if shortfall_account and debit_account:
+            je = frappe.new_doc("Journal Entry")
+            je.voucher_type = "Journal Entry"
+            je.posting_date = doc.date
+            je.company = company
+            je.user_remark = f"Shortage Payment from {doc.employee} (Ref: {doc.name})"
+            
+            je.append("accounts", {
+                "account": debit_account,
+                "debit_in_account_currency": doc.amount
+            })
+            
+            je.append("accounts", {
+                "account": shortfall_account,
+                "credit_in_account_currency": doc.amount,
+                "party_type": "Employee",
+                "party": doc.employee
+            })
+            
+            je.insert(ignore_permissions=True)
+            je.submit()
+
+def on_cancel_shortage_payment(doc, method):
+    ledgers = frappe.get_all('Staff Liability Ledger', filters={'reason': ['like', f'%Ref: {doc.name}%'], 'docstatus': 1})
+    for l in ledgers:
+        frappe.get_doc('Staff Liability Ledger', l.name).cancel()
+        
+    jes = frappe.get_all('Journal Entry', filters={'user_remark': f"Shortage Payment from {doc.employee} (Ref: {doc.name})", 'docstatus': 1}, fields=['name'])
+    for je in jes:
+        frappe.get_doc('Journal Entry', je.name).cancel()
+
+
+@frappe.whitelist()
+def get_recent_shortage_records(start_date=None, end_date=None):
+    filters = {'docstatus': 1}
+    if start_date and end_date:
+        filters['date'] = ['between', [start_date, end_date]]
+        limit = 0
+    else:
+        limit = 20
+
+    payments = frappe.get_all('Staff Shortage Payment', filters=filters, fields=['name', 'employee', 'payment_mode', 'amount', 'date', 'creation'], order_by='date desc, creation desc', limit=limit)
+    corrections = frappe.get_all('Staff Shortage Correction', filters=filters, fields=['name', 'from_employee', 'to_employee', 'amount', 'date', 'creation'], order_by='date desc, creation desc', limit=limit)
+    
+    combined = []
+    
+    emp_ids = set()
+    for p in payments: emp_ids.add(p['employee'])
+    for c in corrections: 
+        emp_ids.add(c['from_employee'])
+        emp_ids.add(c['to_employee'])
+        
+    emp_names = {}
+    if emp_ids:
+        emp_records = frappe.get_all('Employee', filters={'name': ['in', list(emp_ids)]}, fields=['name', 'employee_name'])
+        emp_names = {e.name: e.employee_name for e in emp_records}
+    
+    for p in payments:
+        p['type'] = 'Payment'
+        p['employee_name'] = emp_names.get(p['employee']) or p['employee']
+        combined.append(p)
+    for c in corrections:
+        c['type'] = 'Correction'
+        c['from_employee_name'] = emp_names.get(c['from_employee']) or c['from_employee']
+        c['to_employee_name'] = emp_names.get(c['to_employee']) or c['to_employee']
+        combined.append(c)
+        
+    combined.sort(key=lambda x: x['creation'], reverse=True)
+    if not start_date:
+        return combined[:20]
+    return combined
+
+@frappe.whitelist()
+def get_csa_shorts_balances(start_date=None, end_date=None):
+    from frappe.utils import nowdate, getdate
+    
+    date_filter = ""
+    args = []
+    
+    if start_date and end_date:
+        date_filter = "AND date BETWEEN %s AND %s"
+        args = [start_date, end_date]
+    else:
+        # Default to this month
+        date = getdate(nowdate())
+        date_filter = f"AND MONTH(date) = {date.month} AND YEAR(date) = {date.year}"
+        
+    ledgers = frappe.db.sql("""
+        SELECT 
+            l.employee,
+            e.employee_name,
+            SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END) as total_shortage,
+            SUM(CASE WHEN l.amount < 0 THEN ABS(l.amount) ELSE 0 END) as total_paid,
+            SUM(l.amount) as outstanding_balance
+        FROM `tabStaff Liability Ledger` l
+        LEFT JOIN `tabEmployee` e ON l.employee = e.name
+        WHERE l.docstatus = 1
+        GROUP BY l.employee
+        ORDER BY e.employee_name
+    """, as_dict=True)
+    
+    filtered_data = frappe.db.sql(f"""
+        SELECT 
+            employee,
+            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as month_shortage,
+            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as month_paid
+        FROM `tabStaff Liability Ledger`
+        WHERE docstatus = 1 {date_filter}
+        GROUP BY employee
+    """, tuple(args) if args else (), as_dict=True)
+    
+    month_map = {d.employee: d for d in filtered_data}
+    
+    for l in ledgers:
+        emp = l.employee
+        if emp in month_map:
+            l['month_shortage'] = month_map[emp].month_shortage
+            l['month_paid'] = month_map[emp].month_paid
+        else:
+            l['month_shortage'] = 0
+            l['month_paid'] = 0
+            
+    return ledgers
+
+@frappe.whitelist()
+def get_csa_shorts_breakdown(employee, start_date=None, end_date=None):
+    date_filter = ""
+    args = [employee]
+    
+    if start_date and end_date:
+        date_filter = "AND sll.date BETWEEN %s AND %s"
+        args.extend([start_date, end_date])
+        
+    return frappe.db.sql(f"""
+        SELECT 
+            sll.name, sll.date, sll.shift, sll.amount, sll.reason, sll.status,
+            s.shift_template, s.shift_date
+        FROM `tabStaff Liability Ledger` sll
+        LEFT JOIN `tabShift` s ON s.name = sll.shift
+        WHERE sll.employee = %s AND sll.docstatus = 1 {date_filter}
+        ORDER BY sll.date DESC, sll.creation DESC
+    """, tuple(args), as_dict=True)
+
+
+@frappe.whitelist()
+def create_spa_bulk_stock_transfer(station_id, items, direction="Store to Forecourt"):
+    if not station_id or not items:
+        frappe.throw("Station ID and Items are required")
+        
+    import json
+    if isinstance(items, str):
+        items = json.loads(items)
+        
+    station = frappe.get_doc("Fuel Station", station_id)
+    
+    if not station.default_store_warehouse or not station.default_forecourt_warehouse:
+        frappe.throw("Station must have both Default Store Warehouse and Default Forecourt Warehouse set.")
+        
+    se = frappe.new_doc("Stock Entry")
+    se.stock_entry_type = "Material Transfer"
+    se.company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
+    if direction == "Forecourt to Store":
+        se.from_warehouse = station.default_forecourt_warehouse
+        se.to_warehouse = station.default_store_warehouse
+    else:
+        se.from_warehouse = station.default_store_warehouse
+        se.to_warehouse = station.default_forecourt_warehouse
+        
+    for it in items:
+        item_code = it.get("item_code")
+        qty = it.get("qty")
+        if not item_code or not qty:
+            continue
+            
+        try:
+            qty = float(qty)
+            if qty <= 0:
+                continue
+        except ValueError:
+            continue
+            
+        se.append("items", {
+            "item_code": item_code,
+            "qty": qty,
+            "uom": frappe.db.get_value("Item", item_code, "stock_uom") or "Nos",
+            "s_warehouse": se.from_warehouse,
+            "t_warehouse": se.to_warehouse
+        })
+        
+    if not se.items:
+        frappe.throw("No valid items to transfer")
+        
+    se.insert()
+    se.submit()
+    
+    return {"status": "success", "message": "Bulk Stock Transfer completed successfully.", "name": se.name}
+
+@frappe.whitelist()
+def get_historical_stock_transfers(station_id, date_from=None, date_to=None):
+    if not station_id:
+        frappe.throw("Station ID is required")
+        
+    station = frappe.get_doc("Fuel Station", station_id)
+    if not station.default_store_warehouse or not station.default_forecourt_warehouse:
+        return []
+        
+    w1 = station.default_store_warehouse
+    w2 = station.default_forecourt_warehouse
+    
+    date_conditions = ""
+    if date_from:
+        date_conditions += f" AND se.posting_date >= '{date_from}'"
+    if date_to:
+        date_conditions += f" AND se.posting_date <= '{date_to}'"
+        
+    entries = frappe.db.sql(f"""
+        SELECT DISTINCT se.name, se.posting_date, se.posting_time
+        FROM `tabStock Entry` se
+        JOIN `tabStock Entry Detail` sed ON sed.parent = se.name
+        WHERE se.docstatus = 1 AND se.stock_entry_type = 'Material Transfer'
+        AND (
+            (sed.s_warehouse = '{w1}' AND sed.t_warehouse = '{w2}') OR 
+            (sed.s_warehouse = '{w2}' AND sed.t_warehouse = '{w1}')
+        )
+        {date_conditions}
+        ORDER BY se.posting_date DESC, se.posting_time DESC
+        LIMIT 100
+    """, as_dict=1)
+    
+    for entry in entries:
+        items = frappe.db.sql(f"""
+            SELECT item_code, item_name, qty, s_warehouse
+            FROM `tabStock Entry Detail`
+            WHERE parent = '{entry.name}'
+        """, as_dict=1)
+        
+        if items and items[0].get("s_warehouse") == w1:
+            entry.direction = "Store to Forecourt"
+        else:
+            entry.direction = "Forecourt to Store"
+            
+        entry.items = items
+        
+    return entries
+
+
+@frappe.whitelist()
+def get_supplier_statement(station_id, card, date_from=None, date_to=None):
+    if not station_id or not card:
+        frappe.throw("Station ID and Supplier Card are required")
+        
+    # We want to fetch from Station Supplier Top Up
+    # We might need to join with Shift Operation to filter by station
+    # However, Station Supplier Top Up might not have station directly, it has 'shift'
+    # Let's check Shift Operation first
+    
+    conditions = "docstatus = 1 AND card = %s"
+    values = [card]
+    
+    if date_from:
+        conditions += " AND date >= %s"
+        values.append(date_from)
+    if date_to:
+        conditions += " AND date <= %s"
+        values.append(date_to)
+        
+    # We need to ensure the shift belongs to this station
+    # So we join
+    
+    sql = f"""
+        SELECT t.name, t.date, t.shift, t.csa, t.rrn_number, t.mode_of_payment, t.amount
+        FROM `tabStation Supplier Top Up` t
+        JOIN `tabShift Operation` s ON t.shift = s.name
+        WHERE {conditions} AND s.station = %s AND s.docstatus = 1
+        ORDER BY t.date ASC, t.creation ASC
+    """
+    values.append(station_id)
+    
+    entries = frappe.db.sql(sql, values, as_dict=1)
+    
+    return entries
+
+
+@frappe.whitelist()
+def get_item_tax_and_tanks(item_code, station_id=None):
+    from frappe.utils import flt
+    
+    # Get standard tax for item
+    tax_rate = 0.0
+    item = frappe.get_doc("Item", item_code)
+    
+    # Check Item Tax
+    if item.taxes:
+        for t in item.taxes:
+            # Get the rate from Item Tax Template
+            template = frappe.get_cached_doc("Item Tax Template", t.item_tax_template)
+            for r in template.taxes:
+                tax_rate = flt(r.tax_rate)
+                break
+            if tax_rate > 0:
+                break
+                
+    # Get tanks if Fuel
+    tanks = []
+    if item.item_group == "Fuel":
+        filters = {"fuel_product": item_code}
+        if station_id:
+            filters["station"] = station_id
+        tanks = frappe.get_all("Fuel Tank", filters=filters, fields=["name", "tank_name", "capacity", "current_volume"])
+        
+    return {
+        "tax_rate": tax_rate,
+        "tanks": tanks
+    }
+
+@frappe.whitelist()
+def get_past_shifts(start_date=None, end_date=None):
+    filters = {'status': 'Closed'}
+    if start_date and end_date:
+        filters['shift_date'] = ['between', [start_date, end_date]]
+    
+    shifts = frappe.get_all('Shift', filters=filters, fields=['name', 'shift_date', 'head_csa'], order_by='shift_date desc')
+    
+    for s in shifts:
+        cashier_name = frappe.db.get_value('Employee', s.head_csa, 'employee_name')
+        s['cashier_name'] = cashier_name or s.head_csa
+
+    return shifts
+
+
+def on_borrowed_product_inserted(doc, method=None):
+    """
+    When a Borrowed Product is recorded, create a Stock Entry.
+    Borrowed Out => Material Issue
+    Borrowed In => Material Receipt
+    """
+    import frappe
+    if not doc.items:
+        return
+        
+    station = frappe.get_doc("Fuel Station", doc.station)
+    # Both use Store Warehouse
+    warehouse = station.default_store_warehouse
+    
+    if not warehouse:
+        frappe.throw(f"Fuel Station {doc.station} is missing Default Store Warehouse.")
+        
+    purpose = "Material Issue" if doc.type == "Borrowed Out" else "Material Receipt"
+    
+    se = frappe.new_doc("Stock Entry")
+    se.purpose = purpose
+    se.stock_entry_type = purpose
+    se.posting_date = doc.date
+    se.posting_time = frappe.utils.nowtime()
+    se.company = station.company if hasattr(station, "company") and station.company else frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+    
+    for item in doc.items:
+        if purpose == "Material Issue":
+            se.append("items", {
+                "item_code": item.item_code,
+                "qty": item.qty,
+                "s_warehouse": warehouse,
+                "cost_center": frappe.defaults.get_user_default("Cost Center") or getattr(station, 'cost_center', None)
+            })
+        else:
+            se.append("items", {
+                "item_code": item.item_code,
+                "qty": item.qty,
+                "t_warehouse": warehouse,
+                "cost_center": frappe.defaults.get_user_default("Cost Center") or getattr(station, 'cost_center', None)
+            })
+            
+    se.insert()
+    se.submit()
+    
+    doc.db_set("stock_entry", se.name)
+
+
+
+@frappe.whitelist()
+def return_borrowed_product(docname, return_date, returned_items):
+    import frappe
+    import json
+    
+    returned_items = json.loads(returned_items)
+    doc = frappe.get_doc("Borrowed Product", docname)
+    
+    if doc.status == "Returned":
+        frappe.throw("Already returned.")
+        
+    station = frappe.get_doc("Fuel Station", doc.station)
+    warehouse = station.default_store_warehouse
+    
+    purpose = "Material Receipt" if doc.type == "Borrowed Out" else "Material Issue"
+    
+    se = frappe.new_doc("Stock Entry")
+    se.purpose = purpose
+    se.stock_entry_type = purpose
+    se.posting_date = return_date
+    se.posting_time = frappe.utils.nowtime()
+    se.company = station.company if hasattr(station, "company") and station.company else frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+    
+    has_items = False
+    for r_item in returned_items:
+        if float(r_item['qty']) > 0:
+            has_items = True
+            if purpose == "Material Issue":
+                se.append("items", {
+                    "item_code": r_item['item_code'],
+                    "qty": float(r_item['qty']),
+                    "s_warehouse": warehouse,
+                    "cost_center": frappe.defaults.get_user_default("Cost Center") or getattr(station, 'cost_center', None)
+                })
+            else:
+                se.append("items", {
+                    "item_code": r_item['item_code'],
+                    "qty": float(r_item['qty']),
+                    "t_warehouse": warehouse,
+                    "cost_center": frappe.defaults.get_user_default("Cost Center") or getattr(station, 'cost_center', None)
+                })
+                
+    if not has_items:
+        frappe.throw("No returned quantities provided.")
+        
+    se.insert(ignore_permissions=True)
+    se.submit()
+    
+    # Check if partially returned
+    is_partial = False
+    for item in doc.items:
+        returned_qty = next((float(r['qty']) for r in returned_items if r['item_code'] == item.item_code), 0)
+        # We might want to keep track of total returned, but for now we just change status
+        if returned_qty < item.qty:
+            is_partial = True
+            
+    doc.db_set("return_stock_entry", se.name)
+    doc.db_set("status", "Partially Returned" if is_partial else "Returned")
+    return "success"
+
+@frappe.whitelist()
+def get_inventory_sales_history(station, from_date=None, to_date=None, search=None):
+    import frappe
+    # First get matching shifts
+    shift_filters = {"station": station}
+    if from_date and to_date:
+        shift_filters["shift_date"] = ["between", [from_date, to_date]]
+    elif from_date:
+        shift_filters["shift_date"] = [">=", from_date]
+    elif to_date:
+        shift_filters["shift_date"] = ["<=", to_date]
+        
+    shifts = frappe.get_all("Shift", filters=shift_filters, fields=["name", "shift_date", "shift_template", "shift_name_display"])
+    if not shifts:
+        return []
+        
+    shift_map = {s.name: s for s in shifts}
+    shift_names = list(shift_map.keys())
+    
+    # Now get the child records
+    sale_filters = {"parent": ["in", shift_names], "parenttype": "Shift"}
+    
+    sales = frappe.get_all("Shift Inventory Sale", filters=sale_filters, fields=["name", "parent", "item", "quantity", "selling_price", "amount", "sold_by", "is_invoice_sale", "reference_invoice", "creation", "total_volume"])
+    
+    # Process and return
+    result = []
+    for s in sales:
+        s_doc = shift_map.get(s.parent)
+        s["shift_date"] = s_doc.shift_date if s_doc else ""
+        s["shift_template"] = s_doc.shift_template if s_doc else ""
+        s["shift_name_display"] = s_doc.shift_name_display if s_doc else s.parent
+        
+        # client side can filter search, or we do it here:
+        if search:
+            search_str = f"{s.item} {s.sold_by}".lower()
+            if search.lower() not in search_str:
+                continue
+                
+        result.append(s)
+        
+    # Sort by creation desc
+    result.sort(key=lambda x: str(x.creation), reverse=True)
+    return result
+
+
+@frappe.whitelist()
+def get_station_cards_history(station, from_date=None, to_date=None, card=None, csa=None):
+    conditions = ["s.station = %s", "sc.docstatus < 2"]
+    values = [station]
+    
+    if from_date:
+        conditions.append("sc.date >= %s")
+        values.append(from_date)
+    if to_date:
+        conditions.append("sc.date <= %s")
+        values.append(to_date)
+    if card:
+        conditions.append("sc.card = %s")
+        values.append(card)
+    if csa:
+        conditions.append("sc.csa = %s")
+        values.append(csa)
+        
+    query = f"""
+        SELECT 
+            sc.name,
+            sc.date,
+            sc.creation,
+            sc.card,
+            sc.csa,
+            sc.receipt_no,
+            sc.amount,
+            sc.memo,
+            s.name as shift,
+            s.shift_template as shift_template
+        FROM `tabStation Cards` sc
+        JOIN `tabShift` s ON sc.shift = s.name
+        WHERE {' AND '.join(conditions)}
+        ORDER BY sc.date DESC, sc.creation DESC
+    """
+    return frappe.db.sql(query, tuple(values), as_dict=True)
+
+@frappe.whitelist()
+def get_shift_invoices_history(station, from_date=None, to_date=None, customer=None):
+    conditions = ["s.station = %s", "s.docstatus < 2"]
+    values = [station]
+    
+    if from_date:
+        conditions.append("s.shift_date >= %s")
+        values.append(from_date)
+    if to_date:
+        conditions.append("s.shift_date <= %s")
+        values.append(to_date)
+    if customer:
+        conditions.append("si.customer = %s")
+        values.append(customer)
+        
+    query = f"""
+        SELECT 
+            si.name, si.parent as shift, s.shift_date, s.shift_template, si.customer,
+            si.purchase_order, si.vehicle_registration, si.item,
+            si.quantity, si.rate, si.amount, si.entry_number, si.csa
+        FROM `tabShift Invoice` si
+        JOIN `tabShift` s ON si.parent = s.name
+        WHERE {' AND '.join(conditions)}
+        ORDER BY si.creation DESC
+        LIMIT 500
+    """
+    return frappe.db.sql(query, values, as_dict=True)
+
+@frappe.whitelist()
+def get_customer_payments_history(station, from_date=None, to_date=None, customer=None):
+    conditions = ["s.station = %s"]
+    values = [station]
+    
+    if from_date:
+        conditions.append("s.shift_date >= %s")
+        values.append(from_date)
+    if to_date:
+        conditions.append("s.shift_date <= %s")
+        values.append(to_date)
+    if customer:
+        conditions.append("cp.customer = %s")
+        values.append(customer)
+        
+    query = f"""
+        SELECT 
+            cp.name, cp.shift, s.shift_date, s.shift_template, cp.customer,
+            cp.csa, cp.mode_of_payment, cp.amount, cp.date, cp.creation
+        FROM `tabCustomer Payment` cp
+        JOIN `tabShift` s ON cp.shift = s.name
+        WHERE {' AND '.join(conditions)}
+        ORDER BY cp.creation DESC
+        LIMIT 500
+    """
+    return frappe.db.sql(query, values, as_dict=True)
+
+
+@frappe.whitelist()
+def get_topups_history(station=None, from_date=None, to_date=None):
+    filters = []
+    if station:
+        filters.append(f"s.station = '{station}'")
+    if from_date:
+        filters.append(f"t.date >= '{from_date}'")
+    if to_date:
+        filters.append(f"t.date <= '{to_date}'")
+        
+    filter_cond = " AND ".join(filters)
+    if filter_cond:
+        filter_cond = " AND " + filter_cond
+        
+    sql = f'''
+        SELECT 
+            t.name, t.date, t.shift, t.creation, t.card, t.csa, 
+            t.rrn_number, t.mode_of_payment, t.amount, s.shift_date, s.shift_template
+        FROM `tabStation Supplier Top Up` t
+        LEFT JOIN `tabShift` s ON t.shift = s.name
+        WHERE t.docstatus < 2 {filter_cond}
+        ORDER BY t.date DESC, t.creation DESC
+        LIMIT 500
+    '''
+    return frappe.db.sql(sql, as_dict=True)
 
 
 

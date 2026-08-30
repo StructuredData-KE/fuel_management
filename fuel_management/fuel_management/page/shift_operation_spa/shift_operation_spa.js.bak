@@ -121,7 +121,7 @@ function fetch_active_shift(wrapper) {
         args: {
             doctype: "Shift",
             filters: { status: "Open", owner: frappe.session.user },
-            fields: ["name", "station", "head_csa", "shift_template", "shift_date", "status", "creation", "report_sent"],
+            fields: ["name", "station", "head_csa", "shift_template", "shift_date", "status", "creation"],
             limit_page_length: 1
         },
         callback: function(r) {
@@ -143,9 +143,9 @@ function lock_ui_for_no_shift($wrapper) {
     });
     
     // Update Top Navbar
-    $wrapper.find('#active-shift-badge').text('No Active Shift');
-    $wrapper.find('#active-shift-badge').css('background', 'rgba(255,255,255,0.15)');
-    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
+    $wrapper.find('#top-navbar-shift').text('No Active Shift');
+    $wrapper.find('#top-navbar-brand-station').text(frappe.datetime.str_to_user(frappe.datetime.nowdate()));
+    $wrapper.find('#top-navbar-user').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
     
     // Switch to Home Shift tab
     $wrapper.find('.nav-item[data-target="tab-home"]').click();
@@ -160,9 +160,9 @@ function lock_ui_for_active_shift($wrapper) {
     // Update Top Navbar
     let bShiftName = window.ACTIVE_SHIFT.shift_template ? window.ACTIVE_SHIFT.shift_template : "Shift";
     let formattedDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
-    $wrapper.find('#active-shift-badge').text(`Active Shift: ${formattedDate} (${bShiftName})`);
-    $wrapper.find('#active-shift-badge').css('background', '#16a34a'); // Green badge for active
-    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
+    $wrapper.find('#top-navbar-shift').text(`Active Shift: ${formattedDate} (${bShiftName})`);
+    $wrapper.find('#top-navbar-brand-station').text(window.ACTIVE_SHIFT.station || "Unknown Station");
+    $wrapper.find('#top-navbar-user').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
     
     // Switch to Home tab automatically
     $wrapper.find('.nav-item[data-target="tab-home"]').click();
@@ -370,15 +370,7 @@ function render_meters($wrapper) {
                     
                     function render_pg_form(pg) {
                         let rows = window.METER_GROUPS[pg];
-                        rows.sort((a, b) => {
-                            let a_nozzle = a.pump_nozzle || "";
-                            let b_nozzle = b.pump_nozzle || "";
-                            let a_is_pms = a_nozzle.toUpperCase().includes("PMS");
-                            let b_is_pms = b_nozzle.toUpperCase().includes("PMS");
-                            if (a_is_pms && !b_is_pms) return -1;
-                            if (!a_is_pms && b_is_pms) return 1;
-                            return a_nozzle.localeCompare(b_nozzle, undefined, {numeric: true, sensitivity: 'base'});
-                        });
+                        rows.sort((a, b) => (a.pump_nozzle || "").localeCompare((b.pump_nozzle || ""), undefined, {numeric: true, sensitivity: 'base'}));
                         
                         let has_saved = rows.some(r => r.closing_electronic_meter > 0 || r.closing_manual_meter > 0);
                         let is_locked = has_saved && window.EDITING_PG !== pg;
@@ -394,12 +386,12 @@ function render_meters($wrapper) {
                             let user = window.USERS_LIST.find(u => u.name === assigned_csa_id);
                             if (user) csa_name = user.employee_name;
                         }
-                        let csa_text = csa_name ? `<div style="font-size: 0.875rem; color: #e2e8f0;">Assigned CSA: <strong style="font-weight: 700; color: #ffffff;">${csa_name}</strong></div>` : "";
+                        let csa_text = csa_name ? `<div style="font-size: 0.875rem; color: #475569;">Assigned CSA: <strong style="font-weight: 700; color: #0f172a;">${csa_name}</strong></div>` : "";
                         
                         let html = `
                             <div class="pump-group-card" style="margin-bottom: 0;">
                                 <div class="pump-group-header" style="padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 2px solid #1e3a8a;">
-                                    <div style="font-size: 1.25rem; font-weight: 700; color: #ffffff;">${pg}</div>
+                                    <div style="font-size: 1.25rem; font-weight: 700; color: #172554;">${pg}</div>
                                     ${csa_text}
                                 </div>
                                 <div class="pump-nozzles-list">
@@ -585,10 +577,10 @@ function render_meters($wrapper) {
                                 return;
                             }
                             
-                            let ago_ltrs = $wrapper.find('#sum-ago-ltrs').text();
-                            let pms_ltrs = $wrapper.find('#sum-pms-ltrs').text();
+                            let ago_val = $wrapper.find('#sum-ago-val').text();
+                            let pms_val = $wrapper.find('#sum-pms-val').text();
                             
-                            frappe.confirm(`<b>Confirm Save for ${pg_name}</b><br><br><span style="color:var(--primary); font-size:1.1em;">Total AGO Ltrs:</span> <b>${ago_ltrs} Ltrs</b><br><span style="color:var(--primary); font-size:1.1em;">Total PMS Ltrs:</span> <b>${pms_ltrs} Ltrs</b>`, function() {
+                            frappe.confirm(`<b>Confirm Save for ${pg_name}</b><br><br><span style="color:var(--primary); font-size:1.1em;">Total AGO Value:</span> <b>Ksh ${ago_val}</b><br><span style="color:var(--primary); font-size:1.1em;">Total PMS Value:</span> <b>Ksh ${pms_val}</b>`, function() {
                                 btn.prop('disabled', true); btn.find('.spinner').removeClass('hidden');
                                 save_child_table("pump_meter_readings", rows_data, `${pg_name} saved!`, btn, originalText, function() {
                                     // Update local state
@@ -754,7 +746,7 @@ function render_mpesa($wrapper) {
                         <input type="number" class="spa-input mpesa-transfers highlight-input" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="Enter Transfers">
                     </td>
                     <td>
-                        <input type="number" class="spa-input mpesa-closing highlight-input" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance || ''}" placeholder="Enter closing reading here">
+                        <input type="number" class="spa-input mpesa-closing highlight-input" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance !== null && row.closing_balance !== undefined && row.closing_balance !== '' ? row.closing_balance : 0}" placeholder="Enter Closing">
                     </td>
                     <td class="mpesa-collected font-weight-bold">0.00</td>
                 </tr>
@@ -833,9 +825,8 @@ function render_drystock($wrapper) {
     }
 
     $wrapper.find('#drystock-item-input').off('change').on('change', function() {
-        let val_raw = $(this).val();
-        let val = val_raw ? val_raw.split(' - ')[0].trim() : '';
-        let item = window.DRYSTOCK_ITEMS.find(i => i.item_name === val || i.item_code === val);
+        let val = $(this).val();
+        let item = window.DRYSTOCK_ITEMS.find(i => `${i.item_name} - ${i.item_code}` === val);
         if(item) {
             $wrapper.find('#drystock-price').val(parseFloat(item.price_list_rate).toFixed(2));
             
@@ -880,9 +871,8 @@ function render_drystock($wrapper) {
     // Add to Cart
     $wrapper.find('#btn-add-drystock').off('click').on('click', function() {
         let csa = $wrapper.find('#drystock-csa').val();
-        let item_val_raw = $wrapper.find('#drystock-item-input').val();
-        let item_val = item_val_raw ? item_val_raw.split(' - ')[0].trim() : '';
-        let item = window.DRYSTOCK_ITEMS.find(i => i.item_name === item_val || i.item_code === item_val);
+        let item_val = $wrapper.find('#drystock-item-input').val();
+        let item = window.DRYSTOCK_ITEMS.find(i => `${i.item_name} - ${i.item_code}` === item_val);
         
         let qty = parseFloat($wrapper.find('#drystock-qty').val()) || 0;
         if(qty < 0) { qty = 0; $wrapper.find('#drystock-qty').val(0); }
@@ -1094,9 +1084,11 @@ function refresh_drystock_cart($wrapper) {
                             // Load into form
                             $wrapper.find('#drystock-csa').val(row.sold_by);
                             
-                            let full_item_name = row.item_name || row.item;
-                            let match = window.DRYSTOCK_ITEMS.find(i => i.item_code === row.item);
-                            if (match) full_item_name = `${match.item_name} - ${match.item_code}`;
+                            let full_item_name = row.item;
+                            if (window.DRYSTOCK_ITEMS) {
+                                let match = window.DRYSTOCK_ITEMS.find(i => i.item_code === row.item);
+                                if (match) full_item_name = `${match.item_name} - ${match.item_code}`;
+                            }
                             $wrapper.find('#drystock-item-input').val(full_item_name);
                             
                             $wrapper.find('#drystock-qty').val(row.quantity);
@@ -1198,7 +1190,7 @@ function setup_tabs(wrapper) {
             render_warehouse_inventory($wrapper, 'store');
         } else if (target === 'tab-stock-transfer') {
             render_stock_transfer($wrapper);
-        } else if (target === 'tab-borrowed') { render_borrowed_products($wrapper); }
+        }
         
         // Update topbar title
         const tabName = $(this).find('span').text();
@@ -1231,13 +1223,10 @@ function load_dropdowns(wrapper) {
             if(r.message) {
                 window.DRYSTOCK_ITEMS = r.message;
                 let options = '';
-                let st_options = '';
                 r.message.forEach(item => {
                     options += `<option value="${item.item_name} - ${item.item_code}"></option>`;
-                    st_options += `<option data-value="${item.item_code}" value="${item.item_name} (${item.item_code})"></option>`;
                 });
                 $(wrapper).find('#drystock-items-list').html(options);
-                $(wrapper).find('#stock-transfer-item-list').html(st_options);
             }
         }
     });
@@ -1408,8 +1397,7 @@ function load_dropdowns(wrapper) {
         args: {
             doctype: "Employee",
             filters: { status: "Active" },
-            fields: ["name", "employee_name", "user_id"],
-            limit_page_length: 0
+            fields: ["name", "employee_name", "user_id"]
         },
         callback: function(r) {
             if(r.message) {
@@ -1560,18 +1548,14 @@ function setup_actions(wrapper) {
         
         let assigned_csas = [];
         let unassigned_pgs = [];
-        let csa_names = [];
         $wrapper.find('#csa-assignment-body div[data-pg]').each(function() {
-            let $select = $(this).find('.csa-select');
-            let csa = $select.val();
+            let csa = $(this).find('.csa-select').val();
             let pg = $(this).attr('data-pg');
             if(csa) {
                 assigned_csas.push({
                     "csa": csa,
                     "pump_group": pg
                 });
-                let csa_name = $select.find('option:selected').text();
-                csa_names.push(`<b>${pg}:</b> ${csa_name}`);
             } else {
                 unassigned_pgs.push(pg);
             }
@@ -1587,9 +1571,7 @@ function setup_actions(wrapper) {
             return;
         }
         
-        let confirm_html = `You are starting a <b>${shift_template}</b> for Date <b>${shift_date}</b>.<br><br><span style="color:var(--primary); font-size:1.1em; font-weight:600;">Assignments:</span><br>` + csa_names.join('<br>') + `<br><br>Is this correct?`;
-        
-        frappe.confirm(confirm_html, () => {
+        frappe.confirm(`You are starting a <b>${shift_template}</b> for Date <b>${shift_date}</b>. Is this correct?`, () => {
             let $btn = $(this);
             $btn.find('.spinner').removeClass('hidden');
             $btn.prop('disabled', true);
@@ -1779,16 +1761,6 @@ function setup_actions(wrapper) {
         let actual_drystock_cash = parseFloat($wrapper.find('#actual-drystock-cash-input').val()) || 0;
 
         frappe.confirm('Are you absolutely sure you want to close this shift? This will permanently lock the data and generate accounting entries.', () => {
-            let overlay = $(`
-                <div id="close-shift-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; backdrop-filter: blur(4px);">
-                    <div style="border: 4px solid #333; border-top: 4px solid #ef4444; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 25px;"></div>
-                    <h2 style="margin: 0; color: white; font-size: 1.5rem; font-weight: 600;">Closing Shift & Locking Data...</h2>
-                    <p style="margin-top: 15px; color: #cbd5e1; font-size: 1rem;">Generating accounting entries. Please wait.</p>
-                    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-                </div>
-            `);
-            $('body').append(overlay);
-
             frappe.call({
                 method: "frappe.client.get",
                 args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
@@ -1804,26 +1776,14 @@ function setup_actions(wrapper) {
                             args: { doc: doc },
                             callback: function(r) {
                                 if(r.message) {
-                                    $('#close-shift-overlay h2').text('Shift Closed successfully!');
-                                    $('#close-shift-overlay p').text('Reloading dashboard...');
-                                    $('#close-shift-overlay div:first').hide();
+                                    frappe.show_alert({message: "Shift Closed successfully!", indicator: "green"});
                                     setTimeout(() => {
                                         location.reload();
                                     }, 2000);
-                                } else {
-                                    $('#close-shift-overlay').remove();
                                 }
-                            },
-                            error: function() {
-                                $('#close-shift-overlay').remove();
                             }
                         });
-                    } else {
-                        $('#close-shift-overlay').remove();
                     }
-                },
-                error: function() {
-                    $('#close-shift-overlay').remove();
                 }
             });
         });
@@ -1929,7 +1889,7 @@ function render_invoices($wrapper) {
                 window.CUSTOMERS_LIST = r.message;
                 let custOpts = '';
                 r.message.forEach(c => {
-                    custOpts += `<option value="${c.name} - ${c.customer_name}">`;
+                    custOpts += `<option value="${c.name}">${c.customer_name}</option>`;
                 });
                 $wrapper.find('#invoice-customers-list').html(custOpts);
                 refresh_invoice_cart($wrapper);
@@ -1939,8 +1899,7 @@ function render_invoices($wrapper) {
 
     // Event: Customer changes -> Fetch Vehicles
     $wrapper.find('#invoice-customer-input').off('change').on('change', function() {
-        let cust_raw = $(this).val();
-        let cust = cust_raw ? cust_raw.split(' - ')[0].trim() : '';
+        let cust = $(this).val();
         $wrapper.find('#invoice-vehicles-list').empty();
         if(cust) {
         let unique_v = [];
@@ -2320,7 +2279,7 @@ function render_customer_payments($wrapper) {
         if(window.CUSTOMERS_LIST) {
             let custOpts = '';
             window.CUSTOMERS_LIST.forEach(c => {
-                custOpts += `<option value="${c.name} - ${c.customer_name}">`;
+                custOpts += `<option value="${c.name}">${c.customer_name}</option>`;
             });
             $wrapper.find('#cp-customers-list').html(custOpts);
         }
@@ -2343,7 +2302,7 @@ function render_customer_payments($wrapper) {
     // 4. Populate Mode of Payment
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Mode of Payment", filters: { enabled: 1 }, fields: ["name"], limit_page_length: 100 },
+        args: { doctype: "Mode of Payment", fields: ["name"], limit_page_length: 100 },
         callback: function(r) {
             if(r.message) {
                 let mopOpts = '<option value="">Select Mode...</option>';
@@ -2356,158 +2315,100 @@ function render_customer_payments($wrapper) {
     });
 
     // 5. Fetch and Render History
-
-    let custFilterOpts = '<option value="">All Customers</option>';
-    (window.CUSTOMERS_LIST || []).forEach(c => {
-        custFilterOpts += `<option value="${c.name}">${c.customer_name}</option>`;
-    });
-    $wrapper.find('#cp-filter-customer').html(custFilterOpts);
-
     let fetch_history = function() {
-        let start_date = $wrapper.find('#cp-filter-date-from').val();
-        let end_date = $wrapper.find('#cp-filter-date-to').val();
-        let customer_filter = $wrapper.find('#cp-filter-customer').val();
-
-        let is_filtering = (start_date || end_date || customer_filter);
-
-        let render_table = function(items, is_api_fetch) {
-            let html = '';
-            let total_amount = 0;
-            
-            if(items) {
-                items.forEach(row => {
-                    total_amount += parseFloat(row.amount || 0);
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Customer Payment",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "date", "shift", "creation", "customer", "csa", "mode_of_payment", "amount"],
+                order_by: "name desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
                         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
-                    if (row.time) time_val = row.time; 
-                    
-                    let csa_name = row.csa || "N/A";
-                    if (row.csa && window.USERS_LIST) {
-                        let u = window.USERS_LIST.find(u => u.name === row.csa);
-                        if(u) csa_name = u.employee_name;
-                    }
-                    
-                    let cust = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
-                    let customer_name = cust ? cust.customer_name : row.customer;
-                    
-                    let sDate = is_api_fetch ? (row.shift_date || row.date || '') : (row.date || "");
-                    let shiftName = is_api_fetch ? (row.shift_template || row.shift) : (window.ACTIVE_SHIFT.shift_template || "");
-
-                    let show_actions = false;
-                    if (!is_locked && !is_api_fetch) {
-                        show_actions = true;
-                    } else if (is_api_fetch && row.shift === window.ACTIVE_SHIFT.name && !is_locked && sDate === window.ACTIVE_SHIFT.shift_date) {
-                        show_actions = true;
-                    }
-                    
-                    let del_btn = !show_actions ? 
-                        `<button class="btn btn-xs btn-danger" disabled>X</button>` :
-                        `<button class="btn btn-xs btn-danger btn-delete-cp" data-name="${row.name}">X</button>`;
+                        let csa_name = row.csa || "N/A";
+                        if (row.csa && window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(u => u.name === row.csa);
+                            if(u) csa_name = u.employee_name;
+                        }
                         
-                    let edit_btn = !show_actions ?
-                        `<button class="btn btn-xs btn-default" disabled>Edit</button>` :
-                        `<button class="btn btn-xs btn-default btn-edit-cp" data-name="${row.name}" data-customer="${row.customer}" data-csa="${row.csa}" data-mode="${row.mode_of_payment}" data-amount="${row.amount}">Edit</button>`;
+                        let cust = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
+                        let customer_name = cust ? cust.customer_name : row.customer;
                         
-                    let action_html = `<div style="display:flex; gap:0.5rem;">${edit_btn}${del_btn}</div>`;
+                        let del_btn = is_locked ? 
+                            `<button class="btn btn-xs btn-danger" disabled>X</button>` :
+                            `<button class="btn btn-xs btn-danger btn-delete-cp" data-name="${row.name}">X</button>`;
+                            
+                        let edit_btn = is_locked ?
+                            `<button class="btn btn-xs btn-default" disabled>Edit</button>` :
+                            `<button class="btn btn-xs btn-default btn-edit-cp" data-name="${row.name}" data-customer="${row.customer}" data-csa="${row.csa}" data-mode="${row.mode_of_payment}" data-amount="${row.amount}">Edit</button>`;
+                            
+                        let action_html = `<div style="display:flex; gap:0.5rem;">${edit_btn}${del_btn}</div>`;
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                                <td>${row.date || ""}</td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
+                                <td style="color: #64748b;">${time_val}</td>
+                                <td><strong>${customer_name}</strong></td>
+                                <td>${csa_name}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569;">${row.mode_of_payment || ""}</span></td>
+                                <td style="font-weight: 600; text-align:right;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td>${action_html}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="9" class="text-center" style="color: #94a3b8; padding: 2rem;">No payments recorded yet.</td></tr>';
+                $wrapper.find('#list-customer-payments-saved').html(html);
+                
+                // Bind Edit and Delete handlers
+                $wrapper.find('.btn-delete-cp').off('click').on('click', function() {
+                    let cp_name = $(this).attr('data-name');
+                    frappe.confirm('Are you sure you want to delete this payment?', () => {
+                        frappe.call({
+                            method: "frappe.client.delete",
+                            args: { doctype: "Customer Payment", name: cp_name },
+                            callback: function(del_r) {
+                                if(!del_r.exc) {
+                                    frappe.show_alert({message: "Payment deleted", indicator: "green"});
+                                    fetch_history();
+                                }
+                            }
+                        });
+                    });
+                });
+                
+                $wrapper.find('.btn-edit-cp').off('click').on('click', function() {
+                    let $btn = $(this);
+                    let cp_name = $btn.attr('data-name');
                     
-                    total_amount += (row.amount || 0);
-                    
-                    html += `
-                        <tr>
-                            <td style="font-family: monospace; color: #64748b;">${row.name}</td>
-                            <td>${sDate}</td>
-                            <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${shiftName}</span></td>
-                            <td style="color: #64748b;">${time_val}</td>
-                            <td><strong>${customer_name}</strong></td>
-                            <td>${csa_name}</td>
-                            <td><span class="badge" style="background-color: #f1f5f9; color: #475569;">${row.mode_of_payment || ""}</span></td>
-                            <td style="font-weight: 600; text-align:right;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td>${action_html}</td>
-                        </tr>
-                    `;
+                    frappe.confirm('This will load the payment back into the entry form and delete it from history. Continue?', () => {
+                        $wrapper.find('#cp-customer-input').val($btn.attr('data-customer'));
+                        $wrapper.find('#cp-customer-input').trigger('change');
+                        $wrapper.find('#cp-csa').val($btn.attr('data-csa'));
+                        $wrapper.find('#cp-mode').val($btn.attr('data-mode'));
+                        $wrapper.find('#cp-amount').val($btn.attr('data-amount'));
+                        
+                        frappe.call({
+                            method: "frappe.client.delete",
+                            args: { doctype: "Customer Payment", name: cp_name },
+                            callback: function(del_r) {
+                                if(!del_r.exc) {
+                                    $wrapper.find('#tab-customer-payments .seg-btn[data-view="entry"]').click();
+                                    fetch_history();
+                                }
+                            }
+                        });
+                    });
                 });
             }
-            if(html === '') html = '<tr><td colspan="9" class="text-center" style="color: #94a3b8; padding: 2rem;">No payments found.</td></tr>';
-            $wrapper.find('#list-customer-payments-saved').html(html);
-            
-            let title_text = "Customer Payments for Active Shift";
-            $wrapper.find('#cp-history-view h3').html(`${title_text} <span style="float: right; color: #10b981;">Total: KES ${total_amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`);
-            
-            $wrapper.find('.btn-delete-cp').off('click').on('click', function() {
-                let cp_name = $(this).attr('data-name');
-                frappe.confirm('Are you sure you want to delete this payment?', () => {
-                    frappe.call({
-                        method: "frappe.client.delete",
-                        args: { doctype: "Customer Payment", name: cp_name },
-                        callback: function(del_r) {
-                            if(!del_r.exc) {
-                                frappe.show_alert({message: "Payment deleted", indicator: "green"});
-                                fetch_history();
-                            }
-                        }
-                    });
-                });
-            });
-            
-            $wrapper.find('.btn-edit-cp').off('click').on('click', function() {
-                let $btn = $(this);
-                let cp_name = $btn.attr('data-name');
-                
-                frappe.confirm('This will load the payment back into the entry form and delete it from history. Continue?', () => {
-                    let cust_code = $btn.attr('data-customer');
-                    let c_obj = (window.CUSTOMERS_LIST || []).find(c => c.name === cust_code);
-                    $wrapper.find('#cp-customer-input').val(c_obj ? `${c_obj.name} - ${c_obj.customer_name}` : cust_code);
-                    $wrapper.find('#cp-customer-input').trigger('change');
-                    $wrapper.find('#cp-csa').val($btn.attr('data-csa'));
-                    $wrapper.find('#cp-mode').val($btn.attr('data-mode'));
-                    $wrapper.find('#cp-amount').val($btn.attr('data-amount'));
-                    
-                    frappe.call({
-                        method: "frappe.client.delete",
-                        args: { doctype: "Customer Payment", name: cp_name },
-                        callback: function(del_r) {
-                            if(!del_r.exc) {
-                                $wrapper.find('#tab-customer-payments .seg-btn[data-view="entry"]').click();
-                                fetch_history();
-                            }
-                        }
-                    });
-                });
-            });
-        };
-
-        if (is_filtering) {
-            $wrapper.find('#list-customer-payments-saved').html('<tr><td colspan="9" class="text-center"><div class="spinner"></div> Fetching history...</td></tr>');
-            frappe.call({
-                method: "fuel_management.fuel_management.api.get_customer_payments_history",
-                args: {
-                    station: window.ACTIVE_SHIFT.station,
-                    from_date: start_date,
-                    to_date: end_date,
-                    customer: customer_filter
-                },
-                callback: function(r) {
-                    render_table(r.message || [], true);
-                }
-            });
-        } else {
-            frappe.call({
-                method: "frappe.client.get_list",
-                args: {
-                    doctype: "Customer Payment",
-                    filters: { shift: window.ACTIVE_SHIFT.name },
-                    fields: ["name", "date", "shift", "creation", "customer", "csa", "mode_of_payment", "amount"],
-                    order_by: "name desc"
-                },
-                callback: function(r) {
-                    render_table(r.message || [], false);
-                }
-            });
-        }
+        });
     };
-    
-    $wrapper.find('#cp-filter-date-from, #cp-filter-date-to, #cp-filter-customer').off('change').on('change', function() {
-        fetch_history();
-    });
     fetch_history();
 
     // 6. Save Payment
@@ -2517,8 +2418,7 @@ function render_customer_payments($wrapper) {
             return;
         }
 
-        let customer_raw = $wrapper.find('#cp-customer-input').val();
-        let customer = customer_raw ? customer_raw.split(' - ')[0].trim() : '';
+        let customer = $wrapper.find('#cp-customer-input').val();
         let csa = $wrapper.find('#cp-csa').val();
         let mode = $wrapper.find('#cp-mode').val();
         let trans_no = $wrapper.find('#cp-trans-no').val();
@@ -2643,10 +2543,8 @@ function render_fleet_cards($wrapper) {
             },
             callback: function(r) {
                 let html = '';
-                let total_amount = 0;
                 if(r.message) {
                     r.message.forEach(row => {
-                        total_amount += parseFloat(row.amount || 0);
                         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
@@ -2805,10 +2703,8 @@ function render_station_expenses($wrapper) {
             },
             callback: function(r) {
                 let html = '';
-                let total_amount = 0;
                 if(r.message) {
                     r.message.forEach(row => {
-                        total_amount += parseFloat(row.amount || 0);
                         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
@@ -3016,10 +2912,8 @@ function render_rtt($wrapper) {
             },
             callback: function(r) {
                 let html = '';
-                let total_amount = 0;
                 if(r.message) {
                     r.message.forEach(row => {
-                        total_amount += parseFloat(row.amount || 0);
                         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
@@ -3153,7 +3047,7 @@ function render_topups($wrapper) {
     // 2.5 Setup Mode of Payment Dropdown
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Mode of Payment", filters: { enabled: 1 }, fields: ["name"], limit_page_length: 100 },
+        args: { doctype: "Mode of Payment", fields: ["name"], limit_page_length: 100 },
         callback: function(r) {
             let mopOpts = '<option value="">Select Mode...</option>';
             if(r.message) {
@@ -3185,87 +3079,46 @@ function render_topups($wrapper) {
     });
 
     // 4. Fetch and Render History
-
     let fetch_history = function() {
-        let start_date = $wrapper.find('#tp-filter-date-from').val();
-        let end_date = $wrapper.find('#tp-filter-date-to').val();
-
-        let is_filtering = (start_date || end_date);
-
-        let render_table = function(items, is_api_fetch) {
-            let html = '';
-            let total_amount = 0;
-            
-            if(items) {
-                items.forEach(row => {
-                    total_amount += parseFloat(row.amount || 0);
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Station Supplier Top Up",
+                filters: { shift: window.ACTIVE_SHIFT.name },
+                fields: ["name", "date", "shift", "creation", "card", "csa", "rrn_number", "mode_of_payment", "amount"],
+                order_by: "name desc"
+            },
+            callback: function(r) {
+                let html = '';
+                if(r.message) {
+                    r.message.forEach(row => {
                         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
-                    
-                    let csa_name = row.csa || "N/A";
-                    if (row.csa && window.USERS_LIST) {
-                        let u = window.USERS_LIST.find(u => u.name === row.csa);
-                        if(u) csa_name = u.employee_name;
-                    }
-                    
-                    let sDate = is_api_fetch ? (row.shift_date || row.date || '') : (row.date || "");
-                    let shiftName = is_api_fetch ? (row.shift_template || row.shift) : (window.ACTIVE_SHIFT.shift_template || "");
-                    
-                    total_amount += (row.amount || 0);
-                    
-                    html += `
-                        <tr>
-                            <td style="font-family: monospace; color: #64748b;">${row.name}</td>
-                            <td>${sDate}</td>
-                            <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${shiftName}</span></td>
-                            <td style="color: #64748b;">${time_val}</td>
-                            <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.card || "-"}</span></td>
-                            <td>${csa_name}</td>
-                            <td>${row.rrn_number || "-"}</td>
-                            <td><span class="badge">${row.mode_of_payment || ""}</span></td>
-                            <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                        </tr>
-                    `;
-                });
+                        let csa_name = row.csa;
+                        if (window.USERS_LIST) {
+                            let u = window.USERS_LIST.find(u => u.name === row.csa);
+                            if(u) csa_name = u.employee_name;
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                                <td>${row.date || ""}</td>
+                                <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${window.ACTIVE_SHIFT.shift_template || ""}</span></td>
+                                <td style="color: #64748b;">${time_val}</td>
+                                <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: normal;">${row.card}</span></td>
+                                <td>${csa_name}</td>
+                                <td>${row.rrn_number}</td>
+                                <td><span class="badge">${row.mode_of_payment || ""}</span></td>
+                                <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No Top-Ups recorded yet.</td></tr>';
+                $wrapper.find('#list-station-topups-saved').html(html);
             }
-            if(html === '') html = '<tr><td colspan="9" class="text-center" style="color: #94a3b8; padding: 2rem;">No Top-Ups recorded yet.</td></tr>';
-            $wrapper.find('#list-station-topups-saved').html(html);
-            
-            let title_text = "Station Top-Ups for Active Shift";
-            $wrapper.find('#topups-history-view h3').html(`${title_text} <span style="float: right; color: #10b981;">Total: KES ${total_amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`);
-        };
-
-        if (is_filtering) {
-            $wrapper.find('#list-station-topups-saved').html('<tr><td colspan="9" class="text-center"><div class="spinner"></div> Fetching history...</td></tr>');
-            frappe.call({
-                method: "fuel_management.fuel_management.api.get_topups_history",
-                args: {
-                    station: window.ACTIVE_SHIFT.station,
-                    from_date: start_date,
-                    to_date: end_date
-                },
-                callback: function(r) {
-                    render_table(r.message || [], true);
-                }
-            });
-        } else {
-            frappe.call({
-                method: "frappe.client.get_list",
-                args: {
-                    doctype: "Station Supplier Top Up",
-                    filters: { shift: window.ACTIVE_SHIFT.name },
-                    fields: ["name", "date", "shift", "creation", "card", "csa", "rrn_number", "mode_of_payment", "amount"],
-                    order_by: "name desc"
-                },
-                callback: function(r) {
-                    render_table(r.message || [], false);
-                }
-            });
-        }
+        });
     };
-    
-    $wrapper.find('#tp-filter-date-from, #tp-filter-date-to').off('change').on('change', function() {
-        fetch_history();
-    });
     fetch_history();
 
     // 5. Save Top-Up
@@ -3329,42 +3182,24 @@ function render_topups($wrapper) {
 // =========================================================
 // TOTAL INVENTORY STATUS MODULE
 // =========================================================
-
 function render_inventory_status($wrapper) {
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
     
+    // Set default dates to first and last of current month if not set
     let fromInput = $wrapper.find('#inventory-date-from');
     let toInput = $wrapper.find('#inventory-date-to');
     
     if (!fromInput.val()) {
         let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]); // 1st of month
     }
     if (!toInput.val()) {
         let d = new Date();
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]); // last of month
     }
 
     $wrapper.find('#btn-refresh-inventory-report').off('click').on('click', function() {
         fetch_inventory_report($wrapper);
-    });
-
-    $wrapper.find('#inventory-search').off('input').on('input', function() {
-        let val = $(this).val().toLowerCase();
-        $wrapper.find('#list-inventory-status tr.data-row').each(function() {
-            let text = $(this).find('.th-product').text().toLowerCase();
-            $(this).toggle(text.includes(val));
-        });
-        
-        $wrapper.find('#list-inventory-status tr.row-group-header').each(function() {
-            let $group = $(this);
-            let $rows = $group.nextUntil('.row-group-header', 'tr.data-row');
-            if ($rows.filter(':visible').length === 0) {
-                $group.hide();
-            } else {
-                $group.show();
-            }
-        });
     });
     
     // Zoom Controls
@@ -3405,7 +3240,7 @@ function render_inventory_status($wrapper) {
     
     // Collapse Columns
     $wrapper.find('.collapse-icon').off('click').on('click', function() {
-        let target = $(this).data('target');
+        let target = $(this).data('target'); // 'op' or 'cl'
         let table = $wrapper.find('.inventory-report-table');
         let isCollapsed = table.hasClass('collapsed-' + target);
         
@@ -3486,18 +3321,16 @@ function fetch_inventory_report($wrapper) {
                                 <td class="sticky-col th-no">${no++}</td>
                                 <td class="sticky-col th-product">${row.item_name}</td>
                                 
-                                <td class="col-op text-center">${row.op_store || 0}</td>
-                                <td class="col-op text-center">${row.op_forecourt || 0}</td>
-                                <td class="text-center" style="font-weight:bold;">${row.op_total || 0}</td>
+                                <td class="col-op text-right">${row.op_store || 0}</td>
+                                <td class="col-op text-right">${row.op_forecourt || 0}</td>
+                                <td class="text-right" style="font-weight:bold;">${row.op_total || 0}</td>
                                 
-                                <td class="text-center">${row.purchases || 0}</td>
-                                <td class="text-center">${row.sales || 0}</td>
-                                <td class="text-center">${row.borrowed_in || 0}</td>
-                                <td class="text-center">${row.borrowed_out || 0}</td>
+                                <td class="text-right">${row.purchases || 0}</td>
+                                <td class="text-right">${row.sales || 0}</td>
                                 
-                                <td class="col-cl text-center ${cl_store_cls}">${row.cl_store || 0}</td>
-                                <td class="col-cl text-center ${cl_fc_cls}">${row.cl_forecourt || 0}</td>
-                                <td class="text-center ${cl_tot_cls}" style="font-weight:bold;">${row.cl_total || 0}</td>
+                                <td class="col-cl text-right ${cl_store_cls}">${row.cl_store || 0}</td>
+                                <td class="col-cl text-right ${cl_fc_cls}">${row.cl_forecourt || 0}</td>
+                                <td class="text-right ${cl_tot_cls}" style="font-weight:bold;">${row.cl_total || 0}</td>
                             </tr>
                         `;
                     });
@@ -3520,7 +3353,6 @@ function fetch_inventory_report($wrapper) {
 // =========================================================
 // WAREHOUSE INVENTORY MODULE
 // =========================================================
-
 function render_warehouse_inventory($wrapper, warehouse_type) {
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
     
@@ -3529,35 +3361,19 @@ function render_warehouse_inventory($wrapper, warehouse_type) {
     
     if (!fromInput.val()) {
         let d = new Date();
+        // 1st of current month
         fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
     }
     if (!toInput.val()) {
         let d = new Date();
+        // last of current month
         toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
     }
 
     $wrapper.find(`#btn-refresh-${warehouse_type}-inventory`).off('click').on('click', function() {
         fetch_warehouse_inventory_report($wrapper, warehouse_type);
     });
-
-    $wrapper.find(`#${warehouse_type}-inventory-search`).off('input').on('input', function() {
-        let val = $(this).val().toLowerCase();
-        $wrapper.find(`#list-${warehouse_type}-inventory tr.data-row`).each(function() {
-            let text = $(this).find('td:nth-child(2)').text().toLowerCase();
-            $(this).toggle(text.includes(val));
-        });
-        
-        $wrapper.find(`#list-${warehouse_type}-inventory tr.row-group-header`).each(function() {
-            let $group = $(this);
-            let $rows = $group.nextUntil('.row-group-header', 'tr.data-row');
-            if ($rows.filter(':visible').length === 0) {
-                $group.hide();
-            } else {
-                $group.show();
-            }
-        });
-    });
-
+    
     fetch_warehouse_inventory_report($wrapper, warehouse_type);
 }
 
@@ -3628,10 +3444,10 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
                             <tr class="data-row">
                                 <td style="text-align: center;">${no++}</td>
                                 <td style="font-weight: 600; color: #1e293b;">${row.item_name}</td>
-                                <td class="text-center">${op_val}</td>
-                                <td class="text-center">${row.purchases || 0}</td>
-                                <td class="text-center">${row.sales || 0}</td>
-                                <td class="text-center ${cl_cls}" style="font-weight:bold;">${cl_val}</td>
+                                <td class="text-right">${op_val}</td>
+                                <td class="text-right">${row.purchases || 0}</td>
+                                <td class="text-right">${row.sales || 0}</td>
+                                <td class="text-right ${cl_cls}" style="font-weight:bold;">${cl_val}</td>
                             </tr>
                         `;
                     });
@@ -3659,43 +3475,14 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
     });
 }
 
-    
-window.STOCK_TRANSFER_CART = [];
-
-function render_stock_transfer_cart(wrapper) {
-    let $wrapper = $(wrapper);
-    let html = '';
-    if(window.STOCK_TRANSFER_CART.length === 0) {
-        html = '<tr><td colspan="4" class="text-center" style="color: #64748b; padding: 2rem;">Cart is empty</td></tr>';
-    } else {
-        window.STOCK_TRANSFER_CART.forEach((row, idx) => {
-            html += `
-                <tr>
-                    <td>${row.direction}</td>
-                    <td>${row.item_name}</td>
-                    <td>${row.qty}</td>
-                    <td><button class="btn btn-sm btn-remove-st-cart" data-idx="${idx}" style="color: #ef4444; border: 1px solid #ef4444; background: transparent;">X</button></td>
-                </tr>
-            `;
-        });
-    }
-    $wrapper.find('#st-cart-body').html(html);
-    
-    $wrapper.find('.btn-remove-st-cart').off('click').on('click', function() {
-        let idx = parseInt($(this).attr('data-idx'));
-        window.STOCK_TRANSFER_CART.splice(idx, 1);
-        render_stock_transfer_cart($wrapper);
-    });
-}
 function render_stock_transfer($wrapper) {
-    render_stock_transfer_cart($wrapper);
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
 
     if ($wrapper.find('#stock-transfer-item-list').children().length === 0) {
         fetch_warehouse_inventory_report($wrapper, 'store');
     }
-
-    $wrapper.find('#btn-add-st-cart').off('click').on('click', function() {
+    
+    $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
         let item_val = $wrapper.find('#stock-transfer-item').val();
         let selected_option = $wrapper.find(`#stock-transfer-item-list option[value="${item_val}"]`);
         if (!selected_option.length) {
@@ -3703,29 +3490,11 @@ function render_stock_transfer($wrapper) {
         }
         let item = selected_option.length ? selected_option.attr('data-value') : item_val;
         
-        let qty = parseFloat($wrapper.find('#stock-transfer-qty').val()) || 0;
+        let qty = $wrapper.find('#stock-transfer-qty').val();
         let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
         
-        if(!item || qty <= 0) {
-            frappe.show_alert({message: "Please select an item and enter a valid quantity.", indicator: "orange"});
-            return;
-        }
-        
-        window.STOCK_TRANSFER_CART.push({
-            item: item,
-            item_name: item_val,
-            qty: qty,
-            direction: direction
-        });
-        
-        $wrapper.find('#stock-transfer-item').val('');
-        $wrapper.find('#stock-transfer-qty').val('');
-        render_stock_transfer_cart($wrapper);
-    });
-
-    $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
-        if(window.STOCK_TRANSFER_CART.length === 0) {
-            frappe.show_alert({message: "Cart is empty.", indicator: "orange"});
+        if(!item || !qty) {
+            frappe.show_alert({message: "Please select an item and enter a quantity.", indicator: "orange"});
             return;
         }
         
@@ -3737,7 +3506,9 @@ function render_stock_transfer($wrapper) {
             method: "fuel_management.fuel_management.api.create_spa_stock_transfer",
             args: {
                 station_id: window.ACTIVE_SHIFT.station,
-                items: JSON.stringify(window.STOCK_TRANSFER_CART)
+                item_code: item,
+                qty: qty,
+                direction: direction
             },
             callback: function(res) {
                 $btn.find('.spinner').addClass('hidden');
@@ -3745,13 +3516,8 @@ function render_stock_transfer($wrapper) {
                 
                 if(res.message && res.message.status === "success") {
                     frappe.show_alert({message: res.message.message, indicator: "green"});
-                    window.STOCK_TRANSFER_CART = [];
-                    render_stock_transfer_cart($wrapper);
                     $wrapper.find('#stock-transfer-item').val('');
                     $wrapper.find('#stock-transfer-qty').val('');
-                    fetch_warehouse_inventory_report($wrapper, 'store');
-                    $wrapper.find('#tab-stock-transfer .seg-btn[data-view="history"]').click();
-                    fetch_st_history();
                 }
             },
             error: function() {
@@ -3760,55 +3526,6 @@ function render_stock_transfer($wrapper) {
             }
         });
     });
-
-    // Segmented Control Logic
-    $wrapper.find('#tab-stock-transfer .seg-btn').off('click').on('click', function() {
-        $wrapper.find('#tab-stock-transfer .seg-btn').removeClass('active');
-        $(this).addClass('active');
-        
-        const view = $(this).data('view');
-        $wrapper.find('#tab-stock-transfer .view-pane').removeClass('active');
-        $wrapper.find('#st-' + view + '-view').addClass('active');
-    });
-
-    function fetch_st_history() {
-        let df = $wrapper.find('#st-filter-date-from').val();
-        let dt = $wrapper.find('#st-filter-date-to').val();
-        
-        $wrapper.find('#st-history-body').html('<tr><td colspan="4" class="text-center">Loading...</td></tr>');
-        
-        frappe.call({
-            method: "fuel_management.fuel_management.api.get_historical_stock_transfers",
-            args: {
-                station_id: window.ACTIVE_SHIFT.station,
-                date_from: df,
-                date_to: dt
-            },
-            callback: function(r) {
-                let $tbody = $wrapper.find('#st-history-body');
-                $tbody.empty();
-                
-                if(r.message && r.message.length > 0) {
-                    r.message.forEach(row => {
-                        let itemSum = (row.items || []).map(i => `${i.item_name} (${i.qty})`).join(', ');
-                        $tbody.append(`
-                            <tr>
-                                <td>${row.name}</td>
-                                <td>${frappe.datetime.str_to_user(row.posting_date)} ${row.posting_time}</td>
-                                <td>${row.direction}</td>
-                                <td style="max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${itemSum}">${itemSum}</td>
-                            </tr>
-                        `);
-                    });
-                } else {
-                    $tbody.html('<tr><td colspan="4" class="text-center">No transfers found.</td></tr>');
-                }
-            }
-        });
-    }
-
-    $wrapper.find('#st-filter-date-from, #st-filter-date-to').off('change').on('change', fetch_st_history);
-    fetch_st_history();
 }
 
 function print_stock_sheet(warehouse_type, data, company) {
@@ -4007,7 +3724,7 @@ function render_purchases($wrapper) {
     // 4. Item Dropdown (Datalist approach)
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Item", fields: ["name", "item_name", "item_group"], filters: {disabled: 0}, limit_page_length: 5000 },
+        args: { doctype: "Item", fields: ["name", "item_name"], filters: {disabled: 0}, limit_page_length: 5000 },
         callback: function(r) {
             let opts = '';
             if(r.message) {
@@ -4021,7 +3738,7 @@ function render_purchases($wrapper) {
     // 5. Target Location Dropdown
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Warehouse", fields: ["name", "warehouse_name"], filters: {is_group: 0, disabled: 0}, limit_page_length: 500 },
+        args: { doctype: "Warehouse", fields: ["name", "warehouse_name"], filters: {is_group: 0}, limit_page_length: 500 },
         callback: function(r) {
             let opts = '<option value="">Select Target...</option>';
             if(r.message) {
@@ -4097,30 +3814,10 @@ function render_purchases($wrapper) {
             if(!is_incl && vat_rate > 0) {
                 total = total * (1 + (vat_rate / 100));
             }
-            $wrapper.find('#pur-live-total').html(frappe.format(total, {fieldtype: 'Currency'}));
+            $wrapper.find('#pur-live-total').text(frappe.format(total, {fieldtype: 'Currency'}));
         };
         
         $wrapper.find('#pur-qty, #pur-cost, #pur-vat-rate, #pur-vat-incl').on('input change', calculate_live_total);
-
-    
-        $wrapper.find('#pur-item-input').off('change').on('change', function() {
-            let val = $(this).val();
-            let match = (window.PURCHASE_ITEMS || []).find(i => `${i.item_name} - ${i.name}` === val);
-            if (match && match.item_group) {
-                let group = match.item_group.toUpperCase();
-                if (!group.includes("FUEL") && !group.includes("GAS")) {
-                    let store_wh = "";
-                    $wrapper.find('#pur-target option').each(function() {
-                        if ($(this).text().toLowerCase().includes("store")) {
-                            store_wh = $(this).val();
-                        }
-                    });
-                    if (store_wh) {
-                        $wrapper.find('#pur-target').val(store_wh);
-                    }
-                }
-            }
-        });
 
     // 7. Add Item to Cart
     $wrapper.find('#btn-add-purchase-item').off('click').on('click', function() {
@@ -4154,7 +3851,7 @@ function render_purchases($wrapper) {
         $wrapper.find('#pur-item-input').val('');
         $wrapper.find('#pur-qty').val('');
         $wrapper.find('#pur-cost').val('');
-        $wrapper.find('#pur-live-total').html('0.00');
+        $wrapper.find('#pur-live-total').text('0.00');
         
         refresh_purchase_cart();
     });
@@ -4172,7 +3869,6 @@ function render_purchases($wrapper) {
             },
             callback: function(r) {
                 let html = '';
-                let total_amount = 0;
                 if(r.message) {
                     r.message.forEach(row => {
                         let items_html = (row.items || []).map(i => `<div><small>${i.quantity}x ${i.item}</small></div>`).join('');
@@ -4632,7 +4328,9 @@ function render_reconcile(wrapper) {
     // Populate CSA selector
     let csaOptions = '<option value="">-- Select CSA to Reconcile --</option>';
     let allowed_csas = [];
-    // Removed head_csa per user request
+    if(window.SHIFT_DOC && window.SHIFT_DOC.head_csa) {
+        allowed_csas.push(window.SHIFT_DOC.head_csa);
+    }
     if(window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas) {
         window.SHIFT_DOC.assigned_csas.forEach(row => {
             if(row.csa) allowed_csas.push(row.csa);
@@ -4862,29 +4560,6 @@ function load_reconciliation_history($wrapper) {
                 let url = `/printview?doctype=Shift&name=${encodeURIComponent(window.ACTIVE_SHIFT.name)}&format=Consolidated CSA Sign-Off`;
                 window.open(url, '_blank');
             });
-            
-            // Re-populate dropdown to exclude already saved CSAs
-            let saved_csas = r.message ? r.message.map(row => row.csa) : [];
-            let csaOptions = '<option value="">-- Select CSA to Reconcile --</option>';
-            let allowed_csas = [];
-            
-            if(window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas) {
-                window.SHIFT_DOC.assigned_csas.forEach(row => {
-                    if(row.csa && !saved_csas.includes(row.csa)) allowed_csas.push(row.csa);
-                });
-            }
-            allowed_csas = [...new Set(allowed_csas)];
-            
-            let sorted_csas = allowed_csas.map(csa => {
-                let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === csa) : null;
-                let name = u ? (u.employee_name || u.full_name) : csa;
-                return {csa, name};
-            }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
-            
-            sorted_csas.forEach(item => {
-                csaOptions += `<option value="${item.csa}">${item.name}</option>`;
-            });
-            $wrapper.find('#recon-csa-select').html(csaOptions);
         }
     });
 }
@@ -4979,10 +4654,8 @@ function render_station_cards($wrapper) {
             },
             callback: function(r) {
                 let html = '';
-                let total_amount = 0;
                 if(r.message) {
                     r.message.forEach(row => {
-                        total_amount += parseFloat(row.amount || 0);
                         let time_val = row.creation ? row.creation.split(" ")[1].substring(0, 5) : "";
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
@@ -5438,35 +5111,48 @@ function render_greasing(wrapper) {
     }
 }
 
-
-function render_borrowed_products($wrapper) {
-    if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
+function setup_borrowed_products($wrapper) {
+    let current_borrow_type = "Borrowed In";
+    let items = [];
     
-    // Set Active Shift Display
-    let shiftDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
-    let shiftName = window.ACTIVE_SHIFT.shift_template || "";
-    $wrapper.find('#bp-shift-display').text(`${shiftDate} (${shiftName})`);
+    // Type Dropdown Toggle
+    $wrapper.find('#borrow-type-selected').off('click').on('click', function() {
+        $wrapper.find('#borrow-type-options').toggle();
+    });
     
-    // Segmented control
-    $wrapper.find('#tab-borrowed .seg-btn').off('click').on('click', function() {
-        let view = $(this).attr('data-view');
-        $wrapper.find('#tab-borrowed .seg-btn').removeClass('active');
-        $(this).addClass('active');
+    $wrapper.find('.borrow-option').off('click').on('click', function() {
+        let val = $(this).data('value');
+        let text = $(this).text();
+        current_borrow_type = val;
         
-        $wrapper.find('#tab-borrowed .view-pane').removeClass('active');
-        $wrapper.find('#bp-' + view + '-view').addClass('active');
+        let $selected = $wrapper.find('#borrow-type-selected');
+        $selected.text(text);
         
-        if (view === 'history') {
-            fetch_bp_history($wrapper);
+        if (val === "Borrowed In") {
+            $selected.removeClass('pill-red').addClass('pill-green');
+        } else {
+            $selected.removeClass('pill-green').addClass('pill-red');
+        }
+        
+        $wrapper.find('#borrow-type-options').hide();
+    });
+    
+    // Click outside to close
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#borrow-type-dropdown').length) {
+            $wrapper.find('#borrow-type-options').hide();
         }
     });
+    
+    // Default date to today
+    $wrapper.find('#borrow-date').val(frappe.datetime.get_today());
     
     // Fetch Counterparties
     frappe.call({
         method: 'fuel_management.fuel_management.api.get_borrowing_counterparties',
         callback: function(r) {
             if(r.message) {
-                let select = $wrapper.find('#bp-counterparty');
+                let select = $wrapper.find('#borrow-counterparty');
                 select.empty().append('<option value="">Select Counterparty...</option>');
                 r.message.forEach(c => {
                     select.append(`<option value="${c.value}">${c.label}</option>`);
@@ -5475,84 +5161,67 @@ function render_borrowed_products($wrapper) {
         }
     });
     
-    // Add first item row if empty
-    if ($wrapper.find('#bp-items-container').children().length === 0) {
-        add_bp_item_row($wrapper);
-    }
+    // Add first item row
+    add_borrow_item_row($wrapper);
     
-    $wrapper.find('#btn-add-bp-item').off('click').on('click', function() {
-        add_bp_item_row($wrapper);
+    // Add Item Button
+    $wrapper.find('#btn-add-borrowed-item').off('click').on('click', function() {
+        add_borrow_item_row($wrapper);
     });
     
-    // Set default filter dates to first and last of month
-    let fromInput = $wrapper.find('#bp-filter-from-date');
-    let toInput = $wrapper.find('#bp-filter-to-date');
-    if (!fromInput.val()) {
-        let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
-    }
-    if (!toInput.val()) {
-        let d = new Date();
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
-    }
-    
-    $wrapper.find('#btn-refresh-bp-history').off('click').on('click', function() {
-        fetch_bp_history($wrapper);
+    // Submit Button
+    $wrapper.find('#btn-submit-borrowed').off('click').on('click', function() {
+        submit_borrowed_product($wrapper, current_borrow_type);
     });
     
-    $wrapper.find('#btn-cancel-bp').off('click').on('click', function() {
-        $wrapper.find('#bp-counterparty').val('');
-        $wrapper.find('#bp-memo').val('');
-        $wrapper.find('#bp-items-container').empty();
-        add_bp_item_row($wrapper);
+    // Report tab events
+    $wrapper.find('.nav-item[data-target="tab-borrowed-report"]').off('click').on('click', function() {
+        fetch_borrowed_report($wrapper);
     });
     
-    $wrapper.find('#btn-save-bp').off('click').on('click', function() {
-        submit_borrowed_product($wrapper);
-    });
-    
-    // Initial fetch history
-    fetch_bp_history($wrapper);
-    
-    // Return modal events
-    $wrapper.find('#bp-return-modal-close, #btn-bp-return-cancel').off('click').on('click', function() {
-        $wrapper.find('#bp-return-modal').hide();
-    });
-    
-    $wrapper.find('#btn-bp-return-submit').off('click').on('click', function() {
-        submit_bp_return($wrapper);
+    $wrapper.find('#btn-refresh-borrow-report').off('click').on('click', function() {
+        fetch_borrowed_report($wrapper);
     });
 }
 
-function add_bp_item_row($wrapper) {
-    let container = $wrapper.find('#bp-items-container');
+function add_borrow_item_row($wrapper) {
+    let container = $wrapper.find('#borrowed-items-container');
     let row_id = frappe.utils.get_random(8);
     
     let html = `
-        <div class="bp-item-row" id="bp-row-${row_id}" style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
-            <select class="spa-input bp-item-code" style="flex:2;"></select>
-            <input type="number" class="spa-input bp-qty" placeholder="Qty" style="flex:1;">
-            <button class="btn btn-secondary" onclick="$(this).closest('.bp-item-row').remove();" style="color: #ef4444; border-color: #ef4444; background: transparent; padding: 0.5rem 1rem;">&times;</button>
+        <div class="borrowed-item-card" id="borrow-row-${row_id}">
+            <div>
+                <label class="mobile-only" style="display:none; font-weight:bold; font-size:0.8rem; margin-bottom:2px;">PRODUCT</label>
+                <select class="spa-input borrow-item-code" style="padding: 0.5rem;"></select>
+            </div>
+            <div>
+                <label class="mobile-only" style="display:none; font-weight:bold; font-size:0.8rem; margin-bottom:2px;">QTY</label>
+                <input type="number" class="spa-input borrow-qty" placeholder="Qty" style="padding: 0.5rem;">
+            </div>
+            <div style="text-align: center;">
+                <button class="btn-remove-item" onclick="$(this).closest('.borrowed-item-card').remove();">&times;</button>
+            </div>
         </div>
     `;
     
     let $row = $(html);
     container.append($row);
     
+    // Populate items
     if (window.cached_items) {
-        let select = $row.find('.bp-item-code');
+        let select = $row.find('.borrow-item-code');
         select.append('<option value="">Select Product...</option>');
         window.cached_items.forEach(item => {
             select.append(`<option value="${item.name}">${item.item_name}</option>`);
         });
     } else {
         frappe.call({
-            method: 'frappe.client.get_list',
-            args: { doctype: "Item", fields: ["name", "item_name", "item_group"], filters: {disabled: 0}, limit_page_length: 5000 },
+            method: 'fuel_management.fuel_management.api.get_station_items',
+            args: { station: window.current_station },
             callback: function(r) {
                 if (r.message) {
                     window.cached_items = r.message;
-                    let select = $row.find('.bp-item-code');
+                    let select = $row.find('.borrow-item-code');
                     select.append('<option value="">Select Product...</option>');
                     r.message.forEach(item => {
                         select.append(`<option value="${item.name}">${item.item_name}</option>`);
@@ -5563,23 +5232,22 @@ function add_bp_item_row($wrapper) {
     }
 }
 
-function submit_borrowed_product($wrapper) {
-    let type = $wrapper.find('#bp-type').val();
-    let counterparty = $wrapper.find('#bp-counterparty').val();
-    let memo = $wrapper.find('#bp-memo').val();
-    let date = window.ACTIVE_SHIFT.shift_date || frappe.datetime.get_today();
+function submit_borrowed_product($wrapper, type) {
+    let date = $wrapper.find('#borrow-date').val();
+    let counterparty = $wrapper.find('#borrow-counterparty').val();
+    let memo = $wrapper.find('#borrow-memo').val();
     
     if (!counterparty) {
-        frappe.msgprint("Please select a Counterparty.");
+        frappe.msgprint("Please enter a Counterparty (FROM/TO).");
         return;
     }
     
     let items = [];
     let has_error = false;
     
-    $wrapper.find('.bp-item-row').each(function() {
-        let item_code = $(this).find('.bp-item-code').val();
-        let qty = parseFloat($(this).find('.bp-qty').val());
+    $wrapper.find('.borrowed-item-card').each(function() {
+        let item_code = $(this).find('.borrow-item-code').val();
+        let qty = parseFloat($(this).find('.borrow-qty').val());
         
         if (item_code && qty > 0) {
             items.push({
@@ -5597,7 +5265,7 @@ function submit_borrowed_product($wrapper) {
     }
     
     let payload = {
-        station: window.ACTIVE_SHIFT.station,
+        station: window.current_station,
         type: type,
         date: date,
         counterparty: counterparty,
@@ -5605,7 +5273,7 @@ function submit_borrowed_product($wrapper) {
         items: items
     };
     
-    let $btn = $wrapper.find('#btn-save-bp');
+    let $btn = $wrapper.find('#btn-submit-borrowed');
     $btn.find('.spinner').removeClass('hidden');
     $btn.prop('disabled', true);
     
@@ -5618,149 +5286,88 @@ function submit_borrowed_product($wrapper) {
             
             if (!r.exc && r.message) {
                 frappe.show_alert({message: "Successfully recorded " + type, indicator: "green"});
-                $wrapper.find('#bp-counterparty').val('');
-                $wrapper.find('#bp-memo').val('');
-                $wrapper.find('#bp-items-container').empty();
-                add_bp_item_row($wrapper);
-                
-                // Switch to history tab
-                $wrapper.find('#tab-borrowed .seg-btn[data-view="history"]').click();
+                // Reset form
+                $wrapper.find('#borrow-counterparty').val('');
+                $wrapper.find('#borrow-memo').val('');
+                $wrapper.find('#borrowed-items-container').empty();
+                add_borrow_item_row($wrapper);
             }
         }
     });
 }
 
-function fetch_bp_history($wrapper) {
-    let from_date = $wrapper.find('#bp-filter-from-date').val();
-    let to_date = $wrapper.find('#bp-filter-to-date').val();
-    let counterparty = $wrapper.find('#bp-filter-counterparty').val() || "";
+function fetch_borrowed_report($wrapper) {
+    let status = $wrapper.find('#borrow-report-status').val() || "All";
     
-    let $btn = $wrapper.find('#btn-refresh-bp-history');
+    let $btn = $wrapper.find('#btn-refresh-borrow-report');
     $btn.find('.spinner').removeClass('hidden');
-    
-    let $tbody = $wrapper.find('#list-borrowed-saved');
-    $tbody.html('<tr><td colspan="8" class="text-center">Loading history...</td></tr>');
+    $btn.prop('disabled', true);
     
     frappe.call({
         method: 'fuel_management.fuel_management.api.get_borrowed_products',
-        args: { 
-            station: window.ACTIVE_SHIFT.station,
-            status: "All",
-            from_date: from_date,
-            to_date: to_date,
-            counterparty: counterparty
-        },
+        args: { station: window.current_station, status: status },
         callback: function(r) {
             $btn.find('.spinner').addClass('hidden');
-            $tbody.empty();
+            $btn.prop('disabled', false);
+            
+            let tbody = $wrapper.find('#table-borrowed-report tbody');
+            tbody.empty();
             
             if (r.message && r.message.length > 0) {
                 r.message.forEach(row => {
                     let type_html = row.type === 'Borrowed In' 
-                        ? `<span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">IN</span>` 
-                        : `<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-full">OUT</span>`;
+                        ? `<span class="badge pill-green" style="color:white; padding:0.4rem;">IN</span>` 
+                        : `<span class="badge pill-red" style="color:white; padding:0.4rem;">OUT</span>`;
                         
                     let status_html = row.status === 'Pending Return'
-                        ? `<span class="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">Pending Return</span>`
-                        : `<span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">Returned</span>`;
+                        ? `<span class="badge badge-pending">Pending Return</span>`
+                        : `<span class="badge badge-returned">Returned</span>`;
                         
                     let items_html = row.items.map(i => `${i.qty}x ${i.item_code}`).join('<br>');
                     
                     let action_html = "";
                     if (row.status === 'Pending Return') {
-                        action_html = `<button class="btn btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="open_bp_return_modal('${row.name}', '${row.counterparty}')">Return</button>`;
+                        action_html = `<button class="btn-primary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" onclick="mark_borrowed_returned('${row.name}')">Mark Returned</button>`;
                     }
                     
                     let tr = `
                         <tr>
-                            <td class="text-sm font-medium text-gray-900">${row.name}</td>
-                            <td class="text-sm text-gray-500">${frappe.datetime.str_to_user(row.date)}</td>
+                            <td>${row.name}</td>
+                            <td>${row.date}</td>
+                            <td>${row.counterparty}</td>
                             <td>${type_html}</td>
-                            <td class="text-sm text-gray-900 font-semibold">${row.counterparty}</td>
-                            <td class="text-sm text-gray-600">${items_html}</td>
+                            <td>${items_html}</td>
                             <td>${status_html}</td>
-                            <td class="text-sm text-gray-500">${row.memo || ""}</td>
                             <td>${action_html}</td>
                         </tr>
                     `;
-                    $tbody.append(tr);
+                    tbody.append(tr);
                 });
             } else {
-                $tbody.append('<tr><td colspan="8" class="text-center" style="padding: 2rem; color: #64748b;">No borrowed products found.</td></tr>');
+                tbody.append('<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>');
             }
         }
     });
 }
 
-window.open_bp_return_modal = function(docname, counterparty) {
-    let $wrapper = $('.shift-operation-spa');
-    let $modal = $wrapper.find('#bp-return-modal');
-    
-    $wrapper.find('#bp-return-docname').val(docname);
-    $wrapper.find('#bp-return-date').val(window.ACTIVE_SHIFT.shift_date || frappe.datetime.get_today());
-    
-    $wrapper.find('#bp-return-modal-body').html('<div class="text-center">Loading items...</div>');
-    $modal.css('display', 'flex');
-    
-    // Fetch items for this borrow record to show what's being returned
-    frappe.call({
-        method: 'frappe.client.get',
-        args: {
-            doctype: 'Borrowed Product',
-            name: docname
-        },
-        callback: function(r) {
-            if (r.message) {
-                let html = `<div style="margin-bottom: 10px; font-weight: bold; color: #1e293b;">Items from ${counterparty}:</div>`;
-                html += `<table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
-                            <thead>
-                                <tr style="background: #f1f5f9;">
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #cbd5e1; font-size: 0.85rem; color: #475569;">Item</th>
-                                    <th style="padding: 8px; text-align: center; border-bottom: 1px solid #cbd5e1; font-size: 0.85rem; color: #475569;">Qty to Return</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                
-                r.message.items.forEach(i => {
-                    html += `<tr>
-                                <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem;">${i.item_code}</td>
-                                <td style="padding: 8px; text-align: center; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; font-weight: 600;">${i.qty}</td>
-                             </tr>`;
-                });
-                
-                html += `</tbody></table>`;
-                html += `<div class="alert alert-warning" style="font-size: 0.85rem; padding: 10px; margin-top: 10px;">
-                            <strong>Note:</strong> Returning this will automatically post a reverse Stock Entry.
-                         </div>`;
-                
-                $wrapper.find('#bp-return-modal-body').html(html);
-            }
+window.mark_borrowed_returned = function(docname) {
+    frappe.confirm(
+        `Are you sure you want to mark ${docname} as Returned? This will automatically post a reverse Stock Entry.`,
+        function() {
+            frappe.call({
+                method: 'fuel_management.fuel_management.api.return_borrowed_product',
+                args: { docname: docname },
+                callback: function(r) {
+                    if (!r.exc) {
+                        frappe.show_alert({message: "Successfully returned!", indicator: "green"});
+                        fetch_borrowed_report($('.shift-operation-spa'));
+                    }
+                }
+            });
         }
-    });
+    );
 };
 
-function submit_bp_return($wrapper) {
-    let docname = $wrapper.find('#bp-return-docname').val();
-    
-    let $btn = $wrapper.find('#btn-bp-return-submit');
-    $btn.find('.spinner').removeClass('hidden');
-    $btn.prop('disabled', true);
-    
-    frappe.call({
-        method: 'fuel_management.fuel_management.api.return_borrowed_product',
-        args: { docname: docname },
-        callback: function(r) {
-            $btn.find('.spinner').addClass('hidden');
-            $btn.prop('disabled', false);
-            
-            if (!r.exc) {
-                frappe.show_alert({message: "Successfully returned!", indicator: "green"});
-                $wrapper.find('#bp-return-modal').hide();
-                fetch_bp_history($wrapper);
-            }
-        }
-    });
-}
 
 
 // =========================================================
@@ -5785,7 +5392,6 @@ window.generate_end_shift_report = function($wrapper) {
                 doc.csa_reconciliation = (r.message && r.message.reconciliations) ? r.message.reconciliations : [];
                 doc.non_shift_amount = (r.message && r.message.non_shift_amount) ? r.message.non_shift_amount : 0;
                 doc.customer_payments_total = (r.message && r.message.customer_payments_total) ? r.message.customer_payments_total : 0;
-                doc.customer_payments_breakdown = (r.message && r.message.customer_payments_breakdown) ? r.message.customer_payments_breakdown : [];
                 doc.topups_total = (r.message && r.message.topups_total) ? r.message.topups_total : 0;
                 doc.cards_breakdown = (r.message && r.message.cards_breakdown) ? r.message.cards_breakdown : [];
                 doc.invoices_breakdown = (r.message && r.message.invoices_breakdown) ? r.message.invoices_breakdown : [];
@@ -6008,15 +5614,6 @@ var company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
                         <div class="summary-row"><span>Total Cash Submitted by CSAs</span> <span>${frappe.format(total_submitted_cash, {fieldtype: 'Currency'})}</span></div>
                         <div class="summary-row total" style="color: ${grand_variance < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(grand_variance, {fieldtype: 'Currency'})}</span></div>
                         <div class="summary-row" style="border-top: 1px dashed #cbd5e1; margin-top: 5px; padding-top: 5px;"><span>Customer Payments (Non-Shift)</span> <span>${frappe.format(cp_total, {fieldtype: 'Currency'})}</span></div>
-                        ${(function(){
-                            let cp_html = '';
-                            if (doc.customer_payments_breakdown && doc.customer_payments_breakdown.length > 0) {
-                                doc.customer_payments_breakdown.forEach(cp => {
-                                    cp_html += `<div class="summary-row" style="color: #64748b; padding-left: 15px; font-size: 0.85rem;"><span>↳ ${cp.customer || 'Unknown'}</span> <span>${frappe.format(cp.amount || 0, {fieldtype: 'Currency'})}</span></div>`;
-                                });
-                            }
-                            return cp_html;
-                        })()}
                         <div class="summary-row"><span>Supplier Top-Ups (Non-Shift)</span> <span>${frappe.format(topups_total, {fieldtype: 'Currency'})}</span></div>
                     </div>
                 </div>
@@ -6849,7 +6446,7 @@ window.load_shortage_form_data = function() {
                 // Populate Cash Accounts
                 let cashOptions = '<option value="">Select Account...</option>';
                 r.message.cash_accounts.forEach(c => {
-                    cashOptions += `<option value="${c.name}">${c.account_name} (Bal: ${format_currency(c.current_balance)})</option>`;
+                    cashOptions += `<option value="${c.name}">${c.account_name} (Bal: ${formatCurrency(c.current_balance)})</option>`;
                 });
                 $('#shortage-pay-cash-account').html(cashOptions);
             }
@@ -6857,90 +6454,29 @@ window.load_shortage_form_data = function() {
     });
 };
 
-
-window.cancel_shortage_doc = function(doctype, docname) {
-    frappe.confirm(`Are you sure you want to cancel this ${doctype}? This will reverse the accounting and ledger entries.`, function() {
-        frappe.call({
-            method: "frappe.client.cancel",
-            args: {
-                doctype: doctype,
-                name: docname
-            },
-            callback: function(r) {
-                if(!r.exc) {
-                    frappe.show_alert({message: "Document Cancelled Successfully", indicator: "green"});
-                    window.load_shortage_history();
-                    window.load_shortage_balances();
-                }
-            }
-        });
-    });
-};
-
-window.cancel_shortage_doc = function(doctype, docname) {
-    frappe.confirm(`Are you sure you want to cancel this ${doctype}? This will reverse the accounting and ledger entries.`, function() {
-        frappe.call({
-            method: "frappe.client.cancel",
-            args: {
-                doctype: doctype,
-                name: docname
-            },
-            callback: function(r) {
-                if(!r.exc) {
-                    frappe.show_alert({message: "Document Cancelled Successfully", indicator: "green"});
-                    window.load_shortage_history();
-                    window.load_shortage_balances();
-                }
-            }
-        });
-    });
-};
-
 window.load_shortage_history = function() {
-    $('#shortage-history-body').html('<tr><td colspan="5" class="text-center py-4 text-gray-500">Loading...</td></tr>');
-    
-    let s = $('#shortage-history-start').val();
-    let e = $('#shortage-history-end').val();
-    let args = {};
-    if (s && e) { args.start_date = s; args.end_date = e; }
-    
+    $('#shortage-history-body').html('<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading...</td></tr>');
     frappe.call({
         method: "fuel_management.fuel_management.api.get_recent_shortage_records",
-        args: args,
         callback: function(r) {
             if (r.message) {
                 let html = '';
                 if (r.message.length === 0) {
-                    html = '<tr><td colspan="5" class="text-center py-4 text-gray-500">No recent activity</td></tr>';
+                    html = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No recent activity</td></tr>';
                 } else {
                     r.message.forEach(row => {
                         let isPay = row.type === 'Payment';
                         let typeBadge = isPay 
                             ? `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded border border-blue-200">Payment</span>`
                             : `<span class="bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded border border-orange-200">Correction</span>`;
-                        let staff = isPay ? row.employee_name : `${row.from_employee_name} -> ${row.to_employee_name}`;
-                        
-                        let doctype_url = isPay ? 'staff-shortage-payment' : 'staff-shortage-correction';
-                        let dt_str = isPay ? 'Staff Shortage Payment' : 'Staff Shortage Correction';
-                        
-                        let actions = `
-                            <div class="flex items-center justify-end gap-2">
-                                <a href="/app/${doctype_url}/${row.name}" target="_blank" class="text-blue-600 hover:text-blue-800" title="View / Edit">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                </a>
-                                <button onclick="window.cancel_shortage_doc('${dt_str}', '${row.name}')" class="text-red-600 hover:text-red-800" title="Delete / Cancel">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                                </button>
-                            </div>
-                        `;
+                        let staff = isPay ? row.employee : `${row.from_employee} ➔ ${row.to_employee}`;
                         
                         html += `
                             <tr class="border-b border-gray-100 hover:bg-gray-50">
                                 <td class="px-4 py-3">${frappe.datetime.str_to_user(row.date)}</td>
                                 <td class="px-4 py-3">${typeBadge}</td>
                                 <td class="px-4 py-3">${staff}</td>
-                                <td class="px-4 py-3 text-right font-medium text-gray-900">${format_currency(row.amount)}</td>
-                                <td class="px-4 py-3 text-right">${actions}</td>
+                                <td class="px-4 py-3 text-right font-medium text-gray-900">${formatCurrency(row.amount)}</td>
                             </tr>
                         `;
                     });
@@ -6964,10 +6500,6 @@ window.submit_shortage_payment = function() {
     
     let shift_ref = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.name : null;
     
-    let $btn = $('#btn-submit-shortage-pay');
-    let original_html = $btn.html();
-    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="margin-right: 5px;"></span> Processing...');
-    
     frappe.call({
         method: "fuel_management.fuel_management.api.submit_shortage_payment",
         args: {
@@ -6981,7 +6513,6 @@ window.submit_shortage_payment = function() {
             remarks: remarks
         },
         callback: function(r) {
-            $btn.prop('disabled', false).html(original_html);
             if (!r.exc) {
                 frappe.show_alert({message: "Payment Recorded Successfully", indicator: "green"});
                 $('#shortage-pay-amount').val('');
@@ -6989,9 +6520,6 @@ window.submit_shortage_payment = function() {
                 $('#shortage-pay-remarks').val('');
                 window.load_shortage_history();
             }
-        },
-        error: function() {
-            $btn.prop('disabled', false).html(original_html);
         }
     });
 };
@@ -7005,10 +6533,7 @@ window.submit_shortage_correction = function() {
     if (!from_emp || !to_emp) { frappe.msgprint("Please select both staff members"); return; }
     if (from_emp === to_emp) { frappe.msgprint("Cannot transfer to the same staff member"); return; }
     if (!amount || amount <= 0) { frappe.msgprint("Enter a valid amount"); return; }
-    
-    let $btn = $('#btn-submit-shortage-cor');
-    let original_html = $btn.html();
-    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="margin-right: 5px;"></span> Processing...');
+    if (!remarks) { frappe.msgprint("Remarks/Reason is required"); return; }
     
     frappe.call({
         method: "fuel_management.fuel_management.api.submit_shortage_correction",
@@ -7020,16 +6545,12 @@ window.submit_shortage_correction = function() {
             remarks: remarks
         },
         callback: function(r) {
-            $btn.prop('disabled', false).html(original_html);
             if (!r.exc) {
                 frappe.show_alert({message: "Correction Recorded Successfully", indicator: "green"});
                 $('#shortage-cor-amount').val('');
                 $('#shortage-cor-remarks').val('');
                 window.load_shortage_history();
             }
-        },
-        error: function() {
-            $btn.prop('disabled', false).html(original_html);
         }
     });
 };
@@ -7166,9 +6687,3 @@ window.show_shortage_breakdown = function(employee_id, employee_name) {
         }
     });
 };
-
-
-
-
-
-

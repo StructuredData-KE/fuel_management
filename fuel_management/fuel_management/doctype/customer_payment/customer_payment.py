@@ -30,8 +30,8 @@ class CustomerPayment(Document):
 
         # 1. Determine Debit Account
         debit_account = None
-        if self.mode_of_payment == "Cash" and self.shift:
-            # Try to get the shift control account from the Fuel Station of the shift
+        if self.shift:
+            # Route through Shift Control if linked to a shift, regardless of payment mode
             station = frappe.db.get_value("Shift", self.shift, "station")
             if station:
                 debit_account = frappe.db.get_value("Fuel Station", station, "shift_control_account")

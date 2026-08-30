@@ -1,0 +1,302 @@
+
+<style>
+      /* Prevent Frappe CSS conflicts */
+      .dashboard-wrapper * {
+          box-sizing: border-box;
+      }
+      .dashboard-wrapper {
+          font-family: "Inter", sans-serif;
+      }
+      /* Hide scrollbars for cleaner look */
+      ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+          background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+      }
+      /* Fix for Frappe page container padding */
+      .page-body {
+          padding: 0 !important;
+      }
+      .page-content {
+          padding: 0 !important;
+          margin: 0 !important;
+      }
+  </style>
+
+  <div class="dashboard-wrapper min-h-screen flex flex-col md:flex-row bg-background text-text-primary" style="margin: -15px; width: calc(100% + 30px);">
+    
+<!-- TopNavBar (Mobile Only) / Header -->
+<header class="d-md-none bg-surface-container-lowest border-b border-surface-border fixed top-0 w-full z-50 h-14 flex justify-between items-center px-container-padding">
+<span class="font-headline-md text-headline-md font-bold text-accent-amber">Executive Owner SPA</span>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined cursor-pointer text-text-secondary hover:text-text-primary" id="mobile-menu-btn">menu</span>
+<span class="material-symbols-outlined cursor-pointer text-text-secondary hover:text-text-primary">settings</span>
+</div>
+</header>
+<!-- SideNavBar (Desktop Only) -->
+<nav id="sidebar" class="d-none d-md-flex flex-col bg-[#f4f7fa] border-r border-slate-200 w-64 fixed h-screen overflow-y-auto py-6 z-40 shrink-0 top-0 left-0">
+<div class="px-6 mb-8">
+<span class="text-orange-500 font-bold text-[22px] tracking-tight block">Executive Panel</span>
+<span class="text-green-700 font-bold text-[10px] tracking-widest uppercase block mt-1">Operational Overview</span>
+</div>
+<div class="flex-1 flex flex-col space-y-1 overflow-y-auto px-4">
+<!-- Active Nav Item: Dashboard -->
+<a class="nav-item flex items-center gap-3 bg-orange-500 text-white rounded-lg px-4 py-2.5 text-sm font-semibold transition-all shadow-sm" href="#" data-target="tab-dashboard">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Inactive Nav Items -->
+<a class="nav-item flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#" data-target="tab-financials">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+<span>Financials</span>
+</a>
+<a class="nav-item flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#" data-target="tab-inventory">
+<span class="material-symbols-outlined text-[20px]">inventory_2</span>
+<span>Inventory</span>
+</a>
+<a class="nav-item flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#" data-target="tab-reconciliations">
+<span class="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+<span>Reconciliations</span>
+</a>
+<a class="nav-item flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#" data-target="tab-customers">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span>Customers</span>
+</a>
+<a class="nav-item flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#" data-target="tab-hr">
+<span class="material-symbols-outlined text-[20px]">badge</span>
+<span>HR</span>
+</a>
+<a class="nav-item flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#" data-target="tab-analytics">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+<span>Analytics</span>
+</a>
+</div>
+<div class="mt-auto flex flex-col space-y-1 pt-6 px-4">
+<a class="nav-item flex items-center gap-3 text-slate-500 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">help</span>
+<span>Support</span>
+</a>
+<a class="nav-item flex items-center gap-3 text-slate-500 hover:text-slate-900 hover:bg-white hover:shadow-sm transition-all rounded-lg px-4 py-2.5 text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[20px]">logout</span>
+<span>Logout</span>
+</a>
+</div>
+</nav>
+<!-- Main Canvas -->
+<main class="flex-1 md:ml-64 pt-14 md:pt-0 bg-white min-h-screen px-6 py-6 md:py-10 flex flex-col gap-6">
+        <!-- Global Filters Bar -->
+        <div class="bg-white border-b border-slate-200 pb-4 flex flex-col sm:flex-row gap-4 justify-between items-center z-30 mb-2">
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+             <select id="global-station-filter" class="bg-white border border-slate-300 hover:border-slate-400 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 w-full sm:w-auto cursor-pointer shadow-sm transition-all">
+               <option>All Stations</option>
+               <option>Forecourt</option>
+               <option>Town Station</option>
+               <option>Cheptiret A</option>
+               <option>Canary</option>
+             </select>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+             <input type="date" id="global-date-start" class="bg-white border border-slate-300 hover:border-slate-400 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-700 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 w-full sm:w-auto shadow-sm transition-all" />
+             <span class="text-slate-400 font-medium">-</span>
+             <input type="date" id="global-date-end" class="bg-white border border-slate-300 hover:border-slate-400 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-700 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 w-full sm:w-auto shadow-sm transition-all" />
+          </div>
+        </div>
+
+        <div id="tab-dashboard" class="tab-content w-full">
+            
+<!-- Desktop Header Row (Context & Global Actions) -->
+<div class="d-none d-md-flex justify-between items-end mb-6">
+<div>
+<h1 class="text-[32px] leading-tight font-bold text-slate-900 tracking-tight">System Overview</h1>
+<p class="text-[13px] font-mono text-slate-500 mt-1">Real-time telemetry &amp; financial metrics.</p>
+</div>
+<div class="flex gap-2">
+<button class="bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 border border-slate-200 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                    Export Shift Report
+                </button>
+</div>
+</div>
+<!-- KPI Row: Bento Box High Density -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-card-gap">
+<!-- Total Sales -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-surface-border flex flex-col hover:bg-surface-container-low transition-colors group shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-text-secondary uppercase">Total Sales (Today)</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">trending_up</span>
+</div>
+<div class="font-data-lg text-data-lg text-text-primary mt-1 group-hover:text-accent-amber transition-colors">
+                    $142,500.00
+                </div>
+<div class="mt-2 h-1 w-full bg-surface-border rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-[85%] rounded-full"></div>
+</div>
+<span class="font-data-sm text-data-sm text-text-secondary mt-2 text-right">85% of daily target</span>
+</div>
+<!-- Collections -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-surface-border flex flex-col hover:bg-surface-container-low transition-colors group shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-text-secondary uppercase">Collections Split</span>
+<span class="material-symbols-outlined text-tertiary text-[18px]">account_balance</span>
+</div>
+<div class="font-data-lg text-data-lg text-text-primary mt-1">
+                    $138,200.00
+                </div>
+<div class="flex gap-1 mt-3">
+<!-- Sparkline/Bar substitute -->
+<div class="h-2 bg-accent-amber rounded-l-full w-[40%]" title="M-Pesa: 40%"></div>
+<div class="h-2 bg-tertiary w-[35%]" title="Cards: 35%"></div>
+<div class="h-2 bg-secondary rounded-r-full w-[25%]" title="Cash: 25%"></div>
+</div>
+<div class="flex justify-between font-data-sm text-data-sm mt-2 text-text-secondary">
+<span class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-accent-amber"></div>M-Pesa</span>
+<span class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-tertiary"></div>Cards</span>
+<span class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-secondary"></div>Cash</span>
+</div>
+</div>
+<!-- Net Variance -->
+<div class="bg-surface-container-lowest p-4 rounded-lg border border-surface-border flex flex-col hover:bg-surface-container-low transition-colors group shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-text-secondary uppercase">Net Variance</span>
+<span class="material-symbols-outlined text-error text-[18px]">warning</span>
+</div>
+<div class="font-data-lg text-data-lg text-error mt-1">
+                    -$4,300.00
+                </div>
+<div class="mt-auto pt-3 border-t border-surface-border">
+<span class="font-data-sm text-data-sm text-error bg-error-container px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">arrow_downward</span> 3.01%
+                    </span>
+<span class="font-data-sm text-data-sm text-text-secondary ml-2">vs. projected</span>
+</div>
+</div>
+</div>
+<!-- Main Chart & Alerts Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-card-gap flex-1">
+<!-- Primary Chart Area -->
+<div class="md:col-span-2 bg-surface-container-lowest rounded-lg border border-surface-border p-4 flex flex-col min-h-[300px] shadow-sm">
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline-md text-headline-md text-text-primary">Fuel Sales Volume (Liters)</h2>
+<div class="flex gap-2">
+<span class="flex items-center gap-1 font-data-sm text-data-sm text-text-secondary"><div class="w-3 h-3 bg-accent-amber rounded-sm"></div> Current Mth</span>
+<span class="flex items-center gap-1 font-data-sm text-data-sm text-text-secondary"><div class="w-3 h-3 bg-surface-border border border-outline-variant rounded-sm"></div> Prev Mth</span>
+</div>
+</div>
+<!-- CSS-based Bar Chart Representation -->
+<div class="flex-1 flex items-end justify-between gap-2 border-b border-surface-border pb-2 relative">
+<!-- Grid Lines -->
+<div class="absolute w-full border-t border-surface-border top-1/4"></div>
+<div class="absolute w-full border-t border-surface-border top-2/4"></div>
+<div class="absolute w-full border-t border-surface-border top-3/4"></div>
+<!-- Bars -->
+<div class="flex flex-col items-center flex-1 z-10 group">
+<div class="flex items-end gap-1 w-full justify-center h-[200px]">
+<div class="w-3 md:w-6 bg-surface-border border border-outline-variant h-[60%] rounded-t-sm"></div>
+<div class="w-3 md:w-6 bg-accent-amber h-[75%] rounded-t-sm group-hover:bg-primary transition-colors"></div>
+</div>
+<span class="font-data-sm text-data-sm text-text-secondary mt-2">W1</span>
+</div>
+<div class="flex flex-col items-center flex-1 z-10 group">
+<div class="flex items-end gap-1 w-full justify-center h-[200px]">
+<div class="w-3 md:w-6 bg-surface-border border border-outline-variant h-[70%] rounded-t-sm"></div>
+<div class="w-3 md:w-6 bg-accent-amber h-[85%] rounded-t-sm group-hover:bg-primary transition-colors"></div>
+</div>
+<span class="font-data-sm text-data-sm text-text-secondary mt-2">W2</span>
+</div>
+<div class="flex flex-col items-center flex-1 z-10 group">
+<div class="flex items-end gap-1 w-full justify-center h-[200px]">
+<div class="w-3 md:w-6 bg-surface-border border border-outline-variant h-[80%] rounded-t-sm"></div>
+<div class="w-3 md:w-6 bg-accent-amber h-[65%] rounded-t-sm group-hover:bg-primary transition-colors"></div>
+</div>
+<span class="font-data-sm text-data-sm text-text-secondary mt-2">W3</span>
+</div>
+<div class="flex flex-col items-center flex-1 z-10 group">
+<div class="flex items-end gap-1 w-full justify-center h-[200px]">
+<div class="w-3 md:w-6 bg-surface-border border border-outline-variant h-[55%] rounded-t-sm"></div>
+<div class="w-3 md:w-6 bg-accent-amber h-[90%] rounded-t-sm group-hover:bg-primary transition-colors"></div>
+</div>
+<span class="font-data-sm text-data-sm text-text-secondary mt-2">W4</span>
+</div>
+</div>
+</div>
+<!-- Alerts & Tank Status -->
+<div class="bg-surface-container-lowest rounded-lg border border-surface-border p-4 flex flex-col shadow-sm">
+<h2 class="font-headline-md text-headline-md text-text-primary mb-4 flex items-center justify-between border-b border-surface-border pb-2">
+                    System Alerts
+                    <span class="bg-error-container text-on-error-container font-data-sm text-data-sm px-2 py-0.5 rounded-full">3 Active</span>
+</h2>
+<div class="flex flex-col gap-dense-gap overflow-y-auto pr-1">
+<!-- Alert Item 1 -->
+<div class="bg-surface-container-low p-3 rounded flex items-start gap-3 border-l-2 border-error">
+<span class="material-symbols-outlined text-error text-[18px] mt-0.5">water_drop</span>
+<div>
+<div class="font-data-md text-data-md text-text-primary">Tank 2 Variance High</div>
+<div class="font-data-sm text-data-sm text-text-secondary mt-1">Dispensed: 4,500L | Dipped: 4,320L. Variance exceeds 1% threshold.</div>
+</div>
+</div>
+<!-- Alert Item 2 -->
+<div class="bg-surface-container-low p-3 rounded flex items-start gap-3 border-l-2 border-accent-amber">
+<span class="material-symbols-outlined text-accent-amber text-[18px] mt-0.5">credit_card_off</span>
+<div>
+<div class="font-data-md text-data-md text-text-primary">Credit Limit Near</div>
+<div class="font-data-sm text-data-sm text-text-secondary mt-1">Client &apos;Apex Logistics&apos; at 92% of allowable credit limit.</div>
+</div>
+</div>
+<!-- Alert Item 3 -->
+<div class="bg-surface-container-low p-3 rounded flex items-start gap-3 border-l-2 border-secondary">
+<span class="material-symbols-outlined text-secondary text-[18px] mt-0.5">price_change</span>
+<div>
+<div class="font-data-md text-data-md text-text-primary">Price Update Pending</div>
+<div class="font-data-sm text-data-sm text-text-secondary mt-1">Scheduled pump price increase requires authorization.</div>
+</div>
+</div>
+</div>
+<button class="mt-auto w-full bg-primary-container text-on-primary-container font-label-caps text-label-caps py-3 rounded uppercase hover:bg-accent-amber transition-colors tracking-wider mt-4 shadow-lg shadow-primary-container/20 border border-accent-amber">
+                    Acknowledge All Alerts
+                </button>
+</div>
+</div>
+
+        </div>
+        
+        <div id="tab-financials" class="tab-content" style="display:none;">
+            <h1 class="font-display-lg text-display-lg text-text-primary">Financials & Accounting</h1>
+            <!-- Content will be ported here -->
+        </div>
+
+        <div id="tab-inventory" class="tab-content" style="display:none;">
+            <h1 class="font-display-lg text-display-lg text-text-primary">Visual Inventory & Dip Reports</h1>
+            <!-- Content will be ported here -->
+        </div>
+
+        <div id="tab-reconciliations" class="tab-content" style="display:none;">
+            <h1 class="font-display-lg text-display-lg text-text-primary">Shift Reconciliations</h1>
+            <!-- Content will be ported here -->
+        </div>
+
+        <div id="tab-customers" class="tab-content" style="display:none;">
+            <h1 class="font-display-lg text-display-lg text-text-primary">Customers & Debtors</h1>
+            <!-- Content will be ported here -->
+        </div>
+
+        <div id="tab-hr" class="tab-content" style="display:none;">
+            <h1 class="font-display-lg text-display-lg text-text-primary">HR View</h1>
+            <!-- Content will be ported here -->
+        </div>
+
+        <div id="tab-analytics" class="tab-content" style="display:none;">
+            <h1 class="font-display-lg text-display-lg text-text-primary">Station Analytics</h1>
+            <!-- Content will be ported here -->
+        </div>
+</main>
+
+</div>

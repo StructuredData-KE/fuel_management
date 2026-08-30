@@ -36,6 +36,18 @@
    "fieldtype": "Float",
    "label": "Current Volume",
    "read_only": 1
+  },
+  {
+   "fieldname": "reorder_threshold",
+   "fieldtype": "Percent",
+   "label": "Reorder Threshold %",
+   "default": "15"
+  },
+  {
+   "fieldname": "variance_tolerance",
+   "fieldtype": "Float",
+   "label": "Variance Tolerance (Litres)",
+   "default": "50"
   }
  ],
  "modified": "2024-01-01 12:00:00.000000",

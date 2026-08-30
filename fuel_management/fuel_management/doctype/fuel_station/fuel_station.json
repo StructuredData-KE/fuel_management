@@ -89,6 +89,12 @@
    "fieldtype": "Link",
    "label": "Overage Account (Income)",
    "options": "Account"
+  },
+  {
+   "fieldname": "top_up_holding_account",
+   "fieldtype": "Link",
+   "label": "Top Up Holding Account",
+   "options": "Account"
   }
  ],
  "modified": "2024-01-01 12:00:00.000000",

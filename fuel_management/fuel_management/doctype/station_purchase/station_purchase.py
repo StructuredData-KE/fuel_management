@@ -35,14 +35,22 @@ class StationPurchase(Document):
         pi.custom_kra_invoice_number = self.tax_invoice_number
         
         for item in self.items:
+            company = frappe.defaults.get_user_default("Company")
+            expense_account = frappe.db.get_value("Item Default", {"parent": item.item, "company": company}, "expense_account")
+            if not expense_account:
+                expense_account = frappe.get_cached_value("Company", company, "default_expense_account") or "Cost of Goods Sold"
+
             pi_item = {
                 "item_code": item.item,
                 "qty": item.quantity,
                 "rate": item.unit_cost,
                 "warehouse": item.target_location,
                 "received_qty": item.quantity,
-                "expense_account": frappe.get_cached_value("Company", frappe.defaults.get_user_default("Company"), "default_expense_account") or "Cost of Goods Sold"
+                "expense_account": expense_account
             }
+            # Custom logic to map target_tank if added to Purchase Invoice Item in future
+            if getattr(item, "target_tank", None):
+                pi_item["custom_target_tank"] = item.target_tank
             if getattr(item, "uom", None):
                 pi_item["uom"] = item.uom
                 
@@ -76,6 +84,11 @@ class StationPurchase(Document):
                     except Exception:
                         pass
                         
+            company = frappe.defaults.get_user_default("Company")
+            expense_account = frappe.db.get_value("Item Default", {"parent": item_code, "company": company}, "expense_account")
+            if not expense_account:
+                expense_account = frappe.get_cached_value("Company", company, "default_expense_account") or "Cost of Goods Sold"
+
             pi.append("items", {
                 "item_code": item_code,
                 "warehouse": self.items[0].target_location if self.items else None,
@@ -83,12 +96,26 @@ class StationPurchase(Document):
                 "description": "Transport Charge",
                 "qty": 1,
                 "rate": self.transport_charge,
-                "expense_account": frappe.get_cached_value("Company", frappe.defaults.get_user_default("Company"), "default_expense_account") or "Cost of Goods Sold"
+                "expense_account": expense_account
             })
         
+
         pi.flags.ignore_permissions = True
         pi.insert()
         pi.submit()
+        
+        # Update tank volume
+        for item in self.items:
+            if getattr(item, "target_tank", None):
+                try:
+                    tank = frappe.get_doc("Fuel Tank", item.target_tank)
+                    if tank.current_volume is None:
+                        tank.current_volume = 0
+                    tank.current_volume += item.quantity
+                    tank.flags.ignore_permissions = True
+                    tank.save()
+                except Exception as e:
+                    frappe.log_error("Failed to update Fuel Tank volume: " + str(e))
         
         # Suppress auto-generated warning messages about Expense Head changing
         if hasattr(frappe, "message_log"):

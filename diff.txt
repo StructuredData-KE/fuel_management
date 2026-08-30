@@ -1,0 +1,1409 @@
+﻿diff --git a/fuel_management/fuel_management/page/shift_operation_spa/shift_operation_spa.js b/fuel_management/fuel_management/page/shift_operation_spa/shift_operation_spa.js
+index 01967fe..088bcee 100644
+--- a/fuel_management/fuel_management/page/shift_operation_spa/shift_operation_spa.js
++++ b/fuel_management/fuel_management/page/shift_operation_spa/shift_operation_spa.js
+@@ -121,7 +121,7 @@ function fetch_active_shift(wrapper) {
+         args: {
+             doctype: "Shift",
+             filters: { status: "Open", owner: frappe.session.user },
+-            fields: ["name", "station", "head_csa", "shift_template", "shift_date", "status"],
++            fields: ["name", "station", "head_csa", "shift_template", "shift_date", "status", "creation"],
+             limit_page_length: 1
+         },
+         callback: function(r) {
+@@ -137,14 +137,14 @@ function fetch_active_shift(wrapper) {
+ }
+ 
+ function lock_ui_for_no_shift($wrapper) {
+-    $wrapper.find('.nav-item:not([data-target="tab-start"])').css({
++    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-home"])').css({
+         'opacity': '0.5',
+         'pointer-events': 'none'
+     });
+     $wrapper.find('#active-shift-badge').removeClass('active-shift').text('No Active Shift');
+     
+-    // Switch to Start Shift tab
+-    $wrapper.find('.nav-item[data-target="tab-start"]').click();
++    // Switch to Home Shift tab
++    $wrapper.find('.nav-item[data-target="tab-home"]').click();
+ }
+ 
+ function lock_ui_for_active_shift($wrapper) {
+@@ -152,19 +152,14 @@ function lock_ui_for_active_shift($wrapper) {
+         'opacity': '1',
+         'pointer-events': 'auto'
+     });
+-    // Lock Start Shift module
+-    $wrapper.find('.nav-item[data-target="tab-start"]').css({
+-        'opacity': '0.5',
+-        'pointer-events': 'none'
+-    });
+     
+     // Update Badge
+     let bShiftName = window.ACTIVE_SHIFT.shift_template ? window.ACTIVE_SHIFT.shift_template : "Shift";
+     let formattedDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
+     $wrapper.find('#active-shift-badge').addClass('active-shift').text(`Active: ${formattedDate}(${bShiftName})`);
+     
+-    // Switch to Fuel tab automatically
+-    $wrapper.find('.nav-item[data-target="tab-fuel"]').click();
++    // Switch to Home tab automatically
++    $wrapper.find('.nav-item[data-target="tab-home"]').click();
+     
+     // Pre-fill Start Shift form just for viewing
+     $wrapper.find('#input-shift-date').val(window.ACTIVE_SHIFT.shift_date).prop('disabled', true);
+@@ -176,9 +171,12 @@ function lock_ui_for_active_shift($wrapper) {
+     if (window.ACTIVE_SHIFT.status === 'Closed') {
+         $wrapper.find('#btn-close-shift').hide();
+         $wrapper.find('#btn-email-shift-report').show();
++        $wrapper.find('#btn-update-assignments').hide();
++        $wrapper.find('#csa-assignment-body .csa-select').prop('disabled', true);
+     } else {
+         $wrapper.find('#btn-close-shift').show();
+         $wrapper.find('#btn-email-shift-report').hide();
++        $wrapper.find('#btn-update-assignments').removeClass('hidden').show();
+     }
+     
+     // Trigger loading of grid data (Meters, Dips, etc)
+@@ -592,6 +590,7 @@ function render_meters($wrapper) {
+                                     $wrapper.find('#pg-selector').val('').trigger('change');
+                                     render_history();
+                                     frappe.show_alert({message: `${pg_name} readings successfully saved!`, indicator: 'green'});
++                                    if (window.render_homepage) window.render_homepage($wrapper);
+                                 });
+                             }, function() {
+                                 // User clicked cancel on confirm
+@@ -737,10 +736,11 @@ function render_mpesa($wrapper) {
+                     </td>
+                     <td><span class="read-only-cell">${Number(row.opening_balance || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
+                     <td>
++                        <div style="font-size: 0.75em; color: #64748b; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">${row.bank_name ? 'to ' + row.bank_name : 'Transfer to Bank'}</div>
+                         <input type="number" class="spa-input mpesa-transfers highlight-input" data-field="transfers_made" value="${row.transfers_made || ''}" placeholder="Enter Transfers">
+                     </td>
+                     <td>
+-                        <input type="number" class="spa-input mpesa-closing highlight-input" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance || ''}" placeholder="Enter Closing">
++                        <input type="number" class="spa-input mpesa-closing highlight-input" data-field="closing_balance" data-opening="${row.opening_balance || 0}" value="${row.closing_balance !== null && row.closing_balance !== undefined && row.closing_balance !== '' ? row.closing_balance : 0}" placeholder="Enter Closing">
+                     </td>
+                     <td class="mpesa-collected font-weight-bold">0.00</td>
+                 </tr>
+@@ -1248,6 +1248,44 @@ function load_dropdowns(wrapper) {
+                     options += `<option value="${st.name}">${st.name}</option>`;
+                 });
+                 $(wrapper).find('#select-station').html(options);
++                $(wrapper).find('#select-station').on('change', function() {
++                    let station = $(this).val();
++                    if(station) {
++                        frappe.db.get_list('Shift', {
++                            filters: { station: station },
++                            fields: ['name', 'shift_template', 'shift_date'],
++                            limit: 1,
++                            order_by: 'creation desc'
++                        }).then(r => {
++                            if (r && r.length > 0) {
++                                let last_shift = r[0];
++                                $(wrapper).find('#previous-shift-badge').text(`Last Shift: ${last_shift.shift_template} (${frappe.datetime.str_to_user(last_shift.shift_date)})`).removeClass('hidden');
++                                
++                                // Smart Prediction Logic
++                                if (window.SHIFT_TEMPLATES) {
++                                    let last_template = window.SHIFT_TEMPLATES.find(t => t.name === last_shift.shift_template);
++                                    if (last_template && last_template.next_shift_template) {
++                                        let next_date_obj = frappe.datetime.str_to_obj(last_shift.shift_date);
++                                        if (last_template.rolls_over_date) {
++                                            next_date_obj.setDate(next_date_obj.getDate() + 1);
++                                        }
++                                        let next_date_str = frappe.datetime.obj_to_str(next_date_obj);
++                                        
++                                        // Update UI
++                                        $(wrapper).find('#input-shift-date').val(next_date_str);
++                                        $(wrapper).find('#select-shift-template').val(last_template.next_shift_template);
++                                    }
++                                }
++                            } else {
++                                $(wrapper).find('#previous-shift-badge').addClass('hidden');
++                            }
++                        });
++                    } else {
++                        $(wrapper).find('#previous-shift-badge').addClass('hidden');
++                    }
++                });
++                // Trigger change immediately to load for default station
++                $(wrapper).find('#select-station').trigger('change');
+             }
+         }
+     });
+@@ -1257,7 +1295,7 @@ function load_dropdowns(wrapper) {
+         method: "frappe.client.get_list",
+         args: {
+             doctype: "Fuel Shift Template",
+-            fields: ["name", "start_time", "end_time"]
++            fields: ["name", "start_time", "end_time", "next_shift_template", "rolls_over_date"]
+         },
+         callback: function(r) {
+             if(r.message) {
+@@ -1383,10 +1421,10 @@ function load_dropdowns(wrapper) {
+         let html = '';
+         window.PUMP_GROUPS_LIST.forEach(pg => {
+             html += `
+-             <tr data-pg="${pg.name}">
+-                 <td style="font-weight: bold; color: #1e293b;">${pg.name}</td>
+-                 <td><select class="spa-input csa-select">${csaOptions}</select></td>
+-             </tr>
++             <div class="assignment-row" data-pg="${pg.name}">
++                 <label class="block text-xs font-bold text-slate-500 uppercase mb-1">${pg.name}</label>
++                 <select class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2 text-slate-800 csa-select">${csaOptions}</select>
++             </div>
+             `;
+         });
+         $w.find('#csa-assignment-body').html(html);
+@@ -1425,6 +1463,7 @@ function save_child_table(table_name, rows_data, success_msg, btn = null, origin
+                     args: { doc: doc },
+                     callback: function(r2) {
+                         if(r2.message) {
++                            window.SHIFT_DOC = r2.message;
+                             frappe.show_alert({message: success_msg, indicator: "green"});
+                         }
+                     },
+@@ -1464,6 +1503,45 @@ function setup_actions(wrapper) {
+         $wrapper.find(`#mpesa-${targetView}-view`).addClass('active');
+     });
+     
++    // Update Assignments Logic
++    $wrapper.find('#btn-update-assignments').on('click', function() {
++        if(!window.ACTIVE_SHIFT) return;
++        let btn = $(this);
++        let assigned_csas = [];
++        $wrapper.find('#csa-assignment-body div[data-pg]').each(function() {
++            let csa = $(this).find('.csa-select').val();
++            let pg = $(this).attr('data-pg');
++            if(csa) {
++                assigned_csas.push({
++                    "csa": csa,
++                    "pump_group": pg
++                });
++            }
++        });
++        
++        btn.find('.spinner').removeClass('hidden');
++        btn.prop('disabled', true);
++        
++        frappe.call({
++            method: "frappe.client.set_value",
++            args: {
++                doctype: "Shift",
++                name: window.ACTIVE_SHIFT.name,
++                fieldname: "assigned_csas",
++                value: assigned_csas
++            },
++            callback: function(r) {
++                btn.find('.spinner').addClass('hidden');
++                btn.prop('disabled', false);
++                if(!r.exc) {
++                    frappe.show_alert({message: "Pump Assignments Updated Successfully!", indicator: "green"});
++                    window.SHIFT_DOC.assigned_csas = assigned_csas;
++                    window.ACTIVE_SHIFT.assigned_csas = assigned_csas;
++                }
++            }
++        });
++    });
++
+     // Start Shift Logic
+     $wrapper.find('#btn-start-shift').on('click', function() {
+         const station = $wrapper.find('#select-station').val();
+@@ -1473,7 +1551,7 @@ function setup_actions(wrapper) {
+         
+         let assigned_csas = [];
+         let unassigned_pgs = [];
+-        $wrapper.find('#csa-assignment-body tr').each(function() {
++        $wrapper.find('#csa-assignment-body div[data-pg]').each(function() {
+             let csa = $(this).find('.csa-select').val();
+             let pg = $(this).attr('data-pg');
+             if(csa) {
+@@ -1583,6 +1661,7 @@ function setup_actions(wrapper) {
+         }
+         save_child_table("mpesa_payments", readings, "M-Pesa Tills saved!", btn, originalText, function() {
+             render_mpesa($wrapper);
++            $wrapper.find('#tab-mpesa .seg-btn[data-view="history"]').click();
+         });
+     });
+     
+@@ -3927,7 +4006,7 @@ function render_petty_cash(wrapper) {
+ 
+     $wrapper.find('.nav-item').on('click', function(e) {
+         e.preventDefault();
+-        if(!window.ACTIVE_SHIFT && $(this).attr('data-target') !== 'tab-start') {
++        if(!window.ACTIVE_SHIFT && $(this).attr('data-target') !== 'tab-start' && $(this).attr('data-target') !== 'tab-home') {
+             frappe.show_alert({message: "Start or resume a shift first.", indicator: "orange"});
+             return;
+         }
+@@ -3936,11 +4015,24 @@ function render_petty_cash(wrapper) {
+         $(this).addClass('active');
+         
+         let target = $(this).attr('data-target');
++        
++        // Handle Debtors specific Tailwind classes & Vue routing
++        let vueView = $(this).attr('data-vue-view');
++        if (vueView && window.VUE_DEBTORS_VIEW) {
++            window.VUE_DEBTORS_VIEW.value = vueView;
++            $wrapper.find('[data-vue-view]').removeClass('bg-blue-900 text-amber-400 border-amber-500').addClass('border-transparent text-blue-200');
++            $(this).removeClass('border-transparent text-blue-200').addClass('bg-blue-900 text-amber-400 border-amber-500');
++        } else if (!vueView) {
++            // Remove Tailwind active classes if clicking on another tab
++            $wrapper.find('[data-vue-view]').removeClass('bg-blue-900 text-amber-400 border-amber-500').addClass('border-transparent text-blue-200');
++        }
++        
+         $wrapper.find('.tab-pane').removeClass('active');
+         $wrapper.find('#' + target).addClass('active');
+-        
+         if (target === 'tab-report') {
+             window.generate_end_shift_report($wrapper);
++        } else if (target === 'tab-home') {
++            window.render_homepage($wrapper);
+         }
+     });
+ 
+@@ -5291,19 +5383,17 @@ window.generate_end_shift_report = function($wrapper) {
+         return;
+     }
+     
+-    // Fetch CSA Reconciliation data first
++    // Fetch Shift Report Data (CSA Reconciliation + Non-Shift Payments)
+     frappe.call({
+-        method: "frappe.client.get_list",
++        method: "fuel_management.fuel_management.api.get_shift_report_data",
+         args: {
+-            doctype: "Shift Cash Reconciliation",
+-            filters: { shift: window.SHIFT_DOC.name },
+-            fields: ["csa", "meter_sales", "invoices", "cards", "mpesa", "expenses", "expected_cash", "actual_cash", "variance"],
+-            limit_page_length: 500
++            shift_id: window.SHIFT_DOC.name
+         },
+         callback: function(r) {
+             try {
+                 let doc = window.SHIFT_DOC;
+-                doc.csa_reconciliation = r.message || [];
++                doc.csa_reconciliation = (r.message && r.message.reconciliations) ? r.message.reconciliations : [];
++                doc.non_shift_amount = (r.message && r.message.non_shift_amount) ? r.message.non_shift_amount : 0;
+                 
+ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults.company : "END OF SHIFT REPORT";
+         let html = `<div class="report-header">
+@@ -5497,8 +5587,8 @@ let company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
+                     </div>
+                     <div class="summary-box">
+                         <div class="summary-row"><span>Total Cash Submitted by CSAs</span> <span>${frappe.format(total_submitted_cash, {fieldtype: 'Currency'})}</span></div>
+-                        <div class="summary-row"><span>Non-Shift Payments / Top-Ups</span> <span>0.00</span></div>
+-                        <div class="summary-row total" style="color: ${total_variance < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(total_variance, {fieldtype: 'Currency'})}</span></div>
++                        <div class="summary-row"><span>Non-Shift Payments / Top-Ups</span> <span>${frappe.format(doc.non_shift_amount || 0, {fieldtype: 'Currency'})}</span></div>
++                        <div class="summary-row total" style="color: ${total_variance + (doc.non_shift_amount || 0) < 0 ? 'red' : 'green'}"><span>GRAND STATION VARIANCE</span> <span>${frappe.format(total_variance + (doc.non_shift_amount || 0), {fieldtype: 'Currency'})}</span></div>
+                     </div>
+                 </div>
+             </div>
+@@ -5626,183 +5716,198 @@ function setup_vue_debtors(wrapper) {
+ 
+ 	const app = createApp({
+ 		template: `
+-			<div class="debtors-container">
++			<div>
+ 				<!-- Dashboard View -->
+ 				<div v-if="activeView === 'dashboard'">
+-					
+-					<!-- KPI Row -->
+-					<div class="kpi-row" v-if="!isLoading">
+-						<div class="kpi-card">
+-							<div class="kpi-title">Total Receivables</div>
+-							<div class="kpi-value">{{ formatCurrency(totalReceivables) }}</div>
++					<div class="max-w-7xl mx-auto p-6 flex flex-col gap-6 bg-slate-50 min-h-screen">
++						
++						<!-- 1. KPI Cards Grid -->
++						<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
++						<div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center">
++							<span class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Total Receivables</span>
++							<span class="text-2xl font-mono font-bold text-slate-800">{{ formatCurrency(totalReceivables) }}</span>
+ 						</div>
+-						<div class="kpi-card text-danger">
+-							<div class="kpi-title">Overdue Amount</div>
+-							<div class="kpi-value">{{ formatCurrency(totalOverdue) }}</div>
++						<div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center border-t-4 border-t-red-500">
++							<span class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Overdue Amount</span>
++							<span class="text-2xl font-mono font-bold text-red-600">{{ formatCurrency(totalOverdue) }}</span>
+ 						</div>
+-						<div class="kpi-card text-warning">
+-							<div class="kpi-title">At Risk / Near Limit</div>
+-							<div class="kpi-value">{{ atRiskCount }} Customers</div>
++						<div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center border-t-4 border-t-amber-500">
++							<span class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">At Risk / Near Limit</span>
++							<span class="text-2xl font-bold text-amber-500">{{ atRiskCount }} Customers</span>
+ 						</div>
+-					</div>
+-
+-					<!-- Filter Bar -->
+-					<div class="filter-bar">
+-						<div class="search-box">
+-							<input type="text" class="form-control" placeholder="Search Customer or Fleet ID..." v-model="searchQuery">
+ 						</div>
+-						<div class="toggle-box checkbox">
+-							<label>
+-								<input type="checkbox" v-model="showOverdueOnly"> <span class="label-area">Show Overdue Only</span>
+-							</label>
++
++						<!-- 2. Controls & Search -->
++						<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
++						<input type="text" v-model="searchQuery" placeholder="Search Customer or Fleet ID..." class="w-full max-w-md bg-slate-50 border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-900 focus:outline-none" />
++						<label class="flex items-center gap-2 text-sm text-slate-700 font-medium">
++							<input type="checkbox" v-model="showOverdueOnly" class="rounded text-blue-900 focus:ring-blue-900" /> Show Overdue Only
++						</label>
+ 						</div>
+-					</div>
+ 
+-					<!-- Data Table -->
+-					<div class="table-responsive">
+-							<div v-if="isLoading" class="text-center p-4">
+-								<div class="spinner-border text-primary" role="status">
+-									<span class="sr-only">Loading...</span>
+-								</div>
+-								<p class="mt-2 text-muted">Fetching real-time debtor balances...</p>
+-							</div>
+-							
+-							<table class="debtors-table" v-else>
+-								<thead>
+-									<tr>
+-									<th>Customer Name</th>
+-									<th>Last Payment</th>
+-									<th class="text-right">Total Invoiced</th>
+-									<th class="text-right">Total Paid</th>
+-									<th class="text-right">Current Balance</th>
+-									<th class="text-center">Status</th>
+-									<th class="text-center">Actions</th>
+-								</tr>
++						<!-- 3. Main Data Table -->
++						<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
++						<table class="w-full text-sm text-left whitespace-nowrap">
++							<thead class="bg-slate-100 border-b border-slate-200 text-slate-600 text-xs uppercase font-bold">
++							<tr>
++								<th class="px-6 py-4">Customer Name</th>
++								<th class="px-6 py-4">Last Payment</th>
++								<th class="px-6 py-4 text-right">Total Invoiced</th>
++								<th class="px-6 py-4 text-right">Total Paid</th>
++								<th class="px-6 py-4 text-right">Current Balance</th>
++								<th class="px-6 py-4 text-center">Status</th>
++								<th class="px-6 py-4 text-center">Actions</th>
++							</tr>
+ 							</thead>
+-							<tbody>
+-								<tr v-for="debtor in filteredDebtors" :key="debtor.id">
+-									<td class="font-weight-bold">
+-										<a href="#" @click.prevent="openStatement(debtor)">{{ debtor.name }}</a>
+-										<div class="text-muted small">Fleet ID: {{ debtor.fleet_id || 'N/A' }}</div>
+-									</td>
+-									<td>{{ debtor.last_payment_date }}</td>
+-									<td class="text-right">{{ formatCurrency(debtor.total_invoiced) }}</td>
+-									<td class="text-right">{{ formatCurrency(debtor.total_paid) }}</td>
+-									<td class="text-right font-weight-bold">{{ formatCurrency(debtor.balance) }}</td>
+-									<td class="text-center">
+-										<span :class="['indicator', getStatusColor(debtor.status)]">{{ debtor.status }}</span>
+-									</td>
+-									<td class="text-center">
+-										<button class="btn btn-xs btn-default" @click="openStatement(debtor)">Statement</button>
+-									</td>
+-								</tr>
+-								<tr v-if="filteredDebtors.length === 0">
+-									<td colspan="7" class="text-center text-muted">No debtors found.</td>
+-								</tr>
++							<tbody class="divide-y divide-slate-100">
++							<tr v-for="debtor in filteredDebtors" :key="debtor.id" class="hover:bg-slate-50 transition-colors">
++								<td class="px-6 py-4">
++								<span class="block font-bold text-slate-900">{{ debtor.name }}</span>
++								<span class="block text-xs text-slate-500">Fleet ID: {{ debtor.fleet_id || 'N/A' }}</span>
++								</td>
++								<td class="px-6 py-4 text-slate-600">{{ debtor.last_payment_date || '--' }}</td>
++								<td class="px-6 py-4 text-right font-mono text-slate-700">{{ formatCurrency(debtor.total_invoiced) }}</td>
++								<td class="px-6 py-4 text-right font-mono text-slate-700">{{ formatCurrency(debtor.total_paid) }}</td>
++								<td class="px-6 py-4 text-right font-mono font-bold text-slate-900">{{ formatCurrency(debtor.balance) }}</td>
++								<td class="px-6 py-4 text-center">
++								<span :class="['text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide', getStatusTailwindClass(debtor.status)]">{{ debtor.status }}</span>
++								</td>
++								<td class="px-6 py-4 text-center">
++								<button @click="openStatement(debtor)" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded text-xs font-semibold shadow-sm transition-all">Statement</button>
++								</td>
++							</tr>
++							<tr v-if="filteredDebtors.length === 0">
++								<td colspan="7" class="px-6 py-4 text-center text-slate-500">No debtors found.</td>
++							</tr>
+ 							</tbody>
+ 						</table>
++						</div>
+ 					</div>
+ 				</div>
+ 
+ 				<!-- Statement Detail View -->
+ 				<div v-if="activeView === 'statement'">
+-					
+-					<!-- Header Section -->
+-					<div class="statement-header">
+-						<div>
+-							<button class="btn btn-sm btn-default" @click="activeView = 'dashboard'">
+-								<svg class="icon icon-sm"><use href="#icon-arrow-left"></use></svg> Back to Dashboard
+-							</button>
+-							<h2 class="mt-3">{{ selectedDebtor.name }}</h2>
+-							<div class="text-muted">Credit Limit: <strong>{{ formatCurrency(selectedDebtor.credit_limit) }}</strong></div>
++					<div class="max-w-6xl mx-auto p-4 flex flex-col gap-4 bg-slate-50 min-h-screen">
++						
++						<!-- 1. Top Control Bar (Forced Single Row) -->
++						<div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-row items-center justify-between w-full">
++						<div class="flex items-center gap-3">
++							<span class="text-xs font-bold text-slate-500 uppercase">Debtor:</span>
++							<select v-model="selectedDebtorId" @change="onDebtorSelectChange" class="w-64 bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-900 focus:outline-none">
++							<option v-for="d in debtors" :key="d.id" :value="d.id">{{ d.name }}</option>
++							</select>
++							
++							<span class="text-xs font-bold text-slate-500 uppercase ml-4">From:</span>
++							<input type="date" v-model="startDate" class="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm" />
++							
++							<span class="text-xs font-bold text-slate-500 uppercase ml-2">To:</span>
++							<input type="date" v-model="endDate" class="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm" />
++						</div>
++						<div class="flex gap-2">
++							<button @click="emailStatement" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-1.5 rounded-lg text-sm font-semibold shadow-sm transition-all">Email Statement</button>
++							<button @click="printStatement" class="bg-blue-950 hover:bg-blue-900 text-amber-400 px-4 py-1.5 rounded-lg text-sm font-semibold shadow-sm transition-all">Export PDF</button>
+ 						</div>
+-						<div class="statement-actions">
+-							<button class="btn btn-default mr-2" @click="printStatement">Download PDF</button>
+-							<button class="btn btn-primary" @click="emailStatement">Email to Customer</button>
+ 						</div>
+-					</div>
+ 
+-					<!-- Controls -->
+-					<div class="statement-controls mt-4">
+-						<div class="row">
+-							<div class="col-md-3">
+-								<div class="form-group">
+-									<label>Start Date</label>
+-									<input type="date" class="form-control" v-model="startDate">
+-								</div>
++						<!-- 2. The A4 Document Container (Tightened Padding) -->
++						<div class="bg-white p-6 rounded-sm border border-slate-200 shadow-lg">
++						
++						<!-- Header -->
++						<div class="flex justify-between items-start mb-6 pb-4 border-b border-slate-100">
++							<div>
++							<h1 class="text-2xl font-bold text-blue-950">Kilibet - Rubis</h1>
++							<p class="text-xs text-slate-500 mt-1">Accounts Receivable Division<br>Highway Road, Eldoret</p>
++							</div>
++							<div class="text-right">
++							<h2 class="text-xl font-bold text-slate-900 uppercase tracking-wider">Statement of Account</h2>
++							<p class="text-xs text-slate-500 mt-1">Period: {{ startDate }} &mdash; {{ endDate }}</p>
++							<div class="mt-3 bg-blue-50 border border-blue-100 rounded-lg px-4 py-2 inline-block text-right">
++								<span class="block text-[10px] font-bold text-blue-800 uppercase">Amount Due</span>
++								<span class="block text-xl font-mono font-bold text-blue-950">{{ formatCurrency(closingBalance) }}</span>
+ 							</div>
+-							<div class="col-md-3">
+-								<div class="form-group">
+-									<label>End Date</label>
+-									<input type="date" class="form-control" v-model="endDate">
+-								</div>
+ 							</div>
+ 						</div>
+-					</div>
+ 
+-					<!-- Summary Section -->
+-					<div class="statement-summary mt-3">
+-						<div class="row text-center">
+-							<div class="col-md-3">
+-								<div class="text-muted small uppercase">Opening Balance</div>
+-								<div class="h4">{{ formatCurrency(openingBalance) }}</div>
+-							</div>
+-							<div class="col-md-3">
+-								<div class="text-muted small uppercase">Total Debits</div>
+-								<div class="h4">{{ formatCurrency(periodDebits) }}</div>
++						<!-- Info Grid (Tightened Gaps & Conditional Rendering) -->
++						<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
++							<div class="p-4 border border-slate-200 rounded-lg bg-slate-50">
++							<span class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Bill To</span>
++							<h3 class="text-lg font-bold text-slate-900 mb-1">{{ selectedDebtor?.name }}</h3>
++							<!-- CONDITIONAL RENDERING -->
++							<div class="text-xs text-slate-600 flex flex-col gap-0.5">
++								<span v-if="selectedDebtor?.address && selectedDebtor?.address !== 'N/A'">{{ selectedDebtor.address }}</span>
++								<span v-if="selectedDebtor?.phone && selectedDebtor?.phone !== 'N/A'">{{ selectedDebtor.phone }}</span>
+ 							</div>
+-							<div class="col-md-3">
+-								<div class="text-muted small uppercase">Total Credits</div>
+-								<div class="h4">{{ formatCurrency(periodCredits) }}</div>
+ 							</div>
+-							<div class="col-md-3">
+-								<div class="text-muted small uppercase">Closing Balance</div>
+-								<div class="h4 font-weight-bold">{{ formatCurrency(closingBalance) }}</div>
++							
++							<div class="p-4 border border-slate-200 rounded-lg">
++							<span class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Account Details</span>
++							<ul class="text-xs space-y-1.5">
++								<li class="flex justify-between"><span class="text-slate-500">Account Number</span><span class="font-semibold text-slate-900">{{ selectedDebtor?.id || 'N/A' }}</span></li>
++								<li class="flex justify-between"><span class="text-slate-500">Payment Terms</span><span class="font-semibold text-slate-900">30 days</span></li>
++								<li class="flex justify-between"><span class="text-slate-500">Credit Limit</span><span class="font-mono text-slate-900">{{ formatCurrency(selectedDebtor?.credit_limit) }}</span></li>
++							</ul>
+ 							</div>
+ 						</div>
+-					</div>
+ 
+-					<!-- Transaction Table -->
+-					<div class="table-responsive mt-4">
+-						<table class="table table-bordered table-striped">
+-							<thead>
++						<!-- Ledger Table (Rebalanced Columns) -->
++						<div class="overflow-x-auto">
++							<table class="w-full text-xs text-left">
++							<thead class="border-b-2 border-blue-950 text-slate-500 text-[10px] uppercase tracking-widest font-bold">
+ 								<tr>
+-									<th>Date</th>
+-									<th>Reference Type</th>
+-									<th>Description</th>
+-									<th class="text-right">Debit</th>
+-									<th class="text-right">Credit</th>
+-									<th class="text-right">Running Balance</th>
++								<th class="py-2 pr-2 w-24">Date</th>
++								<th class="py-2 px-2 w-32">Reference</th>
++								<th class="py-2 px-2 w-2/5">Description</th>
++								<th class="py-2 px-2 w-20">Type</th>
++								<th class="py-2 px-2 text-right">Debit</th>
++								<th class="py-2 px-2 text-right">Credit</th>
++								<th class="py-2 pl-2 text-right">Balance</th>
+ 								</tr>
+ 							</thead>
+-							<tbody>
+-								<tr class="table-info">
+-									<td colspan="5" class="text-right font-weight-bold">Opening Balance</td>
+-									<td class="text-right font-weight-bold">{{ formatCurrency(openingBalance) }}</td>
++							<tbody class="divide-y divide-slate-100">
++								<tr class="bg-slate-50">
++									<td colspan="4" class="py-2 pr-2 font-semibold text-slate-700">Opening Balance (Brought forward)</td>
++									<td class="py-2 px-2 text-right font-mono text-slate-400">--</td>
++									<td class="py-2 px-2 text-right font-mono text-slate-400">--</td>
++									<td class="py-2 pl-2 text-right font-mono font-bold text-slate-900">{{ formatCurrency(openingBalance) }}</td>
+ 								</tr>
+-								<tr v-for="(txn, index) in processedTransactions" :key="index">
+-									<td>{{ txn.date }}</td>
+-									<td>{{ txn.ref_type }}</td>
+-									<td>{{ txn.description }}</td>
+-									<td class="text-right">{{ txn.debit ? formatCurrency(txn.debit) : '-' }}</td>
+-									<td class="text-right">{{ txn.credit ? formatCurrency(txn.credit) : '-' }}</td>
+-									<td class="text-right font-weight-bold">{{ formatCurrency(txn.running_balance) }}</td>
++								<tr v-for="(txn, index) in processedTransactions" :key="index" class="hover:bg-slate-50 transition-colors">
++									<td class="py-2 pr-2 text-slate-600 whitespace-nowrap">{{ txn.date }}</td>
++									<td class="py-2 px-2 text-slate-800 font-medium">{{ txn.ref_type }}</td>
++									<td class="py-2 px-2 text-slate-600">{{ txn.description }}</td>
++									<td class="py-2 px-2">
++									<span class="bg-blue-50 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-100 uppercase">{{ txn.type || 'Transaction' }}</span>
++									</td>
++									<td class="py-2 px-2 text-right font-mono text-slate-800">{{ txn.debit ? formatCurrency(txn.debit) : '--' }}</td>
++									<td class="py-2 px-2 text-right font-mono text-slate-400">{{ txn.credit ? formatCurrency(txn.credit) : '--' }}</td>
++									<td class="py-2 pl-2 text-right font-mono font-bold text-slate-900">{{ formatCurrency(txn.running_balance) }}</td>
+ 								</tr>
+ 								<tr v-if="processedTransactions.length === 0">
+-									<td colspan="6" class="text-center text-muted">No transactions in this period.</td>
++									<td colspan="7" class="py-4 text-center text-slate-500 text-sm">No transactions in this period.</td>
+ 								</tr>
+ 							</tbody>
+-						</table>
++							</table>
++						</div>
++						</div>
+ 					</div>
+-
+ 				</div>
+ 			</div>
+ 		`,
+ 		setup() {
+ 			const activeView = ref('dashboard');
++			window.VUE_DEBTORS_VIEW = activeView;
+ 			const searchQuery = ref('');
+ 			const showOverdueOnly = ref(false);
+ 			const selectedDebtor = ref(null);
++			const selectedDebtorId = ref('');
++			
++			const onDebtorSelectChange = () => {
++				const found = debtors.value.find(d => d.id === selectedDebtorId.value);
++				if (found) {
++					selectedDebtor.value = found;
++					fetch_transactions(found.id);
++				}
++			};
+ 			const startDate = ref('2026-08-01');
+ 			const endDate = ref('2026-08-31');
+ 			const isLoading = ref(true);
+@@ -5816,7 +5921,8 @@ function setup_vue_debtors(wrapper) {
+ 					method: 'fuel_management.fuel_management.page.shift_operation_spa.shift_operation_spa.get_debtors_data',
+ 					callback: function(r) {
+ 						if(r.message) {
+-							debtors.value = r.message;
++							let rawDebtors = r.message || [];
++							debtors.value = rawDebtors.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+ 						}
+ 						isLoading.value = false;
+ 					}
+@@ -5850,13 +5956,21 @@ function setup_vue_debtors(wrapper) {
+ 			});
+ 
+ 			// Computed properties for Statement View
+-			const customerTransactions = computed(() => {
+-				if (!selectedDebtor.value) return [];
+-				// Sort chronologically
+-				return allTransactions.value
+-					.filter(t => t.customer_id === selectedDebtor.value.id)
+-					.sort((a, b) => new Date(a.date) - new Date(b.date));
+-			});
++			const customerTransactions = ref([]);
++			
++			const fetch_transactions = (customer_id) => {
++				isLoading.value = true;
++				frappe.call({
++					method: 'fuel_management.fuel_management.page.shift_operation_spa.shift_operation_spa.get_customer_transactions',
++					args: { customer: customer_id },
++					callback: function(r) {
++						if(r.message) {
++							customerTransactions.value = r.message;
++						}
++						isLoading.value = false;
++					}
++				});
++			};
+ 
+ 			const openingBalance = computed(() => {
+ 				let bal = 0;
+@@ -5907,28 +6021,735 @@ function setup_vue_debtors(wrapper) {
+ 				return 'green';
+ 			};
+ 
++			const getStatusTailwindClass = (status) => {
++				if (status === 'Overdue') return 'bg-red-100 text-red-800';
++				if (status === 'Near Limit') return 'bg-amber-100 text-amber-800';
++				return 'bg-emerald-100 text-emerald-800';
++			};
++
+ 			const openStatement = (debtor) => {
+ 				selectedDebtor.value = debtor;
++				selectedDebtorId.value = debtor.id;
+ 				activeView.value = 'statement';
++				fetch_transactions(debtor.id);
+ 			};
+ 
+ 			const printStatement = () => {
+-				// In a real implementation, this would route to /printview?doctype=Customer&name=xxx&format=Fuel%20Debtor%20Statement
+ 				frappe.msgprint("Opening print view (mocked)");
+ 			};
+ 
+ 			const emailStatement = () => {
+-				frappe.msgprint(`Emailing statement to ${selectedDebtor.value.name}`);
++				frappe.msgprint(`Emailing statement to ${selectedDebtor.value?.name || 'Customer'}`);
+ 			};
+ 
+ 			return {
+-				activeView, searchQuery, showOverdueOnly, selectedDebtor, startDate, endDate, isLoading,
+-				filteredDebtors, totalReceivables, totalOverdue, atRiskCount,
++				activeView, searchQuery, showOverdueOnly, selectedDebtor, selectedDebtorId, onDebtorSelectChange, startDate, endDate, isLoading,
++				debtors, filteredDebtors, totalReceivables, totalOverdue, atRiskCount,
+ 				openingBalance, processedTransactions, periodDebits, periodCredits, closingBalance,
+-				formatCurrency, getStatusColor, openStatement, printStatement, emailStatement
++				formatCurrency, getStatusColor, getStatusTailwindClass, openStatement, printStatement, emailStatement
+ 			};
+ 		}
+ 	});
+ 
+ 	app.mount('#debtors-vue-root');
+ }
++
++window.CURRENT_VIEWED_SHIFT = window.CURRENT_VIEWED_SHIFT || null;
++window.AVAILABLE_SHIFTS = window.AVAILABLE_SHIFTS || [];
++
++window.render_homepage = function($wrapper) {
++    let station = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : null;
++    
++    // Fetch available shifts if not populated
++    if (window.AVAILABLE_SHIFTS.length === 0) {
++        frappe.call({
++            method: "fuel_management.fuel_management.api.get_available_shifts",
++            args: { station: station },
++            callback: function(r) {
++                if(r.message) {
++                    window.AVAILABLE_SHIFTS = r.message;
++                    let $select = $wrapper.find('#home-shift-selector');
++                    $select.empty().append('<option value="" style="color: black;">Active Shift</option>');
++                    r.message.forEach((s, idx) => {
++                        $select.append(`<option value="${s.name}" style="color: black;" data-idx="${idx}">${s.name} (${s.shift_date})</option>`);
++                    });
++                    if (window.CURRENT_VIEWED_SHIFT) {
++                        $select.val(window.CURRENT_VIEWED_SHIFT);
++                    }
++                }
++            }
++        });
++    }
++
++    // Attach event listeners for shift selector
++    $wrapper.find('#home-shift-selector').off('change').on('change', function() {
++        window.CURRENT_VIEWED_SHIFT = $(this).val() || null;
++        window.render_homepage($wrapper);
++    });
++    
++    $wrapper.find('#btn-prev-shift').off('click').on('click', function() {
++        let currentIdx = -1;
++        if (window.CURRENT_VIEWED_SHIFT) {
++            currentIdx = window.AVAILABLE_SHIFTS.findIndex(s => s.name === window.CURRENT_VIEWED_SHIFT);
++        }
++        if (currentIdx + 1 < window.AVAILABLE_SHIFTS.length) {
++            window.CURRENT_VIEWED_SHIFT = window.AVAILABLE_SHIFTS[currentIdx + 1].name;
++            $wrapper.find('#home-shift-selector').val(window.CURRENT_VIEWED_SHIFT);
++            window.render_homepage($wrapper);
++        }
++    });
++
++    $wrapper.find('#btn-next-shift').off('click').on('click', function() {
++        let currentIdx = -1;
++        if (window.CURRENT_VIEWED_SHIFT) {
++            currentIdx = window.AVAILABLE_SHIFTS.findIndex(s => s.name === window.CURRENT_VIEWED_SHIFT);
++        }
++        if (currentIdx > 0) {
++            window.CURRENT_VIEWED_SHIFT = window.AVAILABLE_SHIFTS[currentIdx - 1].name;
++        } else if (currentIdx === 0) {
++            window.CURRENT_VIEWED_SHIFT = null;
++        }
++        $wrapper.find('#home-shift-selector').val(window.CURRENT_VIEWED_SHIFT || "");
++        window.render_homepage($wrapper);
++    });
++    
++    // 1. Fetch KPIs
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_homepage_kpis",
++        args: { station: station, shift_id: window.CURRENT_VIEWED_SHIFT },
++        callback: function(r) {
++            if(r.message) {
++                let msg = r.message;
++                
++                // Update Context Text
++                let greeting = `Good afternoon, ${frappe.session.user_fullname ? frappe.session.user_fullname.split(' ')[0] : 'User'}`;
++                $wrapper.find('#home-greeting').text(greeting);
++                
++                if (window.ACTIVE_SHIFT) {
++                    $wrapper.find('#home-subtext').text(`Active Shift: Started at ${window.ACTIVE_SHIFT.shift_date} ${(window.ACTIVE_SHIFT.creation ? window.ACTIVE_SHIFT.creation.split(' ')[1].substring(0,5) : '')} | Station: ${window.ACTIVE_SHIFT.station}`);
++                    $wrapper.find('#home-date-station').text(`${frappe.datetime.str_to_user(frappe.datetime.nowdate())} ÔÇö ${window.ACTIVE_SHIFT.station}`);
++                } else if (msg.context_shift) {
++                    $wrapper.find('#home-subtext').text(`Showing data for Last Closed Shift: ${msg.context_shift} (${msg.context_date})`);
++                    $wrapper.find('#home-date-station').text(`${frappe.datetime.str_to_user(msg.context_date)} ÔÇö Closed Shift`);
++                } else {
++                    $wrapper.find('#home-subtext').text("No shift data available.");
++                    $wrapper.find('#home-date-station').text(frappe.datetime.str_to_user(frappe.datetime.nowdate()));
++                }
++                
++                // Format Number safely
++                let fmtNum = (n, dec=0) => Number(n||0).toLocaleString(undefined, {minimumFractionDigits: dec, maximumFractionDigits: dec});
++                
++                // Update KPI values safely
++                $wrapper.find('#kpi-litres').text(fmtNum(msg.litres_sold, 2));
++                $wrapper.find('#kpi-cash').text("Sh " + fmtNum(msg.cash_reconciled, 2));
++                $wrapper.find('#kpi-mpesa').text("Sh " + fmtNum(msg.mpesa_posted, 2));
++                $wrapper.find('#kpi-flags').text(msg.dip_flags || 0);
++                $wrapper.find('#kpi-monthly-litres').text(fmtNum(msg.monthly_litres, 2));
++                $wrapper.find('#kpi-monthly-revenue').text("Sh " + fmtNum(msg.monthly_revenue, 2));
++                
++                // New Granular Metrics
++                let fbd_html = "";
++                if (msg.fuel_breakdown) {
++                    for (let [product, qty] of Object.entries(msg.fuel_breakdown)) {
++                        fbd_html += `<div><div style="color: #93a0b8; font-size: 0.75rem;">${product} Sold</div><div style="font-family: JetBrains Mono, monospace; font-size: 1.125rem; font-weight: 600;">${fmtNum(qty, 2)} L</div></div>`;
++                    }
++                }
++                if (!fbd_html) fbd_html = `<div style="color: #93a0b8; font-size: 0.875rem;">No fuel data</div>`;
++                $wrapper.find('#kpi-fuel-breakdown').html(fbd_html);
++                
++                $wrapper.find('#kpi-lubes').text(fmtNum(msg.lubes_qty, 2) + " L");
++                $wrapper.find('#kpi-cylinders').text(fmtNum(msg.cylinders_sold || 0, 0));
++                
++                let gbd_html = "";
++                if (msg.gas_breakdown) {
++                    for (let [product, qty] of Object.entries(msg.gas_breakdown)) {
++                        gbd_html += `<div><div style="color: #93a0b8; font-size: 0.75rem;">${product}</div><div style="font-family: JetBrains Mono, monospace; font-size: 1.125rem; font-weight: 600;">${fmtNum(qty, 0)} KG</div></div>`;
++                    }
++                }
++                if (!gbd_html) gbd_html = `<div style="color: #93a0b8; font-size: 0.875rem;">No gas data</div>`;
++                $wrapper.find('#kpi-gas-breakdown').html(gbd_html);
++                $wrapper.find('#kpi-gas-total').text(`Total Gas Sold: ${fmtNum(msg.gas_qty || 0, 0)} KG`);
++                
++                // Animate Rings
++                setTimeout(() => {
++                    $wrapper.find('#kpi-ring-litres').css('stroke-dashoffset', 100 - (msg.litres_sold > 0 ? 75 : 0));
++                    $wrapper.find('#kpi-ring-cash').css('stroke-dashoffset', 100 - (msg.cash_reconciled > 0 ? 80 : 0));
++                    $wrapper.find('#kpi-ring-mpesa').css('stroke-dashoffset', 100 - (msg.mpesa_posted > 0 ? 60 : 0));
++                    $wrapper.find('#kpi-ring-flags').css('stroke-dashoffset', 100 - (msg.dip_flags > 0 ? 25 : 0));
++                }, 100);
++            }
++        }
++    });
++    
++    // 2. Fetch Tank Levels
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_tank_levels",
++        args: { station: station },
++        callback: function(r) {
++            if(r.message) {
++                let html = '';
++                r.message.forEach(t => {
++                    let colorStart = '#ef5350';
++                    let colorEnd = '#b91c1c';
++                    if(t.product.includes('Petrol') || t.product.includes('PMS')) { colorStart = '#22c55e'; colorEnd = '#15803d'; }
++                    if(t.product.includes('Diesel') || t.product.includes('AGO')) { colorStart = '#f0a323'; colorEnd = '#b45309'; }
++                    if(t.product.includes('Kerosene') || t.product.includes('IK')) { colorStart = '#3b82f6'; colorEnd = '#2563eb'; }
++                    
++                    let statusPill = `<span style="background: #dcfce9; color: #166534; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">Normal</span>`;
++                    if(t.status === 'Low') statusPill = `<span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">Low</span>`;
++                    if(t.status === 'Variance flagged') statusPill = `<span style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">Variance Flagged</span>`;
++                    
++                    html += `
++                    <div style="width: 160px; background: #ffffff; border: 1px solid #e7ebf1; border-radius: 14px; padding: 1rem; display: flex; flex-direction: column; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
++                       <div style="width: 80px; height: 160px; background: #f2f4f8; border-radius: 8px; margin-bottom: 1rem; position: relative; border: 2px solid #e7ebf1; overflow: hidden;">
++                         <!-- Fill -->
++                         <div style="position: absolute; bottom: 0; left: 0; right: 0; height: ${t.percent_full}%; background: linear-gradient(to top, ${colorEnd}, ${colorStart}); transition: height 1s ease-in-out;"></div>
++                         <!-- Lines -->
++                         <div style="position: absolute; bottom: 25%; left: 0; right: 0; border-bottom: 1px solid rgba(255,255,255,0.3);"></div>
++                         <div style="position: absolute; bottom: 50%; left: 0; right: 0; border-bottom: 1px solid rgba(255,255,255,0.3);"></div>
++                         <div style="position: absolute; bottom: 75%; left: 0; right: 0; border-bottom: 1px solid rgba(255,255,255,0.3);"></div>
++                         <!-- Reorder Threshold -->
++                         <div style="position: absolute; bottom: ${t.reorder_threshold || 15}%; left: 0; right: 0; border-bottom: 1px dashed #ef5350;"></div>
++                       </div>
++                       <div style="font-weight: 600; font-size: 0.875rem; color: #0f172a; text-align: center; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;" title="${t.name}">${t.name}</div>
++                       <div style="font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 600; color: #081326;">
++                          ${frappe.format(t.latest_dip, {fieldtype: 'Float'})}L
++                          ${t.variance ? `<span style="color: #ef5350; font-size: 0.75rem;">(${t.variance > 0 ? '+':''}${t.variance})</span>` : ''}
++                       </div>
++                       <div style="color: #93a0b8; font-size: 0.7rem; margin-bottom: 0.5rem;">${t.percent_full}% of ${frappe.format(t.capacity, {fieldtype: 'Float'})}</div>
++                       ${statusPill}
++                    </div>`;
++                });
++                $wrapper.find('#home-tank-container').html(html);
++                $wrapper.find('#home-tank-timestamp').text(`Updated: ${frappe.datetime.now_time()}`);
++            }
++        }
++    });
++    
++    // 3. Fetch Trend
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_homepage_trend",
++        args: { station: station },
++        callback: function(r) {
++            if(r.message) {
++                // Render Trend Chart using Frappe Charts
++                if (window.frappe && window.frappe.ui && window.frappe.ui.RealtimeChart) {
++                    new frappe.Chart("#home-trend-chart-container", {
++                        data: {
++                            labels: r.message.trend_dates.map(d => d.substring(5)), // MM-DD
++                            datasets: [
++                                { name: "Petrol", values: r.message.trend_petrol, chartType: 'line' },
++                                { name: "Diesel", values: r.message.trend_diesel, chartType: 'line' }
++                            ]
++                        },
++                        title: "",
++                        type: 'axis-mixed',
++                        height: 250,
++                        colors: ['#22c55e', '#f0a323'],
++                        axisOptions: { xIsSeries: true },
++                        lineOptions: { regionFill: 1 }
++                    });
++                } else {
++                    $wrapper.find('#home-trend-chart-container').html(`<div style="text-align: center; color: #93a0b8; padding-top: 100px;">Chart library not loaded</div>`);
++                }
++                
++                // Render Fuel Mix
++                let mixHtml = '';
++                let total = Object.values(r.message.fuel_mix).reduce((a,b) => a+b, 0);
++                if (total === 0) total = 1;
++                
++                Object.keys(r.message.fuel_mix).forEach(k => {
++                    let val = r.message.fuel_mix[k];
++                    let pct = (val/total)*100;
++                    let c = '#93a0b8';
++                    if (k==='Petrol') c='#22c55e';
++                    if (k==='Diesel') c='#f0a323';
++                    if (k==='Kerosene') c='#3b82f6';
++                    
++                    mixHtml += `
++                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.875rem;">
++                       <div style="width: 80px; font-weight: 600; color: #0f172a;">${k}</div>
++                       <div style="flex: 1; margin: 0 1rem; height: 8px; background: #f2f4f8; border-radius: 4px; overflow: hidden;">
++                          <div style="width: ${pct}%; height: 100%; background: ${c};"></div>
++                       </div>
++                       <div style="width: 80px; text-align: right; font-family: 'JetBrains Mono', monospace; color: #081326; font-weight: 600;">${frappe.format(val, {fieldtype: 'Float'})}</div>
++                    </div>`;
++                });
++                $wrapper.find('#home-fuel-mix-container').html(mixHtml);
++            }
++        }
++    });
++    
++    // 4. Fetch Activity
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_homepage_activity",
++        args: { station: station },
++        callback: function(r) {
++            if(r.message) {
++                let actHtml = '';
++                r.message.forEach(a => {
++                    let color = '#3b82f6';
++                    if (a.type === 'shift') color = '#f0a323';
++                    if (a.type === 'meter') color = '#22c55e';
++                    if (a.type === 'dip' && Math.abs(a.variance || 0) > 50) color = '#ef5350';
++                    
++                    actHtml += `
++                    <div style="display: flex; gap: 1rem; align-items: flex-start; padding-bottom: 0.75rem; border-bottom: 1px solid #f2f4f8;">
++                       <div style="width: 10px; height: 10px; border-radius: 50%; background: ${color}; margin-top: 6px;"></div>
++                       <div style="flex: 1;">
++                          <div style="font-size: 0.875rem; color: #0f172a;">${a.msg}</div>
++                          <div style="font-size: 0.75rem; color: #93a0b8; font-family: 'JetBrains Mono', monospace; margin-top: 0.25rem;">${a.time.substring(11, 16)}</div>
++                       </div>
++                    </div>`;
++                });
++                $wrapper.find('#home-activity-container').html(actHtml || `<div style="text-align: center; color: #93a0b8; padding: 2rem 0;">No recent activity</div>`);
++            }
++        }
++    });
++};
++// Also set up auto-refresh for homepage every 5 minutes
++if (!window.HOME_REFRESH_INTERVAL) {
++    window.HOME_REFRESH_INTERVAL = setInterval(() => {
++        if ($('.tab-pane.active').attr('id') === 'tab-home') {
++            window.render_homepage($('.dashboard-wrapper'));
++        }
++    }, 5 * 60 * 1000);
++}
++
++// ---------------------------------------------------------------------------
++// SHORTAGE MANAGEMENT MODULE
++// ---------------------------------------------------------------------------
++
++window.toggle_shortage_cash_account = function() {
++    let mode = $('#shortage-pay-mode').val();
++    if (mode === 'Cash') {
++        $('#shortage-pay-cash-account-wrapper').show();
++    } else {
++        $('#shortage-pay-cash-account-wrapper').hide();
++    }
++};
++
++window.load_shortage_form_data = function() {
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_shortage_form_data",
++        callback: function(r) {
++            if (r.message) {
++                // Populate Employees
++                let empOptions = '<option value="">Select Staff...</option>';
++                r.message.employees.forEach(e => {
++                    empOptions += `<option value="${e.name}">${e.employee_name}</option>`;
++                });
++                $('#shortage-pay-employee').html(empOptions);
++                $('#shortage-cor-from').html(empOptions);
++                $('#shortage-cor-to').html(empOptions);
++                
++                // Populate Cash Accounts
++                let cashOptions = '<option value="">Select Account...</option>';
++                r.message.cash_accounts.forEach(c => {
++                    cashOptions += `<option value="${c.name}">${c.account_name} (Bal: ${formatCurrency(c.current_balance)})</option>`;
++                });
++                $('#shortage-pay-cash-account').html(cashOptions);
++            }
++        }
++    });
++};
++
++window.load_shortage_history = function() {
++    $('#shortage-history-body').html('<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading...</td></tr>');
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_recent_shortage_records",
++        callback: function(r) {
++            if (r.message) {
++                let html = '';
++                if (r.message.length === 0) {
++                    html = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No recent activity</td></tr>';
++                } else {
++                    r.message.forEach(row => {
++                        let isPay = row.type === 'Payment';
++                        let typeBadge = isPay 
++                            ? `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded border border-blue-200">Payment</span>`
++                            : `<span class="bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded border border-orange-200">Correction</span>`;
++                        let staff = isPay ? row.employee : `${row.from_employee} Ô×ö ${row.to_employee}`;
++                        
++                        html += `
++                            <tr class="border-b border-gray-100 hover:bg-gray-50">
++                                <td class="px-4 py-3">${frappe.datetime.str_to_user(row.date)}</td>
++                                <td class="px-4 py-3">${typeBadge}</td>
++                                <td class="px-4 py-3">${staff}</td>
++                                <td class="px-4 py-3 text-right font-medium text-gray-900">${formatCurrency(row.amount)}</td>
++                            </tr>
++                        `;
++                    });
++                }
++                $('#shortage-history-body').html(html);
++            }
++        }
++    });
++};
++
++window.submit_shortage_payment = function() {
++    let employee = $('#shortage-pay-employee').val();
++    let mode = $('#shortage-pay-mode').val();
++    let account = $('#shortage-pay-cash-account').val();
++    let amount = parseFloat($('#shortage-pay-amount').val());
++    let ref = $('#shortage-pay-reference').val();
++    let remarks = $('#shortage-pay-remarks').val();
++    
++    if (!employee) { frappe.msgprint("Please select a staff member"); return; }
++    if (!amount || amount <= 0) { frappe.msgprint("Enter a valid amount"); return; }
++    if (mode === 'Cash' && !account) { frappe.msgprint("Please select a cash account"); return; }
++    
++    let shift_ref = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.name : null;
++    
++    frappe.call({
++        method: "fuel_management.fuel_management.api.submit_shortage_payment",
++        args: {
++            employee: employee,
++            payment_mode: mode,
++            amount: amount,
++            date: frappe.datetime.get_today(),
++            shift_reference: shift_ref,
++            cash_account: account,
++            reference_no: ref,
++            remarks: remarks
++        },
++        callback: function(r) {
++            if (!r.exc) {
++                frappe.show_alert({message: "Payment Recorded Successfully", indicator: "green"});
++                $('#shortage-pay-amount').val('');
++                $('#shortage-pay-reference').val('');
++                $('#shortage-pay-remarks').val('');
++                window.load_shortage_history();
++            }
++        }
++    });
++};
++
++window.submit_shortage_correction = function() {
++    let from_emp = $('#shortage-cor-from').val();
++    let to_emp = $('#shortage-cor-to').val();
++    let amount = parseFloat($('#shortage-cor-amount').val());
++    let remarks = $('#shortage-cor-remarks').val();
++    
++    if (!from_emp || !to_emp) { frappe.msgprint("Please select both staff members"); return; }
++    if (from_emp === to_emp) { frappe.msgprint("Cannot transfer to the same staff member"); return; }
++    if (!amount || amount <= 0) { frappe.msgprint("Enter a valid amount"); return; }
++    if (!remarks) { frappe.msgprint("Remarks/Reason is required"); return; }
++    
++    frappe.call({
++        method: "fuel_management.fuel_management.api.submit_shortage_correction",
++        args: {
++            from_employee: from_emp,
++            to_employee: to_emp,
++            amount: amount,
++            date: frappe.datetime.get_today(),
++            remarks: remarks
++        },
++        callback: function(r) {
++            if (!r.exc) {
++                frappe.show_alert({message: "Correction Recorded Successfully", indicator: "green"});
++                $('#shortage-cor-amount').val('');
++                $('#shortage-cor-remarks').val('');
++                window.load_shortage_history();
++            }
++        }
++    });
++};
++
++// Hook into tab switching to load data
++$(document).on('click', '.nav-item[data-target="tab-shortage-mgmt"]', function() {
++    window.load_shortage_form_data();
++    window.load_shortage_history();
++});
++
++$(document).on('click', '.nav-item[data-target="tab-shorts-report"]', function() {
++    window.load_shortage_balances();
++});
++
++window.load_shortage_balances = function() {
++    $('#shortage-balances-body').html('<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading balances...</td></tr>');
++    
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_csa_shorts_balances",
++        callback: function(r) {
++            if (r.message) {
++                let html = '';
++                if (r.message.length === 0) {
++                    html = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No shortage balances found</td></tr>';
++                } else {
++                    r.message.forEach(row => {
++                        html += `
++                            <tr style="border-bottom: 1px solid #e2e8f0; cursor: pointer;" onclick="window.show_shortage_breakdown('${row.employee}', '${row.employee_name || row.employee}')" class="hover-bg-slate-50 transition-colors">
++                                <td style="padding: 1rem; color: #1e293b; font-weight: 500;">
++                                    ${row.employee_name || row.employee}
++                                    <div style="font-size: 0.75rem; color: #64748b;">${row.employee}</div>
++                                </td>
++                                <td style="padding: 1rem; text-align: right; color: #dc2626; font-weight: 600;">${format_currency(row.month_shortage || 0)}</td>
++                                <td style="padding: 1rem; text-align: right; color: #16a34a; font-weight: 600;">${format_currency(row.month_paid || 0)}</td>
++if (a.type === 'dip' && Math.abs(a.variance || 0) > 50) color = '#ef5350';
++                    
++                    actHtml += `
++                    <div style="display: flex; gap: 1rem; align-items: flex-start; padding-bottom: 0.75rem; border-bottom: 1px solid #f2f4f8;">
++                       <div style="width: 10px; height: 10px; border-radius: 50%; background: ${color}; margin-top: 6px;"></div>
++                       <div style="flex: 1;">
++                          <div style="font-size: 0.875rem; color: #0f172a;">${a.msg}</div>
++                          <div style="font-size: 0.75rem; color: #93a0b8; font-family: 'JetBrains Mono', monospace; margin-top: 0.25rem;">${a.time.substring(11, 16)}</div>
++                       </div>
++                    </div>`;
++                });
++                $wrapper.find('#home-activity-container').html(actHtml || `<div style="text-align: center; color: #93a0b8; padding: 2rem 0;">No recent activity</div>`);
++            }
++        }
++    });
++};
++// Also set up auto-refresh for homepage every 5 minutes
++if (!window.HOME_REFRESH_INTERVAL) {
++    window.HOME_REFRESH_INTERVAL = setInterval(() => {
++        if ($('.tab-pane.active').attr('id') === 'tab-home') {
++            window.render_homepage($('.dashboard-wrapper'));
++        }
++    }, 5 * 60 * 1000);
++}
++
++// ---------------------------------------------------------------------------
++// SHORTAGE MANAGEMENT MODULE
++// ---------------------------------------------------------------------------
++
++window.toggle_shortage_cash_account = function() {
++    let mode = $('#shortage-pay-mode').val();
++    if (mode === 'Cash') {
++        $('#shortage-pay-cash-account-wrapper').show();
++    } else {
++        $('#shortage-pay-cash-account-wrapper').hide();
++    }
++};
++
++window.load_shortage_form_data = function() {
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_shortage_form_data",
++        callback: function(r) {
++            if (r.message) {
++                // Populate Employees
++                let empOptions = '<option value="">Select Staff...</option>';
++                r.message.employees.forEach(e => {
++                    empOptions += `<option value="${e.name}">${e.employee_name}</option>`;
++                });
++                $('#shortage-pay-employee').html(empOptions);
++                $('#shortage-cor-from').html(empOptions);
++                $('#shortage-cor-to').html(empOptions);
++                
++                // Populate Cash Accounts
++                let cashOptions = '<option value="">Select Account...</option>';
++                r.message.cash_accounts.forEach(c => {
++                    cashOptions += `<option value="${c.name}">${c.account_name} (Bal: ${formatCurrency(c.current_balance)})</option>`;
++                });
++                $('#shortage-pay-cash-account').html(cashOptions);
++            }
++        }
++    });
++};
++
++window.load_shortage_history = function() {
++    $('#shortage-history-body').html('<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading...</td></tr>');
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_recent_shortage_records",
++        callback: function(r) {
++            if (r.message) {
++                let html = '';
++                if (r.message.length === 0) {
++                    html = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No recent activity</td></tr>';
++                } else {
++                    r.message.forEach(row => {
++                        let isPay = row.type === 'Payment';
++                        let typeBadge = isPay 
++                            ? `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded border border-blue-200">Payment</span>`
++                            : `<span class="bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded border border-orange-200">Correction</span>`;
++                        let staff = isPay ? row.employee : `${row.from_employee} Ô×ö ${row.to_employee}`;
++                        
++                        html += `
++                            <tr class="border-b border-gray-100 hover:bg-gray-50">
++                                <td class="px-4 py-3">${frappe.datetime.str_to_user(row.date)}</td>
++                                <td class="px-4 py-3">${typeBadge}</td>
++                                <td class="px-4 py-3">${staff}</td>
++                                <td class="px-4 py-3 text-right font-medium text-gray-900">${formatCurrency(row.amount)}</td>
++                            </tr>
++                        `;
++                    });
++                }
++                $('#shortage-history-body').html(html);
++            }
++        }
++    });
++};
++
++window.submit_shortage_payment = function() {
++    let employee = $('#shortage-pay-employee').val();
++    let mode = $('#shortage-pay-mode').val();
++    let account = $('#shortage-pay-cash-account').val();
++    let amount = parseFloat($('#shortage-pay-amount').val());
++    let ref = $('#shortage-pay-reference').val();
++    let remarks = $('#shortage-pay-remarks').val();
++    
++    if (!employee) { frappe.msgprint("Please select a staff member"); return; }
++    if (!amount || amount <= 0) { frappe.msgprint("Enter a valid amount"); return; }
++    if (mode === 'Cash' && !account) { frappe.msgprint("Please select a cash account"); return; }
++    
++    let shift_ref = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.name : null;
++    
++    frappe.call({
++        method: "fuel_management.fuel_management.api.submit_shortage_payment",
++        args: {
++            employee: employee,
++            payment_mode: mode,
++            amount: amount,
++            date: frappe.datetime.get_today(),
++            shift_reference: shift_ref,
++            cash_account: account,
++            reference_no: ref,
++            remarks: remarks
++        },
++        callback: function(r) {
++            if (!r.exc) {
++                frappe.show_alert({message: "Payment Recorded Successfully", indicator: "green"});
++                $('#shortage-pay-amount').val('');
++                $('#shortage-pay-reference').val('');
++                $('#shortage-pay-remarks').val('');
++                window.load_shortage_history();
++            }
++        }
++    });
++};
++
++window.submit_shortage_correction = function() {
++    let from_emp = $('#shortage-cor-from').val();
++    let to_emp = $('#shortage-cor-to').val();
++    let amount = parseFloat($('#shortage-cor-amount').val());
++    let remarks = $('#shortage-cor-remarks').val();
++    
++    if (!from_emp || !to_emp) { frappe.msgprint("Please select both staff members"); return; }
++    if (from_emp === to_emp) { frappe.msgprint("Cannot transfer to the same staff member"); return; }
++    if (!amount || amount <= 0) { frappe.msgprint("Enter a valid amount"); return; }
++    if (!remarks) { frappe.msgprint("Remarks/Reason is required"); return; }
++    
++    frappe.call({
++        method: "fuel_management.fuel_management.api.submit_shortage_correction",
++        args: {
++            from_employee: from_emp,
++            to_employee: to_emp,
++            amount: amount,
++            date: frappe.datetime.get_today(),
++            remarks: remarks
++        },
++        callback: function(r) {
++            if (!r.exc) {
++                frappe.show_alert({message: "Correction Recorded Successfully", indicator: "green"});
++                $('#shortage-cor-amount').val('');
++                $('#shortage-cor-remarks').val('');
++                window.load_shortage_history();
++            }
++        }
++    });
++};
++
++// Hook into tab switching to load data
++$(document).on('click', '.nav-item[data-target="tab-shortage-mgmt"]', function() {
++    window.load_shortage_form_data();
++    window.load_shortage_history();
++});
++
++$(document).on('click', '.nav-item[data-target="tab-shorts-report"]', function() {
++    window.load_shortage_balances();
++});
++
++window.load_shortage_balances = function() {
++    $('#shortage-balances-body').html('<tr><td colspan="4" class="text-center py-4 text-gray-500">Loading balances...</td></tr>');
++    
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_csa_shorts_balances",
++        callback: function(r) {
++            if (r.message) {
++                let html = '';
++                if (r.message.length === 0) {
++                    html = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No shortage balances found</td></tr>';
++                } else {
++                    r.message.forEach(row => {
++                        html += `
++                            <tr style="border-bottom: 1px solid #e2e8f0; cursor: pointer;" onclick="window.show_shortage_breakdown('${row.employee}', '${row.employee_name || row.employee}')" class="hover-bg-slate-50 transition-colors">
++                                <td style="padding: 1rem; color: #1e293b; font-weight: 500;">
++                                    ${row.employee_name || row.employee}
++                                    <div style="font-size: 0.75rem; color: #64748b;">${row.employee}</div>
++                                </td>
++                                <td style="padding: 1rem; text-align: right; color: #dc2626; font-weight: 600;">${format_currency(row.month_shortage || 0)}</td>
++                                <td style="padding: 1rem; text-align: right; color: #16a34a; font-weight: 600;">${format_currency(row.month_paid || 0)}</td>
++                                <td style="padding: 1rem; text-align: right; font-weight: 700; color: #0f172a;">${format_currency(row.outstanding_balance || 0)}</td>
++                            </tr>
++                        `;
++                    });
++                }
++                $('#shortage-balances-body').html(html);
++            }
++        },
++        error: function() {
++            $('#shortage-balances-body').html('<tr><td colspan="4" class="text-center py-4 text-red-500">Error loading balances</td></tr>');
++        }
++    });
++};
++
++window.show_shortage_breakdown = function(employee_id, employee_name) {
++    $('#breakdown-modal-title').text(`Shorts Breakdown: ${employee_name}`);
++    $('#breakdown-modal-body').html('<div class="text-center py-8 text-gray-500">Loading breakdown...</div>');
++    $('#breakdown-modal').css('display', 'flex');
++    
++    // Bind close handlers
++    $('#breakdown-modal-close').off('click').on('click', function() {
++        $('#breakdown-modal').hide();
++    });
++    $('#breakdown-modal').off('click').on('click', function(e) {
++        if (e.target === this) {
++            $(this).hide();
++        }
++    });
++    
++    frappe.call({
++        method: "fuel_management.fuel_management.api.get_csa_shorts_breakdown",
++        args: { employee: employee_id },
++        callback: function(r) {
++            if (r.message) {
++                let html = `
++                    <table class="w-full text-left border-collapse" style="min-width: 600px;">
++                        <thead>
++                            <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; text-transform: uppercase; font-size: 0.75rem; color: #64748b;">
++                                <th style="padding: 0.75rem;">Date</th>
++                                <th style="padding: 0.75rem;">Reason</th>
++                                <th style="padding: 0.75rem;">Shift</th>
++                                <th style="padding: 0.75rem; text-align: right;">Amount (KES)</th>
++                            </tr>
++                        </thead>
++                        <tbody>
++                `;
++                
++                if (r.message.length === 0) {
++                    html += `<tr><td colspan="4" class="text-center py-4 text-gray-500">No records found.</td></tr>`;
++                } else {
++                    r.message.forEach(row => {
++                        let amountColor = row.amount > 0 ? '#dc2626' : '#16a34a'; // positive amount is a short (liability), negative is payment
++                        html += `
++                            <tr style="border-bottom: 1px solid #e2e8f0;">
++                                <td style="padding: 0.75rem;">${frappe.datetime.str_to_user(row.date)}</td>
++                                <td style="padding: 0.75rem;">${row.reason || '-'}</td>
++                                <td style="padding: 0.75rem;">${row.shift || '-'}</td>
++                                <td style="padding: 0.75rem; text-align: right; color: ${amountColor}; font-weight: 600;">${format_currency(Math.abs(row.amount))}</td>
++                            </tr>
++                        `;
++                    });
++                }
++                
++                html += `</tbody></table>`;
++                $('#breakdown-modal-body').html(html);
++            }
++        },
++        error: function() {
++            $('#breakdown-modal-body').html('<div class="text-center py-8 text-red-500">Error loading data.</div>');
++        }
++    });
++};

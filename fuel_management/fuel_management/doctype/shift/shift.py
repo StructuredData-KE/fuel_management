@@ -27,14 +27,11 @@ class Shift(Document):
     def auto_inject_dry_stock_from_invoices(self):
         from frappe.utils import flt
         
-        # Clean up orphaned injected inventory sales and injected fuel items
+        # Clean up ALL injected inventory sales first to prevent duplicates or ghost items on edit
         if getattr(self, "inventory_sales", None):
-            valid_invoice_entries = [inv.entry_number for inv in (self.invoices or []) if getattr(inv, "entry_number", None)]
-            fuel_items = frappe.get_all("Item", filters={"item_group": ["in", ["FUEL", "FUELS"]]}, pluck="name")
             self.inventory_sales = [
                 row for row in self.inventory_sales 
-                if not row.get("is_invoice_sale") or 
-                (row.get("reference_invoice") in valid_invoice_entries and row.item not in fuel_items)
+                if not row.get("is_invoice_sale")
             ]
             
         if not self.invoices:
@@ -47,27 +44,15 @@ class Shift(Document):
             if item_group and item_group.upper() in ["FUEL", "FUELS"]:
                 continue
                 
-            found = False
-            for row in (self.inventory_sales or []):
-                if row.get("reference_invoice") == inv.entry_number:
-                    row.item = inv.item
-                    row.quantity = inv.quantity
-                    row.selling_price = inv.rate
-                    row.amount = inv.amount
-                    row.sold_by = inv.csa
-                    found = True
-                    break
-                    
-            if not found:
-                self.append("inventory_sales", {
-                    "item": inv.item,
-                    "quantity": inv.quantity,
-                    "selling_price": inv.rate,
-                    "amount": inv.amount,
-                    "sold_by": getattr(inv, "inventory_csa", inv.csa) or inv.csa,
-                    "is_invoice_sale": 1,
-                    "reference_invoice": inv.entry_number
-                })
+            self.append("inventory_sales", {
+                "item": inv.item,
+                "quantity": inv.quantity,
+                "selling_price": inv.rate,
+                "amount": inv.amount,
+                "sold_by": getattr(inv, "inventory_csa", inv.csa) or getattr(inv, "csa", ""),
+                "is_invoice_sale": 1,
+                "reference_invoice": inv.entry_number
+            })
 
     def auto_set_shift_display(self):
         from frappe.utils import getdate
@@ -220,6 +205,17 @@ class Shift(Document):
             
         total_revenue = total_fuel_revenue + total_dry_stock_revenue + total_greasing
         
+        # Clean up any existing duplicate Shift Closure Journal Entries to prevent double-posting
+        existing_jes = frappe.get_all("Journal Entry", filters={"user_remark": f"Shift Closure Accounting for Shift {self.name}", "docstatus": ["<", 2]})
+        for old_je in existing_jes:
+            try:
+                old_doc = frappe.get_doc("Journal Entry", old_je.name)
+                if old_doc.docstatus == 1:
+                    old_doc.cancel()
+                frappe.delete_doc("Journal Entry", old_je.name, ignore_permissions=True)
+            except Exception:
+                pass
+
         # We will create ONE massive Journal Entry for the entire shift closure.
         je = frappe.new_doc("Journal Entry")
         je.voucher_type = "Journal Entry"
@@ -351,8 +347,12 @@ class Shift(Document):
                 
         # C. M-Pesa
         for m in (self.mpesa_payments or []):
+            if not m.mpesa_till: continue
+            till_doc = frappe.get_doc("M-Pesa Till", m.mpesa_till)
+            mop_account = till_doc.default_account
+            bank_account = getattr(till_doc, "bank_account", None)
+
             if flt(m.amount) > 0:
-                mop_account = frappe.db.get_value("M-Pesa Till", m.mpesa_till, "default_account")
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for M-Pesa Till: {m.mpesa_till}")
                 je.append("accounts", {
@@ -364,6 +364,23 @@ class Shift(Document):
                     "account": station_doc.shift_control_account,
                     "credit_in_account_currency": m.amount,
                     "user_remark": f"Clear M-Pesa"
+                })
+                
+            if flt(m.transfers_made) > 0:
+                if not bank_account:
+                    frappe.throw(f"No Bank Account mapped for Transfers on M-Pesa Till: {m.mpesa_till}. Please configure the Bank Account in the Till settings.")
+                if not mop_account:
+                    frappe.throw(f"No Default Account mapped for M-Pesa Till: {m.mpesa_till}")
+                    
+                je.append("accounts", {
+                    "account": bank_account,
+                    "debit_in_account_currency": m.transfers_made,
+                    "user_remark": f"Bank Transfer from {m.mpesa_till}"
+                })
+                je.append("accounts", {
+                    "account": mop_account,
+                    "credit_in_account_currency": m.transfers_made,
+                    "user_remark": f"Bank Transfer Out"
                 })
                 
         # D. Cards
@@ -418,6 +435,25 @@ class Shift(Document):
                         "user_remark": f"Clear RTT"
                     })
                 
+        # G. Non-Cash Customer Payments
+        customer_payments = frappe.get_all("Customer Payment", filters={"shift": self.name, "docstatus": 1})
+        for cp in customer_payments:
+            cp_doc = frappe.get_doc("Customer Payment", cp.name)
+            if cp_doc.mode_of_payment != "Cash":
+                mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": cp_doc.mode_of_payment, "company": company}, "default_account")
+                if not mop_account:
+                    frappe.throw(f"No Default Account mapped for Mode of Payment: {cp_doc.mode_of_payment} (Customer Payment {cp_doc.name})")
+                je.append("accounts", {
+                    "account": mop_account,
+                    "debit_in_account_currency": cp_doc.amount,
+                    "user_remark": f"Clear Non-Cash Customer Payment via {cp_doc.mode_of_payment}"
+                })
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": cp_doc.amount,
+                    "user_remark": f"Clear Customer Payment for {cp_doc.customer}"
+                })
+
         if len(je.accounts) > 0:
             je.flags.ignore_permissions = True
             je.insert()
@@ -503,11 +539,14 @@ class Shift(Document):
             if sob:
                 station_opening = frappe.get_doc("Station Opening Balance", sob[0].name)
 
-        if not self.pump_meter_readings and self.station:
+        if self.station:
             pump_groups = frappe.get_all("Pump Group", filters={"station": self.station}, pluck="name")
             nozzles = frappe.get_all("Pump Nozzle", filters={"pump_group": ["in", pump_groups]}, fields=["name"]) if pump_groups else []
+            existing_nozzles = [r.pump_nozzle for r in (self.pump_meter_readings or [])]
             
             for nozzle in nozzles:
+                if nozzle.name in existing_nozzles:
+                    continue
                 opening_elec = 0
                 opening_manual = 0
                 found = False
@@ -551,17 +590,27 @@ class Shift(Document):
                             row.opening_manual_meter = prev_row.opening_manual_meter
                             break
 
-        if not self.dip_stick_readings and self.station:
-            tanks = frappe.get_all("Fuel Tank", filters={"station": self.station}, fields=["name"])
+        if self.station:
+            tanks = frappe.get_all("Fuel Tank", filters={"station": self.station}, fields=["name"], order_by="name ASC")
+            existing_tanks = [r.fuel_tank for r in (self.dip_stick_readings or [])]
             for tank in tanks:
+                if tank.name in existing_tanks:
+                    continue
                 opening_dip = 0.0
                 found = False
-                if last_shift_doc:
-                    for row in (last_shift_doc.dip_stick_readings or []):
-                        if getattr(row, "fuel_tank", None) == tank.name:
-                            opening_dip = row.closing_dip or 0.0
-                            found = True
-                            break
+                
+                last_dip = frappe.db.sql("""
+                    SELECT r.closing_dip
+                    FROM `tabDip Stick Reading` r
+                    JOIN `tabShift` s ON r.parent = s.name
+                    WHERE s.station = %s AND r.fuel_tank = %s AND r.closing_dip > 0 AND s.name != %s
+                    ORDER BY s.creation DESC
+                    LIMIT 1
+                """, (self.station, tank.name, self.name))
+
+                if last_dip and last_dip[0][0]:
+                    opening_dip = last_dip[0][0]
+                    found = True
                             
                 if not found and station_opening:
                     for row in (station_opening.get("dip_balances") or []):
@@ -576,13 +625,20 @@ class Shift(Document):
         elif self.dip_stick_readings and self.station and self.status == "Open":
             for row in self.dip_stick_readings:
                 found = False
-                if last_shift_doc:
-                    for prev_row in (last_shift_doc.dip_stick_readings or []):
-                        if getattr(prev_row, "fuel_tank", None) == row.fuel_tank:
-                            if prev_row.closing_dip is not None:
-                                row.opening_dip = prev_row.closing_dip
-                            found = True
-                            break
+                
+                last_dip = frappe.db.sql("""
+                    SELECT r.closing_dip
+                    FROM `tabDip Stick Reading` r
+                    JOIN `tabShift` s ON r.parent = s.name
+                    WHERE s.station = %s AND r.fuel_tank = %s AND r.closing_dip > 0 AND s.name != %s
+                    ORDER BY s.creation DESC
+                    LIMIT 1
+                """, (self.station, row.fuel_tank, self.name))
+
+                if last_dip and last_dip[0][0]:
+                    row.opening_dip = last_dip[0][0]
+                    found = True
+
                 if not found and station_opening:
                     for prev_row in (station_opening.get("dip_balances") or []):
                         if getattr(prev_row, "fuel_tank", None) == row.fuel_tank:
@@ -734,8 +790,14 @@ class Shift(Document):
         default_cash_account = frappe.get_cached_value("Company", company, "default_cash_account")
         default_payable_account = frappe.get_cached_value("Company", company, "default_payable_account")
         
-        if not default_payable_account:
-            frappe.msgprint("Default Payable account not set in Company. Skipping Top-Up Accounting.")
+        # Check if Fuel Station has a Holding Account
+        station_doc = frappe.get_doc("Fuel Station", self.station)
+        holding_account = station_doc.get("top_up_holding_account")
+        
+        credit_account = holding_account or default_payable_account
+        
+        if not credit_account:
+            frappe.msgprint("Neither Top Up Holding Account nor Default Payable account is set. Skipping Top-Up Accounting.")
             return
 
         # We will create one Journal Entry for all top-ups in this shift
@@ -757,14 +819,18 @@ class Shift(Document):
             supplier = frappe.db.get_value("Supplier Card", t.card, "supplier")
             if not supplier: continue
             
-            # Credit Supplier
-            je.append("accounts", {
-                "account": default_payable_account,
-                "party_type": "Supplier",
-                "party": supplier,
+            # Credit Account
+            account_type = frappe.db.get_value("Account", credit_account, "account_type")
+            credit_row = {
+                "account": credit_account,
                 "credit_in_account_currency": amount,
                 "user_remark": f"Top-Up RRN: {t.rrn_number} (Ref: {t.name})"
-            })
+            }
+            if account_type == "Payable":
+                credit_row["party_type"] = "Supplier"
+                credit_row["party"] = supplier
+                
+            je.append("accounts", credit_row)
             
             # Determine Debit Account based on Mode of Payment
             debit_acct = default_cash_account
@@ -922,6 +988,7 @@ def send_end_shift_report(shift_name, html_content):
     )
     
     frappe.db.set_value("Shift", shift.name, "report_sent", 1)
+    frappe.db.set_value("Shift", shift.name, "report_html", html_content)
     frappe.db.commit()
     
     return "Sent"
