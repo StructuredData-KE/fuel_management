@@ -1928,10 +1928,17 @@ function render_invoices($wrapper) {
             if(r.message) {
                 window.CUSTOMERS_LIST = r.message;
                 let custOpts = '';
+                let filterOpts = '<option value="">All Customers</option>';
                 r.message.forEach(c => {
                     custOpts += `<option value="${c.name} - ${c.customer_name}">`;
+                    filterOpts += `<option value="${c.name}">${c.customer_name}</option>`;
                 });
                 $wrapper.find('#invoice-customers-list').html(custOpts);
+                $wrapper.find('#inv-filter-customer').html(filterOpts);
+                
+                $wrapper.find('#inv-filter-date-from, #inv-filter-date-to, #inv-filter-customer').off('change').on('change', () => fetch_invoice_history($wrapper));
+                $wrapper.find('#invoice-filter-search').off('keyup').on('keyup', () => fetch_invoice_history($wrapper));
+                
                 refresh_invoice_cart($wrapper);
             }
         }
@@ -2153,136 +2160,7 @@ function refresh_invoice_cart($wrapper) {
         refresh_invoice_cart($wrapper);
     });
 
-    // Render Historical Table
-    let filter_search = ($wrapper.find('#invoice-filter-search').val() || '').toLowerCase();
-    
-    let html_saved = '';
-    (window.SHIFT_DOC.invoices || []).forEach((row, idx) => {
-        let searchStr = `${row.customer} ${row.entry_number} ${row.vehicle_registration}`.toLowerCase();
-        if (filter_search && !searchStr.includes(filter_search)) return;
-        let c = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
-        let customer_name = c ? c.customer_name : row.customer;
-        
-        let csa_name = row.csa;
-        if(window.USERS_LIST) {
-            let u = window.USERS_LIST.find(u => u.name === row.csa);
-            if(u) csa_name = u.employee_name;
-        }
-
-        let del_btn = is_locked ? 
-            `<button class="btn btn-xs btn-danger" disabled>X</button>` : 
-            `<button class="btn btn-xs btn-danger btn-remove-saved-invoice" data-idx="${idx}">X</button>`;
-            
-        let edit_btn = is_locked ?
-            `<button class="btn btn-xs btn-default" disabled>Edit</button>` :
-            `<button class="btn btn-xs btn-default btn-edit-saved-invoice" data-idx="${idx}">Edit</button>`;
-
-        let action_html = `<div style="display:flex; gap:0.5rem;">${edit_btn}${del_btn}</div>`;
-
-        let sDate = window.ACTIVE_SHIFT.shift_date || window.ACTIVE_SHIFT.creation || frappe.datetime.now_date();
-        let shiftName = window.ACTIVE_SHIFT.shift_template ? `${window.ACTIVE_SHIFT.shift_template}` : window.ACTIVE_SHIFT.name;
-
-        html_saved += `
-            <tr>
-                <td><span class="badge" style="background: #e2e8f0; color: #0f172a;">${row.entry_number || '-'}</span></td>
-                <td style="color: #64748b;">${sDate.split(" ")[0]}</td>
-                <td style="color: #64748b;">${shiftName}</td>
-                <td><strong>${customer_name || row.customer || ''}</strong></td>
-                <td>${row.purchase_order || '-'}</td>
-                <td>${row.vehicle_registration || '-'}</td>
-                <td>${row.item_name || (function(){ let i_obj = (window.INVOICE_ITEMS || []).find(i => i.item_code === row.item); return i_obj ? i_obj.item_name : row.item; })() || ''}</td>
-                <td>${row.quantity || 0}</td>
-                <td>${csa_name || ''}</td>
-                <td><strong>${frappe.format(row.amount, {fieldtype: 'Currency'})}</strong></td>
-                <td>${action_html}</td>
-            </tr>
-        `;
-    });
-    if(!html_saved) {
-        html_saved = `<tr><td colspan="11" style="text-align: center; color: #64748b; padding: 2rem;">No historical invoices match filters.</td></tr>`;
-    }
-    $wrapper.find('#list-invoice-saved').html(html_saved);
-
-    // Edit Historical Action
-    $wrapper.find('.btn-edit-saved-invoice').off('click').on('click', function() {
-        if(is_locked) return;
-        let idx = parseInt($(this).attr('data-idx'));
-        let row = window.SHIFT_DOC.invoices[idx];
-        
-        frappe.confirm('This will load the invoice back into the entry form and remove it from history. Continue?', () => {
-            // Populate form
-            let c = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
-            let customer_name = c ? c.customer_name : '';
-            $wrapper.find('#invoice-customer-input').val(`${row.customer} - ${customer_name}`);
-            $wrapper.find('#invoice-customer-input').trigger('change');
-            
-            $wrapper.find('#invoice-csa').val(row.csa);
-            $wrapper.find('#invoice-po').val(row.purchase_order);
-            $wrapper.find('#invoice-vehicle').val(row.vehicle_registration);
-            let i_obj = (window.INVOICE_ITEMS || []).find(i => i.item_code === row.item);
-            let i_name = row.item_name || (i_obj ? i_obj.item_name : '');
-            $wrapper.find('#invoice-item-input').val(`${i_name} - ${row.item}`);
-            $wrapper.find('#invoice-qty').val(row.quantity);
-            $wrapper.find('#invoice-rate').val(row.rate);
-            $wrapper.find('#invoice-amount').val(row.amount);
-            
-            // Delete from history
-            window.SHIFT_DOC.invoices.splice(idx, 1);
-            frappe.call({
-                method: "frappe.client.get",
-                args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
-                callback: function(r) {
-                    if(r.message) {
-                        let doc = r.message;
-                        doc.invoices = window.SHIFT_DOC.invoices.map(r2 => {
-                            return { ...r2, name: r2._is_new ? undefined : r2.name };
-                        });
-                        frappe.call({
-                            method: "frappe.client.save",
-                            args: { doc: doc },
-                            callback: function(r2) {
-                                if(r2.message) window.SHIFT_DOC = r2.message;
-                                refresh_invoice_cart($wrapper);
-                                $wrapper.find('.seg-btn[data-view="entry"]').click();
-                            }
-                        });
-                    }
-                }
-            });
-        });
-    });
-
-    // Delete Historical Action
-    $wrapper.find('.btn-remove-saved-invoice').off('click').on('click', function() {
-        if (is_locked) return;
-        let idx = parseInt($(this).attr('data-idx'));
-        
-        frappe.confirm('Are you sure you want to delete this historical invoice item?', () => {
-            window.SHIFT_DOC.invoices.splice(idx, 1);
-            
-            frappe.call({
-                method: "frappe.client.get",
-                args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
-                callback: function(r) {
-                    if(r.message) {
-                        let doc = r.message;
-                        doc.invoices = window.SHIFT_DOC.invoices.map(r2 => {
-                            return { ...r2, name: r2._is_new ? undefined : r2.name };
-                        });
-                        frappe.call({
-                            method: "frappe.client.save",
-                            args: { doc: doc },
-                            callback: function(r2) {
-                                if(r2.message) window.SHIFT_DOC = r2.message;
-                                refresh_invoice_cart($wrapper);
-                                frappe.show_alert({message: "Item deleted from history", indicator: "green"});
-                            }
-                        });
-                    }
-                }
-            });
-        });
-    });
+    fetch_invoice_history($wrapper);
 }
 
 // =========================================================
@@ -7172,3 +7050,163 @@ window.show_shortage_breakdown = function(employee_id, employee_name) {
 
 
 
+
+
+function fetch_invoice_history($wrapper) {
+    if(!window.ACTIVE_SHIFT) return;
+    
+    let from_date = $wrapper.find('#inv-filter-date-from').val();
+    let to_date = $wrapper.find('#inv-filter-date-to').val();
+    let customer = $wrapper.find('#inv-filter-customer').val();
+    let search = ($wrapper.find('#invoice-filter-search').val() || '').toLowerCase();
+    
+    let is_locked = window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== 'Open';
+    
+    $wrapper.find('#list-invoice-saved').html('<tr><td colspan="11" style="text-align: center; padding: 2rem;">Loading history...</td></tr>');
+    
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.get_shift_invoices_history',
+        args: {
+            station: window.ACTIVE_SHIFT.station,
+            from_date: from_date,
+            to_date: to_date,
+            customer: customer
+        },
+        callback: function(r) {
+            let html_saved = '';
+            if (r.message && r.message.length > 0) {
+                r.message.forEach((row, idx) => {
+                    let searchStr = `${row.customer} ${row.entry_number} ${row.vehicle_registration}`.toLowerCase();
+                    if (search && !searchStr.includes(search)) return;
+                    
+                    let c = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
+                    let customer_name = c ? c.customer_name : row.customer;
+                    
+                    let csa_name = row.csa;
+                    if(window.USERS_LIST) {
+                        let u = window.USERS_LIST.find(u => u.name === row.csa);
+                        if(u) csa_name = u.employee_name || u.full_name;
+                    }
+                    
+                    let can_edit = !is_locked && row.shift === window.ACTIVE_SHIFT.name;
+                    
+                    let del_btn = can_edit ? 
+                        `<button class="btn btn-xs btn-danger btn-remove-saved-invoice" data-name="${row.name}">X</button>` : 
+                        `<button class="btn btn-xs btn-danger" disabled>X</button>`;
+                        
+                    let edit_btn = can_edit ?
+                        `<button class="btn btn-xs btn-default btn-edit-saved-invoice" data-name="${row.name}">Edit</button>` :
+                        `<button class="btn btn-xs btn-default" disabled>Edit</button>`;
+
+                    let action_html = `<div style="display:flex; gap:0.5rem;">${edit_btn}${del_btn}</div>`;
+                    
+                    let i_obj = (window.INVOICE_ITEMS || []).find(i => i.item_code === row.item);
+                    let item_name = i_obj ? i_obj.item_name : row.item;
+
+                    html_saved += `
+                        <tr>
+                            <td><span class="badge" style="background: #e2e8f0; color: #0f172a;">${row.entry_number || '-'}</span></td>
+                            <td style="color: #64748b;">${row.shift_date ? frappe.datetime.str_to_user(row.shift_date).split(' ')[0] : ''}</td>
+                            <td style="color: #64748b;">${row.shift_template || row.shift}</td>
+                            <td><strong>${customer_name || ''}</strong></td>
+                            <td>${row.purchase_order || '-'}</td>
+                            <td>${row.vehicle_registration || '-'}</td>
+                            <td>${item_name || ''}</td>
+                            <td>${row.quantity || 0}</td>
+                            <td>${csa_name || ''}</td>
+                            <td><strong>${frappe.format(row.amount, {fieldtype: 'Currency'})}</strong></td>
+                            <td>${action_html}</td>
+                        </tr>
+                    `;
+                });
+            }
+            if(!html_saved) {
+                html_saved = `<tr><td colspan="11" style="text-align: center; color: #64748b; padding: 2rem;">No historical invoices match filters.</td></tr>`;
+            }
+            $wrapper.find('#list-invoice-saved').html(html_saved);
+            
+            // Edit Historical Action
+            $wrapper.find('.btn-edit-saved-invoice').off('click').on('click', function() {
+                let name = $(this).attr('data-name');
+                let row = r.message.find(x => x.name === name);
+                if (!row) return;
+                
+                frappe.confirm('This will load the invoice back into the entry form and remove it from history. Continue?', () => {
+                    // Populate form
+                    let c = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
+                    let cust_name = c ? c.customer_name : '';
+                    $wrapper.find('#invoice-customer-input').val(`${row.customer} - ${cust_name}`).trigger('change');
+                    
+                    $wrapper.find('#invoice-csa').val(row.csa);
+                    $wrapper.find('#invoice-po').val(row.purchase_order);
+                    $wrapper.find('#invoice-vehicle').val(row.vehicle_registration);
+                    let i_obj = (window.INVOICE_ITEMS || []).find(i => i.item_code === row.item);
+                    let i_name = i_obj ? i_obj.item_name : '';
+                    $wrapper.find('#invoice-item-input').val(`${i_name} - ${row.item}`);
+                    $wrapper.find('#invoice-qty').val(row.quantity);
+                    $wrapper.find('#invoice-rate').val(row.rate);
+                    $wrapper.find('#invoice-amount').val(row.amount);
+                    
+                    // delete from current shift
+                    let idx = window.SHIFT_DOC.invoices.findIndex(i => i.name === name);
+                    if (idx > -1) {
+                        window.SHIFT_DOC.invoices.splice(idx, 1);
+                        frappe.call({
+                            method: "frappe.client.get",
+                            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+                            callback: function(res) {
+                                if(res.message) {
+                                    let doc = res.message;
+                                    doc.invoices = window.SHIFT_DOC.invoices.map(r2 => {
+                                        return { ...r2, name: r2._is_new ? undefined : r2.name };
+                                    });
+                                    frappe.call({
+                                        method: "frappe.client.save",
+                                        args: { doc: doc },
+                                        callback: function(r2) {
+                                            if(r2.message) window.SHIFT_DOC = r2.message;
+                                            fetch_invoice_history($wrapper);
+                                            $wrapper.find('.seg-btn[data-view="entry"]').click();
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+
+            // Delete Historical Action
+            $wrapper.find('.btn-remove-saved-invoice').off('click').on('click', function() {
+                let name = $(this).attr('data-name');
+                frappe.confirm('Are you sure you want to delete this historical invoice item?', () => {
+                    let idx = window.SHIFT_DOC.invoices.findIndex(i => i.name === name);
+                    if (idx > -1) {
+                        window.SHIFT_DOC.invoices.splice(idx, 1);
+                        frappe.call({
+                            method: "frappe.client.get",
+                            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+                            callback: function(res) {
+                                if(res.message) {
+                                    let doc = res.message;
+                                    doc.invoices = window.SHIFT_DOC.invoices.map(r2 => {
+                                        return { ...r2, name: r2._is_new ? undefined : r2.name };
+                                    });
+                                    frappe.call({
+                                        method: "frappe.client.save",
+                                        args: { doc: doc },
+                                        callback: function(r2) {
+                                            if(r2.message) window.SHIFT_DOC = r2.message;
+                                            fetch_invoice_history($wrapper);
+                                            frappe.show_alert({message: "Item deleted from history", indicator: "green"});
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+        }
+    });
+}
