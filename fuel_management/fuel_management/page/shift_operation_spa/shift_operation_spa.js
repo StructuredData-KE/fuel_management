@@ -4899,6 +4899,14 @@ function render_station_cards($wrapper) {
                             </tr>
                         `;
                     });
+                    
+                    html += `
+                        <tr style="background-color: #f8fafc;">
+                            <td colspan="5" style="text-align: right; font-weight: 600; color: #475569;">TOTAL</td>
+                            <td style="font-weight: 700; color: #047857;">${total_amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td></td>
+                        </tr>
+                    `;
                 }
                 if(html === '') html = '<tr><td colspan="7" class="text-center" style="color: #94a3b8; padding: 2rem;">No card payments recorded yet.</td></tr>';
                 $wrapper.find('#list-station-cards-saved').html(html);

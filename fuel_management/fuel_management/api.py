@@ -2172,7 +2172,7 @@ def get_shift_invoices_history(station, from_date=None, to_date=None, customer=N
         JOIN `tabShift` s ON si.parent = s.name
         WHERE {' AND '.join(conditions)}
         ORDER BY si.creation DESC
-        LIMIT 500
+        {500 if (from_date or to_date) else 30}
     """
     return frappe.db.sql(query, values, as_dict=True)
 
@@ -2199,7 +2199,7 @@ def get_customer_payments_history(station, from_date=None, to_date=None, custome
         JOIN `tabShift` s ON cp.shift = s.name
         WHERE {' AND '.join(conditions)}
         ORDER BY cp.creation DESC
-        LIMIT 500
+        {500 if (from_date or to_date) else 30}
     """
     return frappe.db.sql(query, values, as_dict=True)
 
@@ -2226,7 +2226,7 @@ def get_topups_history(station=None, from_date=None, to_date=None):
         LEFT JOIN `tabShift` s ON t.shift = s.name
         WHERE t.docstatus < 2 {filter_cond}
         ORDER BY t.date DESC, t.creation DESC
-        LIMIT 500
+        {500 if (from_date or to_date) else 30}
     '''
     return frappe.db.sql(sql, as_dict=True)
 
