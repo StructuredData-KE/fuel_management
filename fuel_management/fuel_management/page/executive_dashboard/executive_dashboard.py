@@ -296,3 +296,17 @@ def get_sales_analytics(from_date=None, to_date=None):
 
     return analytics
 
+
+
+@frappe.whitelist()
+def get_topup_statement(from_date, to_date):
+    sql = """
+        SELECT 
+            t.name, t.date, t.shift, t.card, t.mode_of_payment, t.rrn_number, t.amount,
+            s.station
+        FROM `tabStation Supplier Top Up` t
+        LEFT JOIN `tabFuel Shift` s ON t.shift = s.name
+        WHERE t.date BETWEEN %s AND %s
+        ORDER BY t.date DESC, t.creation DESC
+    """
+    return frappe.db.sql(sql, (from_date, to_date), as_dict=True)

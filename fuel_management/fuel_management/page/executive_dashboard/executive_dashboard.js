@@ -126,6 +126,7 @@ function init_spa_ui(wrapper) {
         load_pnl_data(wrapper);
         load_hr_data(wrapper);
         load_analytics_data(wrapper);
+    load_topups_statement(wrapper);
 
     
     // Populate Station Dropdown
@@ -245,6 +246,7 @@ function init_spa_ui(wrapper) {
     load_pnl_data(wrapper);
     load_hr_data(wrapper);
     load_analytics_data(wrapper);
+    load_topups_statement(wrapper);
 
     
     // Populate Station Dropdown
@@ -1079,3 +1081,42 @@ function fetch_inventory_report($wrapper) {
 // =========================================================
 // WAREHOUSE INVENTORY MODULE
 // =========================================================
+
+function load_topups_statement(wrapper) {
+    let filters = get_date_filters(wrapper);
+    
+    $(wrapper).find('#exec-topups-table tbody').html('<tr><td colspan="7" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>');
+    
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_topup_statement",
+        args: filters,
+        callback: function(r) {
+            let html = '';
+            let total = 0;
+            
+            if(r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let amount = parseFloat(row.amount) || 0;
+                    total += amount;
+                    
+                    html += `<tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 12px 16px;">${frappe.datetime.str_to_user(row.date)}</td>
+                        <td style="padding: 12px 16px;">
+                            <a href="/app/station-supplier-top-up/${row.name}" style="color: #0ea5e9; font-weight: 500; text-decoration: none;">${row.name}</a>
+                        </td>
+                        <td style="padding: 12px 16px;">${row.station || '-'}</td>
+                        <td style="padding: 12px 16px;">${row.card || '-'}</td>
+                        <td style="padding: 12px 16px;">${row.mode_of_payment || '-'}</td>
+                        <td style="padding: 12px 16px;">${row.rrn_number || '-'}</td>
+                        <td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600;">${format_currency(amount, "KES")}</td>
+                    </tr>`;
+                });
+            } else {
+                html = '<tr><td colspan="7" style="text-align: center; padding: 24px; color: #64748b;">No top-ups found in this period.</td></tr>';
+            }
+            
+            $(wrapper).find('#exec-topups-table tbody').html(html);
+            $(wrapper).find('#exec-topups-total').text(format_currency(total, "KES"));
+        }
+    });
+}
