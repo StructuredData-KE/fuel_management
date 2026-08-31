@@ -127,6 +127,29 @@ function init_spa_ui(wrapper) {
         load_hr_data(wrapper);
         load_analytics_data(wrapper);
 
+    
+    // Populate Station Dropdown
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Fuel Station',
+            fields: ['name']
+        },
+        callback: function(r) {
+            if(r.message) {
+                let opts = '<option value="">All Stations</option>';
+                r.message.forEach(s => {
+                    opts += `<option value="${s.name}">${s.name}</option>`;
+                });
+                $(wrapper).find('#inventory-station-select').html(opts);
+            }
+        }
+    });
+
+    $(wrapper).find('#inventory-station-select').off('change').on('change', function() {
+        fetch_inventory_report($(wrapper));
+    });
+
     // Inventory Report initialization
     let fromInput = $(wrapper).find('#inventory-date-from');
     let toInput = $(wrapper).find('#inventory-date-to');
@@ -222,6 +245,29 @@ function init_spa_ui(wrapper) {
     load_pnl_data(wrapper);
     load_hr_data(wrapper);
     load_analytics_data(wrapper);
+
+    
+    // Populate Station Dropdown
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Fuel Station',
+            fields: ['name']
+        },
+        callback: function(r) {
+            if(r.message) {
+                let opts = '<option value="">All Stations</option>';
+                r.message.forEach(s => {
+                    opts += `<option value="${s.name}">${s.name}</option>`;
+                });
+                $(wrapper).find('#inventory-station-select').html(opts);
+            }
+        }
+    });
+
+    $(wrapper).find('#inventory-station-select').off('change').on('change', function() {
+        fetch_inventory_report($(wrapper));
+    });
 
     // Inventory Report initialization
     let fromInput = $(wrapper).find('#inventory-date-from');
@@ -934,3 +980,102 @@ function apply_inventory_zoom(wrapper, level) {
     $(wrapper).find('.new-inv-table-unified .header-main th').css('font-size', (0.75 * scale) + 'rem');
     $(wrapper).find('.new-inv-table-unified .header-sub th').css('font-size', (0.75 * scale) + 'rem');
 }
+
+
+function fetch_inventory_report($wrapper) {
+    let fromInput = $wrapper.find('#inventory-date-from');
+    let toInput = $wrapper.find('#inventory-date-to');
+    
+    if (!fromInput.val()) {
+        let d = new Date();
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
+    }
+    if (!toInput.val()) {
+        let d = new Date();
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
+    }
+    
+    let fromDate = fromInput.val();
+    let toDate = toInput.val();
+    
+    $wrapper.find('#btn-refresh-inventory-report .spinner').removeClass('hidden');
+    $wrapper.find('#list-inventory-status').html('<tr><td colspan="10" class="text-center">Loading inventory report...</td></tr>');
+    
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_inventory_status_report",
+        args: { 
+            station_id: $wrapper.find("#inventory-station-select").val() || null,
+            from_date: fromDate,
+            to_date: toDate
+        },
+        callback: function(r) {
+            $wrapper.find('#btn-refresh-inventory-report .spinner').addClass('hidden');
+            let html = '';
+            
+            if(r.message && r.message.data && Object.keys(r.message.data).length > 0) {
+                // Update Company Name
+                $wrapper.find('#inventory-report-company').text(r.message.company);
+                
+                let data = r.message.data;
+                let no = 1;
+                
+                let unique_items = [];
+                let item_opts = '';
+                
+                Object.keys(data).forEach(group => {
+                    // Group Header
+                    html += `
+                        <tr class="row-group-header">
+                            <td colspan="10">${group.toUpperCase()}</td>
+                        </tr>
+                    `;
+                    
+                    data[group].forEach(row => {
+                        if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
+                            unique_items.push(row.item_code);
+                            item_opts += `<option data-value="${row.item_code}" value="${row.item_name} (${row.item_code})"></option>`;
+                        }
+                        
+                        let cl_store_cls = (row.cl_store < 0) ? 'negative-val' : '';
+                        let cl_fc_cls = (row.cl_forecourt < 0) ? 'negative-val' : '';
+                        let cl_tot_cls = (row.cl_total < 0) ? 'negative-val' : '';
+                        
+                        html += `
+                            <tr class="data-row">
+                                <td class="sticky-col th-no">${no++}</td>
+                                <td class="sticky-col th-product">${row.item_name}</td>
+                                
+                                <td class="col-op text-center">${row.op_store || 0}</td>
+                                <td class="col-op text-center">${row.op_forecourt || 0}</td>
+                                <td class="text-center" style="font-weight:bold;">${row.op_total || 0}</td>
+                                
+                                <td class="text-center">${row.purchases || 0}</td>
+                                <td class="text-center">${row.sales || 0}</td>
+                                <td class="text-center">${row.borrowed_in || 0}</td>
+                                <td class="text-center">${row.borrowed_out || 0}</td>
+                                
+                                <td class="col-cl text-center ${cl_store_cls}">${row.cl_store || 0}</td>
+                                <td class="col-cl text-center ${cl_fc_cls}">${row.cl_forecourt || 0}</td>
+                                <td class="text-center ${cl_tot_cls}" style="font-weight:bold;">${row.cl_total || 0}</td>
+                            </tr>
+                        `;
+                    });
+                });
+                
+                if ($wrapper.find('#stock-transfer-item-list').children().length === 0) {
+                    $wrapper.find('#stock-transfer-item-list').html(item_opts);
+                }
+                
+            } else {
+                html = '<tr><td colspan="10" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>';
+            }
+            
+            $wrapper.find('#list-inventory-status').html(html);
+        }
+    });
+}
+
+
+// =========================================================
+// WAREHOUSE INVENTORY MODULE
+// =========================================================
