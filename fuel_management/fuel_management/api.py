@@ -766,31 +766,27 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
     warehouses = []
     company = frappe.defaults.get_user_default("Company")
     
+    store_warehouses = []
+    forecourt_warehouses = []
+    
     if station_id:
         station = frappe.get_doc("Fuel Station", station_id)
-        s_warehouse = station.default_store_warehouse
-        f_warehouse = station.default_forecourt_warehouse
-        
-        if warehouse_type == "store" and s_warehouse:
-            warehouses = [s_warehouse]
-        elif warehouse_type == "forecourt" and f_warehouse:
-            warehouses = [f_warehouse]
-        else:
-            if f_warehouse: warehouses.append(f_warehouse)
-            if s_warehouse: warehouses.append(s_warehouse)
-            
+        if station.default_store_warehouse: store_warehouses.append(station.default_store_warehouse)
+        if station.default_forecourt_warehouse: forecourt_warehouses.append(station.default_forecourt_warehouse)
         if hasattr(station, 'company') and station.company:
             company = station.company
     else:
         stations = frappe.get_all("Fuel Station", fields=["default_store_warehouse", "default_forecourt_warehouse"])
         for s in stations:
-            if warehouse_type == "store" and s.default_store_warehouse:
-                warehouses.append(s.default_store_warehouse)
-            elif warehouse_type == "forecourt" and s.default_forecourt_warehouse:
-                warehouses.append(s.default_forecourt_warehouse)
-            elif not warehouse_type:
-                if s.default_forecourt_warehouse: warehouses.append(s.default_forecourt_warehouse)
-                if s.default_store_warehouse: warehouses.append(s.default_store_warehouse)
+            if s.default_store_warehouse: store_warehouses.append(s.default_store_warehouse)
+            if s.default_forecourt_warehouse: forecourt_warehouses.append(s.default_forecourt_warehouse)
+
+    if warehouse_type == "store":
+        warehouses = store_warehouses
+    elif warehouse_type == "forecourt":
+        warehouses = forecourt_warehouses
+    else:
+        warehouses = store_warehouses + forecourt_warehouses
         
     if not warehouses:
         return {"status": "success", "company": company, "from_date": from_date, "to_date": to_date, "data": {}}
@@ -816,6 +812,9 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
     )
     
     data = {}
+    item_wh_op = {}
+    item_wh_cl = {}
+    
     for sle in sles:
         item = sle.item_code
         if item not in data:
@@ -826,8 +825,8 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
                 "op_store": 0,
                 "op_forecourt": 0,
                 "purchases": 0,
-            "borrowed_in": 0,
-            "borrowed_out": 0,
+                "borrowed_in": 0,
+                "borrowed_out": 0,
                 "sales": 0,
                 "unit_price": item_prices.get(item, 0),
                 "vouchers": {}
@@ -835,12 +834,13 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
         
         pdate = str(sle.posting_date)
         
-        # Opening - continuous overwrite until the last entry before from_date
+        # Opening balance is the qty_after_transaction of the LAST SLE strictly BEFORE from_date
         if pdate < from_date:
-            if sle.warehouse == s_warehouse:
-                data[item]["op_store"] = sle.qty_after_transaction
-            elif sle.warehouse == f_warehouse:
-                data[item]["op_forecourt"] = sle.qty_after_transaction
+            item_wh_op[(item, sle.warehouse)] = sle.qty_after_transaction
+            
+        # Closing balance is the qty_after_transaction of the LAST SLE up to to_date
+        if pdate <= to_date:
+            item_wh_cl[(item, sle.warehouse)] = sle.qty_after_transaction
         
         # Transactions
         if from_date <= pdate <= to_date:
@@ -848,19 +848,13 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
             if vid not in data[item]["vouchers"]:
                 data[item]["vouchers"][vid] = 0
             data[item]["vouchers"][vid] += sle.actual_qty
-            
-    # Process transactions & recalculate closing properly from ALL SLEs <= to_date
-    for sle in sles:
-        pdate = str(sle.posting_date)
-        if pdate <= to_date:
-            item = sle.item_code
-            if "cl_store" not in data[item]:
-                data[item]["cl_store"] = 0
-                data[item]["cl_forecourt"] = 0
-            if sle.warehouse == s_warehouse:
-                data[item]["cl_store"] = sle.qty_after_transaction
-            elif sle.warehouse == f_warehouse:
-                data[item]["cl_forecourt"] = sle.qty_after_transaction
+
+    # Calculate aggregated opening and closing balances
+    for item, row in data.items():
+        row["op_store"] = sum(qty for (it, wh), qty in item_wh_op.items() if it == item and wh in store_warehouses)
+        row["op_forecourt"] = sum(qty for (it, wh), qty in item_wh_op.items() if it == item and wh in forecourt_warehouses)
+        row["cl_store"] = sum(qty for (it, wh), qty in item_wh_cl.items() if it == item and wh in store_warehouses)
+        row["cl_forecourt"] = sum(qty for (it, wh), qty in item_wh_cl.items() if it == item and wh in forecourt_warehouses)
 
 
     borrowed_docs = frappe.get_all("Borrowed Product", filters={"docstatus": ["!=", 2]}, fields=["stock_entry", "return_stock_entry", "type"])
