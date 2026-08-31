@@ -126,6 +126,72 @@ function init_spa_ui(wrapper) {
         load_pnl_data(wrapper);
         load_hr_data(wrapper);
         load_analytics_data(wrapper);
+
+    // Inventory Report initialization
+    let fromInput = $(wrapper).find('#inventory-date-from');
+    let toInput = $(wrapper).find('#inventory-date-to');
+    
+    if (!fromInput.val()) {
+        let d = new Date();
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]);
+    }
+    
+    $(wrapper).find('#btn-refresh-inventory-report').off('click').on('click', function() {
+        fetch_inventory_report($(wrapper));
+    });
+
+    $(wrapper).find('#inventory-search').off('input').on('input', function() {
+        let val = $(this).val().toLowerCase();
+        $(wrapper).find('#list-inventory-status tr.data-row').each(function() {
+            let text = $(this).find('.th-product').text().toLowerCase();
+            $(this).toggle(text.includes(val));
+        });
+        
+        $(wrapper).find('#list-inventory-status tr.row-group-header').each(function() {
+            let $group = $(this);
+            let $rows = $group.nextUntil('.row-group-header', 'tr.data-row');
+            if ($rows.filter(':visible').length === 0) {
+                $group.hide();
+            } else {
+                $group.show();
+            }
+        });
+    });
+
+    // Zoom and Compact logic
+    let current_zoom = 100;
+    
+    $(wrapper).find('#btn-zoom-in').on('click', function() {
+        if(current_zoom < 150) {
+            current_zoom += 10;
+            apply_inventory_zoom(wrapper, current_zoom);
+        }
+    });
+    
+    $(wrapper).find('#btn-zoom-out').on('click', function() {
+        if(current_zoom > 70) {
+            current_zoom -= 10;
+            apply_inventory_zoom(wrapper, current_zoom);
+        }
+    });
+    
+    $(wrapper).find('#btn-zoom-reset').on('click', function() {
+        current_zoom = 100;
+        apply_inventory_zoom(wrapper, current_zoom);
+    });
+    
+    $(wrapper).find('#toggle-compact').on('change', function() {
+        if($(this).is(':checked')) {
+            $(wrapper).find('.new-inv-table-unified tbody td').css('padding', '0.2rem 1rem');
+        } else {
+            $(wrapper).find('.new-inv-table-unified tbody td').css('padding', '0.5rem 1rem');
+        }
+    });
+    
+    // Initial Fetch
+    fetch_inventory_report($(wrapper));
+
     });
 
     $(wrapper).find('#btn-reconcile-topups').on('click', function() {
@@ -156,6 +222,72 @@ function init_spa_ui(wrapper) {
     load_pnl_data(wrapper);
     load_hr_data(wrapper);
     load_analytics_data(wrapper);
+
+    // Inventory Report initialization
+    let fromInput = $(wrapper).find('#inventory-date-from');
+    let toInput = $(wrapper).find('#inventory-date-to');
+    
+    if (!fromInput.val()) {
+        let d = new Date();
+        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
+        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]);
+    }
+    
+    $(wrapper).find('#btn-refresh-inventory-report').off('click').on('click', function() {
+        fetch_inventory_report($(wrapper));
+    });
+
+    $(wrapper).find('#inventory-search').off('input').on('input', function() {
+        let val = $(this).val().toLowerCase();
+        $(wrapper).find('#list-inventory-status tr.data-row').each(function() {
+            let text = $(this).find('.th-product').text().toLowerCase();
+            $(this).toggle(text.includes(val));
+        });
+        
+        $(wrapper).find('#list-inventory-status tr.row-group-header').each(function() {
+            let $group = $(this);
+            let $rows = $group.nextUntil('.row-group-header', 'tr.data-row');
+            if ($rows.filter(':visible').length === 0) {
+                $group.hide();
+            } else {
+                $group.show();
+            }
+        });
+    });
+
+    // Zoom and Compact logic
+    let current_zoom = 100;
+    
+    $(wrapper).find('#btn-zoom-in').on('click', function() {
+        if(current_zoom < 150) {
+            current_zoom += 10;
+            apply_inventory_zoom(wrapper, current_zoom);
+        }
+    });
+    
+    $(wrapper).find('#btn-zoom-out').on('click', function() {
+        if(current_zoom > 70) {
+            current_zoom -= 10;
+            apply_inventory_zoom(wrapper, current_zoom);
+        }
+    });
+    
+    $(wrapper).find('#btn-zoom-reset').on('click', function() {
+        current_zoom = 100;
+        apply_inventory_zoom(wrapper, current_zoom);
+    });
+    
+    $(wrapper).find('#toggle-compact').on('change', function() {
+        if($(this).is(':checked')) {
+            $(wrapper).find('.new-inv-table-unified tbody td').css('padding', '0.2rem 1rem');
+        } else {
+            $(wrapper).find('.new-inv-table-unified tbody td').css('padding', '0.5rem 1rem');
+        }
+    });
+    
+    // Initial Fetch
+    fetch_inventory_report($(wrapper));
+
 }
 
 function get_date_filters(wrapper) {
@@ -789,4 +921,16 @@ function setup_vue_debtors(wrapper) {
 	});
 
 	app.mount('#debtors-vue-root');
+}
+
+
+
+
+
+function apply_inventory_zoom(wrapper, level) {
+    $(wrapper).find('#zoom-level').text(level + '%');
+    let scale = level / 100;
+    $(wrapper).find('.new-inv-table-unified').css('font-size', (0.875 * scale) + 'rem');
+    $(wrapper).find('.new-inv-table-unified .header-main th').css('font-size', (0.75 * scale) + 'rem');
+    $(wrapper).find('.new-inv-table-unified .header-sub th').css('font-size', (0.75 * scale) + 'rem');
 }

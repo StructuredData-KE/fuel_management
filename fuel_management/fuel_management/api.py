@@ -758,30 +758,42 @@ def create_spa_stock_transfer(station_id, item_code=None, qty=None, direction="S
     return {"status": "success", "message": f"Successfully created Stock Transfer: {se.name}", "name": se.name}
 
 @frappe.whitelist()
-def get_inventory_status_report(station_id, from_date, to_date, warehouse_type=None):
+def get_inventory_status_report(station_id=None, from_date=None, to_date=None, warehouse_type=None):
     from frappe.utils import flt
-    if not station_id or not from_date or not to_date:
-        frappe.throw("Station ID, From Date, and To Date are required")
-        
-    station = frappe.get_doc("Fuel Station", station_id)
-    s_warehouse = station.default_store_warehouse
-    f_warehouse = station.default_forecourt_warehouse
-    
-    if not s_warehouse or not f_warehouse:
-        frappe.throw("Station must have both Default Store Warehouse and Default Forecourt Warehouse set.")
+    if not from_date or not to_date:
+        frappe.throw("From Date and To Date are required")
         
     warehouses = []
-    if warehouse_type == "store":
-        warehouses = [s_warehouse]
-    elif warehouse_type == "forecourt":
-        warehouses = [f_warehouse]
-    else:
-        if station.default_forecourt_warehouse:
-            warehouses.append(station.default_forecourt_warehouse)
-        if station.default_store_warehouse:
-            warehouses.append(station.default_store_warehouse)
+    company = frappe.defaults.get_user_default("Company")
+    
+    if station_id:
+        station = frappe.get_doc("Fuel Station", station_id)
+        s_warehouse = station.default_store_warehouse
+        f_warehouse = station.default_forecourt_warehouse
         
-    company = station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company")
+        if warehouse_type == "store" and s_warehouse:
+            warehouses = [s_warehouse]
+        elif warehouse_type == "forecourt" and f_warehouse:
+            warehouses = [f_warehouse]
+        else:
+            if f_warehouse: warehouses.append(f_warehouse)
+            if s_warehouse: warehouses.append(s_warehouse)
+            
+        if hasattr(station, 'company') and station.company:
+            company = station.company
+    else:
+        stations = frappe.get_all("Fuel Station", fields=["default_store_warehouse", "default_forecourt_warehouse"])
+        for s in stations:
+            if warehouse_type == "store" and s.default_store_warehouse:
+                warehouses.append(s.default_store_warehouse)
+            elif warehouse_type == "forecourt" and s.default_forecourt_warehouse:
+                warehouses.append(s.default_forecourt_warehouse)
+            elif not warehouse_type:
+                if s.default_forecourt_warehouse: warehouses.append(s.default_forecourt_warehouse)
+                if s.default_store_warehouse: warehouses.append(s.default_store_warehouse)
+        
+    if not warehouses:
+        return {"status": "success", "company": company, "from_date": from_date, "to_date": to_date, "data": {}}
     company_name = frappe.db.get_value("Company", company, "company_name") or company
 
     allowed_items = frappe.get_all("Item", filters={"item_group": ["not in", ["Fuels", "FUELS", "Fuel", "FUEL"]]}, pluck="name")
