@@ -1554,8 +1554,9 @@ function setup_actions(wrapper) {
             args: {
                 doctype: "Shift",
                 name: window.ACTIVE_SHIFT.name,
-                fieldname: "assigned_csas",
-                value: assigned_csas
+                fieldname: {
+                    "assigned_csas": assigned_csas
+                }
             },
             callback: function(r) {
                 btn.find('.spinner').addClass('hidden');
