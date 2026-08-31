@@ -305,7 +305,7 @@ def get_topup_statement(from_date, to_date):
             t.name, t.date, t.shift, t.card, t.mode_of_payment, t.rrn_number, t.amount,
             s.station
         FROM `tabStation Supplier Top Up` t
-        LEFT JOIN `tabFuel Shift` s ON t.shift = s.name
+        LEFT JOIN `tabShift` s ON t.shift = s.name
         WHERE t.date BETWEEN %s AND %s
         ORDER BY t.date DESC, t.creation DESC
     """
