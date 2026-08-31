@@ -218,8 +218,70 @@ function init_spa_ui(wrapper) {
 
     });
 
-    $(wrapper).find('#btn-reconcile-topups').on('click', function() {
-        frappe.new_doc('Journal Entry', {voucher_type: 'Journal Entry'});
+    $(wrapper).find('#btn-reconcile-topups').off('click').on('click', function() {
+        let d = new frappe.ui.Dialog({
+            title: 'Enter Top-Up Deduction (Rubis Charge)',
+            fields: [
+                {
+                    label: 'Station',
+                    fieldname: 'station',
+                    fieldtype: 'Link',
+                    options: 'Fuel Station',
+                    reqd: 1
+                },
+                {
+                    label: 'Amount Charged by Rubis',
+                    fieldname: 'amount',
+                    fieldtype: 'Currency',
+                    reqd: 1
+                },
+                {
+                    label: 'Rubis/Bank Account (Credit Account)',
+                    fieldname: 'credit_account',
+                    fieldtype: 'Link',
+                    options: 'Account',
+                    get_query: function() {
+                        return { filters: { is_group: 0 } };
+                    },
+                    reqd: 1
+                },
+                {
+                    label: 'Date',
+                    fieldname: 'date',
+                    fieldtype: 'Date',
+                    default: frappe.datetime.get_today(),
+                    reqd: 1
+                },
+                {
+                    label: 'Reference / Invoice No',
+                    fieldname: 'reference',
+                    fieldtype: 'Data',
+                    reqd: 1
+                }
+            ],
+            primary_action_label: 'Submit Deduction',
+            primary_action(values) {
+                frappe.call({
+                    method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.create_topup_deduction',
+                    args: {
+                        station: values.station,
+                        amount: values.amount,
+                        credit_account: values.credit_account,
+                        date: values.date,
+                        reference: values.reference
+                    },
+                    callback: function(r) {
+                        if (!r.exc) {
+                            frappe.show_alert({message: 'Deduction logged successfully', indicator: 'green'});
+                            d.hide();
+                            load_topups_statement(wrapper);
+                            load_dashboard_data(wrapper);
+                        }
+                    }
+                });
+            }
+        });
+        d.show();
     });
 
     // Inject Tailwind for Vue Debtors App
@@ -1085,7 +1147,7 @@ function fetch_inventory_report($wrapper) {
 function load_topups_statement(wrapper) {
     let filters = get_date_filters(wrapper);
     
-    $(wrapper).find('#exec-topups-table tbody').html('<tr><td colspan="7" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>');
+    $(wrapper).find('#exec-topups-table tbody').html('<tr><td colspan="8" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>');
     
     frappe.call({
         method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_topup_statement",
@@ -1097,22 +1159,27 @@ function load_topups_statement(wrapper) {
             if(r.message && r.message.length > 0) {
                 r.message.forEach(row => {
                     let amount = parseFloat(row.amount) || 0;
-                    total += amount;
+                    let run_bal = parseFloat(row.running_balance) || 0;
+                    if(!row.is_opening) total += amount;
                     
-                    html += `<tr style="border-bottom: 1px solid #f1f5f9;">
+                    let link = row.is_opening ? row.entry_name : `<a href="/app/${row.entry_name.startsWith('JV-') ? 'journal-entry' : 'station-supplier-top-up'}/${row.entry_name}" style="color: #0ea5e9; font-weight: 500; text-decoration: none;">${row.entry_name}</a>`;
+                    
+                    let amountColor = amount < 0 ? '#ef4444' : '#10b981';
+                    if(row.is_opening) amountColor = '#64748b';
+                    
+                    html += `<tr style="border-bottom: 1px solid #f1f5f9; ${row.is_opening ? 'background: #f8fafc; font-style: italic;' : ''}">
                         <td style="padding: 12px 16px;">${frappe.datetime.str_to_user(row.date)}</td>
-                        <td style="padding: 12px 16px;">
-                            <a href="/app/station-supplier-top-up/${row.name}" style="color: #0ea5e9; font-weight: 500; text-decoration: none;">${row.name}</a>
-                        </td>
+                        <td style="padding: 12px 16px;">${link}</td>
                         <td style="padding: 12px 16px;">${row.station || '-'}</td>
-                        <td style="padding: 12px 16px;">${row.card || '-'}</td>
-                        <td style="padding: 12px 16px;">${row.mode_of_payment || '-'}</td>
-                        <td style="padding: 12px 16px;">${row.rrn_number || '-'}</td>
-                        <td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600;">${format_currency(amount, "KES")}</td>
+                        <td style="padding: 12px 16px;">${row.supplier || '-'}</td>
+                        <td style="padding: 12px 16px;">${row.mode || '-'}</td>
+                        <td style="padding: 12px 16px;">${row.ref || '-'}</td>
+                        <td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600; color: ${amountColor};">${format_currency(amount, "KES")}</td>
+                        <td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600; color: #f59e0b;">${format_currency(run_bal, "KES")}</td>
                     </tr>`;
                 });
             } else {
-                html = '<tr><td colspan="7" style="text-align: center; padding: 24px; color: #64748b;">No top-ups found in this period.</td></tr>';
+                html = '<tr><td colspan="8" style="text-align: center; padding: 24px; color: #64748b;">No top-ups found in this period.</td></tr>';
             }
             
             $(wrapper).find('#exec-topups-table tbody').html(html);

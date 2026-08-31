@@ -300,13 +300,93 @@ def get_sales_analytics(from_date=None, to_date=None):
 
 @frappe.whitelist()
 def get_topup_statement(from_date, to_date):
-    sql = """
+    # 1. Get Opening Balance (Topups before from_date)
+    op_topups = frappe.db.sql("SELECT SUM(amount) as amt FROM `tabStation Supplier Top Up` WHERE date < %s", (from_date,), as_dict=1)
+    op_topup_amt = op_topups[0].amt if op_topups and op_topups[0].amt else 0.0
+    
+    op_deductions = frappe.db.sql("""
+        SELECT SUM(jea.debit) as amt 
+        FROM `tabJournal Entry` je 
+        JOIN `tabJournal Entry Account` jea ON je.name = jea.parent 
+        WHERE je.docstatus = 1 AND je.user_remark LIKE '[TOP-UP DEDUCTION]%' AND jea.debit > 0 AND je.posting_date < %s
+    """, (from_date,), as_dict=1)
+    op_deduct_amt = op_deductions[0].amt if op_deductions and op_deductions[0].amt else 0.0
+    
+    running_balance = op_topup_amt - op_deduct_amt
+
+    # 2. Fetch Period Data
+    topups = frappe.db.sql("""
         SELECT 
-            t.name, t.date, t.shift, t.card, t.mode_of_payment, t.rrn_number, t.amount,
-            s.station
+            t.name as entry_name, t.date, t.shift, t.card as supplier, t.mode_of_payment as mode, t.rrn_number as ref, t.amount,
+            s.station, t.creation
         FROM `tabStation Supplier Top Up` t
         LEFT JOIN `tabShift` s ON t.shift = s.name
         WHERE t.date BETWEEN %s AND %s
-        ORDER BY t.date DESC, t.creation DESC
-    """
-    return frappe.db.sql(sql, (from_date, to_date), as_dict=True)
+    """, (from_date, to_date), as_dict=True)
+    
+    deductions = frappe.db.sql("""
+        SELECT 
+            je.name as entry_name, je.posting_date as date, '' as shift, 'RECONCILIATION' as supplier, '' as mode, je.cheque_no as ref, (jea.debit * -1) as amount,
+            '' as station, je.creation
+        FROM `tabJournal Entry` je
+        JOIN `tabJournal Entry Account` jea ON je.name = jea.parent
+        WHERE je.docstatus = 1 
+        AND je.user_remark LIKE '[TOP-UP DEDUCTION]%'
+        AND jea.debit > 0
+        AND je.posting_date BETWEEN %s AND %s
+    """, (from_date, to_date), as_dict=True)
+    
+    data = topups + deductions
+    # Sort by date, then creation
+    data.sort(key=lambda x: (x.get('date'), x.get('creation')))
+    
+    result = []
+    # Insert opening balance row
+    result.append({
+        "date": from_date,
+        "entry_name": "OPENING BALANCE",
+        "shift": "",
+        "station": "",
+        "supplier": "",
+        "mode": "",
+        "ref": "",
+        "amount": 0.0,
+        "running_balance": running_balance,
+        "is_opening": True
+    })
+    
+    for d in data:
+        running_balance += d.get('amount', 0.0)
+        d['running_balance'] = running_balance
+        result.append(d)
+        
+    return result
+
+@frappe.whitelist()
+def create_topup_deduction(station, amount, credit_account, date, reference):
+    holding_account = frappe.db.get_value("Fuel Station", station, "top_up_holding_account")
+    if not holding_account:
+        frappe.throw(f"No Top Up Holding Account configured for Station: {station}")
+        
+    je = frappe.new_doc("Journal Entry")
+    je.voucher_type = "Journal Entry"
+    je.posting_date = date
+    je.cheque_no = reference
+    je.user_remark = f"[TOP-UP DEDUCTION] Reconciled to {credit_account} for {station}"
+    
+    # Debit the holding account (reduce liability/balance)
+    je.append("accounts", {
+        "account": holding_account,
+        "debit_in_account_currency": amount
+    })
+    
+    # Credit the target account (Rubis bank/supplier)
+    je.append("accounts", {
+        "account": credit_account,
+        "credit_in_account_currency": amount
+    })
+    
+    je.flags.ignore_permissions = True
+    je.insert()
+    je.submit()
+    return je.name
