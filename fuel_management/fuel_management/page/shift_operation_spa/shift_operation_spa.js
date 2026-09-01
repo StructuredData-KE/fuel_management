@@ -120,7 +120,8 @@ function fetch_active_shift(wrapper) {
         method: "frappe.client.get_list",
         args: {
             doctype: "Shift",
-            filters: { status: "Open", owner: frappe.session.user },
+            filters: { status: "Open" },
+            order_by: "creation desc",
             fields: ["name", "station", "head_csa", "shift_template", "shift_date", "status", "creation", "report_sent"],
             limit_page_length: 1
         },
