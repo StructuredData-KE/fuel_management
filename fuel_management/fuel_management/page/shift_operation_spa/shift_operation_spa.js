@@ -224,6 +224,16 @@ function load_shift_data($wrapper) {
                 if(typeof render_petty_cash === 'function') render_petty_cash($wrapper);
                 if(typeof render_cash_transfers === 'function') render_cash_transfers($wrapper);
                 if(typeof render_reconcile === 'function') render_reconcile($wrapper);
+
+                // Prefill CSA assignments
+                if(window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas) {
+                    window.SHIFT_DOC.assigned_csas.forEach(a => {
+                        let row = $wrapper.find(`.assignment-row[data-pg="${a.pump_group}"]`);
+                        if(row.length) {
+                            row.find('.csa-select').val(a.csa);
+                        }
+                    });
+                }
                 if(typeof render_station_expenses === 'function') render_station_expenses($wrapper);
                 if(typeof render_rtt === 'function') render_rtt($wrapper);
                 if(typeof render_topups === 'function') render_topups($wrapper);
@@ -1456,6 +1466,16 @@ function load_dropdowns(wrapper) {
             `;
         });
         $w.find('#csa-assignment-body').html(html);
+        
+        // Prefill if already loaded
+        if(window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas) {
+            window.SHIFT_DOC.assigned_csas.forEach(a => {
+                let row = $w.find(`.assignment-row[data-pg="${a.pump_group}"]`);
+                if(row.length) {
+                    row.find('.csa-select').val(a.csa);
+                }
+            });
+        }
     }
 }
 
