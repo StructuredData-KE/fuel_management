@@ -3892,6 +3892,23 @@ function render_purchases($wrapper) {
         let $btn = $(this);
         let targetView = $btn.attr('data-view');
         
+        if(targetView === 'form' && !$btn.hasClass('active')) {
+            // They are manually clicking "New Purchase"
+            window.EDITING_PURCHASE_ID = null;
+            window.PURCHASE_CART = [];
+            
+            // clear form
+            $wrapper.find('#pur-supplier').val('');
+            $wrapper.find('#pur-doc-invoice').val('');
+            $wrapper.find('#pur-kra-invoice').val('');
+            $wrapper.find('#pur-rec-date').val(frappe.datetime.get_today());
+            $wrapper.find('#pur-doc-date').val(frappe.datetime.get_today());
+            $wrapper.find('#pur-transport-charge').val('');
+            $wrapper.find('#pur-transport-vat').val('');
+            
+            refresh_purchase_cart();
+        }
+        
         $wrapper.find('#tab-purchases .seg-btn').removeClass('active');
         $btn.addClass('active');
         
@@ -4103,11 +4120,15 @@ function render_purchases($wrapper) {
                                 <td><span class="badge" style="background: #f1f5f9;">${row.tax_invoice_number || "N/A"}</span></td>
                                 <td><span class="badge" style="background: #f1f5f9;">${row.document_invoice_number || "N/A"}</span></td>
                                 <td style="font-weight: 600;">${frappe.format(row.grand_total || 0, {fieldtype: 'Currency'})}</td>
+                                <td>
+                                    <button class="btn btn-xs btn-default btn-edit-pur" data-name="${row.name}" style="margin-right: 5px;"><i class="fa fa-pencil"></i></button>
+                                    <button class="btn btn-xs btn-danger btn-delete-pur" data-name="${row.name}"><i class="fa fa-trash"></i></button>
+                                </td>
                             </tr>
                         `;
                     });
                 }
-                if(html === '') html = '<tr><td colspan="7" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
                 
                 $wrapper.find('#list-station-purchases-saved').html(html);
             }
@@ -4116,6 +4137,69 @@ function render_purchases($wrapper) {
     fetch_history();
     
     $wrapper.find('#pur-filter-date-from, #pur-filter-date-to').on('change', fetch_history);
+    $wrapper.on('click', '.btn-delete-pur', function() {
+        let name = $(this).data('name');
+        frappe.confirm('Are you sure you want to delete purchase ' + name + '? This will also cancel the associated Purchase Invoice and revert tank volumes.', () => {
+            frappe.call({
+                method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.delete_purchase",
+                args: { purchase_name: name },
+                callback: function(r) {
+                    if(!r.exc) {
+                        frappe.show_alert({message: "Purchase deleted successfully.", indicator: "green"});
+                        fetch_history();
+                    }
+                }
+            });
+        });
+    });
+
+    $wrapper.on('click', '.btn-edit-pur', function() {
+        let name = $(this).data('name');
+        frappe.call({
+            method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.get_purchase_details",
+            args: { purchase_name: name },
+            callback: function(r) {
+                if(r.message) {
+                    let doc = r.message;
+                    // Populate form
+                    $wrapper.find('#pur-supplier').val(doc.supplier);
+                    $wrapper.find('#pur-doc-invoice').val(doc.document_invoice_number);
+                    $wrapper.find('#pur-kra-invoice').val(doc.tax_invoice_number);
+                    $wrapper.find('#pur-rec-date').val(doc.receiving_date);
+                    $wrapper.find('#pur-doc-date').val(doc.document_date);
+                    $wrapper.find('#pur-transport-charge').val(doc.transport_charge || 0);
+                    $wrapper.find('#pur-transport-vat').val(0); // Optional
+                    
+                    // Populate cart
+                    window.PURCHASE_CART = [];
+                    (doc.items || []).forEach(item => {
+                        window.PURCHASE_CART.push({
+                            item: item.item,
+                            item_name: item.item,
+                            target_location: item.target_location,
+                            quantity: item.quantity,
+                            unit_cost: item.unit_cost,
+                            vat_rate: item.vat_rate || 0,
+                            vat_inclusive: item.vat_inclusive ? 1 : 0
+                        });
+                    });
+                    refresh_purchase_cart();
+                    
+                    // Set edit mode flag
+                    window.EDITING_PURCHASE_ID = name;
+                    
+                    // Switch view to New Purchase
+                    $wrapper.find('#purchases-history-view').removeClass('active');
+                    $wrapper.find('#purchases-form-view').addClass('active');
+                    $wrapper.find('.seg-btn').removeClass('active');
+                    $wrapper.find('.seg-btn[data-view="form"]').addClass('active');
+                    
+                    frappe.show_alert({message: "Editing Purchase: " + name + ". Save will replace it.", indicator: "blue"});
+                }
+            }
+        });
+    });
+
 
     // 9. Save Entire Purchase
     $wrapper.find('#btn-save-purchase').off('click').on('click', function() {
@@ -4404,7 +4488,7 @@ function load_petty_cash_history($wrapper) {
                     $tbody.append(html);
                 });
             } else {
-                $tbody.append('<tr><td colspan="7" class="text-center text-muted">No petty cash entries for this shift yet.</td></tr>');
+                $tbody.append('<tr><td colspan="8" class="text-center text-muted">No petty cash entries for this shift yet.</td></tr>');
             }
         }
     });
@@ -4930,7 +5014,7 @@ function render_station_cards($wrapper) {
                         </tr>
                     `;
                 }
-                if(html === '') html = '<tr><td colspan="7" class="text-center" style="color: #94a3b8; padding: 2rem;">No card payments recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No card payments recorded yet.</td></tr>';
                 $wrapper.find('#list-station-cards-saved').html(html);
 
                 // Action listeners
@@ -6005,14 +6089,14 @@ var company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
                     <td style="color:#94a3b8">-</td><td style="color:#94a3b8">-</td>
                 </tr>`;
             });
-            dip_body += `<tr><td colspan="7" class="text-center" style="color:#64748b;font-style:italic;">Dips are recorded at the end of the Night Shift for the entire 24h period.</td></tr>`;
+            dip_body += `<tr><td colspan="8" class="text-center" style="color:#64748b;font-style:italic;">Dips are recorded at the end of the Night Shift for the entire 24h period.</td></tr>`;
             
             let full_html = html + dip_section_header + dip_body + `</tbody></table></div>`;
             render_report_tail(full_html, doc, $wrapper);
         } else {
             // Night shift: show loading placeholder, then fetch full-day dip summary
             let placeholder_html = html + dip_section_header + 
-                `<tr><td colspan="7" class="text-center" style="color:#64748b">Loading daily dip summary...</td></tr>` +
+                `<tr><td colspan="8" class="text-center" style="color:#64748b">Loading daily dip summary...</td></tr>` +
                 `</tbody></table></div>`;
             
             // Render sections 3–end immediately so user sees the rest of the report
@@ -6039,7 +6123,7 @@ var company = (frappe.boot && frappe.boot.sysdefaults) ? frappe.boot.sysdefaults
                             </tr>`;
                         });
                     } else {
-                        dip_html = `<tr><td colspan="7" class="text-center">No dip stick readings found.</td></tr>`;
+                        dip_html = `<tr><td colspan="8" class="text-center">No dip stick readings found.</td></tr>`;
                     }
                     $wrapper.find('#dips-tbody').html(dip_html);
                 }
@@ -6130,7 +6214,7 @@ function setup_vue_debtors(wrapper) {
 								</td>
 							</tr>
 							<tr v-if="filteredDebtors.length === 0">
-								<td colspan="7" class="px-6 py-4 text-center text-slate-500">No debtors found.</td>
+								<td colspan="8" class="px-6 py-4 text-center text-slate-500">No debtors found.</td>
 							</tr>
 							</tbody>
 						</table>
@@ -6236,7 +6320,7 @@ function setup_vue_debtors(wrapper) {
 									<td class="py-2 pl-2 text-right font-mono font-bold text-slate-900">{{ formatCurrency(txn.running_balance) }}</td>
 								</tr>
 								<tr v-if="processedTransactions.length === 0">
-									<td colspan="7" class="py-4 text-center text-slate-500 text-sm">No transactions in this period.</td>
+									<td colspan="8" class="py-4 text-center text-slate-500 text-sm">No transactions in this period.</td>
 								</tr>
 							</tbody>
 							</table>

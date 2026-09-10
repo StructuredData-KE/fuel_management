@@ -140,3 +140,42 @@ def get_purchases_history(date_from=None, date_to=None):
     
     return purchases
 
+
+
+@frappe.whitelist()
+def delete_purchase(purchase_name):
+    # Check permissions
+    if not (frappe.has_permission("Station Purchase", "delete") or frappe.session.user == "Administrator"):
+        frappe.throw("Not permitted to delete purchases.")
+        
+    doc = frappe.get_doc("Station Purchase", purchase_name)
+    
+    # Try to find associated Purchase Invoice
+    pi = frappe.get_all("Purchase Invoice", filters={"supplier": doc.supplier, "bill_no": doc.document_invoice_number}, order_by="creation desc", limit=1)
+    
+    if pi:
+        pi_doc = frappe.get_doc("Purchase Invoice", pi[0].name)
+        if pi_doc.docstatus == 1:
+            pi_doc.cancel()
+        frappe.delete_doc("Purchase Invoice", pi[0].name)
+        
+    # Revert tank volumes
+    for item in doc.items:
+        if getattr(item, "target_tank", None):
+            try:
+                tank = frappe.get_doc("Fuel Tank", item.target_tank)
+                if tank.current_volume is not None:
+                    tank.current_volume -= item.quantity
+                    tank.flags.ignore_permissions = True
+                    tank.save()
+            except Exception:
+                pass
+                
+    # Finally delete the station purchase
+    frappe.delete_doc("Station Purchase", purchase_name)
+    return True
+
+@frappe.whitelist()
+def get_purchase_details(purchase_name):
+    doc = frappe.get_doc("Station Purchase", purchase_name)
+    return doc.as_dict()
