@@ -156,8 +156,14 @@ def delete_purchase(purchase_name):
     if pi:
         pi_doc = frappe.get_doc("Purchase Invoice", pi[0].name)
         if pi_doc.docstatus == 1:
-            pi_doc.cancel()
-        frappe.delete_doc("Purchase Invoice", pi[0].name)
+            try:
+                pi_doc.cancel()
+            except Exception as e:
+                frappe.throw(f"Could not cancel associated Purchase Invoice {pi[0].name}. It may have linked Payment Entries. Please cancel them first.<br><br>Error: {str(e)}")
+        try:
+            frappe.delete_doc("Purchase Invoice", pi[0].name)
+        except Exception:
+            pass # It's okay if we can't delete it due to linked cancelled GL entries
         
     # Revert tank volumes
     for item in doc.items:
