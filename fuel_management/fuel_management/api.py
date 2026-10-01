@@ -3488,14 +3488,14 @@ def get_shift_invoices_history(station, from_date=None, to_date=None, customer=N
         WHERE {' AND '.join(conditions)}
         ORDER BY 
             CASE 
-                WHEN si.entry_number LIKE 'INV%' THEN CAST(SUBSTRING(si.entry_number, 4) AS UNSIGNED) 
+                WHEN si.entry_number LIKE 'INV%%' THEN CAST(SUBSTRING(si.entry_number, 4) AS UNSIGNED) 
                 ELSE 0 
             END DESC,
             s.shift_date DESC,
             si.creation DESC
         LIMIT {limit_num}
     """
-    return frappe.db.sql(query, values, as_dict=True)
+    return frappe.db.sql(query, tuple(values), as_dict=True)
 
 
 @frappe.whitelist()
