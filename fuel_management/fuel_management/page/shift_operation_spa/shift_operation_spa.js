@@ -2605,16 +2605,32 @@ function render_invoices($wrapper) {
         }
     });
 
-    // 1. Generate Entry Number (e.g. INV001)
-    let max_inv = 0;
-    (window.SHIFT_DOC.invoices || []).forEach(row => {
-        if(row.entry_number && row.entry_number.startsWith('INV')) {
-            let num = parseInt(row.entry_number.replace('INV', ''));
-            if(!isNaN(num) && num > max_inv) max_inv = num;
+    // 1. Fetch & Display Continuous Next Entry Number (e.g. INV006)
+    function refresh_next_entry_badge() {
+        if (window.EDITING_INVOICE_ENTRY_NUMBER) {
+            $wrapper.find('#invoice-entry-number').text(`${window.EDITING_INVOICE_ENTRY_NUMBER} (Editing)`);
+            return;
         }
-    });
-    let next_entry = "INV" + String(max_inv + 1).padStart(3, '0');
-    $wrapper.find('#invoice-entry-number').text(next_entry);
+        if (window.PENDING_INVOICES && window.PENDING_INVOICES.length > 0 && window.PENDING_INVOICES[0].entry_number) {
+            $wrapper.find('#invoice-entry-number').text(window.PENDING_INVOICES[0].entry_number);
+            return;
+        }
+        
+        frappe.call({
+            method: "fuel_management.fuel_management.api.get_next_shift_invoice_number",
+            args: { station: window.ACTIVE_SHIFT.station },
+            callback: function(r) {
+                if (r.message && r.message.next_invoice_number) {
+                    window.CURRENT_NEXT_INVOICE_NUMBER = r.message.next_invoice_number;
+                    if (!window.EDITING_INVOICE_ENTRY_NUMBER && (!window.PENDING_INVOICES || window.PENDING_INVOICES.length === 0)) {
+                        $wrapper.find('#invoice-entry-number').text(r.message.next_invoice_number);
+                    }
+                }
+            }
+        });
+    }
+
+    refresh_next_entry_badge();
 
     // 2. Fetch Active CSAs
     let csaOptions = '<option value="">Select CSA...</option>';
@@ -3182,6 +3198,19 @@ function render_invoices($wrapper) {
         let is_greasing = is_greasing_service_item(item);
         let final_inv_csa = (is_non_fuel && !is_greasing) ? (inv_csa || default_lubes_csa || csa) : '';
 
+        // Determine Entry Number: Preserve editing number if in edit mode, or use cart's active number, or latest global next number
+        let entry_no = window.EDITING_INVOICE_ENTRY_NUMBER;
+        if (!entry_no) {
+            if (window.PENDING_INVOICES && window.PENDING_INVOICES.length > 0 && window.PENDING_INVOICES[0].entry_number) {
+                entry_no = window.PENDING_INVOICES[0].entry_number;
+            } else if (window.CURRENT_NEXT_INVOICE_NUMBER) {
+                entry_no = window.CURRENT_NEXT_INVOICE_NUMBER;
+            } else {
+                let badge_txt = ($wrapper.find('#invoice-entry-number').text() || '').replace(' (Editing)', '').trim();
+                entry_no = badge_txt || 'INV001';
+            }
+        }
+
         window.PENDING_INVOICES.push({
             _is_new: true,
             customer: customer_id,
@@ -3198,7 +3227,7 @@ function render_invoices($wrapper) {
             discount_csa: discount_csa,
             discount_reason: discount_reason,
             amount: net_amount,
-            entry_number: next_entry
+            entry_number: entry_no
         });
 
         // clear item fields
@@ -3275,6 +3304,7 @@ function render_invoices($wrapper) {
                             if(r2.message) {
                                 window.SHIFT_DOC = r2.message;
                                 window.PENDING_INVOICES = [];
+                                window.EDITING_INVOICE_ENTRY_NUMBER = null;
                                 
                                 // Reset form header fields
                                 $wrapper.find('#invoice-customer-input').val('');
@@ -9439,8 +9469,14 @@ window.render_customer_statement = function(data) {
                 let parts = [];
                 let mop = t.mode_of_payment || 'Cash';
                 parts.push(`<span style="background: #ecfdf5; color: #065f46; font-weight: 700; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; border: 1px solid #a7f3d0; display: inline-flex; align-items: center; gap: 3px;">💳 ${escape_debtor_html(mop)}</span>`);
-                if (t.csa) {
-                    parts.push(`<span style="color: #64748b; font-size: 0.72rem; font-weight: 500;">Recv by: <b style="color: #334155;">${escape_debtor_html(t.csa)}</b></span>`);
+                
+                let csa_name = t.csa || '';
+                if (window.USERS_LIST && t.csa) {
+                    let u = window.USERS_LIST.find(x => x.name === t.csa || x.user_id === t.csa);
+                    if (u) csa_name = u.employee_name || u.full_name || csa_name;
+                }
+                if (csa_name) {
+                    parts.push(`<span style="color: #64748b; font-size: 0.72rem; font-weight: 500;">Recv by: <b style="color: #334155;">${escape_debtor_html(csa_name)}</b></span>`);
                 }
                 if (t.memo) {
                     parts.push(`<span style="color: #475569; font-size: 0.72rem; font-style: italic; background: #f8fafc; padding: 1px 6px; border-radius: 3px; border: 1px solid #e2e8f0;">"${escape_debtor_html(t.memo)}"</span>`);
@@ -9825,12 +9861,18 @@ window.print_debtors_statement = function() {
         let refStr = t.entry_number ? `#${t.entry_number}` : (t.trans_no || t.reference_no || '--');
         if (t.purchase_order) refStr += ` (PO: ${t.purchase_order})`;
 
+        let csa_name = t.csa || '';
+        if (window.USERS_LIST && t.csa) {
+            let u = window.USERS_LIST.find(x => x.name === t.csa || x.user_id === t.csa);
+            if (u) csa_name = u.employee_name || u.full_name || csa_name;
+        }
+
         let descStr = t.description || '--';
         if (t.vehicle_registration && t.item) {
             let qtyRate = t.quantity > 0 ? ` (${t.quantity}L @ KES ${Number(t.rate).toFixed(2)})` : '';
             descStr = `[${t.vehicle_registration}] ${t.item}${qtyRate}`;
         } else if (t.mode_of_payment) {
-            descStr = `${t.mode_of_payment}${t.csa ? ' - Recv: ' + t.csa : ''}${t.memo ? ' - ' + t.memo : ''}`;
+            descStr = `${t.mode_of_payment}${csa_name ? ' - Recv: ' + csa_name : ''}${t.memo ? ' - ' + t.memo : ''}`;
         }
 
         rowsHtml += `
@@ -10125,12 +10167,18 @@ window.export_statement_csv = function() {
     txns.forEach(t => {
         let refStr = t.entry_number ? `#${t.entry_number}` : (t.trans_no || t.reference_no || '');
         if (t.purchase_order) refStr += ` (PO: ${t.purchase_order})`;
+        let csa_name = t.csa || '';
+        if (window.USERS_LIST && t.csa) {
+            let u = window.USERS_LIST.find(x => x.name === t.csa || x.user_id === t.csa);
+            if (u) csa_name = u.employee_name || u.full_name || csa_name;
+        }
+
         let descStr = t.description || '';
         if (t.vehicle_registration && t.item) {
             let qtyRate = t.quantity > 0 ? ` (${t.quantity}L @ KES ${Number(t.rate).toFixed(2)})` : '';
             descStr = `[${t.vehicle_registration}] ${t.item}${qtyRate}`;
         } else if (t.mode_of_payment) {
-            descStr = `${t.mode_of_payment}${t.csa ? ' - Recv: ' + t.csa : ''}${t.memo ? ' - ' + t.memo : ''}`;
+            descStr = `${t.mode_of_payment}${csa_name ? ' - Recv: ' + csa_name : ''}${t.memo ? ' - ' + t.memo : ''}`;
         }
 
         let desc = `"${descStr.replace(/"/g, '""')}"`;
@@ -12027,7 +12075,13 @@ function fetch_invoice_history($wrapper) {
                 let row = r.message.find(x => x.name === name);
                 if (!row) return;
                 
-                frappe.confirm('This will load the invoice back into the entry form and remove it from history. Continue?', () => {
+                frappe.confirm(`This will load invoice ${row.entry_number || ''} back into the entry form and remove it from history. Continue?`, () => {
+                    // Retain existing entry number for continuous uniqueness
+                    window.EDITING_INVOICE_ENTRY_NUMBER = row.entry_number || null;
+                    if (row.entry_number) {
+                        $wrapper.find('#invoice-entry-number').text(`${row.entry_number} (Editing)`);
+                    }
+
                     // Populate form
                     let c = (window.CUSTOMERS_LIST || []).find(c => c.name === row.customer);
                     let customer_name = c ? (c.customer_name || c.name) : row.customer;
@@ -12127,6 +12181,7 @@ function fetch_invoice_history($wrapper) {
                                         callback: function(r2) {
                                             if(r2.message) window.SHIFT_DOC = r2.message;
                                             fetch_invoice_history($wrapper);
+                                            render_invoices($wrapper);
                                             if(typeof render_greasing === 'function') render_greasing($wrapper);
                                             if(typeof render_dry_stock === 'function') render_dry_stock($wrapper);
                                             frappe.show_alert({message: "Item deleted from history", indicator: "green"});

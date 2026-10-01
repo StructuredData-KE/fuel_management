@@ -1436,11 +1436,14 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             si.quantity,
             si.rate,
             si.entry_number,
+            si.csa,
+            IFNULL(e.employee_name, si.csa) as csa_name,
             si.amount as debit,
             0.0 as credit,
             si.creation
         FROM `tabShift Invoice` si
         JOIN `tabShift` s ON si.parent = s.name
+        LEFT JOIN `tabEmployee` e ON (si.csa = e.name OR si.csa = e.user_id)
         WHERE si.customer = %s AND s.docstatus < 2
         ORDER BY s.shift_date ASC, si.creation ASC
     """, cust_id, as_dict=True)
@@ -1448,19 +1451,21 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
     # 3. Customer Payments
     payments = frappe.db.sql("""
         SELECT 
-            date,
-            name as reference,
+            p.date,
+            p.name as reference,
             'Customer Payment' as ref_type,
-            mode_of_payment,
-            trans_no,
-            csa,
-            memo,
+            p.mode_of_payment,
+            p.trans_no,
+            p.csa,
+            IFNULL(e.employee_name, p.csa) as csa_name,
+            p.memo,
             0.0 as debit,
-            amount as credit,
-            creation
-        FROM `tabCustomer Payment`
-        WHERE customer = %s AND docstatus < 2
-        ORDER BY date ASC, creation ASC
+            p.amount as credit,
+            p.creation
+        FROM `tabCustomer Payment` p
+        LEFT JOIN `tabEmployee` e ON (p.csa = e.name OR p.csa = e.user_id)
+        WHERE p.customer = %s AND p.docstatus < 2
+        ORDER BY p.date ASC, p.creation ASC
     """, cust_id, as_dict=True)
     
     all_raw = []
@@ -1489,8 +1494,9 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             desc_parts.append(f"{si.item} ({qty_str} {rate_str})".strip())
         if si.purchase_order:
             desc_parts.append(f"PO: {si.purchase_order}")
-        if si.entry_number:
-            desc_parts.append(f"Entry #{si.entry_number}")
+        csa_display = si.csa_name or si.csa or ''
+        if csa_display:
+            desc_parts.append(f"CSA: {csa_display}")
             
         desc = " | ".join(desc_parts) if desc_parts else "Fuel Sale Invoice"
         
@@ -1505,6 +1511,8 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             'item': si.item or '',
             'quantity': flt(si.quantity),
             'rate': flt(si.rate),
+            'csa': csa_display,
+            'csa_id': si.csa or '',
             'purchase_order': si.purchase_order or '',
             'description': desc,
             'type': 'Invoice',
@@ -1521,8 +1529,9 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             desc_parts.append(f"Ref: {p.trans_no}")
         if p.memo:
             desc_parts.append(f"Memo: {p.memo}")
-        if p.csa:
-            desc_parts.append(f"Received By: {p.csa}")
+        csa_display = p.csa_name or p.csa or ''
+        if csa_display:
+            desc_parts.append(f"Received By: {csa_display}")
             
         desc = " | ".join(desc_parts) if desc_parts else "Payment Received"
         
@@ -1534,7 +1543,8 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             'reference_no': p.trans_no or p.reference,
             'trans_no': p.trans_no or '',
             'mode_of_payment': p.mode_of_payment or '',
-            'csa': p.csa or '',
+            'csa': csa_display,
+            'csa_id': p.csa or '',
             'memo': p.memo or '',
             'description': desc,
             'type': 'Payment',
@@ -3463,16 +3473,52 @@ def get_shift_invoices_history(station, from_date=None, to_date=None, customer=N
             si.quantity, si.rate, 
             COALESCE(si.gross_amount, (si.quantity * si.rate)) as gross_amount,
             si.discount_amount, si.discount_csa, si.discount_reason,
-            si.amount, si.entry_number, si.csa, si.inventory_csa
+            IFNULL(e_disc.employee_name, si.discount_csa) as discount_csa_name,
+            si.amount, si.entry_number, si.csa, 
+            IFNULL(e_csa.employee_name, si.csa) as csa_name,
+            si.inventory_csa,
+            IFNULL(e_inv.employee_name, si.inventory_csa) as inventory_csa_name
         FROM `tabShift Invoice` si
         JOIN `tabShift` s ON si.parent = s.name
         LEFT JOIN `tabCustomer` cust ON si.customer = cust.name
         LEFT JOIN `tabItem` it ON si.item = it.name
+        LEFT JOIN `tabEmployee` e_csa ON (si.csa = e_csa.name OR si.csa = e_csa.user_id)
+        LEFT JOIN `tabEmployee` e_inv ON (si.inventory_csa = e_inv.name OR si.inventory_csa = e_inv.user_id)
+        LEFT JOIN `tabEmployee` e_disc ON (si.discount_csa = e_disc.name OR si.discount_csa = e_disc.user_id)
         WHERE {' AND '.join(conditions)}
-        ORDER BY s.shift_date DESC, si.creation DESC
+        ORDER BY 
+            CASE 
+                WHEN si.entry_number LIKE 'INV%' THEN CAST(SUBSTRING(si.entry_number, 4) AS UNSIGNED) 
+                ELSE 0 
+            END DESC,
+            s.shift_date DESC,
+            si.creation DESC
         LIMIT {limit_num}
     """
     return frappe.db.sql(query, values, as_dict=True)
+
+
+@frappe.whitelist()
+def get_next_shift_invoice_number(station=None):
+    from frappe.utils import cint
+    res = frappe.db.sql("""
+        SELECT DISTINCT entry_number 
+        FROM `tabShift Invoice` 
+        WHERE entry_number LIKE 'INV%'
+    """, as_dict=True)
+    
+    max_num = 0
+    for r in res:
+        val = (r.entry_number or "").replace("INV", "").strip()
+        if val.isdigit():
+            num = int(val)
+            if num > max_num:
+                max_num = num
+                
+    next_num = max_num + 1
+    next_inv = f"INV{next_num:03d}"
+    return {"max_num": max_num, "next_invoice_number": next_inv}
+
 
 @frappe.whitelist()
 def get_shift_discounts_report(station=None, shift_id=None, from_date=None, to_date=None, customer=None):
@@ -3563,10 +3609,13 @@ def get_customer_payments_history(station, from_date=None, to_date=None, custome
         SELECT 
             cp.name, cp.shift, s.shift_date, s.shift_template, cp.customer,
             IFNULL(cust.customer_name, cp.customer) as customer_name,
-            cp.csa, cp.mode_of_payment, cp.amount, cp.date, cp.creation
+            cp.csa, 
+            IFNULL(e.employee_name, cp.csa) as csa_name,
+            cp.mode_of_payment, cp.amount, cp.date, cp.creation
         FROM `tabCustomer Payment` cp
         JOIN `tabShift` s ON cp.shift = s.name
         LEFT JOIN `tabCustomer` cust ON cp.customer = cust.name
+        LEFT JOIN `tabEmployee` e ON (cp.csa = e.name OR cp.csa = e.user_id)
         WHERE {' AND '.join(conditions)}
         ORDER BY s.shift_date DESC, cp.creation DESC
         LIMIT {limit_num}
