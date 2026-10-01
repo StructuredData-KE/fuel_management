@@ -433,6 +433,13 @@
                                             <option value="">Select Customer...</option>
                                         </select>
                                     </div>
+                                    <!-- Vehicle Filter -->
+                                    <div style="display: flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 6px;" id="stmt-vehicle-filter-container">
+                                        <span style="font-size: 0.72rem; font-weight: 600; color: #64748b; margin-right: 4px;">🚗 Vehicle:</span>
+                                        <select id="stmt-vehicle-select" class="spa-input" style="padding: 2px 4px; font-size: 0.8rem; border: none; background: transparent; height: 26px; width: 155px; font-weight: 600;">
+                                            <option value="">All Vehicles</option>
+                                        </select>
+                                    </div>
                                     <!-- Date Range -->
                                     <div style="display: flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 6px;">
                                         <span style="font-size: 0.72rem; font-weight: 600; color: #64748b; margin-right: 4px;">From:</span>
@@ -466,8 +473,8 @@
                             </div>
                         </div>
 
-                        <!-- Sleek Compact Composite Summary Bar (Customer Profile + 4 Mini KPIs) -->
-                        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0.75rem; margin-bottom: 0.85rem; align-items: stretch;">
+                        <!-- Sleek Compact Composite Summary Bar (Customer Profile + 5 Mini KPIs) -->
+                        <div style="display: grid; grid-template-columns: 280px 1fr; gap: 0.75rem; margin-bottom: 0.85rem; align-items: stretch;">
                             <!-- Customer Profile Chip -->
                             <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; flex-direction: column; justify-content: center;" id="stmt-customer-card">
                                 <div style="font-size: 0.68rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Customer Account</div>
@@ -479,32 +486,52 @@
                                 </div>
                             </div>
 
-                            <!-- 4 KPI Metrics -->
-                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">
+                            <!-- 5 KPI Metrics (Includes Total Litres) -->
+                            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem;">
                                 <!-- Opening Balance -->
                                 <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.5rem 0.6rem; text-align: center;">
                                     <div style="font-size: 0.65rem; color: #475569; font-weight: 700; text-transform: uppercase;">Opening (B/F)</div>
-                                    <div style="font-size: 1.05rem; font-weight: 800; color: #1e293b; font-family: monospace; margin-top: 1px;" id="stmt-kpi-opening">KES 0.00</div>
+                                    <div style="font-size: 1.02rem; font-weight: 800; color: #1e293b; font-family: monospace; margin-top: 1px;" id="stmt-kpi-opening">KES 0.00</div>
                                     <div style="font-size: 0.62rem; color: #64748b;">Prior carryover</div>
+                                </div>
+                                <!-- Total Fuel Litres -->
+                                <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 0.5rem 0.6rem; text-align: center;">
+                                    <div style="font-size: 0.65rem; color: #0369a1; font-weight: 700; text-transform: uppercase;">Total Fuel Litres</div>
+                                    <div style="font-size: 1.02rem; font-weight: 800; color: #0284c7; font-family: monospace; margin-top: 1px;" id="stmt-kpi-litres">0.00 L</div>
+                                    <div style="font-size: 0.62rem; color: #0284c7;" id="stmt-kpi-litres-sub">Fuel volume</div>
                                 </div>
                                 <!-- Invoices -->
                                 <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 0.5rem 0.6rem; text-align: center;">
                                     <div style="font-size: 0.65rem; color: #991b1b; font-weight: 700; text-transform: uppercase;">Period Invoiced</div>
-                                    <div style="font-size: 1.05rem; font-weight: 800; color: #dc2626; font-family: monospace; margin-top: 1px;" id="stmt-kpi-invoices">KES 0.00</div>
+                                    <div style="font-size: 1.02rem; font-weight: 800; color: #dc2626; font-family: monospace; margin-top: 1px;" id="stmt-kpi-invoices">KES 0.00</div>
                                     <div style="font-size: 0.62rem; color: #ef4444;">Fuel charges (+)</div>
                                 </div>
                                 <!-- Payments -->
                                 <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.5rem 0.6rem; text-align: center;">
                                     <div style="font-size: 0.65rem; color: #166534; font-weight: 700; text-transform: uppercase;">Period Paid</div>
-                                    <div style="font-size: 1.05rem; font-weight: 800; color: #16a34a; font-family: monospace; margin-top: 1px;" id="stmt-kpi-payments">KES 0.00</div>
+                                    <div style="font-size: 1.02rem; font-weight: 800; color: #16a34a; font-family: monospace; margin-top: 1px;" id="stmt-kpi-payments">KES 0.00</div>
                                     <div style="font-size: 0.62rem; color: #22c55e;">Payments (-)</div>
                                 </div>
                                 <!-- Closing Due -->
                                 <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 0.5rem 0.6rem; text-align: center;">
                                     <div style="font-size: 0.65rem; color: #3730a3; font-weight: 700; text-transform: uppercase;">Amount Due (C/F)</div>
-                                    <div style="font-size: 1.1rem; font-weight: 800; color: #1e1b4b; font-family: monospace; margin-top: 1px;" id="stmt-kpi-closing">KES 0.00</div>
+                                    <div style="font-size: 1.05rem; font-weight: 800; color: #1e1b4b; font-family: monospace; margin-top: 1px;" id="stmt-kpi-closing">KES 0.00</div>
                                     <div style="font-size: 0.62rem; color: #6366f1;">Closing balance</div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Vehicle Fleet Quick Analysis Strip -->
+                        <div id="stmt-vehicle-analysis-bar" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem 0.75rem; margin-bottom: 0.75rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; gap: 0.4rem;">
+                                <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                                    <span>🚗 Vehicle Breakdown & Volume Analysis</span>
+                                    <span id="stmt-vehicle-count-badge" style="background: #e2e8f0; color: #334155; font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; font-weight: 700;">0 Vehicles</span>
+                                </div>
+                                <div style="font-size: 0.68rem; color: #64748b;">Click a vehicle to filter statement</div>
+                            </div>
+                            <div id="stmt-vehicle-chips" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                                <!-- Dynamically generated vehicle chips -->
                             </div>
                         </div>
 
@@ -513,10 +540,12 @@
                             <table class="dash-table" style="width: 100%; margin: 0; border-collapse: collapse; font-size: 0.78rem;">
                                 <thead>
                                     <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; font-size: 0.72rem; text-transform: uppercase; color: #475569; letter-spacing: 0.03em;">
-                                        <th style="padding: 6px 8px; width: 85px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Date</th>
-                                        <th style="padding: 6px 8px; width: 95px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Voucher Type</th>
-                                        <th style="padding: 6px 8px; width: 105px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Reference #</th>
-                                        <th style="padding: 6px 8px; min-width: 250px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Description / Details</th>
+                                        <th style="padding: 6px 8px; width: 80px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Date</th>
+                                        <th style="padding: 6px 8px; width: 90px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Voucher Type</th>
+                                        <th style="padding: 6px 8px; width: 95px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Reference #</th>
+                                        <th style="padding: 6px 8px; width: 110px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Vehicle Plate</th>
+                                        <th style="padding: 6px 8px; min-width: 200px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Description / Product</th>
+                                        <th style="padding: 6px 8px; text-align: right; width: 95px; color: #0284c7; font-weight: 700; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Litres (L)</th>
                                         <th style="padding: 6px 8px; text-align: right; width: 110px; color: #dc2626; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Invoiced / Debit (+)</th>
                                         <th style="padding: 6px 8px; text-align: right; width: 110px; color: #16a34a; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Paid / Credit (-)</th>
                                         <th style="padding: 6px 8px; text-align: right; width: 120px; color: #0f172a; font-weight: 800; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Running Balance</th>
@@ -524,9 +553,24 @@
                                 </thead>
                                 <tbody id="debtors-statement-body">
                                     <tr>
-                                        <td colspan="7" class="text-center py-8 text-gray-500" style="font-size: 0.82rem;">Please select a customer and date range above to load statement.</td>
+                                        <td colspan="9" class="text-center py-8 text-gray-500" style="font-size: 0.82rem;">Please select a customer and date range above to load statement.</td>
                                     </tr>
                                 </tbody>
+                                <tfoot id="debtors-statement-foot" style="display: none;">
+                                    <tr style="background: #eef2ff; font-weight: 800; border-top: 2px solid #cbd5e1;">
+                                        <td id="stmt-foot-date" style="padding: 6px 8px; color: #1e1b4b; white-space: nowrap; font-size: 0.75rem; vertical-align: middle;">--</td>
+                                        <td style="padding: 6px 8px; vertical-align: middle;">
+                                            <span style="background: #3730a3; color: #ffffff; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase;">CLOSING C/F</span>
+                                        </td>
+                                        <td style="padding: 6px 8px; font-family: monospace; color: #64748b; font-size: 0.75rem; vertical-align: middle;">--</td>
+                                        <td id="stmt-foot-vehicle-label" style="padding: 6px 8px; color: #475569; font-size: 0.72rem; vertical-align: middle;">All Fleet</td>
+                                        <td style="padding: 6px 8px; color: #1e1b4b; font-size: 0.75rem; text-transform: uppercase; vertical-align: middle; font-weight: 700;">TOTALS (VOLUME / INVOICED / PAID / DUE)</td>
+                                        <td id="stmt-foot-litres" style="padding: 6px 8px; text-align: right; font-family: monospace; font-size: 0.85rem; font-weight: 800; color: #0284c7; vertical-align: middle;">0.00 L</td>
+                                        <td id="stmt-foot-invoices" style="padding: 6px 8px; text-align: right; font-family: monospace; font-size: 0.82rem; color: #dc2626; vertical-align: middle;">0.00</td>
+                                        <td id="stmt-foot-payments" style="padding: 6px 8px; text-align: right; font-family: monospace; font-size: 0.82rem; color: #16a34a; vertical-align: middle;">0.00</td>
+                                        <td id="stmt-foot-closing" style="padding: 6px 8px; text-align: right; font-family: monospace; font-size: 0.9rem; font-weight: 900; color: #1e1b4b; vertical-align: middle;">0.00</td>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
                     </div>

@@ -1591,6 +1591,7 @@ def get_detailed_customer_statement(customer_id=None, customer=None, start_date=
     running = opening_bal
     tot_debits = 0.0
     tot_credits = 0.0
+    tot_litres = 0.0
     
     for pt in period_txns:
         running += (pt['debit'] - pt['credit'])
@@ -1598,6 +1599,8 @@ def get_detailed_customer_statement(customer_id=None, customer=None, start_date=
         pt['balance'] = round(running, 2)
         tot_debits += pt['debit']
         tot_credits += pt['credit']
+        if pt.get('quantity') and flt(pt.get('quantity')) > 0:
+            tot_litres += flt(pt['quantity'])
         
     return {
         'customer': {
@@ -1617,6 +1620,7 @@ def get_detailed_customer_statement(customer_id=None, customer=None, start_date=
         'period_credits': round(tot_credits, 2),
         'period_payments': round(tot_credits, 2),
         'period_net': round(tot_debits - tot_credits, 2),
+        'total_litres': round(tot_litres, 2),
         'closing_balance': round(running, 2),
         'transactions': period_txns
     }
@@ -3859,7 +3863,7 @@ def delete_greasing_sale(shift_name, row_name):
 
 
 @frappe.whitelist()
-def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=None, end_date=None, station=None):
+def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=None, end_date=None, station=None, vehicle=None):
     from frappe.utils.pdf import get_pdf
     from frappe.utils import formatdate, flt
     import frappe.utils
@@ -3875,6 +3879,14 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
     cust = data.get("customer", {})
     cust_name = cust.get("name") or cust_id
     txns = data.get("transactions", [])
+    
+    veh_filter = (vehicle or "").strip()
+    if veh_filter and veh_filter.lower() != 'all':
+        txns = [t for t in txns if (t.get('vehicle_registration') or '').strip().upper() == veh_filter.upper()]
+        
+    tot_litres = sum(flt(t.get('quantity') or 0) for t in txns)
+    period_invoices = sum(flt(t.get('debit') or 0) for t in txns) if (veh_filter and veh_filter.lower() != 'all') else flt(data.get('period_invoices'))
+    period_payments = sum(flt(t.get('credit') or 0) for t in txns) if (veh_filter and veh_filter.lower() != 'all') else flt(data.get('period_payments'))
     
     if not station:
         station = frappe.db.get_value("Fuel Station", {}, "station_name") or frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS ENERGY - KILIBET SERVICE STATION"
@@ -3899,7 +3911,9 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
             <td>{fmt_dt(data.get('start_date'))}</td>
             <td>OPENING B/F</td>
             <td>--</td>
+            <td>--</td>
             <td>Balance brought forward from prior periods</td>
+            <td style="text-align: right;">--</td>
             <td style="text-align: right;">--</td>
             <td style="text-align: right;">--</td>
             <td style="text-align: right; font-family: monospace;">{fmt_num(data.get('opening_balance'))}</td>
@@ -3915,15 +3929,20 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
         if t.get('purchase_order'):
             ref_str += f" (PO: {t.get('purchase_order')})"
             
+        veh_str = t.get('vehicle_registration') or '--'
+            
         desc_str = t.get('description') or '--'
-        if t.get('vehicle_registration') and t.get('item'):
-            qty_rate = f" ({t.get('quantity')}L @ KES {flt(t.get('rate')):.2f})" if flt(t.get('quantity')) > 0 else ''
-            desc_str = f"[{t.get('vehicle_registration')}] {t.get('item')}{qty_rate}"
+        if t.get('item'):
+            rate_val = flt(t.get('rate'))
+            rate_part = f" @ KES {rate_val:.2f}" if rate_val > 0 else ""
+            desc_str = f"{t.get('item')}{rate_part}"
         elif t.get('mode_of_payment'):
             csa_part = f" - Recv: {t.get('csa')}" if t.get('csa') else ''
             memo_part = f" - {t.get('memo')}" if t.get('memo') else ''
             desc_str = f"{t.get('mode_of_payment')}{csa_part}{memo_part}"
             
+        qty_val = flt(t.get('quantity') or 0)
+        qty_str = f"{qty_val:,.2f} L" if qty_val > 0 else "--"
         deb_str = fmt_num(deb) if deb > 0 else "--"
         crd_str = fmt_num(crd) if crd > 0 else "--"
         
@@ -3932,7 +3951,9 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
                 <td>{fmt_dt(t.get('date'))}</td>
                 <td>{frappe.utils.escape_html(str(t.get('voucher_type') or t.get('ref_type') or 'TXN'))}</td>
                 <td><b>{frappe.utils.escape_html(str(ref_str))}</b></td>
+                <td style="font-family: monospace; font-weight: bold;">{frappe.utils.escape_html(str(veh_str))}</td>
                 <td>{frappe.utils.escape_html(str(desc_str))}</td>
+                <td style="text-align: right; color: #0284c7; font-family: monospace; font-weight: bold;">{qty_str}</td>
                 <td style="text-align: right; color: #dc2626; font-family: monospace;">{deb_str}</td>
                 <td style="text-align: right; color: #166534; font-family: monospace;">{crd_str}</td>
                 <td style="text-align: right; font-weight: bold; font-family: monospace;">{fmt_num(bal)}</td>
@@ -3945,12 +3966,16 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
             <td>{fmt_dt(data.get('end_date'))}</td>
             <td>CLOSING C/F</td>
             <td>--</td>
-            <td>AMOUNT DUE (CARRIED FORWARD)</td>
-            <td style="text-align: right; font-family: monospace; color: #dc2626;">{fmt_num(data.get('period_invoices'))}</td>
-            <td style="text-align: right; font-family: monospace; color: #166534;">{fmt_num(data.get('period_payments'))}</td>
+            <td style="font-family: monospace; font-weight: bold;">{frappe.utils.escape_html(veh_filter) if veh_filter and veh_filter.lower() != 'all' else 'All Fleet'}</td>
+            <td>TOTALS (VOLUME / INVOICED / PAID / DUE)</td>
+            <td style="text-align: right; font-family: monospace; color: #0284c7; font-weight: bold;">{fmt_num(tot_litres)} L</td>
+            <td style="text-align: right; font-family: monospace; color: #dc2626;">{fmt_num(period_invoices)}</td>
+            <td style="text-align: right; font-family: monospace; color: #166534;">{fmt_num(period_payments)}</td>
             <td style="text-align: right; font-size: 11px; font-family: monospace; color: #1e1b4b;">{fmt_num(data.get('closing_balance'))}</td>
         </tr>
     """
+    
+    veh_sub_header = f"""<div style="font-size: 10px; color: #0284c7; margin-top: 3px; font-weight: bold;">Filtered Vehicle: {frappe.utils.escape_html(veh_filter)}</div>""" if (veh_filter and veh_filter.lower() != 'all') else ""
     
     html = f"""
     <!DOCTYPE html>
@@ -3959,15 +3984,15 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
         <meta charset="utf-8">
         <title>Statement of Account - {frappe.utils.escape_html(cust_name)}</title>
         <style>
-            body {{ font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10px; color: #111; margin: 15px; line-height: 1.35; }}
+            body {{ font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 9.5px; color: #111; margin: 15px; line-height: 1.35; }}
             .header-table {{ width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px; }}
             .brand-title {{ font-size: 16px; font-weight: 800; color: #1e3a8a; }}
             .doc-title {{ font-size: 14px; font-weight: bold; text-align: right; color: #0f172a; text-transform: uppercase; }}
             .info-grid {{ width: 100%; margin-bottom: 12px; }}
             .info-box {{ border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; background: #f8fafc; }}
-            table.ledger {{ width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9.5px; }}
-            table.ledger th, table.ledger td {{ border: 1px solid #cbd5e1; padding: 4px 6px; }}
-            table.ledger th {{ background: #f1f5f9; text-transform: uppercase; font-size: 8.5px; }}
+            table.ledger {{ width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9px; }}
+            table.ledger th, table.ledger td {{ border: 1px solid #cbd5e1; padding: 4px 5px; }}
+            table.ledger th {{ background: #f1f5f9; text-transform: uppercase; font-size: 8px; }}
             .banking-box {{ margin-top: 15px; border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; background: #fafafa; font-size: 9px; }}
         </style>
     </head>
@@ -3988,6 +4013,7 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
                         <b>Period:</b> {fmt_dt(data.get('start_date'))} &mdash; {fmt_dt(data.get('end_date'))}<br>
                         <b>Date Generated:</b> {fmt_dt(frappe.utils.nowdate())}
                     </div>
+                    {veh_sub_header}
                     <div style="margin-top: 4px; font-size: 11px; font-weight: bold; color: #1e3a8a;">
                         Closing Due: KES {fmt_num(data.get('closing_balance'))}
                     </div>
@@ -3997,7 +4023,7 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
 
         <table class="info-grid">
             <tr>
-                <td style="width: 55%; vertical-align: top; padding-right: 8px;">
+                <td style="width: 52%; vertical-align: top; padding-right: 8px;">
                     <div class="info-box">
                         <div style="font-size: 8px; font-weight: bold; color: #64748b; text-transform: uppercase;">BILL TO CUSTOMER:</div>
                         <div style="font-size: 12px; font-weight: bold; color: #0f172a; margin: 2px 0;">{frappe.utils.escape_html(cust_name)}</div>
@@ -4008,15 +4034,16 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
                         </div>
                     </div>
                 </td>
-                <td style="width: 45%; vertical-align: top;">
+                <td style="width: 48%; vertical-align: top;">
                     <div class="info-box">
                         <div style="font-size: 8px; font-weight: bold; color: #64748b; text-transform: uppercase;">ACCOUNT SUMMARY:</div>
-                        <table style="width: 100%; font-size: 9px; margin-top: 2px;">
+                        <table style="width: 100%; font-size: 8.5px; margin-top: 2px;">
                             <tr><td><b>Credit Limit:</b></td><td style="text-align: right; font-family: monospace;">KES {fmt_num(cust.get('credit_limit'))}</td></tr>
                             <tr><td><b>Opening Balance (B/F):</b></td><td style="text-align: right; font-family: monospace;">KES {fmt_num(data.get('opening_balance'))}</td></tr>
-                            <tr><td><b>Total Invoices (Period):</b></td><td style="text-align: right; font-family: monospace; color:#dc2626;">+ KES {fmt_num(data.get('period_invoices'))}</td></tr>
-                            <tr><td><b>Total Payments (Period):</b></td><td style="text-align: right; font-family: monospace; color:#166534;">- KES {fmt_num(data.get('period_payments'))}</td></tr>
-                            <tr style="border-top: 1px solid #cbd5e1; font-weight: bold;"><td><b>Total Amount Due:</b></td><td style="text-align: right; font-family: monospace; color:#1e3a8a; font-size: 10px;">KES {fmt_num(data.get('closing_balance'))}</td></tr>
+                            <tr><td><b>Total Fuel Litres:</b></td><td style="text-align: right; font-family: monospace; color:#0284c7; font-weight: bold;">{fmt_num(tot_litres)} L</td></tr>
+                            <tr><td><b>Total Invoices (Period):</b></td><td style="text-align: right; font-family: monospace; color:#dc2626;">+ KES {fmt_num(period_invoices)}</td></tr>
+                            <tr><td><b>Total Payments (Period):</b></td><td style="text-align: right; font-family: monospace; color:#166534;">- KES {fmt_num(period_payments)}</td></tr>
+                            <tr style="border-top: 1px solid #cbd5e1; font-weight: bold;"><td><b>Total Amount Due:</b></td><td style="text-align: right; font-family: monospace; color:#1e3a8a; font-size: 9.5px;">KES {fmt_num(data.get('closing_balance'))}</td></tr>
                         </table>
                     </div>
                 </td>
@@ -4026,13 +4053,15 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
         <table class="ledger">
             <thead>
                 <tr>
-                    <th style="width: 70px;">Date</th>
-                    <th style="width: 80px;">Type</th>
-                    <th style="width: 90px;">Reference #</th>
+                    <th style="width: 60px;">Date</th>
+                    <th style="width: 70px;">Type</th>
+                    <th style="width: 75px;">Reference #</th>
+                    <th style="width: 75px;">Vehicle Plate</th>
                     <th>Description / Details</th>
-                    <th style="text-align: right; width: 75px;">Debit (+)</th>
-                    <th style="text-align: right; width: 75px;">Credit (-)</th>
-                    <th style="text-align: right; width: 85px;">Balance</th>
+                    <th style="text-align: right; width: 60px; color: #0284c7;">Litres (L)</th>
+                    <th style="text-align: right; width: 68px; color: #dc2626;">Debit (+)</th>
+                    <th style="text-align: right; width: 68px; color: #166534;">Credit (-)</th>
+                    <th style="text-align: right; width: 78px;">Balance</th>
                 </tr>
             </thead>
             <tbody>
@@ -4046,7 +4075,7 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
             <b>Bank:</b> Equity Bank Kenya &nbsp;|&nbsp; <b>Account Name:</b> Kilibet Core Ltd &nbsp;|&nbsp; <b>Payment Terms:</b> 30 Days from invoice date.
         </div>
 
-        <div style="margin-top: 20px; display: flex; justify-content: space-between; font-size: 9px;">
+        <div style="margin-top: 18px; display: flex; justify-content: space-between; font-size: 8.5px;">
             <div><b>Prepared By:</b> __________________________</div>
             <div><b>Accounts Manager:</b> __________________________</div>
             <div><b>Received By (Debtor):</b> __________________________</div>
@@ -4058,7 +4087,8 @@ def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=N
     pdf_bytes = get_pdf(html, {"orientation": "Portrait", "page-size": "A4"})
     
     safe_name = "".join(c for c in cust_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
-    filename = f"Statement_{safe_name}_{data.get('start_date')}_{data.get('end_date')}.pdf"
+    veh_part = f"_{veh_filter.replace(' ', '_')}" if (veh_filter and veh_filter.lower() != 'all') else ""
+    filename = f"Statement_{safe_name}{veh_part}_{data.get('start_date')}_{data.get('end_date')}.pdf"
     
     frappe.response.filename = filename
     frappe.response.filecontent = pdf_bytes

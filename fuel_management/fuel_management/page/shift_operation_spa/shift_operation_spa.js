@@ -8920,6 +8920,7 @@ window.DEBTORS_STATE = {
     aging_search: '',
     aging_filter: 'all',
     selected_customer_id: '',
+    selected_vehicle: '',
     is_loading_balances: false,
     is_loading_statement: false,
     is_loading_aging: false
@@ -8979,10 +8980,22 @@ window.init_debtors_module = function(wrapper) {
     $wrapper.on('change', '#stmt-customer-select', function() {
         let custId = $(this).val();
         window.DEBTORS_STATE.selected_customer_id = custId;
+        window.DEBTORS_STATE.selected_vehicle = '';
         window.update_statement_customer_card();
         if (custId) {
             window.load_customer_statement();
         }
+    });
+
+    $wrapper.on('change', '#stmt-vehicle-select', function() {
+        let veh = $(this).val();
+        window.filter_customer_statement_by_vehicle(veh);
+    });
+
+    $wrapper.on('click', '.stmt-veh-chip', function(e) {
+        e.preventDefault();
+        let veh = $(this).attr('data-vehicle') || '';
+        window.filter_customer_statement_by_vehicle(veh);
     });
 
     $wrapper.on('click', '.stmt-preset-btn', function(e) {
@@ -9381,21 +9394,124 @@ window.render_customer_statement = function(data) {
     $w.find('#stmt-cust-id').text(cust.fleet_id || cust.id || '--');
     $w.find('#stmt-cust-limit').text(format_kes(cust.credit_limit));
 
+    window.DEBTORS_STATE.statement_data = data;
+
+    let allTxns = data.transactions || [];
+    let vehMap = {};
+    let uniqueVehicles = [];
+
+    allTxns.forEach(t => {
+        let v = (t.vehicle_registration || '').trim().toUpperCase();
+        if (v) {
+            if (!vehMap[v]) {
+                vehMap[v] = { plate: v, litres: 0, amount: 0, count: 0 };
+                uniqueVehicles.push(v);
+            }
+            vehMap[v].litres += Number(t.quantity || 0);
+            vehMap[v].amount += Number(t.debit || 0);
+            vehMap[v].count += 1;
+        }
+    });
+    uniqueVehicles.sort();
+
+    // Populate Vehicle Dropdown Filter
+    let currentVeh = window.DEBTORS_STATE.selected_vehicle || '';
+    let vehOptions = `<option value="">🚗 All Vehicles / Fleet (${uniqueVehicles.length})</option>`;
+    uniqueVehicles.forEach(v => {
+        let info = vehMap[v];
+        let litStr = info.litres > 0 ? `${info.litres.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}L` : '0L';
+        let amtStr = info.amount > 0 ? `KES ${format_num_only(info.amount)}` : 'KES 0.00';
+        let sel = (v === currentVeh) ? 'selected' : '';
+        vehOptions += `<option value="${escape_debtor_html(v)}" ${sel}>🚗 ${escape_debtor_html(v)} (${litStr} • ${amtStr})</option>`;
+    });
+    $w.find('#stmt-vehicle-select').html(vehOptions);
+
+    // Build Vehicle Analysis Bar & Chips
+    if (uniqueVehicles.length > 0) {
+        $w.find('#stmt-vehicle-analysis-bar').show();
+        $w.find('#stmt-vehicle-count-badge').text(`${uniqueVehicles.length} Vehicle${uniqueVehicles.length === 1 ? '' : 's'}`);
+        
+        let chipsHtml = `
+            <button type="button" class="btn btn-xs stmt-veh-chip ${!currentVeh ? 'active' : ''}" data-vehicle="" style="padding: 3px 9px; font-size: 0.72rem; font-weight: 700; border-radius: 6px; border: 1px solid ${!currentVeh ? '#2563eb' : '#cbd5e1'}; background: ${!currentVeh ? '#eff6ff' : '#ffffff'}; color: ${!currentVeh ? '#1d4ed8' : '#334155'}; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                <span>🚗 All Fleet (${allTxns.length})</span>
+            </button>
+        `;
+        uniqueVehicles.forEach(v => {
+            let info = vehMap[v];
+            let isAct = (v === currentVeh);
+            let litStr = info.litres > 0 ? `${info.litres.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}L` : '0L';
+            chipsHtml += `
+                <button type="button" class="btn btn-xs stmt-veh-chip ${isAct ? 'active' : ''}" data-vehicle="${escape_debtor_html(v)}" style="padding: 3px 9px; font-size: 0.72rem; font-weight: 600; border-radius: 6px; border: 1px solid ${isAct ? '#2563eb' : '#cbd5e1'}; background: ${isAct ? '#eff6ff' : '#ffffff'}; color: ${isAct ? '#1d4ed8' : '#334155'}; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                    <span style="font-family: monospace; font-weight: 700; color: #0f172a;">🚗 ${escape_debtor_html(v)}</span>
+                    <span style="background: #e0f2fe; color: #0369a1; padding: 1px 5px; border-radius: 3px; font-size: 0.65rem; font-family: monospace; font-weight: 700;">${litStr}</span>
+                </button>
+            `;
+        });
+        $w.find('#stmt-vehicle-chips').html(chipsHtml);
+    } else {
+        $w.find('#stmt-vehicle-analysis-bar').hide();
+    }
+
+    // Render Table based on selected vehicle
+    window.filter_customer_statement_by_vehicle(currentVeh);
+};
+
+window.filter_customer_statement_by_vehicle = function(selected_veh) {
+    const $w = $(window.DEBTORS_STATE.wrapper || document);
+    let data = window.DEBTORS_STATE.statement_data;
+    if (!data) return;
+
+    let veh = (selected_veh || '').trim().toUpperCase();
+    window.DEBTORS_STATE.selected_vehicle = veh;
+
+    // Update select dropdown
+    $w.find('#stmt-vehicle-select').val(veh);
+
+    // Update chip active styles
+    $w.find('.stmt-veh-chip').each(function() {
+        let chipVeh = ($(this).attr('data-vehicle') || '').trim().toUpperCase();
+        if (chipVeh === veh) {
+            $(this).addClass('active').css({
+                'border-color': '#2563eb',
+                'background': '#eff6ff',
+                'color': '#1d4ed8',
+                'font-weight': '700'
+            });
+        } else {
+            $(this).removeClass('active').css({
+                'border-color': '#cbd5e1',
+                'background': '#ffffff',
+                'color': '#334155',
+                'font-weight': '600'
+            });
+        }
+    });
+
+    let allTxns = data.transactions || [];
+    let txns = veh ? allTxns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh) : allTxns;
+
     let openBal = Number(data.opening_balance || 0);
-    let periodInvoices = Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
-    let periodPayments = Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
+    let totalLitres = txns.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+    let periodInvoices = veh ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
+    let periodPayments = veh ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
     let clBal = Number(data.closing_balance != null ? data.closing_balance : (openBal + periodInvoices - periodPayments));
 
     // Update KPI summary cards
     $w.find('#stmt-kpi-opening').text(format_kes(openBal));
-    $w.find('#stmt-kpi-invoices').text(format_kes(periodInvoices));
+    $w.find('#stmt-kpi-litres').text(`${totalLitres.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L`);
+    if (veh) {
+        $w.find('#stmt-kpi-litres-sub').text(`Filtered: ${veh}`);
+        $w.find('#stmt-kpi-invoices').text(format_kes(periodInvoices));
+    } else {
+        $w.find('#stmt-kpi-litres-sub').text('Total Fuel Volume');
+        $w.find('#stmt-kpi-invoices').text(format_kes(periodInvoices));
+    }
     $w.find('#stmt-kpi-payments').text(format_kes(periodPayments));
     $w.find('#stmt-kpi-closing').text(format_kes(clBal));
 
-    let txns = data.transactions || [];
     let rowsHtml = '';
 
-    // 1. Opening Balance Row
+    // 1. Opening Balance Row (9 columns)
     rowsHtml += `
         <tr style="background: #f8fafc; font-weight: 700; border-bottom: 1px solid #e2e8f0;">
             <td style="padding: 5px 8px; color: #475569; white-space: nowrap; font-size: 0.75rem; vertical-align: middle;">${data.start_date ? frappe.datetime.str_to_user(data.start_date) : '--'}</td>
@@ -9403,19 +9519,24 @@ window.render_customer_statement = function(data) {
                 <span style="background: #e2e8f0; color: #334155; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase;">OPENING B/F</span>
             </td>
             <td style="padding: 5px 8px; font-family: monospace; color: #64748b; font-size: 0.75rem; vertical-align: middle;">--</td>
+            <td style="padding: 5px 8px; font-family: monospace; color: #64748b; font-size: 0.75rem; vertical-align: middle;">--</td>
             <td style="padding: 5px 8px; color: #334155; font-size: 0.78rem; font-style: italic; vertical-align: middle;">Balance brought forward from prior period</td>
+            <td style="padding: 5px 8px; text-align: right; font-family: monospace; color: #94a3b8; font-size: 0.78rem; vertical-align: middle;">--</td>
             <td style="padding: 5px 8px; text-align: right; font-family: monospace; color: #94a3b8; font-size: 0.78rem; vertical-align: middle;">--</td>
             <td style="padding: 5px 8px; text-align: right; font-family: monospace; color: #94a3b8; font-size: 0.78rem; vertical-align: middle;">--</td>
             <td style="padding: 5px 8px; text-align: right; font-family: monospace; font-size: 0.84rem; font-weight: 800; color: #0f172a; vertical-align: middle;">${format_num_only(openBal)}</td>
         </tr>
     `;
 
-    // 2. Transaction Rows
+    // 2. Transaction Rows (9 columns)
     if (txns.length === 0) {
+        let msg = veh 
+            ? `No transactions found for vehicle ${veh} during this period (${frappe.datetime.str_to_user(data.start_date)} to ${frappe.datetime.str_to_user(data.end_date)}).`
+            : `No new invoices or payments recorded during this period (${frappe.datetime.str_to_user(data.start_date)} to ${frappe.datetime.str_to_user(data.end_date)}).`;
         rowsHtml += `
             <tr>
-                <td colspan="7" style="padding: 1.25rem; text-align: center; color: #64748b; font-style: italic; font-size: 0.82rem; background: #ffffff;">
-                    No new invoices or payments recorded during this period (${frappe.datetime.str_to_user(data.start_date)} to ${frappe.datetime.str_to_user(data.end_date)}).
+                <td colspan="9" style="padding: 1.25rem; text-align: center; color: #64748b; font-style: italic; font-size: 0.82rem; background: #ffffff;">
+                    ${escape_debtor_html(msg)}
                 </td>
             </tr>
         `;
@@ -9424,9 +9545,11 @@ window.render_customer_statement = function(data) {
             let debit = Number(t.debit || 0);
             let credit = Number(t.credit || 0);
             let bal = Number(t.running_balance != null ? t.running_balance : (t.balance != null ? t.balance : 0));
+            let qty = Number(t.quantity || 0);
 
             let badgeHtml = '';
             let refHtml = '';
+            let vehHtml = '';
             let detailsHtml = '';
 
             let isInvoice = (t.voucher_type === 'Shift Invoice' || t.ref_type === 'Shift Invoice');
@@ -9439,32 +9562,22 @@ window.render_customer_statement = function(data) {
                 let poDisplay = t.purchase_order ? `<div style="font-size: 0.68rem; color: #92400e; font-weight: 600; margin-top: 1px;">PO #${escape_debtor_html(t.purchase_order)}</div>` : '';
                 refHtml = `<div style="font-weight: 700; color: #1e293b; font-size: 0.76rem; font-family: monospace;">${refDisplay}</div>${poDisplay}`;
 
-                let parts = [];
                 if (t.vehicle_registration) {
-                    parts.push(`<span style="background: #f1f5f9; color: #0f172a; font-weight: 700; font-family: monospace; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; gap: 3px;">🚗 ${escape_debtor_html(t.vehicle_registration)}</span>`);
-                }
-                let itemStr = t.item || '';
-                let qty = Number(t.quantity || 0);
-                let rate = Number(t.rate || 0);
-                if (itemStr || qty > 0) {
-                    let qtyRate = '';
-                    if (qty > 0 && rate > 0) {
-                        qtyRate = ` <span style="color: #64748b; font-size: 0.72rem; font-family: monospace; font-weight: 500;">(${qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}L @ KES ${rate.toFixed(2)})</span>`;
-                    } else if (qty > 0) {
-                        qtyRate = ` <span style="color: #64748b; font-size: 0.72rem; font-family: monospace; font-weight: 500;">(${qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}L)</span>`;
-                    }
-                    parts.push(`<span style="font-weight: 600; color: #1e293b; font-size: 0.78rem;">${escape_debtor_html(itemStr || 'Fuel')}${qtyRate}</span>`);
-                }
-                if (parts.length > 0) {
-                    detailsHtml = `<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">${parts.join('')}</div>`;
+                    vehHtml = `<span style="background: #f1f5f9; color: #0f172a; font-weight: 700; font-family: monospace; font-size: 0.74rem; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1; display: inline-flex; align-items: center; gap: 3px;">🚗 ${escape_debtor_html(t.vehicle_registration)}</span>`;
                 } else {
-                    detailsHtml = `<span style="color: #334155; font-size: 0.78rem;">${escape_debtor_html(t.description || '--').replace(/\s*\|\s*/g, ' <span style="color:#cbd5e1;">•</span> ')}</span>`;
+                    vehHtml = `<span style="color: #94a3b8; font-size: 0.75rem;">--</span>`;
                 }
+
+                let itemStr = t.item || 'Fuel Sale';
+                let rate = Number(t.rate || 0);
+                let rateStr = rate > 0 ? ` <span style="color: #64748b; font-size: 0.72rem; font-family: monospace;">(@ KES ${rate.toFixed(2)})</span>` : '';
+                detailsHtml = `<span style="font-weight: 600; color: #1e293b; font-size: 0.78rem;">${escape_debtor_html(itemStr)}${rateStr}</span>`;
             } else if (isPayment) {
                 badgeHtml = `<span style="background: #dcfce7; color: #166534; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; border: 1px solid #bbf7d0; white-space: nowrap;">💳 PAYMENT</span>`;
                 
                 let refDisplay = t.trans_no ? escape_debtor_html(t.trans_no) : escape_debtor_html(t.reference_no || t.reference || '--');
                 refHtml = `<div style="font-weight: 700; color: #065f46; font-size: 0.76rem; font-family: monospace;">${refDisplay}</div>`;
+                vehHtml = `<span style="color: #94a3b8; font-size: 0.75rem;">--</span>`;
 
                 let parts = [];
                 let mop = t.mode_of_payment || 'Cash';
@@ -9485,39 +9598,38 @@ window.render_customer_statement = function(data) {
             } else {
                 badgeHtml = `<span style="background: #f1f5f9; color: #475569; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; border: 1px solid #e2e8f0; white-space: nowrap;">${escape_debtor_html(t.voucher_type || t.ref_type || 'TXN')}</span>`;
                 refHtml = `<div style="font-weight: 600; color: #1e293b; font-size: 0.75rem; font-family: monospace;">${escape_debtor_html(t.reference_no || t.reference || '--')}</div>`;
+                vehHtml = `<span style="color: #94a3b8; font-size: 0.75rem;">--</span>`;
                 detailsHtml = `<span style="color: #334155; font-size: 0.78rem;">${escape_debtor_html(t.description || '--').replace(/\s*\|\s*/g, ' <span style="color:#cbd5e1;">•</span> ')}</span>`;
             }
+
+            let litresDisplay = qty > 0 ? `<span style="color: #0284c7; font-family: monospace; font-weight: 700;">${qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L</span>` : `<span style="color: #94a3b8; font-family: monospace;">--</span>`;
 
             rowsHtml += `
                 <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                     <td style="padding: 5px 8px; color: #334155; white-space: nowrap; font-size: 0.75rem; vertical-align: middle;">${t.date ? frappe.datetime.str_to_user(t.date) : '--'}</td>
                     <td style="padding: 5px 8px; vertical-align: middle;">${badgeHtml}</td>
                     <td style="padding: 5px 8px; vertical-align: middle;">${refHtml}</td>
+                    <td style="padding: 5px 8px; vertical-align: middle;">${vehHtml}</td>
                     <td style="padding: 5px 8px; vertical-align: middle;">${detailsHtml}</td>
+                    <td style="padding: 5px 8px; text-align: right; font-size: 0.78rem; vertical-align: middle;">${litresDisplay}</td>
                     <td style="padding: 5px 8px; text-align: right; font-family: monospace; font-weight: 600; color: #dc2626; font-size: 0.78rem; vertical-align: middle;">${debit > 0 ? format_num_only(debit) : '--'}</td>
-                    <td style="padding: 5px 8px; text-align: right; font-family: monospace; font-weight: 600; color: #16a34a; font-size: 0.78rem; vertical-align: middle;">${credit > 0 ? format_num_only(credit) : '--'}</td>
+                    <td style="padding: 5px 8px; text-align: right; font-family: monospace; font-weight: 600; color: #166534; font-size: 0.78rem; vertical-align: middle;">${credit > 0 ? format_num_only(credit) : '--'}</td>
                     <td style="padding: 5px 8px; text-align: right; font-family: monospace; font-size: 0.84rem; font-weight: 800; color: #0f172a; vertical-align: middle;">${format_num_only(bal)}</td>
                 </tr>
             `;
         });
     }
 
-    // 3. Closing Balance Row
-    rowsHtml += `
-        <tr style="background: #eef2ff; font-weight: 800; border-top: 2px solid #cbd5e1;">
-            <td style="padding: 6px 8px; color: #1e1b4b; white-space: nowrap; font-size: 0.75rem; vertical-align: middle;">${data.end_date ? frappe.datetime.str_to_user(data.end_date) : '--'}</td>
-            <td style="padding: 6px 8px; vertical-align: middle;">
-                <span style="background: #3730a3; color: #ffffff; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase;">CLOSING C/F</span>
-            </td>
-            <td style="padding: 6px 8px; font-family: monospace; color: #64748b; font-size: 0.75rem; vertical-align: middle;">--</td>
-            <td style="padding: 6px 8px; color: #1e1b4b; font-size: 0.78rem; text-transform: uppercase; vertical-align: middle;">Total Invoiced / Paid / Net Closing Due</td>
-            <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-size: 0.78rem; color: #dc2626; vertical-align: middle;">${format_num_only(periodInvoices)}</td>
-            <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-size: 0.78rem; color: #16a34a; vertical-align: middle;">${format_num_only(periodPayments)}</td>
-            <td style="padding: 6px 8px; text-align: right; font-family: monospace; font-size: 0.9rem; font-weight: 900; color: #1e1b4b; vertical-align: middle;">${format_num_only(clBal)}</td>
-        </tr>
-    `;
-
     $w.find('#debtors-statement-body').html(rowsHtml);
+
+    // Update Foot
+    $w.find('#debtors-statement-foot').show();
+    $w.find('#stmt-foot-date').text(data.end_date ? frappe.datetime.str_to_user(data.end_date) : '--');
+    $w.find('#stmt-foot-vehicle-label').text(veh ? veh : 'All Fleet');
+    $w.find('#stmt-foot-litres').text(`${totalLitres.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L`);
+    $w.find('#stmt-foot-invoices').text(format_num_only(periodInvoices));
+    $w.find('#stmt-foot-payments').text(format_num_only(periodPayments));
+    $w.find('#stmt-foot-closing').text(format_num_only(clBal));
 };
 
 /* --- 3. AGING ANALYSIS LOGIC --- */
@@ -9814,15 +9926,18 @@ window.save_debtors_statement_pdf = function() {
     let start_date = data.start_date || '';
     let end_date = data.end_date || '';
     let station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || '';
+    let veh = window.DEBTORS_STATE.selected_vehicle || '';
     
     frappe.show_alert({ message: "Generating PDF Statement...", indicator: "blue" });
     
-    let url = `/api/method/fuel_management.fuel_management.api.download_debtors_statement_pdf?customer=${encodeURIComponent(cust_id)}&start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}&station=${encodeURIComponent(station)}`;
+    let vehParam = veh ? `&vehicle=${encodeURIComponent(veh)}` : '';
+    let url = `/api/method/fuel_management.fuel_management.api.download_debtors_statement_pdf?customer=${encodeURIComponent(cust_id)}&start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}&station=${encodeURIComponent(station)}${vehParam}`;
     
     let link = document.createElement('a');
     link.href = url;
     link.target = '_blank';
-    link.download = `Statement_${(data.customer.name || cust_id).replace(/\s+/g, '_')}_${start_date}_${end_date}.pdf`;
+    let vehSlug = veh ? `_${veh.replace(/\s+/g, '_')}` : '';
+    link.download = `Statement_${(data.customer.name || cust_id).replace(/\s+/g, '_')}${vehSlug}_${start_date}_${end_date}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -9836,7 +9951,13 @@ window.print_debtors_statement = function() {
     }
 
     let cust = data.customer || {};
-    let txns = data.transactions || [];
+    let allTxns = data.transactions || [];
+    let veh = (window.DEBTORS_STATE.selected_vehicle || '').trim().toUpperCase();
+    let txns = veh ? allTxns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh) : allTxns;
+
+    let totalLitres = txns.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+    let periodInvoices = veh ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
+    let periodPayments = veh ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
     let stationName = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || "RUBIS ENERGY - KILIBET SERVICE STATION";
 
     let rowsHtml = '';
@@ -9846,7 +9967,9 @@ window.print_debtors_statement = function() {
             <td>${frappe.datetime.str_to_user(data.start_date)}</td>
             <td>OPENING B/F</td>
             <td>--</td>
+            <td>--</td>
             <td>Balance brought forward from prior periods</td>
+            <td style="text-align: right;">--</td>
             <td style="text-align: right;">--</td>
             <td style="text-align: right;">--</td>
             <td style="text-align: right; font-family: monospace;">${format_num_only(data.opening_balance)}</td>
@@ -9857,9 +9980,12 @@ window.print_debtors_statement = function() {
         let deb = Number(t.debit || 0);
         let crd = Number(t.credit || 0);
         let bal = Number(t.running_balance != null ? t.running_balance : (t.balance != null ? t.balance : 0));
+        let qty = Number(t.quantity || 0);
         
         let refStr = t.entry_number ? `#${t.entry_number}` : (t.trans_no || t.reference_no || '--');
         if (t.purchase_order) refStr += ` (PO: ${t.purchase_order})`;
+
+        let vehStr = t.vehicle_registration || '--';
 
         let csa_name = t.csa || '';
         if (window.USERS_LIST && t.csa) {
@@ -9868,19 +9994,23 @@ window.print_debtors_statement = function() {
         }
 
         let descStr = t.description || '--';
-        if (t.vehicle_registration && t.item) {
-            let qtyRate = t.quantity > 0 ? ` (${t.quantity}L @ KES ${Number(t.rate).toFixed(2)})` : '';
-            descStr = `[${t.vehicle_registration}] ${t.item}${qtyRate}`;
+        if (t.item) {
+            let ratePart = Number(t.rate) > 0 ? ` @ KES ${Number(t.rate).toFixed(2)}` : '';
+            descStr = `${t.item}${ratePart}`;
         } else if (t.mode_of_payment) {
             descStr = `${t.mode_of_payment}${csa_name ? ' - Recv: ' + csa_name : ''}${t.memo ? ' - ' + t.memo : ''}`;
         }
+
+        let qtyStr = qty > 0 ? `${qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L` : '--';
 
         rowsHtml += `
             <tr>
                 <td>${frappe.datetime.str_to_user(t.date)}</td>
                 <td>${escape_debtor_html(t.voucher_type || t.ref_type || 'TXN')}</td>
                 <td><b>${escape_debtor_html(refStr)}</b></td>
+                <td style="font-family: monospace; font-weight: bold;">${escape_debtor_html(vehStr)}</td>
                 <td>${escape_debtor_html(descStr)}</td>
+                <td style="text-align: right; color: #0284c7; font-family: monospace; font-weight: bold;">${qtyStr}</td>
                 <td style="text-align: right; color: #dc2626; font-family: monospace;">${deb > 0 ? format_num_only(deb) : '--'}</td>
                 <td style="text-align: right; color: #166534; font-family: monospace;">${crd > 0 ? format_num_only(crd) : '--'}</td>
                 <td style="text-align: right; font-weight: bold; font-family: monospace;">${format_num_only(bal)}</td>
@@ -9894,12 +10024,16 @@ window.print_debtors_statement = function() {
             <td>${frappe.datetime.str_to_user(data.end_date)}</td>
             <td>CLOSING C/F</td>
             <td>--</td>
-            <td>AMOUNT DUE (CARRIED FORWARD)</td>
-            <td style="text-align: right; font-family: monospace; color: #dc2626;">${format_num_only(data.period_invoices)}</td>
-            <td style="text-align: right; font-family: monospace; color: #166534;">${format_num_only(data.period_payments)}</td>
-            <td style="text-align: right; font-size: 13px; font-family: monospace; color: #1e1b4b;">${format_num_only(data.closing_balance)}</td>
+            <td style="font-family: monospace; font-weight: bold;">${veh ? escape_debtor_html(veh) : 'All Fleet'}</td>
+            <td>TOTALS (VOLUME / INVOICED / PAID / DUE)</td>
+            <td style="text-align: right; font-family: monospace; color: #0284c7; font-weight: bold;">${totalLitres.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L</td>
+            <td style="text-align: right; font-family: monospace; color: #dc2626;">${format_num_only(periodInvoices)}</td>
+            <td style="text-align: right; font-family: monospace; color: #166534;">${format_num_only(periodPayments)}</td>
+            <td style="text-align: right; font-size: 12px; font-family: monospace; color: #1e1b4b;">${format_num_only(data.closing_balance)}</td>
         </tr>
     `;
+
+    let vehSubHeader = veh ? `<div style="font-size: 11px; color: #0284c7; margin-top: 3px;"><b>Filtered Vehicle:</b> ${escape_debtor_html(veh)}</div>` : '';
 
     let html = `
         <!DOCTYPE html>
@@ -9907,17 +10041,17 @@ window.print_debtors_statement = function() {
         <head>
             <title>Statement of Account - ${escape_debtor_html(cust.name)}</title>
             <style>
-                body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 25px; line-height: 1.4; }
-                .header-table { width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; }
-                .brand-title { font-size: 20px; font-weight: 800; color: #1e3a8a; }
-                .doc-title { font-size: 16px; font-weight: bold; text-align: right; color: #0f172a; text-transform: uppercase; }
-                .info-grid { width: 100%; margin-bottom: 15px; }
-                .info-box { border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; background: #f8fafc; }
-                table.ledger { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10.5px; }
-                table.ledger th, table.ledger td { border: 1px solid #cbd5e1; padding: 6px 8px; }
-                table.ledger th { background: #f1f5f9; text-transform: uppercase; font-size: 9.5px; }
-                .banking-box { margin-top: 20px; border: 1px solid #cbd5e1; padding: 10px; border-radius: 6px; background: #fafafa; font-size: 10px; }
-                @media print { @page { size: A4 portrait; margin: 12mm; } }
+                body { font-family: Arial, sans-serif; font-size: 10.5px; color: #111; margin: 20px; line-height: 1.35; }
+                .header-table { width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 12px; }
+                .brand-title { font-size: 18px; font-weight: 800; color: #1e3a8a; }
+                .doc-title { font-size: 15px; font-weight: bold; text-align: right; color: #0f172a; text-transform: uppercase; }
+                .info-grid { width: 100%; margin-bottom: 12px; }
+                .info-box { border: 1px solid #cbd5e1; padding: 8px; border-radius: 6px; background: #f8fafc; }
+                table.ledger { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+                table.ledger th, table.ledger td { border: 1px solid #cbd5e1; padding: 5px 6px; }
+                table.ledger th { background: #f1f5f9; text-transform: uppercase; font-size: 9px; }
+                .banking-box { margin-top: 15px; border: 1px solid #cbd5e1; padding: 8px; border-radius: 6px; background: #fafafa; font-size: 9.5px; }
+                @media print { @page { size: A4 portrait; margin: 10mm; } }
             </style>
         </head>
         <body>
@@ -9925,7 +10059,7 @@ window.print_debtors_statement = function() {
                 <tr>
                     <td style="vertical-align: top;">
                         <div class="brand-title">${stationName}</div>
-                        <div style="font-size: 10px; color: #555; margin-top: 3px;">
+                        <div style="font-size: 9.5px; color: #555; margin-top: 3px;">
                             Accounts Receivable Division<br>
                             Eldoret, Kenya<br>
                             Email: accounts@kilibetcore.co.ke
@@ -9933,11 +10067,12 @@ window.print_debtors_statement = function() {
                     </td>
                     <td style="vertical-align: top; text-align: right;">
                         <div class="doc-title">Statement of Account</div>
-                        <div style="font-size: 11px; color: #333; margin-top: 3px;">
+                        <div style="font-size: 10px; color: #333; margin-top: 2px;">
                             <b>Period:</b> ${frappe.datetime.str_to_user(data.start_date)} &mdash; ${frappe.datetime.str_to_user(data.end_date)}<br>
                             <b>Date Printed:</b> ${new Date().toLocaleDateString()}
                         </div>
-                        <div style="margin-top: 6px; font-size: 13px; font-weight: bold; color: #1e3a8a;">
+                        ${vehSubHeader}
+                        <div style="margin-top: 4px; font-size: 12px; font-weight: bold; color: #1e3a8a;">
                             Closing Due: ${format_kes(data.closing_balance)}
                         </div>
                     </td>
@@ -9946,26 +10081,27 @@ window.print_debtors_statement = function() {
 
             <table class="info-grid">
                 <tr>
-                    <td style="width: 55%; vertical-align: top; padding-right: 10px;">
+                    <td style="width: 52%; vertical-align: top; padding-right: 8px;">
                         <div class="info-box">
-                            <div style="font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase;">BILL TO CUSTOMER:</div>
-                            <div style="font-size: 14px; font-weight: bold; color: #0f172a; margin: 3px 0;">${escape_debtor_html(cust.name)}</div>
-                            <div style="font-size: 10px; color: #475569;">
+                            <div style="font-size: 8.5px; font-weight: bold; color: #64748b; text-transform: uppercase;">BILL TO CUSTOMER:</div>
+                            <div style="font-size: 13px; font-weight: bold; color: #0f172a; margin: 2px 0;">${escape_debtor_html(cust.name)}</div>
+                            <div style="font-size: 9.5px; color: #475569;">
                                 <b>Account / Fleet ID:</b> ${escape_debtor_html(cust.fleet_id || cust.id || 'N/A')}<br>
                                 ${cust.address && cust.address !== 'N/A' ? `<b>Address:</b> ${escape_debtor_html(cust.address)}<br>` : ''}
                                 ${cust.phone && cust.phone !== 'N/A' ? `<b>Phone:</b> ${escape_debtor_html(cust.phone)}` : ''}
                             </div>
                         </div>
                     </td>
-                    <td style="width: 45%; vertical-align: top;">
+                    <td style="width: 48%; vertical-align: top;">
                         <div class="info-box">
-                            <div style="font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase;">ACCOUNT SUMMARY:</div>
-                            <table style="width: 100%; font-size: 10px; margin-top: 3px;">
+                            <div style="font-size: 8.5px; font-weight: bold; color: #64748b; text-transform: uppercase;">ACCOUNT SUMMARY:</div>
+                            <table style="width: 100%; font-size: 9.5px; margin-top: 2px;">
                                 <tr><td><b>Credit Limit:</b></td><td style="text-align: right; font-family: monospace;">${format_kes(cust.credit_limit)}</td></tr>
                                 <tr><td><b>Opening Balance (B/F):</b></td><td style="text-align: right; font-family: monospace;">${format_kes(data.opening_balance)}</td></tr>
-                                <tr><td><b>Total Invoices (Period):</b></td><td style="text-align: right; font-family: monospace; color:#dc2626;">+ ${format_kes(data.period_invoices)}</td></tr>
-                                <tr><td><b>Total Payments (Period):</b></td><td style="text-align: right; font-family: monospace; color:#166534;">- ${format_kes(data.period_payments)}</td></tr>
-                                <tr style="border-top: 1px solid #cbd5e1; font-weight: bold;"><td><b>Total Amount Due:</b></td><td style="text-align: right; font-family: monospace; color:#1e3a8a; font-size: 11px;">${format_kes(data.closing_balance)}</td></tr>
+                                <tr><td><b>Total Fuel Litres:</b></td><td style="text-align: right; font-family: monospace; color:#0284c7; font-weight: bold;">${totalLitres.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L</td></tr>
+                                <tr><td><b>Total Invoices (Period):</b></td><td style="text-align: right; font-family: monospace; color:#dc2626;">+ ${format_kes(periodInvoices)}</td></tr>
+                                <tr><td><b>Total Payments (Period):</b></td><td style="text-align: right; font-family: monospace; color:#166534;">- ${format_kes(periodPayments)}</td></tr>
+                                <tr style="border-top: 1px solid #cbd5e1; font-weight: bold;"><td><b>Total Amount Due:</b></td><td style="text-align: right; font-family: monospace; color:#1e3a8a; font-size: 10.5px;">${format_kes(data.closing_balance)}</td></tr>
                             </table>
                         </div>
                     </td>
@@ -9975,13 +10111,15 @@ window.print_debtors_statement = function() {
             <table class="ledger">
                 <thead>
                     <tr>
-                        <th style="width: 75px;">Date</th>
-                        <th style="width: 95px;">Type</th>
-                        <th style="width: 100px;">Reference #</th>
+                        <th style="width: 65px;">Date</th>
+                        <th style="width: 75px;">Type</th>
+                        <th style="width: 80px;">Reference #</th>
+                        <th style="width: 85px;">Vehicle Plate</th>
                         <th>Description / Details</th>
-                        <th style="text-align: right; width: 85px;">Debit (+)</th>
-                        <th style="text-align: right; width: 85px;">Credit (-)</th>
-                        <th style="text-align: right; width: 95px;">Balance</th>
+                        <th style="text-align: right; width: 65px; color: #0284c7;">Litres (L)</th>
+                        <th style="text-align: right; width: 75px; color: #dc2626;">Debit (+)</th>
+                        <th style="text-align: right; width: 75px; color: #166534;">Credit (-)</th>
+                        <th style="text-align: right; width: 85px;">Balance</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -9995,7 +10133,7 @@ window.print_debtors_statement = function() {
                 <b>Bank:</b> Equity Bank Kenya &nbsp;|&nbsp; <b>Account Name:</b> Kilibet Core Ltd &nbsp;|&nbsp; <b>Payment Terms:</b> 30 Days from invoice date.
             </div>
 
-            <div style="margin-top: 25px; display: flex; justify-content: space-between; font-size: 10px;">
+            <div style="margin-top: 20px; display: flex; justify-content: space-between; font-size: 9.5px;">
                 <div><b>Prepared By:</b> __________________________</div>
                 <div><b>Accounts Manager:</b> __________________________</div>
                 <div><b>Received By (Debtor):</b> __________________________</div>
@@ -10157,12 +10295,21 @@ window.export_statement_csv = function() {
     }
 
     let cust = data.customer || {};
-    let txns = data.transactions || [];
+    let allTxns = data.transactions || [];
+    let veh = (window.DEBTORS_STATE.selected_vehicle || '').trim().toUpperCase();
+    let txns = veh ? allTxns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh) : allTxns;
+
+    let totalLitres = txns.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
+    let periodInvoices = veh ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
+    let periodPayments = veh ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
 
     let csv = `Statement of Account: ${cust.name || ''} (${cust.fleet_id || cust.id || ''})\n`;
-    csv += `Period: ${data.start_date} to ${data.end_date}\n\n`;
-    csv += "Date,Voucher Type,Reference No,Description,Debit,Credit,Running Balance\n";
-    csv += `${data.start_date},Opening Balance,--,Balance brought forward,0,0,${data.opening_balance}\n`;
+    csv += `Period: ${data.start_date} to ${data.end_date}\n`;
+    if (veh) csv += `Vehicle Filter: ${veh}\n`;
+    csv += `Total Fuel Volume: ${totalLitres.toFixed(2)} L\n\n`;
+
+    csv += "Date,Voucher Type,Reference No,Vehicle Plate,Description,Litres (L),Debit,Credit,Running Balance\n";
+    csv += `${data.start_date},Opening Balance,--,--,Balance brought forward,0.00,0.00,0.00,${data.opening_balance}\n`;
 
     txns.forEach(t => {
         let refStr = t.entry_number ? `#${t.entry_number}` : (t.trans_no || t.reference_no || '');
@@ -10174,26 +10321,29 @@ window.export_statement_csv = function() {
         }
 
         let descStr = t.description || '';
-        if (t.vehicle_registration && t.item) {
-            let qtyRate = t.quantity > 0 ? ` (${t.quantity}L @ KES ${Number(t.rate).toFixed(2)})` : '';
-            descStr = `[${t.vehicle_registration}] ${t.item}${qtyRate}`;
+        if (t.item) {
+            let ratePart = Number(t.rate) > 0 ? ` @ KES ${Number(t.rate).toFixed(2)}` : '';
+            descStr = `${t.item}${ratePart}`;
         } else if (t.mode_of_payment) {
             descStr = `${t.mode_of_payment}${csa_name ? ' - Recv: ' + csa_name : ''}${t.memo ? ' - ' + t.memo : ''}`;
         }
 
         let desc = `"${descStr.replace(/"/g, '""')}"`;
         let ref = `"${refStr.replace(/"/g, '""')}"`;
+        let vehPlate = `"${(t.vehicle_registration || '').replace(/"/g, '""')}"`;
+        let qty = Number(t.quantity || 0).toFixed(2);
         let bal = t.running_balance != null ? t.running_balance : (t.balance || 0);
-        csv += `${t.date},"${t.voucher_type || t.ref_type || 'TXN'}",${ref},${desc},${t.debit || 0},${t.credit || 0},${bal}\n`;
+        csv += `${t.date},"${t.voucher_type || t.ref_type || 'TXN'}",${ref},${vehPlate},${desc},${qty},${t.debit || 0},${t.credit || 0},${bal}\n`;
     });
 
-    csv += `${data.end_date},Closing Balance,--,Total amount due,${data.period_invoices},${data.period_payments},${data.closing_balance}\n`;
+    csv += `${data.end_date},Closing Balance,--,${veh || 'All Fleet'},Total amount due / Volume,${totalLitres.toFixed(2)},${periodInvoices},${periodPayments},${data.closing_balance}\n`;
 
     let blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     let link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     let custSlug = (cust.name || 'Debtor').replace(/[^a-zA-Z0-9]/g, '_');
-    link.download = `Statement_${custSlug}_${data.start_date}_${data.end_date}.csv`;
+    let vehSlug = veh ? `_${veh.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
+    link.download = `Statement_${custSlug}${vehSlug}_${data.start_date}_${data.end_date}.csv`;
     link.click();
 };
 

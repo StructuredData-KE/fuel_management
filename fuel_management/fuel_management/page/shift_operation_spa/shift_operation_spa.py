@@ -149,11 +149,14 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             si.quantity,
             si.rate,
             si.entry_number,
+            si.csa,
+            IFNULL(e.employee_name, si.csa) as csa_name,
             si.amount as debit,
             0.0 as credit,
             si.creation
         FROM `tabShift Invoice` si
         JOIN `tabShift` s ON si.parent = s.name
+        LEFT JOIN `tabEmployee` e ON (si.csa = e.name OR si.csa = e.user_id)
         WHERE si.customer = %s AND s.docstatus < 2
         ORDER BY s.shift_date ASC, si.creation ASC
     """, cust_id, as_dict=True)
@@ -161,19 +164,21 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
     # 3. Customer Payments
     payments = frappe.db.sql("""
         SELECT 
-            date,
-            name as reference,
+            p.date,
+            p.name as reference,
             'Customer Payment' as ref_type,
-            mode_of_payment,
-            trans_no,
-            csa,
-            memo,
+            p.mode_of_payment,
+            p.trans_no,
+            p.csa,
+            IFNULL(e.employee_name, p.csa) as csa_name,
+            p.memo,
             0.0 as debit,
-            amount as credit,
-            creation
-        FROM `tabCustomer Payment`
-        WHERE customer = %s AND docstatus < 2
-        ORDER BY date ASC, creation ASC
+            p.amount as credit,
+            p.creation
+        FROM `tabCustomer Payment` p
+        LEFT JOIN `tabEmployee` e ON (p.csa = e.name OR p.csa = e.user_id)
+        WHERE p.customer = %s AND p.docstatus < 2
+        ORDER BY p.date ASC, p.creation ASC
     """, cust_id, as_dict=True)
     
     all_raw = []
@@ -202,8 +207,9 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             desc_parts.append(f"{si.item} ({qty_str} {rate_str})".strip())
         if si.purchase_order:
             desc_parts.append(f"PO: {si.purchase_order}")
-        if si.entry_number:
-            desc_parts.append(f"Entry #{si.entry_number}")
+        csa_display = si.csa_name or si.csa or ''
+        if csa_display:
+            desc_parts.append(f"CSA: {csa_display}")
             
         desc = " | ".join(desc_parts) if desc_parts else "Fuel Sale Invoice"
         
@@ -218,6 +224,8 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             'item': si.item or '',
             'quantity': flt(si.quantity),
             'rate': flt(si.rate),
+            'csa': csa_display,
+            'csa_id': si.csa or '',
             'purchase_order': si.purchase_order or '',
             'description': desc,
             'type': 'Invoice',
@@ -234,8 +242,9 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             desc_parts.append(f"Ref: {p.trans_no}")
         if p.memo:
             desc_parts.append(f"Memo: {p.memo}")
-        if p.csa:
-            desc_parts.append(f"Received By: {p.csa}")
+        csa_display = p.csa_name or p.csa or ''
+        if csa_display:
+            desc_parts.append(f"Received By: {csa_display}")
             
         desc = " | ".join(desc_parts) if desc_parts else "Payment Received"
         
@@ -247,7 +256,8 @@ def get_customer_transactions(customer_id=None, customer=None, **kwargs):
             'reference_no': p.trans_no or p.reference,
             'trans_no': p.trans_no or '',
             'mode_of_payment': p.mode_of_payment or '',
-            'csa': p.csa or '',
+            'csa': csa_display,
+            'csa_id': p.csa or '',
             'memo': p.memo or '',
             'description': desc,
             'type': 'Payment',
@@ -293,6 +303,7 @@ def get_detailed_customer_statement(customer_id=None, customer=None, start_date=
     running = opening_bal
     tot_debits = 0.0
     tot_credits = 0.0
+    tot_litres = 0.0
     
     for pt in period_txns:
         running += (pt['debit'] - pt['credit'])
@@ -300,6 +311,8 @@ def get_detailed_customer_statement(customer_id=None, customer=None, start_date=
         pt['balance'] = round(running, 2)
         tot_debits += pt['debit']
         tot_credits += pt['credit']
+        if pt.get('quantity') and flt(pt.get('quantity')) > 0:
+            tot_litres += flt(pt['quantity'])
         
     return {
         'customer': {
@@ -319,6 +332,7 @@ def get_detailed_customer_statement(customer_id=None, customer=None, start_date=
         'period_credits': round(tot_credits, 2),
         'period_payments': round(tot_credits, 2),
         'period_net': round(tot_debits - tot_credits, 2),
+        'total_litres': round(tot_litres, 2),
         'closing_balance': round(running, 2),
         'transactions': period_txns
     }
