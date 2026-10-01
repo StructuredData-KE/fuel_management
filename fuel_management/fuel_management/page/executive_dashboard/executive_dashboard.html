@@ -437,6 +437,27 @@
     box-shadow: 0 4px 6px rgba(245, 158, 11, 0.2);
 }
 
+.exec-preset-btn {
+    border: none;
+    background: transparent;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.exec-preset-btn:hover {
+    color: #1e293b;
+    background: #f1f5f9;
+}
+.exec-preset-btn.active {
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
 /* Frappe overrides */
 .page-body, .page-content, .layout-main-section, .container {
     padding: 0 !important;
@@ -522,16 +543,26 @@
         <div class="exec-header">
             <div>
                 <h1 class="exec-header-title">System Overview</h1>
-                <p class="exec-header-subtitle">Real-time telemetry & financial metrics.</p>
+                <p class="exec-header-subtitle">Real-time telemetry, 7-day trends & financial metrics.</p>
             </div>
             
-            <div style="display:flex; gap:16px; align-items:center;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:12px; font-weight:600; color:#64748b; text-transform:uppercase;">Date Range:</span>
-                    <input type="date" id="exec-global-from" style="font-size:12px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; outline:none;">
-                    <span style="font-size:12px; color:#64748b;">to</span>
-                    <input type="date" id="exec-global-to" style="font-size:12px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; outline:none;">
-                    <button class="exec-btn-primary" id="exec-global-apply" style="padding:6px 12px; font-size:12px; margin-top:0;">Apply</button>
+            <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+                <!-- Preset pills -->
+                <div class="exec-date-presets" style="display:flex; background:#e2e8f0; padding:3px; border-radius:8px; gap:2px;">
+                    <button class="exec-preset-btn active" data-range="7">Last 7 Days</button>
+                    <button class="exec-preset-btn" data-range="14">Last 14 Days</button>
+                    <button class="exec-preset-btn" data-range="30">Last 30 Days</button>
+                    <button class="exec-preset-btn" data-range="month">This Month</button>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:6px; background:#fff; padding:4px 8px; border:1px solid #cbd5e1; border-radius:8px;">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#64748b;">calendar_today</span>
+                    <input type="date" id="exec-global-from" style="font-size:12px; border:none; outline:none; background:transparent; font-family:inherit; color:#1e293b;">
+                    <span style="font-size:12px; color:#94a3b8; font-weight:600;">to</span>
+                    <input type="date" id="exec-global-to" style="font-size:12px; border:none; outline:none; background:transparent; font-family:inherit; color:#1e293b;">
+                    <button class="exec-btn-primary" id="exec-global-apply" style="padding:5px 12px; font-size:12px; margin-top:0; border-radius:6px; display:flex; align-items:center; gap:4px;">
+                        <span class="material-symbols-outlined" style="font-size:14px;">refresh</span> Apply
+                    </button>
                 </div>
 
                 <button class="exec-btn">
@@ -542,38 +573,92 @@
         </div>
 
         <!-- Charts Grid -->
-        <div class="exec-charts-grid" style="grid-template-columns: 1fr;">
+        <div class="exec-charts-grid" style="grid-template-columns: 1fr; gap:24px;">
             <!-- Fuel Sales Section -->
             <div class="exec-chart-area">
-                <div class="exec-chart-header">
-                    <h2 class="exec-chart-title">Fuel Sales Volume (Liters)</h2>
+                <div class="exec-chart-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <h2 class="exec-chart-title" style="display:flex; align-items:center; gap:8px;">
+                            <span class="material-symbols-outlined" style="color:#f59e0b;">show_chart</span>
+                            Fuel Sales Volume Comparison (Litres)
+                        </h2>
+                        <span style="font-size:12px; color:#64748b;" id="exec-fuel-chart-subtitle">Daily comparison between fuel products</span>
+                    </div>
+                    <div style="display:flex; gap:16px; align-items:center;">
+                        <div style="text-align:right;">
+                            <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Total Fuel Volume</div>
+                            <div style="font-size:18px; font-weight:700; color:#0f172a; font-family: monospace;" id="exec-fuel-total-liters">-- L</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Total Fuel Revenue</div>
+                            <div style="font-size:18px; font-weight:700; color:#059669; font-family: monospace;" id="exec-fuel-total-revenue">KES --</div>
+                        </div>
+                    </div>
                 </div>
-                <div style="width:100%; height:300px; margin-top:16px;" id="exec-fuel-chart"></div>
-                <div id="exec-fuel-table" style="margin-top:24px;"></div>
+                
+                <div style="width:100%; min-height:300px; margin-top:16px;" id="exec-fuel-chart"></div>
+                <div id="exec-fuel-table" style="margin-top:20px;"></div>
             </div>
 
-            <!-- Dry Stock Sales Section (Grid) -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
-                <!-- Lubes -->
+            <!-- Dry Stock Sales Section (3-Card Grid) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+                <!-- Lubes in Litres -->
                 <div class="exec-chart-area">
-                    <h2 class="exec-chart-title">Lubes</h2>
-                    <div id="exec-analytics-lubes" style="margin-top:16px;">
+                    <div class="exec-chart-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h2 class="exec-chart-title" style="display:flex; align-items:center; gap:6px; font-size:16px;">
+                                <span class="material-symbols-outlined" style="color:#0284c7;">water_drop</span>
+                                Lubes Sales (in Litres)
+                            </h2>
+                            <span style="font-size:11px; color:#64748b;">Volume tracked by container capacity</span>
+                        </div>
+                        <div style="text-align:right;">
+                            <span class="exec-badge" style="background:#e0f2fe; color:#0369a1; font-family: monospace; font-size:12px;" id="exec-lubes-total-badge">0.00 L</span>
+                        </div>
+                    </div>
+                    <div id="exec-lubes-chart" style="width:100%; min-height:180px; margin-top:10px;"></div>
+                    <div id="exec-analytics-lubes" style="margin-top:12px; max-height:260px; overflow-y:auto;">
                         <div style="color:#64748b; font-size:12px;">Loading...</div>
                     </div>
                 </div>
 
                 <!-- Gas & Cylinders -->
                 <div class="exec-chart-area">
-                    <h2 class="exec-chart-title">Gas & Cylinders</h2>
-                    <div id="exec-analytics-gas" style="margin-top:16px;">
+                    <div class="exec-chart-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h2 class="exec-chart-title" style="display:flex; align-items:center; gap:6px; font-size:16px;">
+                                <span class="material-symbols-outlined" style="color:#f97316;">propane_tank</span>
+                                Gas & Cylinders
+                            </h2>
+                            <span style="font-size:11px; color:#64748b;">Kgs Refilled vs Cylinders Sold</span>
+                        </div>
+                        <div style="text-align:right; display:flex; gap:4px;">
+                            <span class="exec-badge" style="background:#ffedd5; color:#c2410c; font-family: monospace; font-size:11px;" id="exec-gas-total-badge">0 Kg</span>
+                            <span class="exec-badge" style="background:#f1f5f9; color:#475569; font-family: monospace; font-size:11px;" id="exec-cyl-total-badge">0 Cyl</span>
+                        </div>
+                    </div>
+                    <div id="exec-gas-chart" style="width:100%; min-height:180px; margin-top:10px;"></div>
+                    <div id="exec-analytics-gas" style="margin-top:12px; max-height:260px; overflow-y:auto;">
                         <div style="color:#64748b; font-size:12px;">Loading...</div>
                     </div>
                 </div>
 
                 <!-- Accessories & Filters -->
                 <div class="exec-chart-area">
-                    <h2 class="exec-chart-title">Accessories & Filters</h2>
-                    <div id="exec-analytics-accessories" style="margin-top:16px;">
+                    <div class="exec-chart-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <h2 class="exec-chart-title" style="display:flex; align-items:center; gap:6px; font-size:16px;">
+                                <span class="material-symbols-outlined" style="color:#8b5cf6;">tune</span>
+                                Filters & Accessories
+                            </h2>
+                            <span style="font-size:11px; color:#64748b;">Fast moving maintenance stock</span>
+                        </div>
+                        <div style="text-align:right;">
+                            <span class="exec-badge" style="background:#ede9fe; color:#6d28d9; font-family: monospace; font-size:12px;" id="exec-filters-total-badge">0 Units</span>
+                        </div>
+                    </div>
+                    <div id="exec-filters-chart" style="width:100%; min-height:180px; margin-top:10px;"></div>
+                    <div id="exec-analytics-accessories" style="margin-top:12px; max-height:260px; overflow-y:auto;">
                         <div style="color:#64748b; font-size:12px;">Loading...</div>
                     </div>
                 </div>

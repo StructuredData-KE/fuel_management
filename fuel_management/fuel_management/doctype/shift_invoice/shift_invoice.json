@@ -8,6 +8,10 @@
  "field_order": [
   "customer",
   "amount",
+  "gross_amount",
+  "discount_amount",
+  "discount_csa",
+  "discount_reason",
   "sales_invoice_reference"
  ],
  "fields": [
@@ -23,8 +27,33 @@
    "fieldname": "amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Amount",
+   "label": "Net Invoiced Amount",
    "reqd": 1
+  },
+  {
+   "fieldname": "gross_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Gross Amount"
+  },
+  {
+   "default": "0",
+   "fieldname": "discount_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Discount Amount"
+  },
+  {
+   "fieldname": "discount_csa",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Discount CSA (Beneficiary)",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "discount_reason",
+   "fieldtype": "Data",
+   "label": "Discount Reason"
   },
   {
    "fieldname": "entry_number",

@@ -7,7 +7,8 @@
  "engine": "InnoDB",
  "field_order": [
   "card_name",
-  "status"
+  "status",
+  "default_account"
  ],
  "fields": [
   {
@@ -25,6 +26,13 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "Active\nInactive"
+  },
+  {
+   "fieldname": "default_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Default Account (Bank / Clearing)",
+   "options": "Account"
   }
  ],
  "links": [],

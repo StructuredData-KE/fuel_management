@@ -9,12 +9,13 @@
  "field_order": [
   "shift",
   "date",
+  "csa",
   "petty_cash_account",
   "category",
+  "expense_account",
   "payee",
   "amount",
-  "memo",
-  "csa"
+  "memo"
  ],
  "fields": [
   {
@@ -30,6 +31,14 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "csa",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Paid By (CSA)",
+   "options": "Employee",
    "reqd": 1
   },
   {
@@ -49,6 +58,14 @@
    "reqd": 1
   },
   {
+   "fieldname": "expense_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Expense Account (COA)",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
    "fieldname": "payee",
    "fieldtype": "Data",
    "label": "Payee",
@@ -64,11 +81,6 @@
    "fieldname": "memo",
    "fieldtype": "Small Text",
    "label": "Description"
-  },
-  {
-   "fieldname": "csa",
-   "fieldtype": "Data",
-   "label": "Entered By (CSA)"
   }
  ],
  "grid_page_length": 50,

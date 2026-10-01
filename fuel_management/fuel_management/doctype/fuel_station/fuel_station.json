@@ -95,6 +95,20 @@
    "fieldtype": "Link",
    "label": "Top Up Holding Account",
    "options": "Account"
+  },
+  {
+   "fieldname": "vat_control_account",
+   "fieldtype": "Link",
+   "label": "VAT Control Account",
+   "options": "Account",
+   "default": "VAT Control - KIL"
+  },
+  {
+   "default": "Discounts Allowed - KIL",
+   "fieldname": "discount_account",
+   "fieldtype": "Link",
+   "label": "Discount Account (Discounts Allowed)",
+   "options": "Account"
   }
  ],
  "modified": "2024-01-01 12:00:00.000000",

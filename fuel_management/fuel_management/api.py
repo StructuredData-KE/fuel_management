@@ -16,7 +16,9 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         "invoices": 0.0,
         "cards": 0.0,
         "expenses": 0.0,
-        "rtt_deductions": 0.0
+        "rtt_deductions": 0.0,
+        "discounts": 0.0,
+        "discounts_breakdown": []
     }
     
     # 1. Meter Sales
@@ -118,20 +120,24 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     
     if is_lubes_assigned:
         inventory_data = frappe.db.sql("""
-            SELECT item, quantity, amount 
-            FROM `tabShift Inventory Sale` 
-            WHERE parent=%s AND parenttype='Shift' 
+            SELECT s.name, IFNULL(it.item_name, s.item) as item, s.quantity, s.amount 
+            FROM `tabShift Inventory Sale` s
+            LEFT JOIN `tabItem` it ON s.item = it.name
+            WHERE s.parent=%s AND s.parenttype='Shift' 
             AND (
-                (sold_by=%s)
-                OR (is_invoice_sale=0)
+                (s.sold_by=%s)
+                OR (s.is_invoice_sale=0)
             )
+            ORDER BY it.item_name ASC, s.item ASC
         """, (shift_id, csa_id), as_dict=True)
     else:
         inventory_data = frappe.db.sql("""
-            SELECT item, quantity, amount 
-            FROM `tabShift Inventory Sale` 
-            WHERE parent=%s AND parenttype='Shift' 
-            AND sold_by=%s AND (is_invoice_sale IS NULL OR is_invoice_sale=1)
+            SELECT s.name, IFNULL(it.item_name, s.item) as item, s.quantity, s.amount 
+            FROM `tabShift Inventory Sale` s
+            LEFT JOIN `tabItem` it ON s.item = it.name
+            WHERE s.parent=%s AND s.parenttype='Shift' 
+            AND s.sold_by=%s AND (s.is_invoice_sale IS NULL OR s.is_invoice_sale=1)
+            ORDER BY it.item_name ASC, s.item ASC
         """, (shift_id, csa_id), as_dict=True)
 
     data["inventory_breakdown"] = inventory_data or []
@@ -142,6 +148,7 @@ def get_csa_reconciliation_data(shift_id, csa_id):
         SELECT vehicle_type, total_amount as amount 
         FROM `tabShift Greasing Sale` 
         WHERE parent=%s AND parenttype='Shift' AND csa=%s
+        ORDER BY vehicle_type ASC
     """, (shift_id, csa_id), as_dict=True)
     data["greasing_breakdown"] = greasing_data or []
     data["greasing_sales"] = sum([d.amount for d in greasing_data]) if greasing_data else 0.0
@@ -149,24 +156,28 @@ def get_csa_reconciliation_data(shift_id, csa_id):
     # 4. Customer Payments (All customer payments count as liabilities for the CSA)
     from frappe.utils import flt
     cp_data = frappe.db.sql("""
-        SELECT name, customer, amount, mode_of_payment 
-        FROM `tabCustomer Payment` 
-        WHERE shift=%s AND csa=%s AND docstatus=1 
-        AND mode_of_payment IN ('Cash', 'M-Pesa', 'Mpesa')
+        SELECT p.name, IFNULL(c.customer_name, p.customer) as customer, p.amount, p.mode_of_payment 
+        FROM `tabCustomer Payment` p
+        LEFT JOIN `tabCustomer` c ON p.customer = c.name
+        WHERE p.shift=%s AND p.csa=%s AND p.docstatus=1 
+        AND p.mode_of_payment IN ('Cash', 'M-Pesa', 'Mpesa')
+        ORDER BY customer ASC
     """, (shift_id, csa_id), as_dict=True)
     
     if not cp_data:
         cp_data = frappe.db.sql("""
-            SELECT name, customer, amount, mode_of_payment 
-            FROM `tabCustomer Payment` 
-            WHERE shift=%s AND csa=%s
-            AND mode_of_payment IN ('Cash', 'M-Pesa', 'Mpesa')
+            SELECT p.name, IFNULL(c.customer_name, p.customer) as customer, p.amount, p.mode_of_payment 
+            FROM `tabCustomer Payment` p
+            LEFT JOIN `tabCustomer` c ON p.customer = c.name
+            WHERE p.shift=%s AND p.csa=%s
+            AND p.mode_of_payment IN ('Cash', 'M-Pesa', 'Mpesa')
+            ORDER BY customer ASC
         """, (shift_id, csa_id), as_dict=True)
         
     data["customer_payments_breakdown"] = cp_data or []
     data["customer_payments"] = sum([flt(d.amount) for d in cp_data]) if cp_data else 0.0
         
-    # 5. M-Pesa
+    # 5. M-Pesa (Strictly from Till readings)
     mpesa_data = frappe.db.sql("""
         SELECT 
             sp.mpesa_till, 
@@ -183,53 +194,72 @@ def get_csa_reconciliation_data(shift_id, csa_id):
                 WHERE sc.parent=%s AND sc.parenttype='Shift' AND sc.csa=%s
             )
         )
+        ORDER BY sp.mpesa_till ASC
     """, (shift_id, shift_id, csa_id), as_dict=True)
     data["mpesa_breakdown"] = mpesa_data or []
     data["mpesa"] = sum([flt(d.amount) for d in mpesa_data]) if mpesa_data else 0.0
-    
-    # Add non-cash M-Pesa customer payments to M-Pesa deductions
-    for cp in (cp_data or []):
-        if cp.mode_of_payment == "M-Pesa":
-            data["mpesa"] += flt(cp.amount)
-    
+
     # 6. Invoices
     invoices_data = frappe.db.sql("""
-        SELECT item, quantity, entry_number, amount 
-        FROM `tabShift Invoice` 
-        WHERE parent=%s AND parenttype='Shift' AND csa=%s
+        SELECT i.name, IFNULL(c.customer_name, i.customer) as customer, IFNULL(it.item_name, i.item) as item, i.quantity, i.entry_number, i.amount 
+        FROM `tabShift Invoice` i
+        LEFT JOIN `tabCustomer` c ON i.customer = c.name
+        LEFT JOIN `tabItem` it ON i.item = it.name
+        WHERE i.parent=%s AND i.parenttype='Shift' AND i.csa=%s
+        ORDER BY customer ASC, item ASC
     """, (shift_id, csa_id), as_dict=True)
     data["invoices_breakdown"] = invoices_data or []
     data["invoices"] = sum([flt(d.amount) for d in invoices_data]) if invoices_data else 0.0
     
-    # 7. Cards
+    # 7. Cards (Strictly from Station Cards)
     cards_data = frappe.db.sql("""
-        SELECT card as card_type, receipt_no, amount 
+        SELECT name, card as card_type, receipt_no, memo, amount 
         FROM `tabStation Cards` 
         WHERE shift=%s AND csa=%s
+        ORDER BY card ASC
     """, (shift_id, csa_id), as_dict=True)
     data["cards_breakdown"] = cards_data or []
     data["cards"] = sum([flt(d.amount) for d in cards_data]) if cards_data else 0.0
     
-    # Add other non-cash customer payments (Bank Transfer, Card, etc.) to Card/Bank deductions
-    for cp in (cp_data or []):
-        if cp.mode_of_payment and cp.mode_of_payment not in ["Cash", "M-Pesa"]:
-            data["cards"] += flt(cp.amount)
+    # 8. Expenses (Petty Cash & Station Expenses attributed to this CSA)
+    petty_cash_data = frappe.db.sql("""
+        SELECT name, category, expense_account, memo, amount, payee, csa
+        FROM `tabStation Petty Cash Entry` 
+        WHERE shift=%s AND (csa=%s OR csa IN (SELECT user_id FROM `tabEmployee` WHERE name=%s))
+        ORDER BY creation DESC
+    """, (shift_id, csa_id, csa_id), as_dict=True)
     
-    # 8. Expenses
-    expenses_data = frappe.db.sql("""
-        SELECT name, category, amount 
+    # Also check legacy tabStation Expense
+    legacy_expenses = frappe.db.sql("""
+        SELECT name, category, '' as expense_account, memo, amount, '' as payee, csa
         FROM `tabStation Expense` 
-        WHERE shift=%s AND csa=%s
-    """, (shift_id, csa_id), as_dict=True)
+        WHERE shift=%s AND (csa=%s OR csa IN (SELECT user_id FROM `tabEmployee` WHERE name=%s))
+        ORDER BY creation DESC
+    """, (shift_id, csa_id, csa_id), as_dict=True)
     
-    data["expenses_breakdown"] = expenses_data or []
-    data["expenses"] = sum([flt(d.amount) for d in expenses_data]) if expenses_data else 0.0
+    all_expenses = (petty_cash_data or []) + (legacy_expenses or [])
+    data["expenses_breakdown"] = all_expenses
+    data["expenses"] = sum([flt(d.amount) for d in all_expenses]) if all_expenses else 0.0
+    
+    # 9. Discounts Relief (Discounts credited to this CSA's cash liability)
+    discounts_data = frappe.db.sql("""
+        SELECT i.name, IFNULL(c.customer_name, i.customer) as customer, IFNULL(it.item_name, i.item) as item, i.quantity, i.entry_number, i.discount_amount as amount, i.discount_reason, i.discount_csa, i.csa
+        FROM `tabShift Invoice` i
+        LEFT JOIN `tabCustomer` c ON i.customer = c.name
+        LEFT JOIN `tabItem` it ON i.item = it.name
+        WHERE i.parent=%s AND i.parenttype='Shift' 
+        AND (i.discount_csa=%s OR (i.discount_csa IS NULL AND i.csa=%s) OR (i.discount_csa='' AND i.csa=%s))
+        AND i.discount_amount > 0
+        ORDER BY customer ASC, item ASC
+    """, (shift_id, csa_id, csa_id, csa_id), as_dict=True)
+    data["discounts_breakdown"] = discounts_data or []
+    data["discounts"] = sum([flt(d.amount) for d in discounts_data]) if discounts_data else 0.0
     
     return data
 
 @frappe.whitelist()
 def get_shift_report_data(shift_id):
-    recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": shift_id}, fields=["csa", "meter_sales", "inventory_sales", "greasing_sales", "invoices", "cards", "mpesa", "expenses", "expected_cash", "actual_cash", "variance"])
+    recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": shift_id}, fields=["csa", "meter_sales", "inventory_sales", "greasing_sales", "invoices", "cards", "mpesa", "expenses", "rtt_deductions", "discounts", "expected_cash", "actual_cash", "variance"])
     
     # Customer Payments
     payments_breakdown = frappe.db.sql("""
@@ -266,17 +296,115 @@ def get_shift_report_data(shift_id):
         GROUP BY i.customer
     """, (shift_id,), as_dict=True)
     
+    # Petty Cash Breakdown for Shift Report
+    petty_cash_breakdown = frappe.db.sql("""
+        SELECT pc.category, pc.expense_account, pc.payee, pc.memo, pc.amount, IFNULL(e.employee_name, pc.csa) as csa_name
+        FROM `tabStation Petty Cash Entry` pc
+        LEFT JOIN `tabEmployee` e ON pc.csa = e.name
+        WHERE pc.shift=%s
+        ORDER BY pc.creation ASC
+    """, (shift_id,), as_dict=True)
+    petty_cash_total = sum([flt(p.amount) for p in petty_cash_breakdown]) if petty_cash_breakdown else 0.0
+    
     return {
         "reconciliations": recons,
         "customer_payments_total": customer_payments_total,
         "customer_payments_breakdown": payments_breakdown,
         "topups_total": topups_total,
         "cards_breakdown": cards_breakdown,
-        "invoices_breakdown": invoices_breakdown
+        "invoices_breakdown": invoices_breakdown,
+        "petty_cash_breakdown": petty_cash_breakdown,
+        "petty_cash_total": petty_cash_total
     }
+
+def ensure_grease_service_items():
+    """
+    Ensures that Item Group 'Greasing Services' exists,
+    and every 'Grease Vehicle Type' has a matching Item and Item Price in 'Standard Selling'.
+    Also ensures custom columns exist on tabShift Greasing Sale.
+    """
+    try:
+        from frappe.utils import flt
+        
+        # 1. Ensure Item Group exists
+        if not frappe.db.exists("Item Group", "Greasing Services"):
+            try:
+                ig = frappe.get_doc({
+                    "doctype": "Item Group",
+                    "item_group_name": "Greasing Services",
+                    "parent_item_group": "All Item Groups",
+                    "is_group": 0
+                })
+                ig.insert(ignore_permissions=True)
+            except Exception:
+                frappe.db.rollback()
+
+        # 2. Check and add columns on tabShift Greasing Sale if missing
+        try:
+            columns = [c[0] for c in frappe.db.sql("DESCRIBE `tabShift Greasing Sale`")]
+            if "is_invoice_sale" not in columns:
+                frappe.db.sql("ALTER TABLE `tabShift Greasing Sale` ADD COLUMN `is_invoice_sale` INT(1) DEFAULT 0")
+            if "reference_invoice" not in columns:
+                frappe.db.sql("ALTER TABLE `tabShift Greasing Sale` ADD COLUMN `reference_invoice` VARCHAR(140) DEFAULT NULL")
+            frappe.db.commit()
+        except Exception:
+            pass
+
+        # 3. Fetch all Grease Vehicle Types and ensure Item & Item Price
+        if frappe.db.exists("DocType", "Grease Vehicle Type"):
+            types = frappe.get_all("Grease Vehicle Type", fields=["name", "vehicle_type", "greasing_price"])
+            for t in types:
+                vt_name = (t.vehicle_type or t.name).strip()
+                code = f"Greasing - {vt_name}"
+                name = code
+                rate = flt(t.greasing_price)
+                
+                # Check / Create Item
+                if not frappe.db.exists("Item", code):
+                    try:
+                        item_doc = frappe.get_doc({
+                            "doctype": "Item",
+                            "item_code": code,
+                            "item_name": name,
+                            "item_group": "Greasing Services",
+                            "stock_uom": "Nos",
+                            "is_stock_item": 0,
+                            "is_sales_item": 1,
+                            "standard_rate": rate
+                        })
+                        item_doc.insert(ignore_permissions=True)
+                    except Exception:
+                        frappe.db.rollback()
+                else:
+                    curr_group = frappe.db.get_value("Item", code, "item_group")
+                    if curr_group != "Greasing Services":
+                        frappe.db.set_value("Item", code, "item_group", "Greasing Services", update_modified=False)
+
+                # Check / Create / Update Item Price
+                ip_name = frappe.db.get_value("Item Price", {"item_code": code, "price_list": "Standard Selling"}, "name")
+                if not ip_name:
+                    try:
+                        ip_doc = frappe.get_doc({
+                            "doctype": "Item Price",
+                            "item_code": code,
+                            "price_list": "Standard Selling",
+                            "price_list_rate": rate,
+                            "currency": "KES"
+                        })
+                        ip_doc.insert(ignore_permissions=True)
+                    except Exception:
+                        frappe.db.rollback()
+                else:
+                    curr_rate = flt(frappe.db.get_value("Item Price", ip_name, "price_list_rate"))
+                    if curr_rate != rate and rate > 0:
+                        frappe.db.set_value("Item Price", ip_name, "price_list_rate", rate, update_modified=False)
+            frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "ensure_grease_service_items error")
 
 @frappe.whitelist()
 def get_active_item_prices():
+    ensure_grease_service_items()
     sql = """
         SELECT ip.item_code, ip.item_name, ip.price_list_rate, i.item_group
         FROM `tabItem Price` ip
@@ -728,6 +856,8 @@ def create_spa_stock_transfer(station_id, item_code=None, qty=None, direction="S
     se.stock_entry_type = "Material Transfer"
     se.company = company
     
+    stock_adj_account = frappe.get_cached_value("Company", company, "stock_adjustment_account")
+
     for row in parsed_items:
         r_item = row.get("item")
         r_qty = float(row.get("qty") or 0)
@@ -742,18 +872,24 @@ def create_spa_stock_transfer(station_id, item_code=None, qty=None, direction="S
             from_w = station.default_forecourt_warehouse
             to_w = station.default_store_warehouse
             
-        se.append("items", {
+        row_dict = {
             "item_code": r_item,
             "qty": r_qty,
             "s_warehouse": from_w,
             "t_warehouse": to_w
-        })
+        }
+        if stock_adj_account:
+            row_dict["expense_account"] = stock_adj_account
+
+        se.append("items", row_dict)
         
     if not se.items:
         frappe.throw("No valid items with quantity > 0")
         
     se.insert()
     se.submit()
+    
+    frappe.clear_messages()
     
     return {"status": "success", "message": f"Successfully created Stock Transfer: {se.name}", "name": se.name}
 
@@ -1059,7 +1195,7 @@ def create_borrowed_product(payload):
     return doc.name
 
 @frappe.whitelist()
-def get_borrowed_products(station, status="All", from_date=None, to_date=None, counterparty=None):
+def get_borrowed_products(station, status="All", from_date=None, to_date=None, counterparty=None, limit=None):
     import frappe
     filters = {"station": station}
     if status != "All":
@@ -1075,10 +1211,13 @@ def get_borrowed_products(station, status="All", from_date=None, to_date=None, c
     if counterparty:
         filters["counterparty"] = ["like", f"%{counterparty}%"]
         
+    limit_num = int(limit) if limit else (1000 if (from_date or to_date or counterparty or status != "All") else 20)
+        
     records = frappe.get_all("Borrowed Product", 
         filters=filters,
         fields=["name", "date", "counterparty", "type", "status", "memo"],
-        order_by="creation desc"
+        order_by="date desc, creation desc",
+        limit_page_length=limit_num
     )
     
     if records:
@@ -1150,153 +1289,615 @@ def reload_spa_page():
     return "Reloaded successfully"
 
 @frappe.whitelist()
-def get_customer_transactions(customer_id):
-    if not customer_id:
-        return []
-        
-    # Get invoices (debits)
+def get_debtors_data():
+    from frappe.utils import flt
+    
+    # 1. Invoices from Shift Invoices
     invoices = frappe.db.sql("""
         SELECT 
-            si.name as id, 
-            s.shift_date as date, 
-            'Shift Invoice' as ref_type, 
-            CONCAT(IFNULL(si.entry_number, ''), ' - ', IFNULL(si.vehicle_registration, ''), ' - ', IFNULL(si.item, '')) as description, 
-            si.amount as debit, 
-            0.0 as credit 
+            si.customer, 
+            SUM(si.amount) as total_invoiced
+        FROM 
+            `tabShift Invoice` si
+        JOIN 
+            `tabShift` s ON si.parent = s.name
+        WHERE 
+            s.docstatus < 2
+        GROUP BY 
+            si.customer
+    """, as_dict=True)
+    
+    # 2. Payments from Customer Payment
+    payments = frappe.db.sql("""
+        SELECT 
+            customer, 
+            SUM(amount) as total_paid, 
+            MAX(date) as last_payment_date
+        FROM 
+            `tabCustomer Payment`
+        WHERE 
+            docstatus < 2
+        GROUP BY 
+            customer
+    """, as_dict=True)
+    
+    # 3. GL balances (excluding Shift Closure JEs)
+    gl_balances = frappe.db.sql("""
+        SELECT 
+            party as customer,
+            SUM(debit) as total_debit,
+            SUM(credit) as total_credit
+        FROM `tabGL Entry`
+        WHERE party_type = 'Customer' AND is_cancelled = 0
+        AND (remarks IS NULL OR (remarks NOT LIKE '%%Shift Closure Accounting%%' AND remarks NOT LIKE '%%Customer Payment Reference%%'))
+        GROUP BY party
+    """, as_dict=True)
+    
+    all_customers = frappe.db.get_all('Customer', 
+        fields=['name', 'customer_name', 'credit_limit', 'email_id', 'mobile_no', 'primary_address', 'disabled'],
+        order_by='customer_name asc'
+    )
+    
+    customer_map = {c.name: c for c in all_customers}
+    payment_map = {p.customer: p for p in payments}
+    invoice_map = {i.customer: i for i in invoices}
+    gl_map = {g.customer: flt(g.total_debit) - flt(g.total_credit) for g in gl_balances}
+    
+    all_cust_keys = set(customer_map.keys())
+    for inv in invoices:
+        if inv.customer:
+            all_cust_keys.add(inv.customer)
+    for pay in payments:
+        if pay.customer:
+            all_cust_keys.add(pay.customer)
+    for gl in gl_balances:
+        if gl.customer:
+            all_cust_keys.add(gl.customer)
+            
+    results = []
+    
+    for cust in all_cust_keys:
+        c_info = customer_map.get(cust, {})
+        c_name = c_info.get('customer_name') if isinstance(c_info, dict) else cust
+        credit_limit = flt(c_info.get('credit_limit') or 0.0) if isinstance(c_info, dict) else 0.0
+        
+        inv = invoice_map.get(cust, {})
+        pay = payment_map.get(cust, {})
+        opening_balance = gl_map.get(cust, 0.0)
+        
+        total_invoiced = flt(inv.get('total_invoiced', 0))
+        total_paid = flt(pay.get('total_paid', 0))
+        last_payment_date = pay.get('last_payment_date', None)
+        
+        balance = opening_balance + total_invoiced - total_paid
+        
+        status = 'Safe'
+        if credit_limit > 0:
+            if balance >= credit_limit:
+                status = 'Overdue'
+            elif balance >= 0.8 * credit_limit:
+                status = 'Near Limit'
+        elif balance > 0:
+            status = 'Near Limit'
+        elif balance < 0:
+            status = 'In Advance'
+        else:
+            status = 'Settled'
+            
+        results.append({
+            'id': cust,
+            'name': c_name or cust,
+            'fleet_id': cust, 
+            'last_payment_date': str(last_payment_date) if last_payment_date else '',
+            'total_invoiced': round(total_invoiced, 2),
+            'total_paid': round(total_paid, 2),
+            'opening_balance': round(opening_balance, 2),
+            'balance': round(balance, 2),
+            'status': status,
+            'credit_limit': credit_limit
+        })
+        
+    results.sort(key=lambda x: (x['balance'] == 0, -x['balance'], x['name']))
+    return results
+
+@frappe.whitelist()
+def get_customer_transactions(customer_id=None, customer=None, **kwargs):
+    cust_id = customer_id or customer or kwargs.get('customer') or kwargs.get('customer_id')
+    if not cust_id:
+        return []
+    from frappe.utils import flt
+    
+    # 1. GL entries
+    gl_entries = frappe.db.sql("""
+        SELECT 
+            posting_date as date,
+            voucher_type as ref_type,
+            voucher_no as reference,
+            remarks as description,
+            debit,
+            credit
+        FROM `tabGL Entry`
+        WHERE party_type = 'Customer' 
+        AND party = %s 
+        AND is_cancelled = 0
+        AND (remarks IS NULL OR (remarks NOT LIKE '%%Shift Closure Accounting%%' AND remarks NOT LIKE '%%Customer Payment Reference%%'))
+        ORDER BY posting_date ASC, creation ASC
+    """, cust_id, as_dict=True)
+    
+    # 2. Shift Invoices
+    shift_invoices = frappe.db.sql("""
+        SELECT 
+            s.shift_date as date,
+            si.name as reference,
+            'Shift Invoice' as ref_type,
+            si.vehicle_registration,
+            si.purchase_order,
+            si.item,
+            si.quantity,
+            si.rate,
+            si.entry_number,
+            si.amount as debit,
+            0.0 as credit,
+            si.creation
         FROM `tabShift Invoice` si
         JOIN `tabShift` s ON si.parent = s.name
         WHERE si.customer = %s AND s.docstatus < 2
-    """, (customer_id,), as_dict=True)
-
-    # Get payments (credits)
+        ORDER BY s.shift_date ASC, si.creation ASC
+    """, cust_id, as_dict=True)
+    
+    # 3. Customer Payments
     payments = frappe.db.sql("""
         SELECT 
-            name as id, 
-            date as date, 
-            'Customer Payment' as ref_type, 
-            CONCAT('Payment via ', IFNULL(mode_of_payment, ''), ' - Ref: ', IFNULL(trans_no, '')) as description, 
-            0.0 as debit, 
-            amount as credit 
-        FROM `tabCustomer Payment` 
+            date,
+            name as reference,
+            'Customer Payment' as ref_type,
+            mode_of_payment,
+            trans_no,
+            csa,
+            memo,
+            0.0 as debit,
+            amount as credit,
+            creation
+        FROM `tabCustomer Payment`
         WHERE customer = %s AND docstatus < 2
-    """, (customer_id,), as_dict=True)
-
-    transactions = invoices + payments
-    # Sort by date
-    transactions.sort(key=lambda x: x['date'] if x['date'] else '')
-    return transactions
-
-
-
-from frappe.utils import today, add_days
-
-@frappe.whitelist()
-def get_tank_levels(station=None):
-    if not station:
-        station = frappe.db.get_value("Fuel Station", None, "name")
-        
-    tanks = frappe.get_all("Fuel Tank", filters={"station": station}, fields=["name as tank_name", "fuel_product", "capacity", "current_volume", "reorder_threshold", "variance_tolerance"])
+        ORDER BY date ASC, creation ASC
+    """, cust_id, as_dict=True)
     
-    res = []
+    all_raw = []
     
-    tank_names = [t.tank_name for t in tanks]
-    latest_dips = {}
-    if tank_names:
-        dips = frappe.db.sql("""
-            SELECT * FROM (
-                SELECT child.fuel_tank, child.closing_dip as reading, parent.shift_date as posting_date, parent.end_time as posting_time, child.variance,
-                ROW_NUMBER() OVER(PARTITION BY child.fuel_tank ORDER BY parent.shift_date DESC, parent.end_time DESC) as rn
-                FROM `tabDip Stick Reading` child
-                JOIN `tabShift` parent ON child.parent = parent.name
-                WHERE child.fuel_tank IN %s AND parent.docstatus IN (0, 1) AND child.closing_dip > 0
-                AND parent.shift_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-            ) as ranked
-            WHERE rn = 1
-        """, (tuple(tank_names),), as_dict=1)
-        for d in dips:
-            latest_dips[d.fuel_tank] = d
-
-    for t in tanks:
-        latest_dip = latest_dips.get(t.tank_name)
-        
-        dip_val = latest_dip.reading if latest_dip and latest_dip.reading is not None else t.current_volume
-        variance = latest_dip.variance if latest_dip and latest_dip.variance is not None else 0.0
-        ts = f"{latest_dip.posting_date} {latest_dip.posting_time}" if latest_dip else ""
-        
-        pct = (dip_val / t.capacity) * 100 if t.capacity else 0
-        
-        status = "Normal"
-        if t.variance_tolerance and abs(variance) > t.variance_tolerance:
-            status = "Variance flagged"
-        elif t.reorder_threshold and pct <= t.reorder_threshold:
-            status = "Low"
-            
-        res.append({
-            "name": t.tank_name,
-            "product": t.fuel_product,
-            "capacity": t.capacity,
-            "latest_dip": dip_val,
-            "percent_full": round(pct, 1),
-            "reorder_threshold": t.reorder_threshold,
-            "variance": variance,
-            "status": status,
-            "timestamp": ts
+    for g in gl_entries:
+        all_raw.append({
+            'date': str(g.date),
+            'ref_type': g.ref_type or 'GL Entry',
+            'voucher_type': g.ref_type or 'GL Entry',
+            'reference': g.reference or '',
+            'reference_no': g.reference or '',
+            'description': g.description or g.reference or 'General Ledger Entry',
+            'type': 'GL Entry',
+            'debit': flt(g.debit),
+            'credit': flt(g.credit),
+            'sort_key': f"{g.date}_1"
         })
-    return res
-
-
-@frappe.whitelist()
-def get_available_shifts(station=None, filter_date=None):
-    if not station:
-        station = frappe.db.get_value("Fuel Station", None, "name")
-    filters = {"station": station}
-    if filter_date:
-        filters["shift_date"] = filter_date
-    shifts = frappe.get_all("Shift", filters=filters, fields=["name", "shift_date", "creation", "status"], order_by="creation desc", limit=50)
-    return shifts
-
-@frappe.whitelist()
-def get_homepage_kpis(station=None, shift_id=None, from_date=None, to_date=None):
-
-    from frappe.utils import today, get_first_day
-    
-    if not station:
-        station = frappe.db.get_value("Fuel Station", None, "name")
         
+    for si in shift_invoices:
+        desc_parts = []
+        if si.vehicle_registration:
+            desc_parts.append(f"Veh: {si.vehicle_registration}")
+        if si.item:
+            qty_str = f"{flt(si.quantity):,.1f}L" if si.quantity else ""
+            rate_str = f"@ KES {flt(si.rate):,.2f}" if si.rate else ""
+            desc_parts.append(f"{si.item} ({qty_str} {rate_str})".strip())
+        if si.purchase_order:
+            desc_parts.append(f"PO: {si.purchase_order}")
+        if si.entry_number:
+            desc_parts.append(f"Entry #{si.entry_number}")
+            
+        desc = " | ".join(desc_parts) if desc_parts else "Fuel Sale Invoice"
+        
+        all_raw.append({
+            'date': str(si.date),
+            'ref_type': 'Shift Invoice',
+            'voucher_type': 'Shift Invoice',
+            'reference': si.reference,
+            'reference_no': si.entry_number or si.reference,
+            'entry_number': si.entry_number or '',
+            'vehicle_registration': si.vehicle_registration or '',
+            'item': si.item or '',
+            'quantity': flt(si.quantity),
+            'rate': flt(si.rate),
+            'purchase_order': si.purchase_order or '',
+            'description': desc,
+            'type': 'Invoice',
+            'debit': flt(si.debit),
+            'credit': 0.0,
+            'sort_key': f"{si.date}_2"
+        })
+        
+    for p in payments:
+        desc_parts = []
+        if p.mode_of_payment:
+            desc_parts.append(f"Mode: {p.mode_of_payment}")
+        if p.trans_no:
+            desc_parts.append(f"Ref: {p.trans_no}")
+        if p.memo:
+            desc_parts.append(f"Memo: {p.memo}")
+        if p.csa:
+            desc_parts.append(f"Received By: {p.csa}")
+            
+        desc = " | ".join(desc_parts) if desc_parts else "Payment Received"
+        
+        all_raw.append({
+            'date': str(p.date),
+            'ref_type': 'Customer Payment',
+            'voucher_type': 'Customer Payment',
+            'reference': p.reference,
+            'reference_no': p.trans_no or p.reference,
+            'trans_no': p.trans_no or '',
+            'mode_of_payment': p.mode_of_payment or '',
+            'csa': p.csa or '',
+            'memo': p.memo or '',
+            'description': desc,
+            'type': 'Payment',
+            'debit': 0.0,
+            'credit': flt(p.credit),
+            'sort_key': f"{p.date}_3"
+        })
+        
+    all_raw.sort(key=lambda x: x['sort_key'])
+    return all_raw
+
+@frappe.whitelist()
+def get_detailed_customer_statement(customer_id=None, customer=None, start_date=None, end_date=None, **kwargs):
+    from frappe.utils import getdate, nowdate, flt
+    cust_id = customer_id or customer or kwargs.get('customer') or kwargs.get('customer_id')
+    if not cust_id:
+        return {}
+        
+    if not start_date or not end_date:
+        today = getdate(nowdate())
+        if not start_date:
+            start_date = f"{today.year}-{today.month:02d}-01"
+        if not end_date:
+            end_date = str(today)
+            
+    # 1. Customer metadata
+    cust_doc = frappe.db.get_value("Customer", cust_id, 
+        ["name", "customer_name", "tax_id", "email_id", "mobile_no", "primary_address", "credit_limit"], 
+        as_dict=True
+    ) or {"name": cust_id, "customer_name": cust_id}
+    
+    all_raw = get_customer_transactions(cust_id)
+    
+    opening_bal = 0.0
+    period_txns = []
+    
+    for t in all_raw:
+        t_date = t['date']
+        if t_date < start_date:
+            opening_bal += (t['debit'] - t['credit'])
+        elif start_date <= t_date <= end_date:
+            period_txns.append(t)
+            
+    running = opening_bal
+    tot_debits = 0.0
+    tot_credits = 0.0
+    
+    for pt in period_txns:
+        running += (pt['debit'] - pt['credit'])
+        pt['running_balance'] = round(running, 2)
+        pt['balance'] = round(running, 2)
+        tot_debits += pt['debit']
+        tot_credits += pt['credit']
+        
+    return {
+        'customer': {
+            'id': cust_id,
+            'name': cust_doc.get('customer_name') or cust_id,
+            'tax_id': cust_doc.get('tax_id') or '',
+            'email': cust_doc.get('email_id') or '',
+            'phone': cust_doc.get('mobile_no') or '',
+            'address': cust_doc.get('primary_address') or '',
+            'credit_limit': flt(cust_doc.get('credit_limit') or 0.0)
+        },
+        'start_date': start_date,
+        'end_date': end_date,
+        'opening_balance': round(opening_bal, 2),
+        'period_debits': round(tot_debits, 2),
+        'period_invoices': round(tot_debits, 2),
+        'period_credits': round(tot_credits, 2),
+        'period_payments': round(tot_credits, 2),
+        'period_net': round(tot_debits - tot_credits, 2),
+        'closing_balance': round(running, 2),
+        'transactions': period_txns
+    }
+
+@frappe.whitelist()
+def get_debtors_aging_analysis(as_of_date=None, **kwargs):
+    from frappe.utils import getdate, nowdate, flt
+    date_val = as_of_date or kwargs.get('date') or kwargs.get('as_of_date')
+    if not date_val:
+        as_of_date = getdate(nowdate())
+    else:
+        as_of_date = getdate(date_val)
+        
+    debtors = get_debtors_data()
+    aging_results = []
+    
+    tot_current = 0.0
+    tot_30_60 = 0.0
+    tot_60_90 = 0.0
+    tot_90_120 = 0.0
+    tot_over_120 = 0.0
+    tot_balance = 0.0
+    
+    for d in debtors:
+        cust_id = d['id']
+        cust_name = d['name']
+        balance = flt(d['balance'])
+        credit_limit = flt(d.get('credit_limit', 0.0))
+        
+        txns = get_customer_transactions(cust_id)
+        
+        b_0_30 = 0.0
+        b_31_60 = 0.0
+        b_61_90 = 0.0
+        b_91_120 = 0.0
+        b_120_plus = 0.0
+        
+        if balance > 0:
+            debits = [t for t in txns if flt(t.get('debit', 0)) > 0]
+            debits.sort(key=lambda x: str(x.get('date', '')), reverse=True)
+            
+            rem_balance = balance
+            for deb in debits:
+                if rem_balance <= 0:
+                    break
+                deb_amt = flt(deb.get('debit', 0))
+                deb_date = getdate(deb.get('date') or nowdate())
+                days_old = (as_of_date - deb_date).days
+                
+                alloc_amt = min(deb_amt, rem_balance)
+                rem_balance -= alloc_amt
+                
+                if days_old <= 30:
+                    b_0_30 += alloc_amt
+                elif days_old <= 60:
+                    b_31_60 += alloc_amt
+                elif days_old <= 90:
+                    b_61_90 += alloc_amt
+                elif days_old <= 120:
+                    b_91_120 += alloc_amt
+                else:
+                    b_120_plus += alloc_amt
+                    
+            if rem_balance > 0:
+                b_120_plus += rem_balance
+        elif balance < 0:
+            b_0_30 = balance
+            
+        tot_current += b_0_30
+        tot_30_60 += b_31_60
+        tot_60_90 += b_61_90
+        tot_90_120 += b_91_120
+        tot_over_120 += b_120_plus
+        tot_balance += balance
+        
+        risk = "Current"
+        risk_color = "green"
+        if b_120_plus > 0 or b_91_120 > 0:
+            risk = "Critical (90+ Days)"
+            risk_color = "red"
+        elif b_61_90 > 0:
+            risk = "Overdue (61-90 Days)"
+            risk_color = "orange"
+        elif b_31_60 > 0:
+            risk = "Watchlist (31-60 Days)"
+            risk_color = "amber"
+        elif balance <= 0:
+            risk = "Settled"
+            risk_color = "emerald"
+            
+        aging_results.append({
+            'id': cust_id,
+            'name': cust_name,
+            'fleet_id': d.get('fleet_id', cust_id),
+            'credit_limit': credit_limit,
+            'last_payment_date': d.get('last_payment_date', ''),
+            'total_balance': round(balance, 2),
+            'current_0_30': round(b_0_30, 2),
+            'aging_31_60': round(b_31_60, 2),
+            'aging_61_90': round(b_61_90, 2),
+            'aging_91_120': round(b_91_120, 2),
+            'aging_120_plus': round(b_120_plus, 2),
+            'risk_status': risk,
+            'risk_color': risk_color
+        })
+        
+    aging_results.sort(key=lambda x: x['total_balance'], reverse=True)
+    
+    return {
+        'as_of_date': str(as_of_date),
+        'summary': {
+            'total_balance': round(tot_balance, 2),
+            'current_0_30': round(tot_current, 2),
+            'aging_31_60': round(tot_30_60, 2),
+            'aging_61_90': round(tot_60_90, 2),
+            'aging_91_120': round(tot_90_120, 2),
+            'aging_120_plus': round(tot_over_120, 2),
+            'total_debtors_count': len(debtors),
+            'overdue_debtors_count': len([r for r in aging_results if (r['aging_31_60'] + r['aging_61_90'] + r['aging_91_120'] + r['aging_120_plus']) > 0.01])
+        },
+        'rows': aging_results
+    }
+
+
+
+from frappe.utils import today, add_days, get_first_day, get_last_day, getdate, cint, flt
+import re
+import json
+
+def clear_homepage_cache(station=None):
+    try:
+        if station:
+            frappe.cache().delete_keys(f"fm_hp_data:{station}:*")
+        else:
+            frappe.cache().delete_keys("fm_hp_data:*")
+    except Exception:
+        pass
+
+@frappe.whitelist()
+def get_active_shift(station=None):
+    if not station:
+        station = frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS POA PLACE"
+    shifts = frappe.db.sql("""
+        SELECT name, station, head_csa, shift_template, shift_date, status, creation, report_sent
+        FROM `tabShift`
+        WHERE status = 'Open' AND station = %s AND docstatus != 2
+        ORDER BY creation DESC LIMIT 1
+    """, (station,), as_dict=True)
+    return shifts[0] if shifts else None
+
+@frappe.whitelist()
+def get_homepage_data(station=None, shift_id=None, from_date=None, to_date=None, force_refresh=0):
+    """
+    Consolidated, ultra-fast endpoint for the homepage.
+    Returns Monthly Volume Snapshot (Litres & KGs, not KSh),
+    Active / Selected Shift Volumes, Live Tank Levels, 7-Day Trend, and Recent Activity.
+    Cached via Redis for instant sub-millisecond retrieval.
+    """
+    if not station:
+        station = frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS POA PLACE"
+        
+    cache_key = f"fm_hp_data:{station}:{shift_id or ''}:{from_date or ''}:{to_date or ''}"
+    if not cint(force_refresh):
+        try:
+            cached = frappe.cache().get_value(cache_key)
+            if cached:
+                if isinstance(cached, str):
+                    return json.loads(cached)
+                elif isinstance(cached, dict):
+                    return cached
+        except Exception:
+            pass
+
     is_date_range = bool(from_date and to_date)
     
+    # 1. Context Shift / Period Resolution (Direct fast SQL)
     if is_date_range:
         context_date = f"{from_date} to {to_date}"
         context_shift = "Multiple Shifts"
         context_status = "Date Range"
         context_creation = None
+        target_date = from_date
     elif shift_id:
-        shifts = frappe.get_all("Shift", filters={"name": shift_id}, fields=["name", "shift_date", "creation", "status"], limit=1)
-        if shifts:
-            shift = shifts[0]
+        shift_row = frappe.db.sql("""
+            SELECT name, shift_date, creation, status
+            FROM `tabShift`
+            WHERE name = %s LIMIT 1
+        """, (shift_id,), as_dict=True)
+        if shift_row:
+            shift = shift_row[0]
             context_date = shift.shift_date
             context_shift = shift.name
             context_status = shift.status
             context_creation = shift.creation
+            target_date = shift.shift_date
         else:
             context_date = today()
             context_shift = None
             context_status = None
             context_creation = None
+            target_date = today()
     else:
-        shifts = frappe.get_all("Shift", filters={"station": station}, fields=["name", "shift_date", "creation", "status"], order_by="creation desc", limit=1)
-        if shifts:
-            shift = shifts[0]
+        shift_row = frappe.db.sql("""
+            SELECT name, shift_date, creation, status
+            FROM `tabShift`
+            WHERE station = %s AND docstatus != 2
+            ORDER BY creation DESC LIMIT 1
+        """, (station,), as_dict=True)
+        if shift_row:
+            shift = shift_row[0]
             context_date = shift.shift_date
             context_shift = shift.name
             context_status = shift.status
             context_creation = shift.creation
+            target_date = shift.shift_date
         else:
             context_date = today()
             context_shift = None
             context_status = None
             context_creation = None
+            target_date = today()
+
+    # 2. Monthly Volume Snapshot (Litres and KGs for the month)
+    target_dt = getdate(target_date)
+    start_of_month = get_first_day(target_date)
+    end_of_month = get_last_day(target_date)
+    month_label = target_dt.strftime("%B %Y")
+    
+    # Monthly Fuel Volumes (Petrol, Diesel, Total Litres)
+    month_fuel_rows = frappe.db.sql("""
+        SELECT tank.fuel_product, SUM(child.sales_quantity_electronic) as qty
+        FROM `tabPump Meter Reading` child
+        JOIN `tabPump Nozzle` nozzle ON child.pump_nozzle = nozzle.name
+        JOIN `tabFuel Tank` tank ON nozzle.fuel_tank = tank.name
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus != 2
+        GROUP BY tank.fuel_product
+    """, (station, start_of_month, end_of_month), as_dict=True)
+    
+    monthly_fuel_breakdown = {}
+    monthly_petrol = 0.0
+    monthly_diesel = 0.0
+    monthly_kerosene = 0.0
+    
+    for row in month_fuel_rows:
+        prod = row.fuel_product or "Unknown"
+        qty = float(row.qty or 0.0)
+        monthly_fuel_breakdown[prod] = qty
+        p_upper = prod.upper()
+        if "PETROL" in p_upper or "PMS" in p_upper or "SUPER" in p_upper:
+            monthly_petrol += qty
+        elif "DIESEL" in p_upper or "AGO" in p_upper:
+            monthly_diesel += qty
+        elif "KEROSENE" in p_upper or "IK" in p_upper:
+            monthly_kerosene += qty
+            
+    monthly_total_fuel = sum(monthly_fuel_breakdown.values())
+    
+    # Monthly Lubes and Gas Volumes (KGs and Litres)
+    month_inv_rows = frappe.db.sql("""
+        SELECT item.item_group, item.item_name, SUM(child.quantity) as qty
+        FROM `tabShift Inventory Sale` child
+        JOIN `tabItem` item ON child.item = item.name
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus != 2
+        GROUP BY item.item_name, item.item_group
+    """, (station, start_of_month, end_of_month), as_dict=True)
+    
+    monthly_lubes_qty = 0.0
+    monthly_gas_kgs = 0.0
+    monthly_gas_cylinders = 0
+    monthly_gas_breakdown = {}
+    
+    for sale in month_inv_rows:
+        grp = (sale.item_group or "").lower()
+        iname = sale.item_name or ""
+        qty = float(sale.qty or 0.0)
         
+        if "lube" in grp or "lubricant" in grp or "oil" in grp:
+            match_litres = re.search(r'(\d+(?:\.\d+)?)\s*L', iname, re.IGNORECASE)
+            litres_per_unit = float(match_litres.group(1)) if match_litres else 1.0
+            monthly_lubes_qty += (qty * litres_per_unit)
+        elif "gas" in grp or "lpg" in grp:
+            monthly_gas_cylinders += int(qty)
+            match = re.search(r'(\d+)KG', iname, re.IGNORECASE)
+            kg_per_cyl = int(match.group(1)) if match else 0
+            kg_total = qty * kg_per_cyl
+            monthly_gas_breakdown[iname] = monthly_gas_breakdown.get(iname, 0) + kg_total
+            monthly_gas_kgs += kg_total
+
+    # 3. Current Shift / Selected Period Volume Data
     fuel_breakdown = {}
     if is_date_range:
         fuel_data = frappe.db.sql("""
@@ -1305,12 +1906,12 @@ def get_homepage_kpis(station=None, shift_id=None, from_date=None, to_date=None)
             JOIN `tabPump Nozzle` nozzle ON child.pump_nozzle = nozzle.name
             JOIN `tabFuel Tank` tank ON nozzle.fuel_tank = tank.name
             JOIN `tabShift` parent ON child.parent = parent.name
-            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus IN (0, 1)
+            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus != 2
             GROUP BY tank.fuel_product
         """, (station, from_date, to_date), as_dict=True)
         for row in fuel_data:
             if row.fuel_product:
-                fuel_breakdown[row.fuel_product] = row.qty or 0
+                fuel_breakdown[row.fuel_product] = float(row.qty or 0.0)
     elif context_shift and context_shift != "Multiple Shifts":
         fuel_data = frappe.db.sql("""
             SELECT tank.fuel_product, SUM(child.sales_quantity_electronic) as qty
@@ -1322,30 +1923,29 @@ def get_homepage_kpis(station=None, shift_id=None, from_date=None, to_date=None)
         """, (context_shift,), as_dict=True)
         for row in fuel_data:
             if row.fuel_product:
-                fuel_breakdown[row.fuel_product] = row.qty or 0
+                fuel_breakdown[row.fuel_product] = float(row.qty or 0.0)
     
     litres_sold = sum(fuel_breakdown.values())
     
-    lubes_qty = 0
-    gas_qty = 0
+    shift_lubes_qty = 0.0
+    shift_gas_kgs = 0.0
+    shift_cylinders = 0
+    shift_gas_breakdown = {}
     top_selling_item = "None"
     top_selling_qty = 0
     
-    gas_breakdown = {}
-    cylinders_sold = 0
-    
-    inventory_sales = []
+    inv_sales = []
     if is_date_range:
-        inventory_sales = frappe.db.sql("""
+        inv_sales = frappe.db.sql("""
             SELECT item.item_group, item.item_name, SUM(child.quantity) as qty
             FROM `tabShift Inventory Sale` child
             JOIN `tabItem` item ON child.item = item.name
             JOIN `tabShift` parent ON child.parent = parent.name
-            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus IN (0, 1)
+            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus != 2
             GROUP BY item.item_name, item.item_group
         """, (station, from_date, to_date), as_dict=True)
     elif context_shift and context_shift != "Multiple Shifts":
-        inventory_sales = frappe.db.sql("""
+        inv_sales = frappe.db.sql("""
             SELECT item.item_group, item.item_name, SUM(child.quantity) as qty
             FROM `tabShift Inventory Sale` child
             JOIN `tabItem` item ON child.item = item.name
@@ -1353,158 +1953,542 @@ def get_homepage_kpis(station=None, shift_id=None, from_date=None, to_date=None)
             GROUP BY item.item_name, item.item_group
         """, (context_shift,), as_dict=True)
         
-    if inventory_sales:
-        import re
-        for sale in inventory_sales:
-            group = sale.item_group.lower() if sale.item_group else ""
-            qty = sale.qty or 0
+    if inv_sales:
+        for sale in inv_sales:
+            group = (sale.item_group or "").lower()
+            iname = sale.item_name or ""
+            qty = float(sale.qty or 0.0)
             if "lube" in group or "lubricant" in group or "oil" in group:
-                lubes_qty += qty
+                match_litres = re.search(r'(\d+(?:\.\d+)?)\s*L', iname, re.IGNORECASE)
+                litres_per_unit = float(match_litres.group(1)) if match_litres else 1.0
+                shift_lubes_qty += (qty * litres_per_unit)
             elif "gas" in group or "lpg" in group:
-                cylinders_sold += qty
-                # Extract KG from item name e.g. "6KG GAS"
-                match = re.search(r'(\d+)KG', sale.item_name, re.IGNORECASE)
+                shift_cylinders += int(qty)
+                match = re.search(r'(\d+)KG', iname, re.IGNORECASE)
                 kg_per_cyl = int(match.group(1)) if match else 0
-                gas_breakdown[sale.item_name] = qty * kg_per_cyl
-                gas_qty += (qty * kg_per_cyl)
+                kg_tot = qty * kg_per_cyl
+                shift_gas_breakdown[iname] = shift_gas_breakdown.get(iname, 0) + kg_tot
+                shift_gas_kgs += kg_tot
                 
             if qty > top_selling_qty:
                 top_selling_qty = qty
-                top_selling_item = sale.item_name
+                top_selling_item = iname
+
+    # 4. Tank Levels (Direct fast SQL)
+    tanks = frappe.db.sql("""
+        SELECT name as tank_name, fuel_product, capacity, current_volume, reorder_threshold, variance_tolerance
+        FROM `tabFuel Tank`
+        WHERE station = %s
+    """, (station,), as_dict=True)
     
-    cash_reconciled = 0
-    mpesa_posted = 0
-        
-    # Dip Variance Flags
-    if is_date_range:
-        flags = frappe.db.sql("""
-            SELECT count(*) as count
+    tank_names = [t.tank_name for t in tanks]
+    latest_dips = {}
+    if tank_names:
+        placeholders = ', '.join(['%s'] * len(tank_names))
+        dips = frappe.db.sql(f"""
+            SELECT child.fuel_tank, child.closing_dip as reading, parent.shift_date as posting_date, parent.end_time as posting_time, child.variance
             FROM `tabDip Stick Reading` child
             JOIN `tabShift` parent ON child.parent = parent.name
-            WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND child.variance != 0 AND parent.docstatus = 1
-        """, (station, from_date, to_date))[0][0]
-    elif context_shift and context_shift != "Multiple Shifts":
-        flags = frappe.db.sql("""
-            SELECT count(*) as count
-            FROM `tabDip Stick Reading` child
-            WHERE child.parent = %s AND child.variance != 0
-        """, (context_shift,))[0][0]
-    else:
-        tanks = get_tank_levels(station)
-        flags = len([t for t in tanks if t.get("status") == "Variance flagged"])
-        
-    # Monthly KPIs
-    if is_date_range:
-        target_date = from_date
-    elif context_shift and context_shift != "Multiple Shifts":
-        target_date = context_date
-    else:
-        target_date = today()
-        
-    start_of_month = get_first_day(target_date)
-    end_of_month = frappe.utils.get_last_day(target_date)
-    
-    month_meters = frappe.db.sql("""
-        SELECT SUM(child.sales_quantity_electronic) as qty
-        FROM `tabPump Meter Reading` child
-        JOIN `tabShift` parent ON child.parent = parent.name
-        WHERE parent.station = %s AND parent.shift_date >= %s AND parent.shift_date <= %s AND parent.docstatus = 1
-    """, (station, start_of_month, end_of_month), as_dict=True)
-    monthly_litres = month_meters[0].qty if month_meters and month_meters[0].qty else 0
-    
-    monthly_revenue = 0
-    
-    return {
-        "context_shift": context_shift,
-        "context_date": context_date,
-        "context_status": context_status,
-        "context_creation": context_creation,
-        "litres_sold": litres_sold,
-        "fuel_breakdown": fuel_breakdown,
-        "lubes_qty": lubes_qty,
-        "gas_qty": gas_qty,
-        "gas_breakdown": gas_breakdown,
-        "cylinders_sold": cylinders_sold,
-        "top_selling_item": top_selling_item,
-        "top_selling_qty": top_selling_qty,
-        "cash_reconciled": cash_reconciled,
-        "mpesa_posted": mpesa_posted,
-        "dip_flags": flags,
-        "monthly_litres": monthly_litres,
-        "monthly_revenue": monthly_revenue
-    }
+            WHERE child.fuel_tank IN ({placeholders}) AND parent.docstatus != 2 AND child.closing_dip > 0
+            ORDER BY parent.shift_date DESC, parent.creation DESC
+            LIMIT 50
+        """, tuple(tank_names), as_dict=True)
+        for d in dips:
+            if d.fuel_tank not in latest_dips:
+                latest_dips[d.fuel_tank] = d
 
-@frappe.whitelist()
-def get_homepage_trend(station=None):
-    # Last 7 days
-    start_date = add_days(today(), -6)
-    meters = frappe.db.sql("""
+    tank_list = []
+    dip_flags = 0
+    for t in tanks:
+        latest_dip = latest_dips.get(t.tank_name)
+        dip_val = float(latest_dip.reading if latest_dip and latest_dip.reading is not None else (t.current_volume or 0.0))
+        variance = float(latest_dip.variance if latest_dip and latest_dip.variance is not None else 0.0)
+        ts = f"{latest_dip.posting_date} {latest_dip.posting_time or ''}".strip() if latest_dip else ""
+        
+        cap = float(t.capacity or 0.0)
+        pct = (dip_val / cap * 100.0) if cap > 0 else 0.0
+        
+        status = "Normal"
+        if t.variance_tolerance and abs(variance) > t.variance_tolerance:
+            status = "Variance flagged"
+            dip_flags += 1
+        elif t.reorder_threshold and pct <= t.reorder_threshold:
+            status = "Low"
+            
+        tank_list.append({
+            "name": t.tank_name,
+            "product": t.fuel_product or t.tank_name,
+            "capacity": cap,
+            "latest_dip": dip_val,
+            "percent_full": round(pct, 1),
+            "reorder_threshold": t.reorder_threshold or 15,
+            "variance": variance,
+            "status": status,
+            "timestamp": ts
+        })
+
+    # 5. 7-Day Trend
+    start_trend_date = add_days(today(), -6)
+    meters_trend = frappe.db.sql("""
         SELECT parent.shift_date as posting_date, tank.fuel_product, SUM(child.sales_quantity_electronic) as qty
         FROM `tabPump Meter Reading` child
-        JOIN `tabShift` parent ON child.parent = parent.name
         JOIN `tabPump Nozzle` nozzle ON child.pump_nozzle = nozzle.name
         JOIN `tabFuel Tank` tank ON nozzle.fuel_tank = tank.name
-        WHERE parent.shift_date >= %s AND parent.docstatus = 1
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s AND parent.shift_date >= %s AND parent.docstatus != 2
         GROUP BY parent.shift_date, tank.fuel_product
-    """, (start_date,), as_dict=True)
+    """, (station, start_trend_date), as_dict=True)
     
     trend = {}
     for i in range(7):
-        dt = str(add_days(start_date, i))
-        trend[dt] = {"Petrol": 0, "Diesel": 0}
+        dt = str(add_days(start_trend_date, i))
+        trend[dt] = {"Petrol": 0.0, "Diesel": 0.0}
         
-    mix = {"Petrol": 0, "Diesel": 0, "Kerosene": 0, "Lubricants": 0}
+    mix = {"Petrol": 0.0, "Diesel": 0.0, "Kerosene": 0.0, "Lubricants": 0.0}
     
-    for m in meters:
+    for m in meters_trend:
         dt = str(m.posting_date)
-        prod = m.fuel_product or ""
-        qty = m.qty or 0
+        prod = (m.fuel_product or "").upper()
+        qty = float(m.qty or 0.0)
         
-        if dt not in trend: continue
-        
-        # Map products
-        if "Petrol" in prod or "PMS" in prod or "Super" in prod:
-            trend[dt]["Petrol"] += qty
-            if dt == today(): mix["Petrol"] += qty
-        elif "Diesel" in prod or "AGO" in prod:
-            trend[dt]["Diesel"] += qty
-            if dt == today(): mix["Diesel"] += qty
-        elif "Kerosene" in prod or "IK" in prod:
-            if dt == today(): mix["Kerosene"] += qty
-        else:
-            if dt == today(): mix["Lubricants"] += qty
+        if dt in trend:
+            if "PETROL" in prod or "PMS" in prod or "SUPER" in prod:
+                trend[dt]["Petrol"] += qty
+            elif "DIESEL" in prod or "AGO" in prod:
+                trend[dt]["Diesel"] += qty
                 
-    # formatting for charts
-    dates = list(trend.keys())
-    dates.sort()
+        if "PETROL" in prod or "PMS" in prod or "SUPER" in prod:
+            mix["Petrol"] += qty
+        elif "DIESEL" in prod or "AGO" in prod:
+            mix["Diesel"] += qty
+        elif "KEROSENE" in prod or "IK" in prod:
+            mix["Kerosene"] += qty
+        else:
+            mix["Lubricants"] += qty
+            
+    trend_dates = list(trend.keys())
+    trend_dates.sort()
     
+    # 6. Activity (Direct fast SQL)
+    shifts_act = frappe.db.sql("""
+        SELECT name, creation, shift_template, status
+        FROM `tabShift`
+        WHERE station = %s AND docstatus != 2
+        ORDER BY creation DESC LIMIT 3
+    """, (station,), as_dict=True)
+
+    meters_act = frappe.db.sql("""
+        SELECT child.name, child.creation, child.pump_nozzle, child.sales_quantity_electronic
+        FROM `tabPump Meter Reading` child
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s AND parent.docstatus != 2
+        ORDER BY child.creation DESC LIMIT 3
+    """, (station,), as_dict=True)
+
+    dips_act = frappe.db.sql("""
+        SELECT child.name, child.creation, child.fuel_tank, child.variance
+        FROM `tabDip Stick Reading` child
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s AND parent.docstatus != 2
+        ORDER BY child.creation DESC LIMIT 3
+    """, (station,), as_dict=True)
+    
+    activity = []
+    for s in shifts_act:
+        activity.append({"time": str(s.creation), "msg": f"Shift {s.name} ({s.shift_template or 'Shift'}) - {s.status}.", "type": "shift"})
+    for m in meters_act:
+        activity.append({"time": str(m.creation), "msg": f"Meter reading for {m.pump_nozzle}: {m.sales_quantity_electronic or 0} L.", "type": "meter"})
+    for d in dips_act:
+        status_txt = "variance flagged" if abs(d.variance or 0) > 50 else "normal"
+        activity.append({"time": str(d.creation), "msg": f"Dip reading for {d.fuel_tank} ({status_txt}).", "type": "dip", "variance": d.variance})
+        
+    activity.sort(key=lambda x: x["time"], reverse=True)
+
+    res = {
+        "station": station,
+        "month_label": month_label,
+        "monthly": {
+            "total_litres": round(monthly_total_fuel, 2),
+            "petrol_litres": round(monthly_petrol, 2),
+            "diesel_litres": round(monthly_diesel, 2),
+            "kerosene_litres": round(monthly_kerosene, 2),
+            "fuel_breakdown": monthly_fuel_breakdown,
+            "lubes_litres": round(monthly_lubes_qty, 2),
+            "gas_kgs": round(monthly_gas_kgs, 1),
+            "gas_cylinders": monthly_gas_cylinders,
+            "gas_breakdown": monthly_gas_breakdown
+        },
+        "kpis": {
+            "context_shift": context_shift,
+            "context_date": str(context_date),
+            "context_status": context_status,
+            "context_creation": str(context_creation) if context_creation else "",
+            "litres_sold": round(litres_sold, 2),
+            "fuel_breakdown": fuel_breakdown,
+            "lubes_qty": round(shift_lubes_qty, 2),
+            "gas_qty": round(shift_gas_kgs, 1),
+            "gas_breakdown": shift_gas_breakdown,
+            "cylinders_sold": shift_cylinders,
+            "top_selling_item": top_selling_item,
+            "top_selling_qty": top_selling_qty,
+            "cash_reconciled": 0.0,
+            "mpesa_posted": 0.0,
+            "dip_flags": dip_flags
+        },
+        "tanks": tank_list,
+        "trend": {
+            "trend_dates": trend_dates,
+            "trend_petrol": [round(trend[d]["Petrol"], 2) for d in trend_dates],
+            "trend_diesel": [round(trend[d]["Diesel"], 2) for d in trend_dates],
+            "fuel_mix": {k: round(v, 2) for k, v in mix.items()}
+        },
+        "activity": activity[:8]
+    }
+
+    try:
+        frappe.cache().set_value(cache_key, json.dumps(res, default=str), expires_in_sec=60)
+    except Exception:
+        pass
+
+    return res
+
+@frappe.whitelist()
+def get_daily_sales_breakdown(station=None, from_date=None, to_date=None, month=None, year=None):
+    """
+    Returns day-by-day daily sales breakdown for wetstock fuel (PMS, AGO, IK),
+    drystock (Lubes, LPG Gas, Store), shift counts, and sales revenues for each date.
+    """
+    from datetime import timedelta
+
+    if not station:
+        station = frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS POA PLACE"
+
+    # Resolve date range
+    if month and year:
+        from_date = f"{year}-{int(month):02d}-01"
+        to_date = get_last_day(from_date)
+    elif not from_date or not to_date:
+        ref_date = today()
+        from_date = get_first_day(ref_date)
+        to_date = get_last_day(ref_date)
+
+    start_dt = getdate(from_date)
+    end_dt = getdate(to_date)
+    month_label = start_dt.strftime("%B %Y") if (start_dt.month == end_dt.month and start_dt.year == end_dt.year) else f"{start_dt.strftime('%d %b %Y')} - {end_dt.strftime('%d %b %Y')}"
+
+    # Standard Selling item prices cache for PMS, AGO, IK, etc.
+    price_records = frappe.get_all("Item Price", filters={"price_list": "Standard Selling"}, fields=["item_code", "price_list_rate"])
+    item_prices = {p.item_code: flt(p.price_list_rate) for p in price_records}
+
+    # Helper to lookup price for fuel product
+    def get_fuel_price(product_name):
+        if not product_name:
+            return 0.0
+        if product_name in item_prices:
+            return item_prices[product_name]
+        p_up = product_name.upper()
+        for k, v in item_prices.items():
+            k_up = k.upper()
+            if ("PETROL" in p_up or "PMS" in p_up or "SUPER" in p_up) and ("PETROL" in k_up or "PMS" in k_up or "SUPER" in k_up):
+                return v
+            if ("DIESEL" in p_up or "AGO" in p_up) and ("DIESEL" in k_up or "AGO" in k_up):
+                return v
+            if ("KEROSENE" in p_up or "IK" in p_up) and ("KEROSENE" in k_up or "IK" in k_up):
+                return v
+        return 0.0
+
+    # 1. Query Pump Meter Readings by Shift Date & Product
+    meter_rows = frappe.db.sql("""
+        SELECT 
+            parent.shift_date as date,
+            tank.fuel_product,
+            SUM(child.sales_quantity_electronic) as qty
+        FROM `tabPump Meter Reading` child
+        JOIN `tabPump Nozzle` nozzle ON child.pump_nozzle = nozzle.name
+        JOIN `tabFuel Tank` tank ON nozzle.fuel_tank = tank.name
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s 
+          AND parent.shift_date >= %s 
+          AND parent.shift_date <= %s 
+          AND parent.docstatus != 2
+        GROUP BY parent.shift_date, tank.fuel_product
+    """, (station, from_date, to_date), as_dict=True)
+
+    # 2. Query Shift Inventory Sales (Lubes, LPG, Shop) by Shift Date & Item
+    inv_rows = frappe.db.sql("""
+        SELECT 
+            parent.shift_date as date,
+            item.item_group,
+            item.item_name,
+            SUM(child.quantity) as qty,
+            SUM(child.amount) as amount
+        FROM `tabShift Inventory Sale` child
+        JOIN `tabItem` item ON child.item = item.name
+        JOIN `tabShift` parent ON child.parent = parent.name
+        WHERE parent.station = %s 
+          AND parent.shift_date >= %s 
+          AND parent.shift_date <= %s 
+          AND parent.docstatus != 2
+        GROUP BY parent.shift_date, item.item_name, item.item_group
+    """, (station, from_date, to_date), as_dict=True)
+
+    # 3. Query Shifts by Date
+    shift_rows = frappe.db.sql("""
+        SELECT 
+            name,
+            shift_date as date,
+            shift_template,
+            status,
+            creation
+        FROM `tabShift`
+        WHERE station = %s 
+          AND shift_date >= %s 
+          AND shift_date <= %s 
+          AND docstatus != 2
+        ORDER BY shift_date ASC, creation ASC
+    """, (station, from_date, to_date), as_dict=True)
+
+    # 4. Map raw rows by date string
+    daily_fuel = {}
+    for r in meter_rows:
+        dt_str = str(r.date)
+        if dt_str not in daily_fuel:
+            daily_fuel[dt_str] = {}
+        prod = r.fuel_product or "Unknown"
+        daily_fuel[dt_str][prod] = daily_fuel[dt_str].get(prod, 0.0) + float(r.qty or 0.0)
+
+    daily_inv = {}
+    for r in inv_rows:
+        dt_str = str(r.date)
+        if dt_str not in daily_inv:
+            daily_inv[dt_str] = []
+        daily_inv[dt_str].append(r)
+
+    daily_shifts = {}
+    for s in shift_rows:
+        dt_str = str(s.date)
+        if dt_str not in daily_shifts:
+            daily_shifts[dt_str] = []
+        daily_shifts[dt_str].append(s)
+
+    # 5. Generate complete date sequence
+    current_dt = start_dt
+    days_list = []
+    
+    tot_pms_l = 0.0
+    tot_ago_l = 0.0
+    tot_ik_l = 0.0
+    tot_fuel_l = 0.0
+    tot_lubes_l = 0.0
+    tot_gas_kg = 0.0
+    tot_gas_cyl = 0
+    tot_fuel_rev = 0.0
+    tot_lubes_rev = 0.0
+    tot_gas_rev = 0.0
+    tot_station_rev = 0.0
+    active_days_count = 0
+
+    while current_dt <= end_dt:
+        dt_str = str(current_dt)
+        day_fuels = daily_fuel.get(dt_str, {})
+        day_invs = daily_inv.get(dt_str, [])
+        day_shifts = daily_shifts.get(dt_str, [])
+
+        pms_l = 0.0
+        ago_l = 0.0
+        ik_l = 0.0
+        pms_rev = 0.0
+        ago_rev = 0.0
+        ik_rev = 0.0
+
+        for prod, qty in day_fuels.items():
+            p_up = prod.upper()
+            price = get_fuel_price(prod)
+            val = qty * price
+            if "PETROL" in p_up or "PMS" in p_up or "SUPER" in p_up:
+                pms_l += qty
+                pms_rev += val
+            elif "DIESEL" in p_up or "AGO" in p_up:
+                ago_l += qty
+                ago_rev += val
+            elif "KEROSENE" in p_up or "IK" in p_up:
+                ik_l += qty
+                ik_rev += val
+
+        day_total_fuel_l = pms_l + ago_l + ik_l
+        day_fuel_rev = pms_rev + ago_rev + ik_rev
+
+        lubes_l = 0.0
+        lubes_rev = 0.0
+        gas_kg = 0.0
+        gas_cyl = 0
+        gas_rev = 0.0
+        other_rev = 0.0
+        gas_items = {}
+
+        for sale in day_invs:
+            grp = (sale.item_group or "").lower()
+            iname = sale.item_name or ""
+            qty = float(sale.qty or 0.0)
+            amt = float(sale.amount or 0.0)
+
+            if "lube" in grp or "lubricant" in grp or "oil" in grp:
+                match_litres = re.search(r'(\d+(?:\.\d+)?)\s*L', iname, re.IGNORECASE)
+                litres_per_unit = float(match_litres.group(1)) if match_litres else 1.0
+                lubes_l += (qty * litres_per_unit)
+                lubes_rev += amt
+            elif "gas" in grp or "lpg" in grp:
+                gas_cyl += int(qty)
+                match = re.search(r'(\d+)KG', iname, re.IGNORECASE)
+                kg_per_cyl = int(match.group(1)) if match else 0
+                kg_total = qty * kg_per_cyl
+                gas_items[iname] = gas_items.get(iname, 0) + int(qty)
+                gas_kg += kg_total
+                gas_rev += amt
+            else:
+                other_rev += amt
+
+        day_total_rev = day_fuel_rev + lubes_rev + gas_rev + other_rev
+        has_sales = bool(day_total_fuel_l > 0 or day_total_rev > 0 or len(day_shifts) > 0)
+
+        if has_sales:
+            active_days_count += 1
+
+        tot_pms_l += pms_l
+        tot_ago_l += ago_l
+        tot_ik_l += ik_l
+        tot_fuel_l += day_total_fuel_l
+        tot_lubes_l += lubes_l
+        tot_gas_kg += gas_kg
+        tot_gas_cyl += gas_cyl
+        tot_fuel_rev += day_fuel_rev
+        tot_lubes_rev += lubes_rev
+        tot_gas_rev += gas_rev
+        tot_station_rev += day_total_rev
+
+        shift_templates = [s.shift_template or "Shift" for s in day_shifts]
+        shift_names = [s.name for s in day_shifts]
+
+        days_list.append({
+            "date": dt_str,
+            "day_name": current_dt.strftime("%A"),
+            "day_short": current_dt.strftime("%a"),
+            "formatted_date": current_dt.strftime("%d %b %Y"),
+            "day_number": current_dt.day,
+            "pms_litres": round(pms_l, 2),
+            "pms_revenue": round(pms_rev, 2),
+            "ago_litres": round(ago_l, 2),
+            "ago_revenue": round(ago_rev, 2),
+            "kerosene_litres": round(ik_l, 2),
+            "kerosene_revenue": round(ik_rev, 2),
+            "total_fuel_litres": round(day_total_fuel_l, 2),
+            "fuel_revenue": round(day_fuel_rev, 2),
+            "lubes_litres": round(lubes_l, 2),
+            "lubes_revenue": round(lubes_rev, 2),
+            "gas_kgs": round(gas_kg, 1),
+            "gas_cylinders": gas_cyl,
+            "gas_revenue": round(gas_rev, 2),
+            "gas_items": gas_items,
+            "total_revenue": round(day_total_rev, 2),
+            "shifts_count": len(day_shifts),
+            "shift_templates": shift_templates,
+            "shift_names": shift_names,
+            "has_sales": has_sales
+        })
+
+        current_dt += timedelta(days=1)
+
+    # 6. Fetch available recent months for switching
+    months_query = frappe.db.sql("""
+        SELECT DISTINCT DATE_FORMAT(shift_date, '%%Y-%%m') as ym, DATE_FORMAT(shift_date, '%%M %%Y') as label
+        FROM `tabShift`
+        WHERE station = %s AND docstatus != 2
+        ORDER BY ym DESC
+        LIMIT 12
+    """, (station,), as_dict=True)
+
+    available_months = [{"value": m.ym, "label": m.label} for m in months_query if m.ym]
+    curr_ym = start_dt.strftime("%Y-%m")
+    if not any(m["value"] == curr_ym for m in available_months):
+        available_months.insert(0, {"value": curr_ym, "label": start_dt.strftime("%B %Y")})
+
+    denom = max(active_days_count, 1)
+
     return {
-        "trend_dates": dates,
-        "trend_petrol": [trend[d]["Petrol"] for d in dates],
-        "trend_diesel": [trend[d]["Diesel"] for d in dates],
-        "fuel_mix": mix
+        "station": station,
+        "from_date": from_date,
+        "to_date": to_date,
+        "month_label": month_label,
+        "active_days_count": active_days_count,
+        "total_days_count": len(days_list),
+        "available_months": available_months,
+        "totals": {
+            "pms_litres": round(tot_pms_l, 2),
+            "ago_litres": round(tot_ago_l, 2),
+            "kerosene_litres": round(tot_ik_l, 2),
+            "total_fuel_litres": round(tot_fuel_l, 2),
+            "lubes_litres": round(tot_lubes_l, 2),
+            "gas_kgs": round(tot_gas_kg, 1),
+            "gas_cylinders": tot_gas_cyl,
+            "fuel_revenue": round(tot_fuel_rev, 2),
+            "lubes_revenue": round(tot_lubes_rev, 2),
+            "gas_revenue": round(tot_gas_rev, 2),
+            "total_revenue": round(tot_station_rev, 2),
+            "avg_daily_fuel_litres": round(tot_fuel_l / denom, 2),
+            "avg_daily_pms_litres": round(tot_pms_l / denom, 2),
+            "avg_daily_ago_litres": round(tot_ago_l / denom, 2),
+            "avg_daily_lubes_litres": round(tot_lubes_l / denom, 2),
+            "avg_daily_gas_kgs": round(tot_gas_kg / denom, 1),
+            "avg_daily_revenue": round(tot_station_rev / denom, 2)
+        },
+        "days": days_list
     }
 
 @frappe.whitelist()
+def get_tank_levels(station=None):
+    data = get_homepage_data(station=station)
+    return data.get("tanks", [])
+
+@frappe.whitelist()
+def get_available_shifts(station=None, filter_date=None):
+    if not station:
+        station = frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS POA PLACE"
+    if filter_date:
+        return frappe.db.sql("""
+            SELECT name, shift_date, creation, status
+            FROM `tabShift`
+            WHERE station = %s AND shift_date = %s AND docstatus != 2
+            ORDER BY creation DESC LIMIT 50
+        """, (station, filter_date), as_dict=True)
+    else:
+        return frappe.db.sql("""
+            SELECT name, shift_date, creation, status
+            FROM `tabShift`
+            WHERE station = %s AND docstatus != 2
+            ORDER BY creation DESC LIMIT 50
+        """, (station,), as_dict=True)
+
+@frappe.whitelist()
+def get_homepage_kpis(station=None, shift_id=None, from_date=None, to_date=None):
+    data = get_homepage_data(station=station, shift_id=shift_id, from_date=from_date, to_date=to_date)
+    kpis = data.get("kpis", {})
+    kpis["monthly_litres"] = data.get("monthly", {}).get("total_litres", 0)
+    kpis["monthly_petrol"] = data.get("monthly", {}).get("petrol_litres", 0)
+    kpis["monthly_diesel"] = data.get("monthly", {}).get("diesel_litres", 0)
+    kpis["monthly_lubes"] = data.get("monthly", {}).get("lubes_litres", 0)
+    kpis["monthly_gas_kgs"] = data.get("monthly", {}).get("gas_kgs", 0)
+    kpis["monthly_gas_cylinders"] = data.get("monthly", {}).get("gas_cylinders", 0)
+    return kpis
+
+@frappe.whitelist()
+def get_homepage_trend(station=None):
+    data = get_homepage_data(station=station)
+    return data.get("trend", {})
+
+@frappe.whitelist()
 def get_homepage_activity(station=None):
-    # recent 5 shifts opened
-    shifts = frappe.get_all("Shift", fields=["name", "creation", "shift_template", "status"], order_by="creation desc", limit=3)
-    # recent 5 meter readings
-    meters = frappe.get_all("Pump Meter Reading", fields=["name", "creation", "pump_nozzle"], order_by="creation desc", limit=3)
-    # recent 5 dip sticks
-    dips = frappe.get_all("Dip Stick Reading", fields=["name", "creation", "fuel_tank", "variance"], order_by="creation desc", limit=3)
-    
-    activity = []
-    for s in shifts:
-        activity.append({"time": str(s.creation), "msg": f"Shift {s.name} ({s.shift_template}) was created.", "type": "shift"})
-    for m in meters:
-        activity.append({"time": str(m.creation), "msg": f"Meter reading posted for {m.pump_nozzle}.", "type": "meter"})
-    for d in dips:
-        status = "variance flagged" if abs(d.variance or 0) > 50 else "normal"
-        activity.append({"time": str(d.creation), "msg": f"Dip reading for {d.fuel_tank} posted ({status}).", "type": "dip", "variance": d.variance})
-        
-    activity.sort(key=lambda x: x["time"], reverse=True)
-    return activity[:8]
+    data = get_homepage_data(station=station)
+    return data.get("activity", [])
 
 # ---------------------------------------------------------
 # Shortage Management Hooks & API
@@ -1525,7 +2509,9 @@ def get_shortage_form_data(station=None):
 
 @frappe.whitelist()
 def submit_shortage_correction(from_employee, to_employee, amount, date, remarks=None):
-    if float(amount) <= 0:
+    from frappe.utils import flt
+    amount = flt(amount)
+    if amount <= 0:
         frappe.throw('Amount must be positive.')
     
     doc = frappe.get_doc({
@@ -1558,7 +2544,9 @@ def update_shift_assignments(shift_name, assignments):
 
 @frappe.whitelist()
 def submit_shortage_payment(employee, payment_mode, amount, date, shift_reference=None, cash_account=None, reference_no=None, remarks=None):
-    if float(amount) <= 0:
+    from frappe.utils import flt
+    amount = flt(amount)
+    if amount <= 0:
         frappe.throw('Amount must be positive.')
         
     doc = frappe.get_doc({
@@ -1579,13 +2567,14 @@ def submit_shortage_payment(employee, payment_mode, amount, date, shift_referenc
 def on_submit_shortage_correction(doc, method):
     # Reference field in Staff Liability Ledger: we should set a custom field or use 'amended_from' to link?
     # We can just link it in 'reason' for now.
-    from frappe.utils import nowdate
+    from frappe.utils import flt, nowdate
+    amount = flt(doc.amount)
     
     frappe.get_doc({
         'doctype': 'Staff Liability Ledger',
         'employee': doc.from_employee,
         'date': doc.date,
-        'amount': -doc.amount,
+        'amount': -amount,
         'reason': f'Correction/Transfer to {doc.to_employee} (Ref: {doc.name})',
         'status': 'Deducted'
     }).insert(ignore_permissions=True).submit()
@@ -1594,7 +2583,7 @@ def on_submit_shortage_correction(doc, method):
         'doctype': 'Staff Liability Ledger',
         'employee': doc.to_employee,
         'date': doc.date,
-        'amount': doc.amount,
+        'amount': amount,
         'reason': f'Correction/Transfer from {doc.from_employee} (Ref: {doc.name})',
         'status': 'Unpaid'
     }).insert(ignore_permissions=True).submit()
@@ -1607,12 +2596,14 @@ def on_cancel_shortage_correction(doc, method):
 
 
 def on_submit_shortage_payment(doc, method):
+    from frappe.utils import flt
+    amount = flt(doc.amount)
     frappe.get_doc({
         'doctype': 'Staff Liability Ledger',
         'employee': doc.employee,
         'date': doc.date,
         'shift': doc.shift_reference,
-        'amount': -float(doc.amount),
+        'amount': -amount,
         'reason': f'{doc.payment_mode} Payment (Ref: {doc.name})',
         'status': 'Deducted'
     }).insert(ignore_permissions=True).submit()
@@ -1642,12 +2633,12 @@ def on_submit_shortage_payment(doc, method):
             
             je.append("accounts", {
                 "account": debit_account,
-                "debit_in_account_currency": doc.amount
+                "debit_in_account_currency": amount
             })
             
             je.append("accounts", {
                 "account": shortfall_account,
-                "credit_in_account_currency": doc.amount,
+                "credit_in_account_currency": amount,
                 "party_type": "Employee",
                 "party": doc.employee
             })
@@ -1706,75 +2697,217 @@ def get_recent_shortage_records(start_date=None, end_date=None):
     return combined
 
 @frappe.whitelist()
-def get_csa_shorts_balances(start_date=None, end_date=None):
-    from frappe.utils import nowdate, getdate
+def get_csa_shorts_balances(start_date=None, end_date=None, employee=None):
+    from frappe.utils import nowdate, getdate, flt
     
-    date_filter = ""
-    args = []
+    if not start_date or not end_date:
+        today = getdate(nowdate())
+        if not start_date:
+            start_date = f"{today.year}-{today.month:02d}-01"
+        if not end_date:
+            end_date = str(today)
+            
+    # 1. Opening balances (transactions prior to start_date)
+    opening_sql = f"""
+        SELECT 
+            employee,
+            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as opening_shortage,
+            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as opening_paid,
+            SUM(amount) as opening_balance
+        FROM `tabStaff Liability Ledger`
+        WHERE docstatus = 1 AND date < %s {'AND employee = %s' if employee else ''}
+        GROUP BY employee
+    """
+    op_params = [start_date, employee] if employee else [start_date]
+    opening_data = frappe.db.sql(opening_sql, tuple(op_params), as_dict=True)
+    opening_map = {d.employee: d for d in opening_data}
     
-    if start_date and end_date:
-        date_filter = "AND date BETWEEN %s AND %s"
-        args = [start_date, end_date]
-    else:
-        # Default to this month
-        date = getdate(nowdate())
-        date_filter = f"AND MONTH(date) = {date.month} AND YEAR(date) = {date.year}"
-        
-    ledgers = frappe.db.sql("""
+    # 2. Period activity (start_date <= date <= end_date)
+    period_sql = f"""
+        SELECT 
+            employee,
+            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as period_shortage,
+            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as period_paid,
+            SUM(amount) as period_net
+        FROM `tabStaff Liability Ledger`
+        WHERE docstatus = 1 AND date BETWEEN %s AND %s {'AND employee = %s' if employee else ''}
+        GROUP BY employee
+    """
+    pe_params = [start_date, end_date, employee] if employee else [start_date, end_date]
+    period_data = frappe.db.sql(period_sql, tuple(pe_params), as_dict=True)
+    period_map = {d.employee: d for d in period_data}
+    
+    # 3. All employees with any liability ledger entry
+    all_emps_sql = f"""
         SELECT 
             l.employee,
             e.employee_name,
-            SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END) as total_shortage,
-            SUM(CASE WHEN l.amount < 0 THEN ABS(l.amount) ELSE 0 END) as total_paid,
-            SUM(l.amount) as outstanding_balance
+            e.status as employee_status,
+            SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END) as lifetime_shortage,
+            SUM(CASE WHEN l.amount < 0 THEN ABS(l.amount) ELSE 0 END) as lifetime_paid,
+            SUM(l.amount) as lifetime_balance
         FROM `tabStaff Liability Ledger` l
         LEFT JOIN `tabEmployee` e ON l.employee = e.name
-        WHERE l.docstatus = 1
+        WHERE l.docstatus = 1 {'AND l.employee = %s' if employee else ''}
         GROUP BY l.employee
-        ORDER BY e.employee_name
-    """, as_dict=True)
+        ORDER BY e.employee_name ASC
+    """
+    all_params = [employee] if employee else []
+    all_emps = frappe.db.sql(all_emps_sql, tuple(all_params), as_dict=True)
     
-    filtered_data = frappe.db.sql(f"""
-        SELECT 
-            employee,
-            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as month_shortage,
-            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as month_paid
-        FROM `tabStaff Liability Ledger`
-        WHERE docstatus = 1 {date_filter}
-        GROUP BY employee
-    """, tuple(args) if args else (), as_dict=True)
+    results = []
+    tot_open = 0.0
+    tot_short = 0.0
+    tot_paid = 0.0
+    tot_close = 0.0
     
-    month_map = {d.employee: d for d in filtered_data}
-    
-    for l in ledgers:
-        emp = l.employee
-        if emp in month_map:
-            l['month_shortage'] = month_map[emp].month_shortage
-            l['month_paid'] = month_map[emp].month_paid
+    for r in all_emps:
+        emp_id = r.employee
+        op = opening_map.get(emp_id, {})
+        pe = period_map.get(emp_id, {})
+        
+        op_bal = flt(op.get('opening_balance', 0.0), 2)
+        p_short = flt(pe.get('period_shortage', 0.0), 2)
+        p_paid = flt(pe.get('period_paid', 0.0), 2)
+        p_net = flt(p_short - p_paid, 2)
+        closing_bal = flt(op_bal + p_net, 2)
+        
+        tot_open += op_bal
+        tot_short += p_short
+        tot_paid += p_paid
+        tot_close += closing_bal
+        
+        if closing_bal > 0.01:
+            status_label = "Outstanding"
+            status_color = "red"
+        elif closing_bal < -0.01:
+            status_label = "Credit / Advance"
+            status_color = "blue"
         else:
-            l['month_shortage'] = 0
-            l['month_paid'] = 0
+            status_label = "Cleared"
+            status_color = "green"
             
-    return ledgers
+        results.append({
+            'employee': emp_id,
+            'employee_name': r.employee_name or emp_id,
+            'employee_status': r.employee_status or "Active",
+            'opening_balance': op_bal,
+            'period_shortage': p_short,
+            'period_paid': p_paid,
+            'period_net': p_net,
+            'closing_balance': closing_bal,
+            'lifetime_balance': flt(r.lifetime_balance or 0.0, 2),
+            'status_label': status_label,
+            'status_color': status_color,
+            # Backward compatibility fields
+            'month_shortage': p_short,
+            'month_paid': p_paid,
+            'outstanding_balance': closing_bal
+        })
+        
+    return {
+        'start_date': start_date,
+        'end_date': end_date,
+        'summary': {
+            'total_opening': round(tot_open, 2),
+            'total_shortage': round(tot_short, 2),
+            'total_paid': round(tot_paid, 2),
+            'total_net': round(tot_short - tot_paid, 2),
+            'total_closing': round(tot_close, 2),
+            'active_debtors_count': len([r for r in results if r['closing_balance'] > 0.01]),
+            'total_csas_count': len(results)
+        },
+        'rows': results
+    }
 
 @frappe.whitelist()
 def get_csa_shorts_breakdown(employee, start_date=None, end_date=None):
-    date_filter = ""
-    args = [employee]
-    
-    if start_date and end_date:
-        date_filter = "AND sll.date BETWEEN %s AND %s"
-        args.extend([start_date, end_date])
+    from frappe.utils import flt, nowdate, getdate
+    if not employee:
+        frappe.throw("Employee is required")
         
-    return frappe.db.sql(f"""
+    if not start_date or not end_date:
+        today = getdate(nowdate())
+        if not start_date:
+            start_date = f"{today.year}-{today.month:02d}-01"
+        if not end_date:
+            end_date = str(today)
+
+    # 1. Opening Balance prior to start_date
+    op_res = frappe.db.sql("""
+        SELECT SUM(amount) as opening_balance
+        FROM `tabStaff Liability Ledger`
+        WHERE employee = %s AND docstatus = 1 AND date < %s
+    """, (employee, start_date), as_dict=True)
+    opening_balance = flt(op_res[0].opening_balance if op_res and op_res[0].opening_balance else 0.0, 2)
+    
+    # 2. Transactions during period
+    txns = frappe.db.sql("""
         SELECT 
             sll.name, sll.date, sll.shift, sll.amount, sll.reason, sll.status,
             s.shift_template, s.shift_date
         FROM `tabStaff Liability Ledger` sll
         LEFT JOIN `tabShift` s ON s.name = sll.shift
-        WHERE sll.employee = %s AND sll.docstatus = 1 {date_filter}
-        ORDER BY sll.date DESC, sll.creation DESC
-    """, tuple(args), as_dict=True)
+        WHERE sll.employee = %s AND sll.docstatus = 1 AND sll.date BETWEEN %s AND %s
+        ORDER BY sll.date ASC, sll.creation ASC
+    """, (employee, start_date, end_date), as_dict=True)
+    
+    running = opening_balance
+    total_short = 0.0
+    total_paid = 0.0
+    
+    formatted_txns = []
+    for t in txns:
+        amt = flt(t.amount or 0.0, 2)
+        running += amt
+        running = round(running, 2)
+        
+        short_amt = amt if amt > 0 else 0.0
+        paid_amt = abs(amt) if amt < 0 else 0.0
+        
+        total_short += short_amt
+        total_paid += paid_amt
+        
+        # Format friendly type/category
+        entry_type = "Shortage Incurred" if amt > 0 else "Payment / Recovery"
+        if "Correction" in (t.reason or "") or "Transfer" in (t.reason or ""):
+            entry_type = "Shortage Transfer"
+        elif "Payment" in (t.reason or ""):
+            entry_type = "Cash / M-Pesa Payment"
+        elif "Shift Cash Variance" in (t.reason or ""):
+            entry_type = "Shift Variance"
+            
+        formatted_txns.append({
+            "name": t.name,
+            "date": t.date,
+            "shift": t.shift or "",
+            "shift_template": t.shift_template or "",
+            "shift_date": t.shift_date or "",
+            "amount": amt,
+            "shortage_amount": short_amt,
+            "paid_amount": paid_amt,
+            "running_balance": running,
+            "reason": t.reason or "",
+            "entry_type": entry_type,
+            "status": t.status or ""
+        })
+        
+    emp_doc = frappe.db.get_value("Employee", employee, ["name", "employee_name", "department", "designation"], as_dict=True) or {"name": employee, "employee_name": employee}
+    
+    return {
+        "employee": employee,
+        "employee_name": emp_doc.get("employee_name") or employee,
+        "department": emp_doc.get("department") or "",
+        "designation": emp_doc.get("designation") or "",
+        "start_date": start_date,
+        "end_date": end_date,
+        "opening_balance": opening_balance,
+        "period_shortage": round(total_short, 2),
+        "period_paid": round(total_paid, 2),
+        "period_net": round(total_short - total_paid, 2),
+        "closing_balance": running,
+        "transactions": formatted_txns
+    }
 
 
 @frappe.whitelist()
@@ -1801,6 +2934,8 @@ def create_spa_bulk_stock_transfer(station_id, items, direction="Store to Foreco
         se.from_warehouse = station.default_store_warehouse
         se.to_warehouse = station.default_forecourt_warehouse
         
+    stock_adj_account = frappe.get_cached_value("Company", se.company, "stock_adjustment_account")
+
     for it in items:
         item_code = it.get("item_code")
         qty = it.get("qty")
@@ -1814,13 +2949,17 @@ def create_spa_bulk_stock_transfer(station_id, items, direction="Store to Foreco
         except ValueError:
             continue
             
-        se.append("items", {
+        row_dict = {
             "item_code": item_code,
             "qty": qty,
             "uom": frappe.db.get_value("Item", item_code, "stock_uom") or "Nos",
             "s_warehouse": se.from_warehouse,
             "t_warehouse": se.to_warehouse
-        })
+        }
+        if stock_adj_account:
+            row_dict["expense_account"] = stock_adj_account
+
+        se.append("items", row_dict)
         
     if not se.items:
         frappe.throw("No valid items to transfer")
@@ -1828,10 +2967,12 @@ def create_spa_bulk_stock_transfer(station_id, items, direction="Store to Foreco
     se.insert()
     se.submit()
     
+    frappe.clear_messages()
+    
     return {"status": "success", "message": "Bulk Stock Transfer completed successfully.", "name": se.name}
 
 @frappe.whitelist()
-def get_historical_stock_transfers(station_id, date_from=None, date_to=None):
+def get_historical_stock_transfers(station_id, date_from=None, date_to=None, limit=None):
     if not station_id:
         frappe.throw("Station ID is required")
         
@@ -1848,6 +2989,8 @@ def get_historical_stock_transfers(station_id, date_from=None, date_to=None):
     if date_to:
         date_conditions += f" AND se.posting_date <= '{date_to}'"
         
+    limit_num = int(limit) if limit else (1000 if (date_from or date_to) else 20)
+        
     entries = frappe.db.sql(f"""
         SELECT DISTINCT se.name, se.posting_date, se.posting_time
         FROM `tabStock Entry` se
@@ -1859,12 +3002,12 @@ def get_historical_stock_transfers(station_id, date_from=None, date_to=None):
         )
         {date_conditions}
         ORDER BY se.posting_date DESC, se.posting_time DESC
-        LIMIT 100
+        LIMIT {limit_num}
     """, as_dict=1)
     
     for entry in entries:
         items = frappe.db.sql(f"""
-            SELECT item_code, item_name, qty, s_warehouse
+            SELECT item_code, item_name, qty, uom, s_warehouse, t_warehouse
             FROM `tabStock Entry Detail`
             WHERE parent = '{entry.name}'
         """, as_dict=1)
@@ -1877,6 +3020,133 @@ def get_historical_stock_transfers(station_id, date_from=None, date_to=None):
         entry.items = items
         
     return entries
+
+
+@frappe.whitelist()
+def get_spa_stock_transfer_details(stock_entry_id):
+    if not stock_entry_id:
+        frappe.throw("Stock Entry ID is required")
+        
+    se = frappe.get_doc("Stock Entry", stock_entry_id)
+    items = []
+    for d in se.items:
+        items.append({
+            "item_code": d.item_code,
+            "item_name": d.item_name or d.item_code,
+            "qty": d.qty,
+            "uom": d.uom,
+            "s_warehouse": d.s_warehouse,
+            "t_warehouse": d.t_warehouse
+        })
+        
+    return {
+        "name": se.name,
+        "posting_date": se.posting_date,
+        "posting_time": se.posting_time,
+        "company": se.company,
+        "from_warehouse": se.from_warehouse,
+        "to_warehouse": se.to_warehouse,
+        "items": items
+    }
+
+
+@frappe.whitelist()
+def delete_spa_stock_transfer(stock_entry_id):
+    if not stock_entry_id:
+        frappe.throw("Stock Entry ID is required")
+        
+    if not frappe.db.exists("Stock Entry", stock_entry_id):
+        frappe.throw(f"Stock Entry {stock_entry_id} not found")
+        
+    se = frappe.get_doc("Stock Entry", stock_entry_id)
+    if se.docstatus == 1:
+        se.cancel()
+    elif se.docstatus == 0:
+        frappe.delete_doc("Stock Entry", stock_entry_id, ignore_permissions=True)
+        
+    frappe.clear_messages()
+    return {"status": "success", "message": f"Stock Transfer {stock_entry_id} deleted successfully."}
+
+
+@frappe.whitelist()
+def update_spa_stock_transfer(stock_entry_id, station_id, items, direction="Store to Forecourt"):
+    if not stock_entry_id:
+        frappe.throw("Stock Entry ID is required")
+    if not station_id:
+        frappe.throw("Station ID is required")
+    if not items:
+        frappe.throw("Items list is required")
+        
+    import json
+    if isinstance(items, str):
+        try:
+            items = json.loads(items)
+        except Exception:
+            frappe.throw("Invalid items data format")
+            
+    if not frappe.db.exists("Stock Entry", stock_entry_id):
+        frappe.throw(f"Stock Entry {stock_entry_id} not found")
+        
+    station = frappe.get_doc("Fuel Station", station_id)
+    if not station.default_store_warehouse or not station.default_forecourt_warehouse:
+        frappe.throw("Station must have both Default Store Warehouse and Default Forecourt Warehouse configured.")
+        
+    old_se = frappe.get_doc("Stock Entry", stock_entry_id)
+    posting_date = old_se.posting_date
+    posting_time = old_se.posting_time
+    company = old_se.company or (station.company if hasattr(station, 'company') and station.company else frappe.defaults.get_user_default("Company"))
+    
+    # Cancel old entry
+    if old_se.docstatus == 1:
+        old_se.cancel()
+    elif old_se.docstatus == 0:
+        frappe.delete_doc("Stock Entry", stock_entry_id, ignore_permissions=True)
+    
+    # Create new entry with updated contents
+    se = frappe.new_doc("Stock Entry")
+    se.stock_entry_type = "Material Transfer"
+    se.company = company
+    se.posting_date = posting_date
+    se.posting_time = posting_time or frappe.utils.nowtime()
+    
+    stock_adj_account = frappe.get_cached_value("Company", company, "stock_adjustment_account")
+    
+    for row in items:
+        r_item = row.get("item") or row.get("item_code")
+        r_qty = float(row.get("qty") or 0)
+        r_dir = row.get("direction") or direction
+        
+        if not r_item or r_qty <= 0:
+            continue
+            
+        from_w = station.default_store_warehouse
+        to_w = station.default_forecourt_warehouse
+        
+        if r_dir == "Forecourt to Store":
+            from_w = station.default_forecourt_warehouse
+            to_w = station.default_store_warehouse
+            
+        row_dict = {
+            "item_code": r_item,
+            "qty": r_qty,
+            "uom": frappe.db.get_value("Item", r_item, "stock_uom") or "Nos",
+            "s_warehouse": from_w,
+            "t_warehouse": to_w
+        }
+        if stock_adj_account:
+            row_dict["expense_account"] = stock_adj_account
+            
+        se.append("items", row_dict)
+        
+    if not se.items:
+        frappe.throw("No valid items with quantity > 0")
+        
+    se.insert(ignore_permissions=True)
+    se.submit()
+    
+    frappe.clear_messages()
+    return {"status": "success", "message": f"Stock Transfer updated successfully (New Entry: {se.name})", "name": se.name}
+
 
 
 @frappe.whitelist()
@@ -1949,12 +3219,18 @@ def get_item_tax_and_tanks(item_code, station_id=None):
     }
 
 @frappe.whitelist()
-def get_past_shifts(start_date=None, end_date=None):
+def get_past_shifts(start_date=None, end_date=None, limit=None):
     filters = {'status': 'Closed'}
     if start_date and end_date:
         filters['shift_date'] = ['between', [start_date, end_date]]
+    elif start_date:
+        filters['shift_date'] = ['>=', start_date]
+    elif end_date:
+        filters['shift_date'] = ['<=', end_date]
     
-    shifts = frappe.get_all('Shift', filters=filters, fields=['name', 'shift_date', 'head_csa'], order_by='shift_date desc')
+    limit_num = int(limit) if limit else (1000 if (start_date or end_date) else 20)
+    
+    shifts = frappe.get_all('Shift', filters=filters, fields=['name', 'shift_date', 'head_csa'], order_by='shift_date desc', limit_page_length=limit_num)
     
     for s in shifts:
         cashier_name = frappe.db.get_value('Employee', s.head_csa, 'employee_name')
@@ -2073,52 +3349,56 @@ def return_borrowed_product(docname, return_date, returned_items):
     return "success"
 
 @frappe.whitelist()
-def get_inventory_sales_history(station, from_date=None, to_date=None, search=None):
-    import frappe
-    # First get matching shifts
-    shift_filters = {"station": station}
-    if from_date and to_date:
-        shift_filters["shift_date"] = ["between", [from_date, to_date]]
-    elif from_date:
-        shift_filters["shift_date"] = [">=", from_date]
-    elif to_date:
-        shift_filters["shift_date"] = ["<=", to_date]
-        
-    shifts = frappe.get_all("Shift", filters=shift_filters, fields=["name", "shift_date", "shift_template", "shift_name_display"])
-    if not shifts:
-        return []
-        
-    shift_map = {s.name: s for s in shifts}
-    shift_names = list(shift_map.keys())
+def get_inventory_sales_history(station, from_date=None, to_date=None, search=None, limit=None):
+    conditions = ["s.station = %s", "s.docstatus < 2"]
+    values = [station]
     
-    # Now get the child records
-    sale_filters = {"parent": ["in", shift_names], "parenttype": "Shift"}
-    
-    sales = frappe.get_all("Shift Inventory Sale", filters=sale_filters, fields=["name", "parent", "item", "quantity", "selling_price", "amount", "sold_by", "is_invoice_sale", "reference_invoice", "creation", "total_volume"])
-    
-    # Process and return
-    result = []
-    for s in sales:
-        s_doc = shift_map.get(s.parent)
-        s["shift_date"] = s_doc.shift_date if s_doc else ""
-        s["shift_template"] = s_doc.shift_template if s_doc else ""
-        s["shift_name_display"] = s_doc.shift_name_display if s_doc else s.parent
+    if from_date:
+        conditions.append("s.shift_date >= %s")
+        values.append(from_date)
+    if to_date:
+        conditions.append("s.shift_date <= %s")
+        values.append(to_date)
+    if search:
+        conditions.append("(sis.item LIKE %s OR sis.sold_by LIKE %s OR i.item_name LIKE %s OR i.item_group LIKE %s)")
+        s_val = f"%{search}%"
+        values.extend([s_val, s_val, s_val, s_val])
         
-        # client side can filter search, or we do it here:
-        if search:
-            search_str = f"{s.item} {s.sold_by}".lower()
-            if search.lower() not in search_str:
-                continue
-                
-        result.append(s)
+    limit_num = int(limit) if limit else (2000 if (from_date or to_date or search) else 200)
         
-    # Sort by creation desc
-    result.sort(key=lambda x: str(x.creation), reverse=True)
-    return result
+    query = f"""
+        SELECT 
+            sis.name,
+            sis.parent as shift,
+            sis.parent as parent,
+            sis.idx,
+            sis.item,
+            COALESCE(i.item_name, sis.item) as item_name,
+            COALESCE(i.item_group, '') as item_group,
+            sis.quantity,
+            sis.uom_multiplier,
+            sis.total_volume,
+            sis.selling_price,
+            sis.amount,
+            sis.sold_by,
+            sis.is_invoice_sale,
+            sis.reference_invoice,
+            sis.creation,
+            s.shift_date,
+            s.shift_template,
+            s.shift_name_display
+        FROM `tabShift Inventory Sale` sis
+        JOIN `tabShift` s ON sis.parent = s.name
+        LEFT JOIN `tabItem` i ON sis.item = i.name
+        WHERE {' AND '.join(conditions)}
+        ORDER BY s.shift_date DESC, sis.creation DESC, sis.idx ASC
+        LIMIT {limit_num}
+    """
+    return frappe.db.sql(query, values, as_dict=True)
 
 
 @frappe.whitelist()
-def get_station_cards_history(station, from_date=None, to_date=None, card=None, csa=None):
+def get_station_cards_history(station, from_date=None, to_date=None, card=None, csa=None, limit=None):
     conditions = ["s.station = %s", "sc.docstatus < 2"]
     values = [station]
     
@@ -2135,6 +3415,8 @@ def get_station_cards_history(station, from_date=None, to_date=None, card=None, 
         conditions.append("sc.csa = %s")
         values.append(csa)
         
+    limit_num = int(limit) if limit else (1000 if (from_date or to_date) else 20)
+    
     query = f"""
         SELECT 
             sc.name,
@@ -2151,11 +3433,12 @@ def get_station_cards_history(station, from_date=None, to_date=None, card=None, 
         JOIN `tabShift` s ON sc.shift = s.name
         WHERE {' AND '.join(conditions)}
         ORDER BY sc.date DESC, sc.creation DESC
+        LIMIT {limit_num}
     """
     return frappe.db.sql(query, tuple(values), as_dict=True)
 
 @frappe.whitelist()
-def get_shift_invoices_history(station, from_date=None, to_date=None, customer=None):
+def get_shift_invoices_history(station, from_date=None, to_date=None, customer=None, limit=None):
     conditions = ["s.station = %s", "s.docstatus < 2"]
     values = [station]
     
@@ -2169,21 +3452,98 @@ def get_shift_invoices_history(station, from_date=None, to_date=None, customer=N
         conditions.append("si.customer = %s")
         values.append(customer)
         
+    limit_num = int(limit) if limit else (1000 if (from_date or to_date or customer) else 20)
+        
     query = f"""
         SELECT 
             si.name, si.parent as shift, s.shift_date, s.shift_template, si.customer,
+            IFNULL(cust.customer_name, si.customer) as customer_name,
             si.purchase_order, si.vehicle_registration, si.item,
-            si.quantity, si.rate, si.amount, si.entry_number, si.csa
+            IFNULL(it.item_name, si.item) as item_name,
+            si.quantity, si.rate, 
+            COALESCE(si.gross_amount, (si.quantity * si.rate)) as gross_amount,
+            si.discount_amount, si.discount_csa, si.discount_reason,
+            si.amount, si.entry_number, si.csa, si.inventory_csa
         FROM `tabShift Invoice` si
         JOIN `tabShift` s ON si.parent = s.name
+        LEFT JOIN `tabCustomer` cust ON si.customer = cust.name
+        LEFT JOIN `tabItem` it ON si.item = it.name
         WHERE {' AND '.join(conditions)}
-        ORDER BY si.creation DESC
-        LIMIT {500 if (from_date or to_date) else 30}
+        ORDER BY s.shift_date DESC, si.creation DESC
+        LIMIT {limit_num}
     """
     return frappe.db.sql(query, values, as_dict=True)
 
 @frappe.whitelist()
-def get_customer_payments_history(station, from_date=None, to_date=None, customer=None):
+def get_shift_discounts_report(station=None, shift_id=None, from_date=None, to_date=None, customer=None):
+    if not station and not shift_id:
+        station = frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS POA PLACE"
+        
+    conditions = ["s.docstatus < 2", "si.discount_amount > 0"]
+    values = []
+    
+    if station:
+        conditions.append("s.station = %s")
+        values.append(station)
+    if shift_id:
+        conditions.append("s.name = %s")
+        values.append(shift_id)
+    if from_date:
+        conditions.append("s.shift_date >= %s")
+        values.append(from_date)
+    if to_date:
+        conditions.append("s.shift_date <= %s")
+        values.append(to_date)
+    if customer:
+        conditions.append("si.customer = %s")
+        values.append(customer)
+        
+    query = f"""
+        SELECT 
+            si.name, si.parent as shift, s.shift_date, s.shift_template, s.station,
+            si.customer, si.entry_number, si.purchase_order, si.vehicle_registration,
+            si.item, item.item_name, item.item_group,
+            si.quantity, si.rate, 
+            COALESCE(si.gross_amount, (si.quantity * si.rate)) as gross_amount,
+            si.discount_amount,
+            COALESCE(si.discount_csa, si.csa) as discount_csa,
+            si.discount_reason,
+            si.amount as net_amount,
+            si.csa as issuer_csa,
+            emp_disc.employee_name as discount_csa_name,
+            emp_iss.employee_name as issuer_csa_name,
+            cust.customer_name
+        FROM `tabShift Invoice` si
+        JOIN `tabShift` s ON si.parent = s.name
+        LEFT JOIN `tabItem` item ON si.item = item.name
+        LEFT JOIN `tabCustomer` cust ON si.customer = cust.name
+        LEFT JOIN `tabEmployee` emp_disc ON COALESCE(si.discount_csa, si.csa) = emp_disc.name
+        LEFT JOIN `tabEmployee` emp_iss ON si.csa = emp_iss.name
+        WHERE {' AND '.join(conditions)}
+        ORDER BY s.shift_date DESC, si.creation DESC
+    """
+    rows = frappe.db.sql(query, values, as_dict=True)
+    
+    total_gross = sum(float(r.gross_amount or 0) for r in rows)
+    total_discounts = sum(float(r.discount_amount or 0) for r in rows)
+    total_net = sum(float(r.net_amount or 0) for r in rows)
+    
+    return {
+        "discounts": rows,
+        "count": len(rows),
+        "total_gross": round(total_gross, 2),
+        "total_discounts": round(total_discounts, 2),
+        "total_net": round(total_net, 2),
+        "summary": {
+            "total_count": len(rows),
+            "total_gross": round(total_gross, 2),
+            "total_discounts": round(total_discounts, 2),
+            "total_net": round(total_net, 2)
+        }
+    }
+
+@frappe.whitelist()
+def get_customer_payments_history(station, from_date=None, to_date=None, customer=None, limit=None):
     conditions = ["s.station = %s"]
     values = [station]
     
@@ -2197,21 +3557,25 @@ def get_customer_payments_history(station, from_date=None, to_date=None, custome
         conditions.append("cp.customer = %s")
         values.append(customer)
         
+    limit_num = int(limit) if limit else (1000 if (from_date or to_date or customer) else 20)
+        
     query = f"""
         SELECT 
             cp.name, cp.shift, s.shift_date, s.shift_template, cp.customer,
+            IFNULL(cust.customer_name, cp.customer) as customer_name,
             cp.csa, cp.mode_of_payment, cp.amount, cp.date, cp.creation
         FROM `tabCustomer Payment` cp
         JOIN `tabShift` s ON cp.shift = s.name
+        LEFT JOIN `tabCustomer` cust ON cp.customer = cust.name
         WHERE {' AND '.join(conditions)}
-        ORDER BY cp.creation DESC
-        LIMIT {500 if (from_date or to_date) else 30}
+        ORDER BY s.shift_date DESC, cp.creation DESC
+        LIMIT {limit_num}
     """
     return frappe.db.sql(query, values, as_dict=True)
 
 
 @frappe.whitelist()
-def get_topups_history(station=None, from_date=None, to_date=None):
+def get_topups_history(station=None, from_date=None, to_date=None, limit=None):
     filters = []
     if station:
         filters.append(f"s.station = '{station}'")
@@ -2224,6 +3588,8 @@ def get_topups_history(station=None, from_date=None, to_date=None):
     if filter_cond:
         filter_cond = " AND " + filter_cond
         
+    limit_num = int(limit) if limit else (1000 if (from_date or to_date) else 20)
+        
     sql = f'''
         SELECT 
             t.name, t.date, t.shift, t.creation, t.card, t.csa, 
@@ -2232,9 +3598,422 @@ def get_topups_history(station=None, from_date=None, to_date=None):
         LEFT JOIN `tabShift` s ON t.shift = s.name
         WHERE t.docstatus < 2 {filter_cond}
         ORDER BY t.date DESC, t.creation DESC
-        LIMIT {500 if (from_date or to_date) else 30}
+        LIMIT {limit_num}
     '''
     return frappe.db.sql(sql, as_dict=True)
+
+
+@frappe.whitelist()
+def get_shift_dips_history(station=None, from_date=None, to_date=None, tank=None, shift_id=None, limit=None):
+    conditions = ["s.docstatus < 2"]
+    values = []
+    
+    if station:
+        conditions.append("s.station = %s")
+        values.append(station)
+    if shift_id:
+        conditions.append("s.name = %s")
+        values.append(shift_id)
+    if from_date:
+        conditions.append("s.shift_date >= %s")
+        values.append(from_date)
+    if to_date:
+        conditions.append("s.shift_date <= %s")
+        values.append(to_date)
+    if tank:
+        conditions.append("sd.fuel_tank = %s")
+        values.append(tank)
+        
+    limit_num = int(limit) if limit else (1000 if (from_date or to_date or tank or shift_id) else 20)
+        
+    query = f"""
+        SELECT 
+            sd.name, sd.parent as shift, s.shift_date, s.shift_template, s.status as shift_status,
+            s.station, sd.fuel_tank, sd.opening_dip, sd.closing_dip, sd.expected_stock, sd.variance,
+            (COALESCE(sd.opening_dip, 0) - COALESCE(sd.closing_dip, 0)) as diff_dip,
+            sd.creation, sd.modified
+        FROM `tabDip Stick Reading` sd
+        JOIN `tabShift` s ON sd.parent = s.name
+        WHERE {' AND '.join(conditions)}
+        ORDER BY s.shift_date DESC, sd.creation DESC, sd.name DESC
+        LIMIT {limit_num}
+    """
+    return frappe.db.sql(query, values, as_dict=True)
+
+
+@frappe.whitelist()
+def update_dip_reading(reading_id, closing_dip=None, opening_dip=None):
+    from frappe.utils import flt
+    if not reading_id:
+        frappe.throw("Reading ID is required")
+        
+    parent_shift = frappe.db.get_value("Dip Stick Reading", reading_id, "parent")
+    if not parent_shift:
+        frappe.throw("Dip Stick Reading not found")
+        
+    shift_doc = frappe.get_doc("Shift", parent_shift)
+    
+    # Check permissions if closed
+    if shift_doc.status != "Open" and not (frappe.user.has_role("System Manager") or frappe.user.has_role("Fuel Station Owner")):
+        frappe.throw("This shift is closed. Only System Managers or Fuel Station Owners can modify closed shift readings.")
+        
+    row_found = False
+    for r in shift_doc.dip_stick_readings:
+        if r.name == reading_id:
+            if closing_dip is not None and str(closing_dip).strip() != "":
+                r.closing_dip = flt(closing_dip)
+            else:
+                r.closing_dip = None
+            if opening_dip is not None and str(opening_dip).strip() != "":
+                r.opening_dip = flt(opening_dip)
+            row_found = True
+            break
+            
+    if not row_found:
+        frappe.throw(f"Reading row {reading_id} not found in shift {parent_shift}")
+        
+    shift_doc.save(ignore_permissions=True)
+    return {"status": "success", "message": "Dip Stick reading updated successfully"}
+
+
+@frappe.whitelist()
+def clear_dip_reading(reading_id):
+    if not reading_id:
+        frappe.throw("Reading ID is required")
+        
+    parent_shift = frappe.db.get_value("Dip Stick Reading", reading_id, "parent")
+    if not parent_shift:
+        frappe.throw("Dip Stick Reading not found")
+        
+    shift_doc = frappe.get_doc("Shift", parent_shift)
+    
+    if shift_doc.status != "Open" and not (frappe.user.has_role("System Manager") or frappe.user.has_role("Fuel Station Owner")):
+        frappe.throw("This shift is closed. Only System Managers or Fuel Station Owners can modify closed shift readings.")
+        
+    for r in shift_doc.dip_stick_readings:
+        if r.name == reading_id:
+            r.closing_dip = None
+            break
+            
+    shift_doc.save(ignore_permissions=True)
+    return {"status": "success", "message": "Dip Stick reading cleared successfully"}
+
+
+@frappe.whitelist()
+def get_historical_greasing_sales(from_date=None, to_date=None, csa=None, vehicle_type=None, station=None):
+    from frappe.utils import flt, cint
+    
+    conditions = ["s.docstatus < 2"]
+    values = []
+    
+    if from_date:
+        conditions.append("s.shift_date >= %s")
+        values.append(from_date)
+    if to_date:
+        conditions.append("s.shift_date <= %s")
+        values.append(to_date)
+    if station:
+        conditions.append("s.station = %s")
+        values.append(station)
+    if csa:
+        conditions.append("g.csa = %s")
+        values.append(csa)
+    if vehicle_type:
+        conditions.append("g.vehicle_type = %s")
+        values.append(vehicle_type)
+        
+    where_clause = " AND ".join(conditions)
+    
+    services = frappe.db.sql(f"""
+        SELECT 
+            g.name,
+            g.parent as shift,
+            s.shift_date,
+            s.shift_name_display,
+            s.station,
+            g.csa,
+            g.vehicle_type,
+            g.number_of_vehicles,
+            g.amount_per_vehicle,
+            g.total_amount,
+            g.is_invoice_sale,
+            g.reference_invoice
+        FROM `tabShift Greasing Sale` g
+        INNER JOIN `tabShift` s ON g.parent = s.name
+        WHERE {where_clause}
+        ORDER BY s.shift_date DESC, g.creation DESC
+    """, values, as_dict=True)
+    
+    # Also fetch shift level inventory & usage summary
+    shift_conditions = ["docstatus < 2"]
+    shift_values = []
+    if from_date:
+        shift_conditions.append("shift_date >= %s")
+        shift_values.append(from_date)
+    if to_date:
+        shift_conditions.append("shift_date <= %s")
+        shift_values.append(to_date)
+    if station:
+        shift_conditions.append("station = %s")
+        shift_values.append(station)
+        
+    shift_where = " AND ".join(shift_conditions)
+    shift_summaries = frappe.db.sql(f"""
+        SELECT 
+            name as shift,
+            shift_date,
+            shift_name_display,
+            station,
+            grease_opening_balance,
+            grease_top_up,
+            grease_closing_balance,
+            grease_used,
+            total_greasing_sales
+        FROM `tabShift`
+        WHERE {shift_where} AND (grease_used > 0 OR total_greasing_sales > 0 OR grease_opening_balance > 0)
+        ORDER BY shift_date DESC, creation DESC
+    """, shift_values, as_dict=True)
+    
+    total_revenue = sum([flt(s.total_amount) for s in services])
+    total_vehicles = sum([cint(s.number_of_vehicles) for s in services])
+    total_grease_kg = sum([flt(sh.grease_used) for sh in shift_summaries])
+    
+    return {
+        "services": services,
+        "shift_summaries": shift_summaries,
+        "total_revenue": total_revenue,
+        "total_vehicles": total_vehicles,
+        "total_grease_kg": total_grease_kg
+    }
+
+
+@frappe.whitelist()
+def delete_greasing_sale(shift_name, row_name):
+    from frappe.utils import cint
+    if not shift_name or not row_name:
+        frappe.throw("Shift name and Row name are required")
+        
+    shift = frappe.get_doc("Shift", shift_name)
+    if shift.status != "Open" and not (frappe.user.has_role("System Manager") or frappe.user.has_role("Fuel Station Owner")):
+        frappe.throw("This shift is closed. Only System Managers or Fuel Station Owners can modify closed shift data.")
+        
+    for row in shift.greasing_sales:
+        if row.name == row_name and cint(getattr(row, "is_invoice_sale", 0)):
+            ref = getattr(row, "reference_invoice", "") or "unknown"
+            frappe.throw(f"This greasing service was automatically posted from Invoice #{ref}. Please edit or delete that invoice directly in the Invoices tab.")
+            
+    shift.greasing_sales = [r for r in shift.greasing_sales if r.name != row_name]
+    frappe.db.sql("DELETE FROM `tabShift Greasing Sale` WHERE name = %s AND parent = %s", (row_name, shift_name))
+    shift.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"status": "success", "message": "Greasing service deleted successfully", "doc": frappe.get_doc("Shift", shift_name)}
+
+
+@frappe.whitelist()
+def download_debtors_statement_pdf(customer_id=None, customer=None, start_date=None, end_date=None, station=None):
+    from frappe.utils.pdf import get_pdf
+    from frappe.utils import formatdate, flt
+    import frappe.utils
+    
+    cust_id = customer_id or customer
+    if not cust_id:
+        frappe.throw("Customer ID is required to generate statement PDF.")
+        
+    data = get_detailed_customer_statement(customer_id=cust_id, customer=cust_id, start_date=start_date, end_date=end_date)
+    if not data:
+        frappe.throw(f"No statement data found for customer {cust_id}.")
+        
+    cust = data.get("customer", {})
+    cust_name = cust.get("name") or cust_id
+    txns = data.get("transactions", [])
+    
+    if not station:
+        station = frappe.db.get_value("Fuel Station", {}, "station_name") or frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS ENERGY - KILIBET SERVICE STATION"
+        
+    def fmt_num(val):
+        try:
+            v = flt(val)
+            return f"{v:,.2f}"
+        except:
+            return "0.00"
+            
+    def fmt_dt(d_str):
+        try:
+            return formatdate(d_str, "dd/mm/yyyy")
+        except:
+            return str(d_str or "--")
+            
+    rows_html = ""
+    # Opening balance
+    rows_html += f"""
+        <tr style="background: #f8fafc; font-weight: bold;">
+            <td>{fmt_dt(data.get('start_date'))}</td>
+            <td>OPENING B/F</td>
+            <td>--</td>
+            <td>Balance brought forward from prior periods</td>
+            <td style="text-align: right;">--</td>
+            <td style="text-align: right;">--</td>
+            <td style="text-align: right; font-family: monospace;">{fmt_num(data.get('opening_balance'))}</td>
+        </tr>
+    """
+    
+    for t in txns:
+        deb = flt(t.get('debit') or 0)
+        crd = flt(t.get('credit') or 0)
+        bal = flt(t.get('running_balance') if t.get('running_balance') is not None else t.get('balance', 0))
+        
+        ref_str = f"#{t.get('entry_number')}" if t.get('entry_number') else (t.get('trans_no') or t.get('reference_no') or '--')
+        if t.get('purchase_order'):
+            ref_str += f" (PO: {t.get('purchase_order')})"
+            
+        desc_str = t.get('description') or '--'
+        if t.get('vehicle_registration') and t.get('item'):
+            qty_rate = f" ({t.get('quantity')}L @ KES {flt(t.get('rate')):.2f})" if flt(t.get('quantity')) > 0 else ''
+            desc_str = f"[{t.get('vehicle_registration')}] {t.get('item')}{qty_rate}"
+        elif t.get('mode_of_payment'):
+            csa_part = f" - Recv: {t.get('csa')}" if t.get('csa') else ''
+            memo_part = f" - {t.get('memo')}" if t.get('memo') else ''
+            desc_str = f"{t.get('mode_of_payment')}{csa_part}{memo_part}"
+            
+        deb_str = fmt_num(deb) if deb > 0 else "--"
+        crd_str = fmt_num(crd) if crd > 0 else "--"
+        
+        rows_html += f"""
+            <tr>
+                <td>{fmt_dt(t.get('date'))}</td>
+                <td>{frappe.utils.escape_html(str(t.get('voucher_type') or t.get('ref_type') or 'TXN'))}</td>
+                <td><b>{frappe.utils.escape_html(str(ref_str))}</b></td>
+                <td>{frappe.utils.escape_html(str(desc_str))}</td>
+                <td style="text-align: right; color: #dc2626; font-family: monospace;">{deb_str}</td>
+                <td style="text-align: right; color: #166534; font-family: monospace;">{crd_str}</td>
+                <td style="text-align: right; font-weight: bold; font-family: monospace;">{fmt_num(bal)}</td>
+            </tr>
+        """
+        
+    # Closing balance
+    rows_html += f"""
+        <tr style="background: #eef2ff; font-weight: bold; border-top: 2px solid #0f172a;">
+            <td>{fmt_dt(data.get('end_date'))}</td>
+            <td>CLOSING C/F</td>
+            <td>--</td>
+            <td>AMOUNT DUE (CARRIED FORWARD)</td>
+            <td style="text-align: right; font-family: monospace; color: #dc2626;">{fmt_num(data.get('period_invoices'))}</td>
+            <td style="text-align: right; font-family: monospace; color: #166534;">{fmt_num(data.get('period_payments'))}</td>
+            <td style="text-align: right; font-size: 11px; font-family: monospace; color: #1e1b4b;">{fmt_num(data.get('closing_balance'))}</td>
+        </tr>
+    """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Statement of Account - {frappe.utils.escape_html(cust_name)}</title>
+        <style>
+            body {{ font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10px; color: #111; margin: 15px; line-height: 1.35; }}
+            .header-table {{ width: 100%; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px; }}
+            .brand-title {{ font-size: 16px; font-weight: 800; color: #1e3a8a; }}
+            .doc-title {{ font-size: 14px; font-weight: bold; text-align: right; color: #0f172a; text-transform: uppercase; }}
+            .info-grid {{ width: 100%; margin-bottom: 12px; }}
+            .info-box {{ border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; background: #f8fafc; }}
+            table.ledger {{ width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9.5px; }}
+            table.ledger th, table.ledger td {{ border: 1px solid #cbd5e1; padding: 4px 6px; }}
+            table.ledger th {{ background: #f1f5f9; text-transform: uppercase; font-size: 8.5px; }}
+            .banking-box {{ margin-top: 15px; border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; background: #fafafa; font-size: 9px; }}
+        </style>
+    </head>
+    <body>
+        <table class="header-table">
+            <tr>
+                <td style="vertical-align: top;">
+                    <div class="brand-title">{frappe.utils.escape_html(station)}</div>
+                    <div style="font-size: 9px; color: #555; margin-top: 2px;">
+                        Accounts Receivable Division<br>
+                        Eldoret, Kenya<br>
+                        Email: accounts@kilibetcore.co.ke
+                    </div>
+                </td>
+                <td style="vertical-align: top; text-align: right;">
+                    <div class="doc-title">Statement of Account</div>
+                    <div style="font-size: 9.5px; color: #333; margin-top: 2px;">
+                        <b>Period:</b> {fmt_dt(data.get('start_date'))} &mdash; {fmt_dt(data.get('end_date'))}<br>
+                        <b>Date Generated:</b> {fmt_dt(frappe.utils.nowdate())}
+                    </div>
+                    <div style="margin-top: 4px; font-size: 11px; font-weight: bold; color: #1e3a8a;">
+                        Closing Due: KES {fmt_num(data.get('closing_balance'))}
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <table class="info-grid">
+            <tr>
+                <td style="width: 55%; vertical-align: top; padding-right: 8px;">
+                    <div class="info-box">
+                        <div style="font-size: 8px; font-weight: bold; color: #64748b; text-transform: uppercase;">BILL TO CUSTOMER:</div>
+                        <div style="font-size: 12px; font-weight: bold; color: #0f172a; margin: 2px 0;">{frappe.utils.escape_html(cust_name)}</div>
+                        <div style="font-size: 9px; color: #475569;">
+                            <b>Account / Fleet ID:</b> {frappe.utils.escape_html(str(cust.get('id') or 'N/A'))}<br>
+                            {f"<b>Address:</b> {frappe.utils.escape_html(cust.get('address'))}<br>" if cust.get('address') and cust.get('address') != 'N/A' else ''}
+                            {f"<b>Phone:</b> {frappe.utils.escape_html(cust.get('phone'))}<br>" if cust.get('phone') and cust.get('phone') != 'N/A' else ''}
+                        </div>
+                    </div>
+                </td>
+                <td style="width: 45%; vertical-align: top;">
+                    <div class="info-box">
+                        <div style="font-size: 8px; font-weight: bold; color: #64748b; text-transform: uppercase;">ACCOUNT SUMMARY:</div>
+                        <table style="width: 100%; font-size: 9px; margin-top: 2px;">
+                            <tr><td><b>Credit Limit:</b></td><td style="text-align: right; font-family: monospace;">KES {fmt_num(cust.get('credit_limit'))}</td></tr>
+                            <tr><td><b>Opening Balance (B/F):</b></td><td style="text-align: right; font-family: monospace;">KES {fmt_num(data.get('opening_balance'))}</td></tr>
+                            <tr><td><b>Total Invoices (Period):</b></td><td style="text-align: right; font-family: monospace; color:#dc2626;">+ KES {fmt_num(data.get('period_invoices'))}</td></tr>
+                            <tr><td><b>Total Payments (Period):</b></td><td style="text-align: right; font-family: monospace; color:#166534;">- KES {fmt_num(data.get('period_payments'))}</td></tr>
+                            <tr style="border-top: 1px solid #cbd5e1; font-weight: bold;"><td><b>Total Amount Due:</b></td><td style="text-align: right; font-family: monospace; color:#1e3a8a; font-size: 10px;">KES {fmt_num(data.get('closing_balance'))}</td></tr>
+                        </table>
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <table class="ledger">
+            <thead>
+                <tr>
+                    <th style="width: 70px;">Date</th>
+                    <th style="width: 80px;">Type</th>
+                    <th style="width: 90px;">Reference #</th>
+                    <th>Description / Details</th>
+                    <th style="text-align: right; width: 75px;">Debit (+)</th>
+                    <th style="text-align: right; width: 75px;">Credit (-)</th>
+                    <th style="text-align: right; width: 85px;">Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+
+        <div class="banking-box">
+            <b>PAYMENT REMITTANCE INSTRUCTIONS:</b><br>
+            Please make all cheque / direct bank transfers payable to <b>Kilibet Core Ltd</b>.<br>
+            <b>Bank:</b> Equity Bank Kenya &nbsp;|&nbsp; <b>Account Name:</b> Kilibet Core Ltd &nbsp;|&nbsp; <b>Payment Terms:</b> 30 Days from invoice date.
+        </div>
+
+        <div style="margin-top: 20px; display: flex; justify-content: space-between; font-size: 9px;">
+            <div><b>Prepared By:</b> __________________________</div>
+            <div><b>Accounts Manager:</b> __________________________</div>
+            <div><b>Received By (Debtor):</b> __________________________</div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    pdf_bytes = get_pdf(html, {"orientation": "Portrait", "page-size": "A4"})
+    
+    safe_name = "".join(c for c in cust_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
+    filename = f"Statement_{safe_name}_{data.get('start_date')}_{data.get('end_date')}.pdf"
+    
+    frappe.response.filename = filename
+    frappe.response.filecontent = pdf_bytes
+    frappe.response.type = "pdf"
 
 
 

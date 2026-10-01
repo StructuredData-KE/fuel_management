@@ -15,6 +15,8 @@
   "document_invoice_number",
   "items",
   "transport_charge",
+  "net_total",
+  "total_vat",
   "grand_total"
  ],
  "fields": [
@@ -76,6 +78,18 @@
    "fieldname": "transport_charge",
    "fieldtype": "Currency",
    "label": "Transport Charge"
+  },
+  {
+   "fieldname": "net_total",
+   "fieldtype": "Currency",
+   "label": "Net Total (Exclusive)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_vat",
+   "fieldtype": "Currency",
+   "label": "Total VAT",
+   "read_only": 1
   },
   {
    "fieldname": "grand_total",

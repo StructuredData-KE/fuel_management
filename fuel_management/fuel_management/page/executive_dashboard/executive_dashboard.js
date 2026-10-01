@@ -115,107 +115,49 @@ function init_spa_ui(wrapper) {
         }
     });
 
-    // Date Filter Initialization
+    // Date Filter Initialization - Default to Last 7 Days
     let today = frappe.datetime.get_today();
-    let first_day = frappe.datetime.month_start();
-    $(wrapper).find('#exec-global-from').val(first_day);
+    let seven_days_ago = frappe.datetime.add_days(today, -6);
+    $(wrapper).find('#exec-global-from').val(seven_days_ago);
     $(wrapper).find('#exec-global-to').val(today);
 
-    $(wrapper).find('#exec-global-apply').on('click', function() {
+    function trigger_all_loads() {
         load_dashboard_data(wrapper);
+        load_analytics_data(wrapper);
         load_pnl_data(wrapper);
         load_hr_data(wrapper);
-        load_analytics_data(wrapper);
-    load_topups_statement(wrapper);
-
-    
-    // Populate Station Dropdown
-    frappe.call({
-        method: 'frappe.client.get_list',
-        args: {
-            doctype: 'Fuel Station',
-            fields: ['name']
-        },
-        callback: function(r) {
-            if(r.message) {
-                let opts = '<option value="">All Stations</option>';
-                r.message.forEach(s => {
-                    opts += `<option value="${s.name}">${s.name}</option>`;
-                });
-                $(wrapper).find('#inventory-station-select').html(opts);
-            }
-        }
-    });
-
-    $(wrapper).find('#inventory-station-select').off('change').on('change', function() {
-        fetch_inventory_report($(wrapper));
-    });
-
-    // Inventory Report initialization
-    let fromInput = $(wrapper).find('#inventory-date-from');
-    let toInput = $(wrapper).find('#inventory-date-to');
-    
-    if (!fromInput.val()) {
-        let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]);
+        load_topups_statement(wrapper);
     }
-    
-    $(wrapper).find('#btn-refresh-inventory-report').off('click').on('click', function() {
-        fetch_inventory_report($(wrapper));
+
+    // Date Preset Buttons
+    $(wrapper).find('.exec-preset-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        $(wrapper).find('.exec-preset-btn').removeClass('active');
+        $(this).addClass('active');
+
+        let range = $(this).data('range');
+        let end = frappe.datetime.get_today();
+        let start = end;
+
+        if (range == 7) {
+            start = frappe.datetime.add_days(end, -6);
+        } else if (range == 14) {
+            start = frappe.datetime.add_days(end, -13);
+        } else if (range == 30) {
+            start = frappe.datetime.add_days(end, -29);
+        } else if (range == 'month') {
+            start = frappe.datetime.month_start();
+        }
+
+        $(wrapper).find('#exec-global-from').val(start);
+        $(wrapper).find('#exec-global-to').val(end);
+        trigger_all_loads();
     });
 
-    $(wrapper).find('#inventory-search').off('input').on('input', function() {
-        let val = $(this).val().toLowerCase();
-        $(wrapper).find('#list-inventory-status tr.data-row').each(function() {
-            let text = $(this).find('.th-product').text().toLowerCase();
-            $(this).toggle(text.includes(val));
-        });
-        
-        $(wrapper).find('#list-inventory-status tr.row-group-header').each(function() {
-            let $group = $(this);
-            let $rows = $group.nextUntil('.row-group-header', 'tr.data-row');
-            if ($rows.filter(':visible').length === 0) {
-                $group.hide();
-            } else {
-                $group.show();
-            }
-        });
-    });
-
-    // Zoom and Compact logic
-    let current_zoom = 100;
-    
-    $(wrapper).find('#btn-zoom-in').on('click', function() {
-        if(current_zoom < 150) {
-            current_zoom += 10;
-            apply_inventory_zoom(wrapper, current_zoom);
-        }
-    });
-    
-    $(wrapper).find('#btn-zoom-out').on('click', function() {
-        if(current_zoom > 70) {
-            current_zoom -= 10;
-            apply_inventory_zoom(wrapper, current_zoom);
-        }
-    });
-    
-    $(wrapper).find('#btn-zoom-reset').on('click', function() {
-        current_zoom = 100;
-        apply_inventory_zoom(wrapper, current_zoom);
-    });
-    
-    $(wrapper).find('#toggle-compact').on('change', function() {
-        if($(this).is(':checked')) {
-            $(wrapper).find('.new-inv-table-unified tbody td').css('padding', '0.2rem 1rem');
-        } else {
-            $(wrapper).find('.new-inv-table-unified tbody td').css('padding', '0.5rem 1rem');
-        }
-    });
-    
-    // Initial Fetch
-    fetch_inventory_report($(wrapper));
-
+    $(wrapper).find('#exec-global-apply').off('click').on('click', function(e) {
+        e.preventDefault();
+        $(wrapper).find('.exec-preset-btn').removeClass('active');
+        trigger_all_loads();
     });
 
     $(wrapper).find('#btn-reconcile-topups').off('click').on('click', function() {
@@ -605,94 +547,214 @@ function load_analytics_data(wrapper) {
                 $(wrapper).find('#exec-analytics-status').text('');
                 let data = r.message;
                 
-                // 1. Render Fuel Chart
-                let labels = Object.keys(data.fuel.total);
-                let dayData = labels.map(l => data.fuel.day[l] ? data.fuel.day[l].liters : 0);
-                let nightData = labels.map(l => data.fuel.night[l] ? data.fuel.night[l].liters : 0);
+                // 1. Render Fuel Multi-Line Comparison Chart
+                $(wrapper).find('#exec-fuel-chart').empty();
                 
-                let chartData = {
-                    labels: labels,
-                    datasets: [
-                        {
-                            name: "Day Shift",
-                            values: dayData,
-                            chartType: 'bar'
-                        },
-                        {
-                            name: "Night Shift",
-                            values: nightData,
-                            chartType: 'bar'
-                        }
-                    ]
+                let fuelDatasets = (data.fuel.series || []).map((s, idx) => ({
+                    name: s.name,
+                    values: s.values,
+                    chartType: 'line'
+                }));
+
+                let fuelChartData = {
+                    labels: data.date_labels || [],
+                    datasets: fuelDatasets
                 };
-                
+
                 new frappe.Chart($(wrapper).find('#exec-fuel-chart')[0], {
-                    data: chartData,
-                    type: 'bar',
+                    data: fuelChartData,
+                    type: 'line',
                     height: 300,
-                    colors: ['#f59e0b', '#1e293b'],
-                    barOptions: {
-                        stacked: true
+                    colors: ['#f59e0b', '#0f172a', '#10b981', '#6366f1', '#ec4899'],
+                    lineOptions: {
+                        regionFill: 1,
+                        dotSize: 5
+                    },
+                    axisOptions: {
+                        xIsSeries: true,
+                        shortenYAxisNumbers: true
                     },
                     tooltipOptions: {
-                        formatTooltipX: d => (d + '').toUpperCase(),
-                        formatTooltipY: d => d + ' L'
+                        formatTooltipX: d => d,
+                        formatTooltipY: d => (d || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' L'
                     }
                 });
+
+                // Update Fuel Summary Totals
+                $(wrapper).find('#exec-fuel-total-liters').text(format_currency(data.fuel.total_liters, '').trim() + ' L');
+                $(wrapper).find('#exec-fuel-total-revenue').text(format_currency(data.fuel.total_revenue, 'KES'));
 
                 // Render Fuel Table Summary
-                let fuelHtml = `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">`;
-                fuelHtml += `<tr style="border-bottom:1px solid #e2e8f0; color:#64748b;">
-                            <th style="padding:8px;">Fuel Type</th>
-                            <th style="padding:8px; text-align:right;">Day (L)</th>
-                            <th style="padding:8px; text-align:right;">Night (L)</th>
-                            <th style="padding:8px; text-align:right;">Total (L)</th>
-                            <th style="padding:8px; text-align:right;">Revenue (KES)</th>
-                        </tr>`;
+                let fuelHtml = `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                            <th style="padding:10px 8px;">Fuel Type</th>
+                            <th style="padding:10px 8px; text-align:right;">Day Shift (L)</th>
+                            <th style="padding:10px 8px; text-align:right;">Night Shift (L)</th>
+                            <th style="padding:10px 8px; text-align:right;">Total Volume (L)</th>
+                            <th style="padding:10px 8px; text-align:right;">Revenue (KES)</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
                 
-                labels.forEach(l => {
-                    let dayL = data.fuel.day[l] ? data.fuel.day[l].liters : 0;
-                    let nightL = data.fuel.night[l] ? data.fuel.night[l].liters : 0;
-                    let totalL = data.fuel.total[l] ? data.fuel.total[l].liters : 0;
-                    let totalRev = data.fuel.total[l] ? data.fuel.total[l].revenue : 0;
-                    
+                let prodColors = {'DIESEL': '#f59e0b', 'PETROL 001': '#0f172a', 'SUPER': '#0f172a', 'KEROSENE': '#10b981'};
+                
+                Object.values(data.fuel.summary || {}).forEach(fs => {
+                    let dotColor = prodColors[fs.item_code.toUpperCase()] || '#6366f1';
                     fuelHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:10px 8px; font-weight:600; color:#0f172a;">${l}</td>
-                            <td style="padding:10px 8px; text-align:right;">${dayL.toFixed(2)}</td>
-                            <td style="padding:10px 8px; text-align:right;">${nightL.toFixed(2)}</td>
-                            <td style="padding:10px 8px; text-align:right; font-weight:600;">${totalL.toFixed(2)}</td>
-                            <td style="padding:10px 8px; text-align:right; color:#059669; font-weight:600;">${format_currency(totalRev, "")}</td>
-                        </tr>`;
+                        <td style="padding:10px 8px; font-weight:700; color:#0f172a;">
+                            <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${dotColor}; margin-right:6px;"></span>
+                            ${fs.item_code}
+                        </td>
+                        <td style="padding:10px 8px; text-align:right; font-family: monospace;">${(fs.day_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                        <td style="padding:10px 8px; text-align:right; font-family: monospace;">${(fs.night_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                        <td style="padding:10px 8px; text-align:right; font-weight:700; color:#0f172a; font-family: monospace;">${(fs.total_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                        <td style="padding:10px 8px; text-align:right; color:#059669; font-weight:700; font-family: monospace;">${format_currency(fs.revenue, 'KES')}</td>
+                    </tr>`;
                 });
-                fuelHtml += `</table>`;
+                fuelHtml += `</tbody></table>`;
                 $(wrapper).find('#exec-fuel-table').html(fuelHtml);
 
-                // Helper to render dry stock tables
-                const renderTable = (items, selector) => {
-                    if(!items || items.length === 0) {
-                        $(wrapper).find(selector).html(`<div style="color:#94a3b8; font-size:12px; padding:12px;">No sales in this period.</div>`);
-                        return;
-                    }
-                    let html = `<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">`;
-                    html += `<tr style="border-bottom:1px solid #e2e8f0; color:#64748b;">
-                                <th style="padding:8px;">Item</th>
-                                <th style="padding:8px; text-align:right;">Qty</th>
-                                <th style="padding:8px; text-align:right;">Revenue</th>
-                            </tr>`;
-                    items.forEach(i => {
-                        html += `<tr style="border-bottom:1px solid #f1f5f9;">
-                                <td style="padding:8px; color:#1e293b; font-weight:500;">${i.item_code}</td>
-                                <td style="padding:8px; text-align:right;">${i.qty}</td>
-                                <td style="padding:8px; text-align:right; color:#059669; font-weight:600;">${format_currency(i.revenue, "")}</td>
-                            </tr>`;
+                // 2. Render Lubes (in Litres)
+                $(wrapper).find('#exec-lubes-total-badge').text((data.lubes.total_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 1}) + ' L');
+                $(wrapper).find('#exec-lubes-chart').empty();
+                if (data.lubes.timeline_liters && data.lubes.timeline_liters.some(v => v > 0)) {
+                    new frappe.Chart($(wrapper).find('#exec-lubes-chart')[0], {
+                        data: {
+                            labels: data.date_labels,
+                            datasets: [{ name: "Lubes (Litres)", values: data.lubes.timeline_liters, chartType: 'bar' }]
+                        },
+                        type: 'bar',
+                        height: 180,
+                        colors: ['#0284c7'],
+                        tooltipOptions: { formatTooltipY: d => (d || 0) + ' L' }
                     });
-                    html += `</table>`;
-                    $(wrapper).find(selector).html(html);
-                };
+                }
 
-                renderTable(data.lubes, '#exec-analytics-lubes');
-                renderTable(data.gas, '#exec-analytics-gas');
-                renderTable(data.accessories, '#exec-analytics-accessories');
+                let lubesHtml = `<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; font-size:10px; text-transform:uppercase;">
+                            <th style="padding:6px 4px;">Lube Item</th>
+                            <th style="padding:6px 4px; text-align:right;">Pack</th>
+                            <th style="padding:6px 4px; text-align:right;">Qty</th>
+                            <th style="padding:6px 4px; text-align:right;">Litres</th>
+                            <th style="padding:6px 4px; text-align:right;">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                if (!data.lubes.items || data.lubes.items.length === 0) {
+                    lubesHtml += `<tr><td colspan="5" style="padding:16px; text-align:center; color:#94a3b8;">No lubes sales recorded.</td></tr>`;
+                } else {
+                    data.lubes.items.forEach(item => {
+                        lubesHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:6px 4px; font-weight:600; color:#1e293b;">${item.item_code}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#64748b; font-family: monospace;">${item.pack_size}L</td>
+                            <td style="padding:6px 4px; text-align:right; font-family: monospace;">${item.qty}</td>
+                            <td style="padding:6px 4px; text-align:right; font-weight:700; color:#0284c7; font-family: monospace;">${item.total_liters.toFixed(1)} L</td>
+                            <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(item.revenue, '')}</td>
+                        </tr>`;
+                    });
+                }
+                lubesHtml += `</tbody></table>`;
+                $(wrapper).find('#exec-analytics-lubes').html(lubesHtml);
+
+                // 3. Render Gas (Kgs) & Cylinders
+                $(wrapper).find('#exec-gas-total-badge').text((data.gas.total_kgs || 0).toLocaleString() + ' Kg');
+                $(wrapper).find('#exec-cyl-total-badge').text((data.gas.total_cylinders || 0) + ' Cyl');
+                $(wrapper).find('#exec-gas-chart').empty();
+                if ((data.gas.timeline_kgs && data.gas.timeline_kgs.some(v => v > 0)) || (data.gas.timeline_cylinders && data.gas.timeline_cylinders.some(v => v > 0))) {
+                    new frappe.Chart($(wrapper).find('#exec-gas-chart')[0], {
+                        data: {
+                            labels: data.date_labels,
+                            datasets: [
+                                { name: "Gas (Kgs)", values: data.gas.timeline_kgs, chartType: 'bar' },
+                                { name: "Cylinders (Units)", values: data.gas.timeline_cylinders, chartType: 'line' }
+                            ]
+                        },
+                        type: 'axis-mixed',
+                        height: 180,
+                        colors: ['#f97316', '#475569'],
+                        tooltipOptions: { formatTooltipY: d => d }
+                    });
+                }
+
+                let gasHtml = `<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; font-size:10px; text-transform:uppercase;">
+                            <th style="padding:6px 4px;">Product</th>
+                            <th style="padding:6px 4px; text-align:right;">Type</th>
+                            <th style="padding:6px 4px; text-align:right;">Units</th>
+                            <th style="padding:6px 4px; text-align:right;">Weight</th>
+                            <th style="padding:6px 4px; text-align:right;">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                let hasGas = (data.gas.gas_items && data.gas.gas_items.length > 0) || (data.gas.cylinder_items && data.gas.cylinder_items.length > 0);
+                if (!hasGas) {
+                    gasHtml += `<tr><td colspan="5" style="padding:16px; text-align:center; color:#94a3b8;">No gas or cylinder sales recorded.</td></tr>`;
+                } else {
+                    (data.gas.gas_items || []).forEach(g => {
+                        gasHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:6px 4px; font-weight:600; color:#1e293b;">${g.item_code}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#ea580c; font-size:10px; font-weight:600;">Gas Refill</td>
+                            <td style="padding:6px 4px; text-align:right; font-family: monospace;">${g.qty}</td>
+                            <td style="padding:6px 4px; text-align:right; font-weight:700; color:#ea580c; font-family: monospace;">${g.total_kg.toFixed(0)} Kg</td>
+                            <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(g.revenue, '')}</td>
+                        </tr>`;
+                    });
+                    (data.gas.cylinder_items || []).forEach(c => {
+                        gasHtml += `<tr style="border-bottom:1px solid #f1f5f9; background:#fcfcfc;">
+                            <td style="padding:6px 4px; font-weight:600; color:#334155;">${c.item_code}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#475569; font-size:10px; font-weight:600;">Cylinder</td>
+                            <td style="padding:6px 4px; text-align:right; font-family: monospace;">${c.qty}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#64748b; font-family: monospace;">--</td>
+                            <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(c.revenue, '')}</td>
+                        </tr>`;
+                    });
+                }
+                gasHtml += `</tbody></table>`;
+                $(wrapper).find('#exec-analytics-gas').html(gasHtml);
+
+                // 4. Render Filters & Accessories
+                $(wrapper).find('#exec-filters-total-badge').text((data.accessories.total_qty || 0) + ' Units');
+                $(wrapper).find('#exec-filters-chart').empty();
+                if (data.accessories.timeline_qty && data.accessories.timeline_qty.some(v => v > 0)) {
+                    new frappe.Chart($(wrapper).find('#exec-filters-chart')[0], {
+                        data: {
+                            labels: data.date_labels,
+                            datasets: [{ name: "Filters & Acc (Units)", values: data.accessories.timeline_qty, chartType: 'bar' }]
+                        },
+                        type: 'bar',
+                        height: 180,
+                        colors: ['#8b5cf6'],
+                        tooltipOptions: { formatTooltipY: d => (d || 0) + ' Units' }
+                    });
+                }
+
+                let filtersHtml = `<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; font-size:10px; text-transform:uppercase;">
+                            <th style="padding:6px 4px;">Item Code</th>
+                            <th style="padding:6px 4px; text-align:right;">Group</th>
+                            <th style="padding:6px 4px; text-align:right;">Qty</th>
+                            <th style="padding:6px 4px; text-align:right;">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                if (!data.accessories.items || data.accessories.items.length === 0) {
+                    filtersHtml += `<tr><td colspan="4" style="padding:16px; text-align:center; color:#94a3b8;">No filter or accessory sales recorded.</td></tr>`;
+                } else {
+                    data.accessories.items.forEach(acc => {
+                        filtersHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:6px 4px; font-weight:600; color:#1e293b;">${acc.item_code}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#64748b; font-size:10px;">${acc.item_group}</td>
+                            <td style="padding:6px 4px; text-align:right; font-family: monospace; font-weight:600;">${acc.qty}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(acc.revenue, '')}</td>
+                        </tr>`;
+                    });
+                }
+                filtersHtml += `</tbody></table>`;
+                $(wrapper).find('#exec-analytics-accessories').html(filtersHtml);
             }
         }
     });

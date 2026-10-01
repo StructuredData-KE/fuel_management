@@ -1,5 +1,6 @@
 import frappe
 from frappe.model.document import Document
+from frappe.utils import flt, cint, cstr, getdate, nowdate, nowtime, add_days
 
 class Shift(Document):
     def validate(self):
@@ -11,9 +12,93 @@ class Shift(Document):
         self.calculate_sales_quantity()
         self.calculate_expected_stock()
         self.calculate_expected_cash()
+        self.auto_inject_greasing_sales_from_invoices()
+        self.calculate_greasing()
         self.auto_inject_dry_stock_from_invoices()
         self.validate_csa_reconciliation()
         self.validate_report_sent()
+
+    def auto_inject_greasing_sales_from_invoices(self):
+        from frappe.utils import flt, cint
+        
+        # Clean up ALL injected greasing sales first to prevent duplicates or ghost items on edit
+        if getattr(self, "greasing_sales", None):
+            self.greasing_sales = [
+                row for row in self.greasing_sales
+                if not cint(getattr(row, "is_invoice_sale", 0)) and not (isinstance(row, dict) and cint(row.get("is_invoice_sale", 0)))
+            ]
+            
+        if not self.invoices:
+            return
+
+        # Fetch Grease Vehicle Types to map vehicle_type
+        vt_map = {}
+        if frappe.db.exists("DocType", "Grease Vehicle Type"):
+            all_vt = frappe.get_all("Grease Vehicle Type", fields=["name", "vehicle_type", "greasing_price"])
+            for vt in all_vt:
+                vt_map[vt.name.upper()] = vt.name
+                if vt.vehicle_type:
+                    vt_map[vt.vehicle_type.upper()] = vt.name
+
+        for inv in self.invoices:
+            if not inv.item: continue
+            
+            item_group = frappe.db.get_value("Item", inv.item, "item_group")
+            is_greasing = False
+            if item_group and "GREAS" in item_group.upper():
+                is_greasing = True
+            elif inv.item.startswith("Greasing - ") or "GREASING" in inv.item.upper() or "GREASE" in inv.item.upper():
+                is_greasing = True
+
+            if not is_greasing:
+                continue
+                
+            raw_name = inv.item
+            if raw_name.startswith("Greasing - "):
+                raw_type = raw_name.replace("Greasing - ", "").strip()
+            else:
+                raw_type = raw_name.strip()
+                
+            target_vt = vt_map.get(raw_type.upper(), None)
+            if not target_vt:
+                for k, v in vt_map.items():
+                    if k in raw_type.upper() or raw_type.upper() in k:
+                        target_vt = v
+                        break
+            if not target_vt:
+                target_vt = raw_type
+                
+            qty = flt(inv.quantity) or 1.0
+            rate = flt(inv.rate)
+            gross_val = flt(inv.gross_amount) if getattr(inv, "gross_amount", None) else (qty * rate)
+            if not gross_val and inv.amount:
+                gross_val = flt(inv.amount)
+            if not rate and qty:
+                rate = gross_val / qty
+
+            self.append("greasing_sales", {
+                "csa": inv.csa,
+                "vehicle_type": target_vt,
+                "number_of_vehicles": cint(qty) if qty == int(qty) else qty,
+                "amount_per_vehicle": rate,
+                "total_amount": gross_val,
+                "is_invoice_sale": 1,
+                "reference_invoice": getattr(inv, "entry_number", None) or getattr(inv, "name", "")
+            })
+
+    def calculate_greasing(self):
+        from frappe.utils import flt
+        op = flt(self.grease_opening_balance)
+        top = flt(self.grease_top_up)
+        cl = flt(self.grease_closing_balance)
+        self.grease_used = max(0.0, flt(op + top - cl, 2))
+        
+        total_grease = 0.0
+        if self.greasing_sales:
+            for row in self.greasing_sales:
+                row.total_amount = flt(flt(row.number_of_vehicles) * flt(row.amount_per_vehicle), 2)
+                total_grease += row.total_amount
+        self.total_greasing_sales = flt(total_grease, 2)
 
     def calculate_sales_quantity(self):
         from frappe.utils import flt
@@ -41,14 +126,20 @@ class Shift(Document):
             if not inv.item: continue
             
             item_group = frappe.db.get_value("Item", inv.item, "item_group")
-            if item_group and item_group.upper() in ["FUEL", "FUELS"]:
+            if item_group and (item_group.upper() in ["FUEL", "FUELS", "GREASING SERVICES", "GREASING SERVICE"] or "GREAS" in item_group.upper()):
+                continue
+            if inv.item.startswith("Greasing - ") or "GREASING" in inv.item.upper():
                 continue
                 
+            gross_val = flt(inv.gross_amount) if getattr(inv, "gross_amount", None) else (flt(inv.quantity) * flt(inv.rate))
+            if not gross_val and inv.amount:
+                gross_val = flt(inv.amount)
+
             self.append("inventory_sales", {
                 "item": inv.item,
-                "quantity": inv.quantity,
-                "selling_price": inv.rate,
-                "amount": inv.amount,
+                "quantity": flt(inv.quantity),
+                "selling_price": flt(inv.rate),
+                "amount": gross_val,
                 "sold_by": getattr(inv, "inventory_csa", inv.csa) or getattr(inv, "csa", ""),
                 "is_invoice_sale": 1,
                 "reference_invoice": inv.entry_number
@@ -104,8 +195,16 @@ class Shift(Document):
                 total_mpesa += row.amount
 
         total_cards = sum(flt(row.amount) for row in (self.card_payments or []))
+        if not self.is_new():
+            st_cards = frappe.get_all("Station Cards", filters={"shift": self.name}, fields=["amount"])
+            total_cards += sum(flt(r.amount) for r in st_cards)
         total_invoices = sum(flt(row.amount) for row in (self.invoices or []))
         total_expenses = sum(flt(row.amount) for row in (self.shift_expenses or []))
+        if not self.is_new():
+            pc_entries = frappe.get_all("Station Petty Cash Entry", filters={"shift": self.name}, fields=["amount"])
+            total_expenses += sum(flt(r.amount) for r in pc_entries)
+            st_expenses = frappe.get_all("Station Expense", filters={"shift": self.name}, fields=["amount"])
+            total_expenses += sum(flt(r.amount) for r in st_expenses)
         total_procurement = sum(flt(row.amount) for row in (self.procurement or []))
 
         # Deduct Fleet Card CSA Drops
@@ -163,8 +262,17 @@ class Shift(Document):
         if not company:
             frappe.throw("No default Company found.")
             
-        # 1. Get nozzle prices to calculate fuel revenue
-        total_fuel_revenue = 0.0
+        # Resolve VAT Control Account
+        vat_control_account = getattr(station_doc, "vat_control_account", None)
+        if not vat_control_account:
+            vat_control_account = frappe.db.get_value("Account", {"company": company, "account_name": ["like", "%VAT Control%"], "is_group": 0}, "name")
+        if not vat_control_account:
+            vat_control_account = frappe.db.get_value("Account", {"company": company, "account_name": ["like", "%VAT%"], "is_group": 0}, "name")
+        if not vat_control_account:
+            vat_control_account = "VAT Control - KIL"
+
+        # 1. Get nozzle prices to calculate fuel revenue (8% VAT)
+        total_fuel_gross = 0.0
         nozzle_tanks = {}
         tank_items = {}
         item_prices = {}
@@ -185,25 +293,59 @@ class Shift(Document):
                     price = frappe.db.get_value("Item Price", {"item_code": item, "price_list": "Standard Selling"}, "price_list_rate")
                     if not price:
                         price = frappe.db.get_value("Item", item, "standard_rate") or 0.0
-                    item_prices[item] = price
+                    item_prices[item] = flt(price)
                     
-                total_fuel_revenue += flt(row.sales_quantity_electronic) * flt(item_prices[item])
+                total_fuel_gross += flt(flt(row.sales_quantity_electronic) * flt(item_prices[item]), 2)
                 
-        # 2. Calculate Dry Stock Revenue
-        total_dry_stock_revenue = 0.0
+        total_fuel_gross = flt(total_fuel_gross, 2)
+        fuel_vat_rate = 8.0
+        net_fuel_revenue = flt(total_fuel_gross / (1 + (fuel_vat_rate / 100.0)), 2)
+        fuel_output_vat = flt(total_fuel_gross - net_fuel_revenue, 2)
+
+        # 2. Calculate Dry Stock Revenue (0% on Gas, 16% on Other Inventory)
+        total_gas_gross = 0.0
+        total_other_inventory_gross = 0.0
+        
         for row in (self.inventory_sales or []):
             qty = row.total_volume if getattr(row, "total_volume", 0) else row.quantity
             rate = row.rate if getattr(row, "rate", 0) else 0.0
             amt = getattr(row, "amount", 0)
-            if amt:
-                total_dry_stock_revenue += flt(amt)
+            line_gross = flt(flt(amt) if amt else (flt(qty) * flt(rate)), 2)
+            
+            item_info = frappe.db.get_value("Item", row.item, ["item_group", "item_name"], as_dict=True) or {}
+            group = (item_info.get("item_group") or "").upper()
+            name = (item_info.get("item_name") or row.item or "").upper()
+            
+            is_gas = "GAS" in group or "CYLINDER" in group or "GAS" in name or "CYLINDER" in name or "LPG" in name or "6KG" in name or "13KG" in name or "35KG" in name or "50KG" in name
+            
+            if is_gas:
+                total_gas_gross += line_gross
             else:
-                total_dry_stock_revenue += flt(qty) * flt(rate)
+                total_other_inventory_gross += line_gross
+                
+        total_gas_gross = flt(total_gas_gross, 2)
+        total_other_inventory_gross = flt(total_other_inventory_gross, 2)
+
+        # Gas: 0% VAT
+        net_gas_revenue = total_gas_gross
+        gas_output_vat = 0.0
+        
+        # Other Inventory: 16% VAT
+        inventory_vat_rate = 16.0
+        net_other_inventory_revenue = flt(total_other_inventory_gross / (1 + (inventory_vat_rate / 100.0)), 2)
+        inventory_output_vat = flt(total_other_inventory_gross - net_other_inventory_revenue, 2)
+        
+        total_dry_stock_gross = flt(total_gas_gross + total_other_inventory_gross, 2)
+        net_dry_stock_revenue = flt(net_gas_revenue + net_other_inventory_revenue, 2)
+        total_dry_stock_vat = flt(gas_output_vat + inventory_output_vat, 2)
                 
         # 3. Calculate Greasing Revenue
-        total_greasing = flt(getattr(self, "total_greasing_sales", 0))
+        total_greasing_gross = flt(getattr(self, "total_greasing_sales", 0), 2)
+        net_greasing_revenue = total_greasing_gross
+        greasing_output_vat = 0.0
             
-        total_revenue = total_fuel_revenue + total_dry_stock_revenue + total_greasing
+        total_revenue_gross = flt(total_fuel_gross + total_dry_stock_gross + total_greasing_gross, 2)
+        total_sales_output_vat = flt(fuel_output_vat + total_dry_stock_vat + greasing_output_vat, 2)
         
         # Clean up any existing duplicate Shift Closure Journal Entries to prevent double-posting
         existing_jes = frappe.get_all("Journal Entry", filters={"user_remark": f"Shift Closure Accounting for Shift {self.name}", "docstatus": ["<", 2]})
@@ -223,30 +365,36 @@ class Shift(Document):
         je.company = company
         je.user_remark = f"Shift Closure Accounting for Shift {self.name}"
         
-        # --- REVENUE RECOGNITION (Income Generation) ---
-        if total_revenue > 0:
+        # --- REVENUE RECOGNITION (Income Generation & Output VAT) ---
+        if total_revenue_gross > 0:
             je.append("accounts", {
                 "account": station_doc.shift_control_account,
-                "debit_in_account_currency": total_revenue,
-                "user_remark": f"Total Shift Revenue Expected (Gross)"
+                "debit_in_account_currency": total_revenue_gross,
+                "user_remark": "Total Shift Revenue Expected (Gross Inclusive of VAT)"
             })
-            if total_fuel_revenue > 0:
+            if net_fuel_revenue > 0:
                 je.append("accounts", {
                     "account": station_doc.fuel_sales_account,
-                    "credit_in_account_currency": total_fuel_revenue,
-                    "user_remark": f"Total Fuel Sales"
+                    "credit_in_account_currency": net_fuel_revenue,
+                    "user_remark": f"Net Fuel Sales (Excl. 8% VAT: {fuel_output_vat:.2f})"
                 })
-            if total_dry_stock_revenue > 0:
+            if net_dry_stock_revenue > 0:
                 je.append("accounts", {
                     "account": station_doc.dry_stock_sales_account,
-                    "credit_in_account_currency": total_dry_stock_revenue,
-                    "user_remark": f"Total Dry Stock Sales"
+                    "credit_in_account_currency": net_dry_stock_revenue,
+                    "user_remark": f"Net Dry Stock Sales (Gas 0%: {total_gas_gross:.2f}, Other 16% VAT: {inventory_output_vat:.2f})"
                 })
-            if total_greasing > 0:
+            if net_greasing_revenue > 0:
                 je.append("accounts", {
                     "account": station_doc.greasing_sales_account,
-                    "credit_in_account_currency": total_greasing,
-                    "user_remark": f"Total Greasing Sales"
+                    "credit_in_account_currency": net_greasing_revenue,
+                    "user_remark": "Total Greasing Sales"
+                })
+            if total_sales_output_vat > 0 and vat_control_account:
+                je.append("accounts", {
+                    "account": vat_control_account,
+                    "credit_in_account_currency": total_sales_output_vat,
+                    "user_remark": f"Shift Output VAT (Fuel 8%: {fuel_output_vat:.2f}, Inventory 16%: {inventory_output_vat:.2f})"
                 })
                 
         # --- PAYMENT ALLOCATIONS (Clearing the Control Account) ---
@@ -254,7 +402,7 @@ class Shift(Document):
         # A. CSA Cash (Includes Cash from Sales AND Cash from Customer Payments)
         recons = frappe.get_all("Shift Cash Reconciliation", filters={"shift": self.name}, fields=["csa", "actual_cash", "variance"])
         for r in recons:
-            tot_cash = flt(r.actual_cash)
+            tot_cash = flt(r.actual_cash, 2)
             if tot_cash > 0:
                 csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
                 
@@ -282,7 +430,7 @@ class Shift(Document):
                     })
                 
             # Variances
-            var = flt(r.variance)
+            var = flt(r.variance, 2)
             if var < 0:
                 shortfall = abs(var)
                 csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
@@ -299,36 +447,42 @@ class Shift(Document):
                     "user_remark": f"Clear Shortfall for {csa_name}"
                 })
             elif var > 0:
-                # Overage
+                # Overage / Excess: Credit to CSA's Shortfall / Staff Clearing Account
+                excess = var
                 csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
                 je.append("accounts", {
-                    "account": station_doc.cash_account,
-                    "debit_in_account_currency": var,
-                    "user_remark": f"Overage Cash Submitted by {csa_name}"
+                    "account": station_doc.shift_control_account,
+                    "debit_in_account_currency": excess,
+                    "user_remark": f"Clear Excess for {csa_name}"
                 })
                 je.append("accounts", {
-                    "account": station_doc.overage_account,
-                    "credit_in_account_currency": var,
-                    "user_remark": f"Overage Income for {csa_name}"
+                    "account": station_doc.shortfall_account,
+                    "party_type": "Employee",
+                    "party": r.csa,
+                    "credit_in_account_currency": excess,
+                    "user_remark": f"Excess Credit for {csa_name}"
                 })
                 
         # A2. Dry Stock Cash
-        if flt(self.actual_dry_stock_cash) > 0:
+        dry_cash = flt(self.actual_dry_stock_cash, 2)
+        if dry_cash > 0:
             je.append("accounts", {
                 "account": station_doc.cash_account,
-                "debit_in_account_currency": self.actual_dry_stock_cash,
+                "debit_in_account_currency": dry_cash,
                 "user_remark": "Dry Stock Cash Submitted"
             })
             je.append("accounts", {
                 "account": station_doc.shift_control_account,
-                "credit_in_account_currency": self.actual_dry_stock_cash,
+                "credit_in_account_currency": dry_cash,
                 "user_remark": "Clear Dry Stock Cash Sales"
             })
 
 
-        # B. Invoices
+        # B. Invoices & Discounts
         for inv in (self.invoices or []):
-            if flt(inv.amount) > 0:
+            net_amt = flt(inv.amount, 2)
+            disc_amt = flt(getattr(inv, "discount_amount", 0), 2)
+            if net_amt > 0:
                 ar_account = frappe.db.get_value("Party Account", {"parent": inv.customer, "parenttype": "Customer", "company": company}, "account") or frappe.db.get_value("Company", company, "default_receivable_account")
                 if not ar_account:
                     frappe.throw(f"No AR account found for customer {inv.customer}")
@@ -336,13 +490,42 @@ class Shift(Document):
                     "account": ar_account,
                     "party_type": "Customer",
                     "party": inv.customer,
-                    "debit_in_account_currency": inv.amount,
-                    "user_remark": f"Credit Sale (Invoice)"
+                    "debit_in_account_currency": net_amt,
+                    "user_remark": f"Credit Sale (Invoice {inv.entry_number or ''})"
                 })
                 je.append("accounts", {
                     "account": station_doc.shift_control_account,
-                    "credit_in_account_currency": inv.amount,
+                    "credit_in_account_currency": net_amt,
                     "user_remark": f"Clear Invoice for {inv.customer}"
+                })
+            if disc_amt > 0:
+                discount_account = getattr(station_doc, "discount_account", None)
+                if not discount_account:
+                    discount_account = frappe.db.get_value("Account", {"company": company, "account_name": ["like", "%Discount%"], "is_group": 0}, "name")
+                if not discount_account:
+                    discount_account = frappe.db.get_value("Account", {"company": company, "account_name": ["like", "%Sales Expense%"], "is_group": 0}, "name")
+                if not discount_account:
+                    discount_account = "Discounts Allowed - KIL"
+                
+                acc_type = frappe.db.get_value("Account", discount_account, "account_type")
+                disc_row = {
+                    "account": discount_account,
+                    "debit_in_account_currency": disc_amt,
+                    "user_remark": f"Discount Allowed on Invoice {inv.entry_number or ''} ({inv.customer})"
+                }
+                if acc_type in ["Receivable", "Payable"]:
+                    if getattr(inv, "discount_csa", None):
+                        disc_row["party_type"] = "Employee"
+                        disc_row["party"] = inv.discount_csa
+                    else:
+                        disc_row["party_type"] = "Customer"
+                        disc_row["party"] = inv.customer
+                
+                je.append("accounts", disc_row)
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": disc_amt,
+                    "user_remark": f"Clear Discount for {inv.customer}"
                 })
                 
         # C. M-Pesa
@@ -352,21 +535,24 @@ class Shift(Document):
             mop_account = till_doc.default_account
             bank_account = getattr(till_doc, "bank_account", None)
 
-            if flt(m.amount) > 0:
+            m_amt = flt(m.amount, 2)
+            m_transfers = flt(m.transfers_made, 2)
+
+            if m_amt > 0:
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for M-Pesa Till: {m.mpesa_till}")
                 je.append("accounts", {
                     "account": mop_account,
-                    "debit_in_account_currency": m.amount,
+                    "debit_in_account_currency": m_amt,
                     "user_remark": f"M-Pesa Payment ({m.mpesa_till})"
                 })
                 je.append("accounts", {
                     "account": station_doc.shift_control_account,
-                    "credit_in_account_currency": m.amount,
+                    "credit_in_account_currency": m_amt,
                     "user_remark": f"Clear M-Pesa"
                 })
                 
-            if flt(m.transfers_made) > 0:
+            if m_transfers > 0:
                 if not bank_account:
                     frappe.throw(f"No Bank Account mapped for Transfers on M-Pesa Till: {m.mpesa_till}. Please configure the Bank Account in the Till settings.")
                 if not mop_account:
@@ -374,46 +560,107 @@ class Shift(Document):
                     
                 je.append("accounts", {
                     "account": bank_account,
-                    "debit_in_account_currency": m.transfers_made,
+                    "debit_in_account_currency": m_transfers,
                     "user_remark": f"Bank Transfer from {m.mpesa_till}"
                 })
                 je.append("accounts", {
                     "account": mop_account,
-                    "credit_in_account_currency": m.transfers_made,
+                    "credit_in_account_currency": m_transfers,
                     "user_remark": f"Bank Transfer Out"
                 })
                 
-        # D. Cards
+        # D. Cards (from self.card_payments and tabStation Cards)
+        processed_cards = []
         for c in (self.card_payments or []):
-            if flt(c.amount) > 0:
-                mop = getattr(c, "mode_of_payment", "Card")
-                mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": mop, "company": company}, "default_account")
+            processed_cards.append({
+                "amount": flt(c.amount, 2),
+                "card": getattr(c, "card", getattr(c, "mode_of_payment", "Card")),
+                "source": "Shift Card Payment"
+            })
+            
+        if not self.is_new():
+            st_cards = frappe.get_all("Station Cards", filters={"shift": self.name}, fields=["amount", "card", "receipt_no"])
+            for sc in st_cards:
+                processed_cards.append({
+                    "amount": flt(sc.amount, 2),
+                    "card": sc.card,
+                    "source": f"Station Card ({sc.card} - {sc.receipt_no})"
+                })
+                
+        for c in processed_cards:
+            c_amt = flt(c.get("amount"), 2)
+            if c_amt > 0:
+                card_name = c.get("card")
+                mop_account = None
+                
+                # 1. Check if Station Card Type has default_account set directly
+                if card_name and frappe.db.exists("Station Card Type", card_name):
+                    mop_account = frappe.db.get_value("Station Card Type", card_name, "default_account")
+                    
+                # 2. Check Mode of Payment Account for specific card name
+                if not mop_account and card_name:
+                    mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": card_name, "company": company}, "default_account")
+                    
+                # 3. Fallback to Mode of Payment Account for 'Card'
                 if not mop_account:
                     mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": "Card", "company": company}, "default_account")
-                    if not mop_account:
-                        frappe.throw(f"No Default Account mapped for Mode of Payment: Card")
+                    
+                if not mop_account:
+                    frappe.throw(f"No Default Account mapped for Card '{card_name or 'Card'}'. Please configure the Default Account in Station Card Type '{card_name}' or Mode of Payment 'Card'.")
+                    
                 je.append("accounts", {
                     "account": mop_account,
-                    "debit_in_account_currency": c.amount,
-                    "user_remark": f"Card Payment"
+                    "debit_in_account_currency": c_amt,
+                    "user_remark": f"Card Payment: {c.get('source')}"
                 })
                 je.append("accounts", {
                     "account": station_doc.shift_control_account,
-                    "credit_in_account_currency": c.amount,
-                    "user_remark": f"Clear Card"
+                    "credit_in_account_currency": c_amt,
+                    "user_remark": f"Clear Card: {c.get('source')}"
                 })
                 
-        # E. Expenses
+        # E. Petty Cash & Station Expenses
+        # 1. Station Petty Cash Entries
+        petty_cash_entries = frappe.get_all(
+            "Station Petty Cash Entry",
+            filters={"shift": self.name},
+            fields=["name", "amount", "expense_account", "category", "payee", "memo", "csa"]
+        )
+        for pc in petty_cash_entries:
+            pc_amt = flt(pc.amount, 2)
+            if pc_amt > 0:
+                exp_acc = pc.expense_account
+                if not exp_acc:
+                    exp_acc = getattr(station_doc, "miscellaneous_expenses_account", None) or frappe.db.get_value("Account", {"company": company, "account_name": ["like", "%Miscellaneous%"], "is_group": 0}, "name")
+                if not exp_acc:
+                    exp_acc = "Miscellaneous Expenses - KIL"
+                
+                csa_name = frappe.db.get_value("Employee", pc.csa, "employee_name") or pc.csa or "Station"
+                memo_str = f": {pc.memo}" if pc.memo else ""
+                payee_str = f" (Payee: {pc.payee})" if pc.payee else ""
+                je.append("accounts", {
+                    "account": exp_acc,
+                    "debit_in_account_currency": pc_amt,
+                    "user_remark": f"Petty Cash ({pc.category or 'Expense'}{memo_str}) - Paid by {csa_name}{payee_str}"
+                })
+                je.append("accounts", {
+                    "account": station_doc.shift_control_account,
+                    "credit_in_account_currency": pc_amt,
+                    "user_remark": f"Clear Petty Cash: {pc.name}"
+                })
+
+        # 2. Legacy Shift Expenses
         for e in (self.shift_expenses or []):
-            if flt(e.amount) > 0:
+            e_amt = flt(e.amount, 2)
+            if e_amt > 0:
                 je.append("accounts", {
                     "account": e.expense_account,
-                    "debit_in_account_currency": e.amount,
+                    "debit_in_account_currency": e_amt,
                     "user_remark": f"Shift Expense: {e.description}"
                 })
                 je.append("accounts", {
                     "account": station_doc.shift_control_account,
-                    "credit_in_account_currency": e.amount,
+                    "credit_in_account_currency": e_amt,
                     "user_remark": f"Clear Expense"
                 })
                 
@@ -422,39 +669,73 @@ class Shift(Document):
             if flt(rtt.volume_returned) > 0:
                 price_rec = frappe.get_all("Item Price", filters={"item_code": rtt.item, "price_list": "Standard Selling", "valid_from": ("<=", self.shift_date)}, fields=["price_list_rate"], order_by="valid_from desc", limit=1)
                 price = flt(price_rec[0].price_list_rate) if price_rec else 0.0
-                rtt_val = flt(rtt.volume_returned) * flt(price)
-                if rtt_val > 0:
+                rtt_gross = flt(flt(rtt.volume_returned) * flt(price), 2)
+                if rtt_gross > 0:
+                    rtt_net = flt(rtt_gross / 1.08, 2)
+                    rtt_vat = flt(rtt_gross - rtt_net, 2)
                     je.append("accounts", {
                         "account": station_doc.fuel_sales_account,
-                        "debit_in_account_currency": rtt_val,
-                        "user_remark": f"Reverse RTT Volume: {rtt.volume_returned}"
+                        "debit_in_account_currency": rtt_net,
+                        "user_remark": f"Reverse RTT Net Revenue: {rtt.volume_returned}L"
                     })
+                    if rtt_vat > 0 and vat_control_account:
+                        je.append("accounts", {
+                            "account": vat_control_account,
+                            "debit_in_account_currency": rtt_vat,
+                            "user_remark": f"Reverse RTT Output VAT: {rtt.volume_returned}L"
+                        })
                     je.append("accounts", {
                         "account": station_doc.shift_control_account,
-                        "credit_in_account_currency": rtt_val,
-                        "user_remark": f"Clear RTT"
+                        "credit_in_account_currency": rtt_gross,
+                        "user_remark": f"Clear RTT: {rtt.volume_returned}L"
                     })
                 
         # G. Non-Cash Customer Payments
         customer_payments = frappe.get_all("Customer Payment", filters={"shift": self.name, "docstatus": 1})
         for cp in customer_payments:
             cp_doc = frappe.get_doc("Customer Payment", cp.name)
-            if cp_doc.mode_of_payment != "Cash":
+            cp_amt = flt(cp_doc.amount, 2)
+            if cp_doc.mode_of_payment != "Cash" and cp_amt > 0:
                 mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": cp_doc.mode_of_payment, "company": company}, "default_account")
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for Mode of Payment: {cp_doc.mode_of_payment} (Customer Payment {cp_doc.name})")
                 je.append("accounts", {
                     "account": mop_account,
-                    "debit_in_account_currency": cp_doc.amount,
+                    "debit_in_account_currency": cp_amt,
                     "user_remark": f"Clear Non-Cash Customer Payment via {cp_doc.mode_of_payment}"
                 })
                 je.append("accounts", {
                     "account": station_doc.shift_control_account,
-                    "credit_in_account_currency": cp_doc.amount,
+                    "credit_in_account_currency": cp_amt,
                     "user_remark": f"Clear Customer Payment for {cp_doc.customer}"
                 })
 
         if len(je.accounts) > 0:
+            # Check for any rounding fractional differences and balance on shift control account
+            tot_dr = sum(flt(d.get("debit_in_account_currency", 0), 2) for d in je.accounts)
+            tot_cr = sum(flt(d.get("credit_in_account_currency", 0), 2) for d in je.accounts)
+            diff = flt(tot_dr - tot_cr, 2)
+            if abs(diff) > 0 and abs(diff) <= 0.50:
+                for acc in je.accounts:
+                    if acc.account == station_doc.shift_control_account:
+                        if diff > 0 and flt(acc.credit_in_account_currency, 2) > 0:
+                            acc.credit_in_account_currency = flt(acc.credit_in_account_currency + diff, 2)
+                            break
+                        elif diff < 0 and flt(acc.debit_in_account_currency, 2) > 0:
+                            acc.debit_in_account_currency = flt(acc.debit_in_account_currency + abs(diff), 2)
+                            break
+
+            # Ensure any Receivable / Payable account has party_type and party
+            for acc in je.accounts:
+                a_type = frappe.db.get_value("Account", acc.account, "account_type")
+                if a_type in ["Receivable", "Payable"] and not acc.party:
+                    acc.party_type = "Employee"
+                    if self.assigned_csas and self.assigned_csas[0].csa:
+                        acc.party = self.assigned_csas[0].csa
+                    else:
+                        emp = frappe.get_all("Employee", limit=1)
+                        acc.party = emp[0].name if emp else ""
+
             je.flags.ignore_permissions = True
             je.insert()
             je.submit()
@@ -470,8 +751,9 @@ class Shift(Document):
         )
         
         for recon in reconciliations:
-            if recon.variance < 0:
-                shortfall = abs(recon.variance)
+            var = flt(recon.variance)
+            if var < 0:
+                shortfall = abs(var)
                 existing = frappe.db.exists("Staff Liability Ledger", {"shift": self.name, "employee": recon.csa, "reason": ("like", "Shift Cash Variance Shortfall%")})
                 if not existing:
                     ledger = frappe.new_doc("Staff Liability Ledger")
@@ -480,9 +762,24 @@ class Shift(Document):
                     ledger.shift = self.name
                     ledger.amount = shortfall
                     ledger.reason = f"Shift Cash Variance Shortfall for Shift {self.name}"
+                    ledger.status = "Unpaid"
                     ledger.insert(ignore_permissions=True)
                     ledger.submit()
                     frappe.msgprint(f"Staff Liability Ledger created for CSA {recon.csa} for shortfall of {shortfall}")
+            elif var > 0:
+                excess = var
+                existing = frappe.db.exists("Staff Liability Ledger", {"shift": self.name, "employee": recon.csa, "reason": ("like", "Shift Cash Variance Excess%")})
+                if not existing:
+                    ledger = frappe.new_doc("Staff Liability Ledger")
+                    ledger.employee = recon.csa
+                    ledger.date = self.shift_date
+                    ledger.shift = self.name
+                    ledger.amount = -excess
+                    ledger.reason = f"Shift Cash Variance Excess for Shift {self.name}"
+                    ledger.status = "Deducted"
+                    ledger.insert(ignore_permissions=True)
+                    ledger.submit()
+                    frappe.msgprint(f"Staff Liability Ledger credit created for CSA {recon.csa} for excess of {excess}")
 
     def validate_csa_reconciliation(self):
         if self.status in ["Ended", "Closed"]:
@@ -858,6 +1155,10 @@ class Shift(Document):
             je.insert()
             je.submit()
             frappe.msgprint(f"Generated Journal Entry {je.name} for Supplier Cash Top-Ups.")
+
+    def get_wet_stock_summary(self):
+        from fuel_management.fuel_management.api import get_daily_dip_summary
+        return get_daily_dip_summary(self.name)
 
 @frappe.whitelist()
 def reopen_shift(shift_name):

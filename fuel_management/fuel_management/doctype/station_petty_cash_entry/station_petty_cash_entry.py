@@ -11,3 +11,10 @@ class StationPettyCashEntry(Document):
 			account.current_balance = (account.current_balance or 0) - self.amount
 			account.save(ignore_permissions=True)
 			frappe.db.commit()
+
+	def on_trash(self):
+		if self.petty_cash_account and self.amount:
+			account = frappe.get_doc("Station Petty Cash Account", self.petty_cash_account)
+			account.current_balance = (account.current_balance or 0) + self.amount
+			account.save(ignore_permissions=True)
+			frappe.db.commit()

@@ -189,34 +189,74 @@ def get_employee_shorts(from_date=None, to_date=None):
         "period": f"{formatdate(from_date)} to {formatdate(to_date)}"
     }
 
+import re
+from datetime import datetime, timedelta
+
+def parse_lube_litres(item_code, item_name):
+    txt = f"{item_code} {item_name}".upper()
+    m_ml = re.search(r'(\d+(?:\.\d+)?)\s*ML\b', txt)
+    if m_ml:
+        try:
+            return float(m_ml.group(1)) / 1000.0
+        except Exception:
+            pass
+    m_l = re.search(r'(\d+(?:\.\d+)?)\s*L(?:TR|ITRE|ITRES|TRS)?\b', txt)
+    if m_l:
+        try:
+            return float(m_l.group(1))
+        except Exception:
+            pass
+    return 1.0
+
+def parse_gas_kg(item_code, item_name):
+    txt = f"{item_code} {item_name}".upper()
+    m_kg = re.search(r'(\d+(?:\.\d+)?)\s*KG\b', txt)
+    if m_kg:
+        try:
+            return float(m_kg.group(1))
+        except Exception:
+            pass
+    return 1.0
+
 @frappe.whitelist()
 def get_sales_analytics(from_date=None, to_date=None):
     if not to_date:
         to_date = today()
     if not from_date:
-        from_date = to_date
+        # Default to 7 days window (today - 6 days to today)
+        from_date = frappe.utils.add_days(to_date, -6)
         
-    analytics = {
-        "fuel": {"day": {}, "night": {}, "total": {}},
-        "lubes": [],
-        "gas": [],
-        "accessories": []
-    }
+    d_start = getdate(from_date)
+    d_end = getdate(to_date)
     
-    # 1. Fuel Sales Breakdown
-    shifts = frappe.get_all("Shift", 
-        filters={"docstatus": ["<", 2], "shift_date": ["between", [from_date, to_date]]},
-        fields=["name", "shift_template", "shift_date"]
-    )
-    
-    # Pre-fetch pricing mapping to avoid looping DB queries
+    # Generate daily sequence of dates
+    num_days = (d_end - d_start).days + 1
+    date_list = [(d_start + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(num_days)]
+    date_labels = [(d_start + timedelta(days=i)).strftime('%d %b') for i in range(num_days)]
+
+    # 1. Fuel Sales Breakdown & Time-Series
+    fuel_readings = frappe.db.sql("""
+        SELECT 
+            s.shift_date,
+            t.fuel_product as item_code,
+            SUM(CASE WHEN UPPER(COALESCE(s.shift_template, '')) LIKE '%%DAY%%' THEN r.sales_quantity_electronic ELSE 0 END) as day_liters,
+            SUM(CASE WHEN UPPER(COALESCE(s.shift_template, '')) LIKE '%%NIGHT%%' THEN r.sales_quantity_electronic ELSE 0 END) as night_liters,
+            SUM(r.sales_quantity_electronic) as total_liters
+        FROM `tabPump Meter Reading` r
+        JOIN `tabShift` s ON r.parent = s.name
+        LEFT JOIN `tabPump Nozzle` n ON r.pump_nozzle = n.name
+        LEFT JOIN `tabFuel Tank` t ON n.fuel_tank = t.name
+        WHERE s.docstatus < 2 AND s.shift_date BETWEEN %s AND %s AND t.fuel_product IS NOT NULL
+        GROUP BY s.shift_date, t.fuel_product
+        ORDER BY s.shift_date ASC, t.fuel_product ASC
+    """, (from_date, to_date), as_dict=True)
+
+    # Pre-fetch pricing mapping
     price_map = {}
-    
     def get_price(item_code, shift_date):
         key = f"{item_code}_{shift_date}"
         if key in price_map:
             return price_map[key]
-            
         price_record = frappe.get_all("Item Price", 
             filters={"item_code": item_code, "price_list": "Standard Selling", "valid_from": ("<=", shift_date)},
             fields=["price_list_rate"],
@@ -226,75 +266,243 @@ def get_sales_analytics(from_date=None, to_date=None):
         price = price_record[0].price_list_rate if price_record else 0.0
         price_map[key] = price
         return price
-        
-    # Pre-fetch nozzles mapping
-    nozzles = frappe.get_all("Pump Nozzle", fields=["name", "fuel_tank"])
-    tanks = frappe.get_all("Fuel Tank", fields=["name", "fuel_product"])
-    
-    nozzle_tank_map = {n.name: n.fuel_tank for n in nozzles}
-    tank_product_map = {t.name: t.fuel_product for t in tanks}
-    
-    for shift in shifts:
-        readings = frappe.get_all("Pump Meter Reading", 
-            filters={"parent": shift.name},
-            fields=["pump_nozzle", "sales_quantity_electronic"]
-        )
-        
-        shift_type = "day" if "DAY" in (shift.shift_template or "").upper() else "night"
-        
-        for r in readings:
-            if r.sales_quantity_electronic and r.sales_quantity_electronic > 0:
-                tank = nozzle_tank_map.get(r.pump_nozzle)
-                if tank:
-                    item_code = tank_product_map.get(tank)
-                    if item_code:
-                        price = get_price(item_code, shift.shift_date)
-                        revenue = r.sales_quantity_electronic * price
-                        
-                        # Init dictionary structures
-                        if item_code not in analytics["fuel"][shift_type]:
-                            analytics["fuel"][shift_type][item_code] = {"liters": 0.0, "revenue": 0.0}
-                        if item_code not in analytics["fuel"]["total"]:
-                            analytics["fuel"]["total"][item_code] = {"liters": 0.0, "revenue": 0.0}
-                            
-                        # Add up
-                        analytics["fuel"][shift_type][item_code]["liters"] += r.sales_quantity_electronic
-                        analytics["fuel"][shift_type][item_code]["revenue"] += revenue
-                        analytics["fuel"]["total"][item_code]["liters"] += r.sales_quantity_electronic
-                        analytics["fuel"]["total"][item_code]["revenue"] += revenue
 
-    # 2. Dry Stock Breakdown (Lubes, Gas, Accessories)
-    inventory_sales = frappe.db.sql("""
-        SELECT i.item_group, inv.item as item_code, i.item_name, SUM(inv.quantity) as qty, SUM(inv.amount) as revenue
-        FROM `tabShift Inventory Sale` inv
-        INNER JOIN `tabShift` s ON inv.parent = s.name
-        INNER JOIN `tabItem` i ON inv.item = i.name
-        WHERE s.docstatus < 2 AND s.shift_date >= %s AND s.shift_date <= %s
-        GROUP BY inv.item, i.item_group
-    """, (from_date, to_date), as_dict=True)
-    
-    for sale in inventory_sales:
-        grp = sale.item_group.upper() if sale.item_group else ""
-        payload = {
-            "item_code": sale.item_code,
-            "item_name": sale.item_name,
-            "qty": sale.qty,
-            "revenue": sale.revenue
+    fuel_products = sorted(list(set(r.item_code for r in fuel_readings if r.item_code)))
+    fuel_series = []
+    fuel_summary = {}
+    total_fuel_liters = 0.0
+    total_fuel_revenue = 0.0
+
+    for prod in fuel_products:
+        daily_map = {d: 0.0 for d in date_list}
+        tot_day = 0.0
+        tot_night = 0.0
+        tot_liters = 0.0
+        tot_rev = 0.0
+        
+        for r in fuel_readings:
+            if r.item_code == prod:
+                sd = str(r.shift_date)
+                if sd in daily_map:
+                    daily_map[sd] += flt(r.total_liters or 0.0)
+                tot_day += flt(r.day_liters or 0.0)
+                tot_night += flt(r.night_liters or 0.0)
+                tot_liters += flt(r.total_liters or 0.0)
+                price = get_price(prod, sd)
+                tot_rev += flt(r.total_liters or 0.0) * price
+                
+        fuel_series.append({
+            "name": prod,
+            "values": [round(daily_map[d], 2) for d in date_list]
+        })
+        
+        fuel_summary[prod] = {
+            "item_code": prod,
+            "day_liters": round(tot_day, 2),
+            "night_liters": round(tot_night, 2),
+            "total_liters": round(tot_liters, 2),
+            "revenue": round(tot_rev, 2)
         }
-        
-        if "LUBE" in grp:
-            analytics["lubes"].append(payload)
-        elif "GAS" in grp or "CYLINDER" in grp:
-            analytics["gas"].append(payload)
-        elif "ACCESSOR" in grp or "FILTER" in grp:
-            analytics["accessories"].append(payload)
-            
-    # Sort descending by revenue
-    analytics["lubes"].sort(key=lambda x: x["revenue"], reverse=True)
-    analytics["gas"].sort(key=lambda x: x["revenue"], reverse=True)
-    analytics["accessories"].sort(key=lambda x: x["revenue"], reverse=True)
+        total_fuel_liters += tot_liters
+        total_fuel_revenue += tot_rev
 
-    return analytics
+    # 2. Lubes Sales (In Litres)
+    lubes_raw = frappe.db.sql("""
+        SELECT 
+            s.shift_date,
+            inv.item as item_code,
+            i.item_name,
+            i.stock_uom,
+            SUM(inv.quantity) as qty,
+            SUM(inv.amount) as revenue
+        FROM `tabShift Inventory Sale` inv
+        JOIN `tabShift` s ON inv.parent = s.name
+        JOIN `tabItem` i ON inv.item = i.name
+        WHERE s.docstatus < 2 AND s.shift_date BETWEEN %s AND %s AND UPPER(i.item_group) = 'LUBES'
+        GROUP BY s.shift_date, inv.item
+        ORDER BY s.shift_date ASC
+    """, (from_date, to_date), as_dict=True)
+
+    daily_lubes_liters = {d: 0.0 for d in date_list}
+    lubes_items_dict = {}
+    total_lubes_liters = 0.0
+    total_lubes_revenue = 0.0
+
+    for row in lubes_raw:
+        sd = str(row.shift_date)
+        pack_l = parse_lube_litres(row.item_code, row.item_name)
+        row_liters = flt(row.qty or 0.0) * pack_l
+        if sd in daily_lubes_liters:
+            daily_lubes_liters[sd] += row_liters
+        
+        code = row.item_code
+        if code not in lubes_items_dict:
+            lubes_items_dict[code] = {
+                "item_code": code,
+                "item_name": row.item_name or code,
+                "pack_size": pack_l,
+                "qty": 0.0,
+                "total_liters": 0.0,
+                "revenue": 0.0
+            }
+        lubes_items_dict[code]["qty"] += flt(row.qty or 0.0)
+        lubes_items_dict[code]["total_liters"] += row_liters
+        lubes_items_dict[code]["revenue"] += flt(row.revenue or 0.0)
+        total_lubes_liters += row_liters
+        total_lubes_revenue += flt(row.revenue or 0.0)
+
+    lubes_list = sorted(lubes_items_dict.values(), key=lambda x: x["total_liters"], reverse=True)
+    lubes_timeline = [round(daily_lubes_liters[d], 2) for d in date_list]
+
+    # 3. Gas & Cylinders
+    gas_cyl_raw = frappe.db.sql("""
+        SELECT 
+            s.shift_date,
+            inv.item as item_code,
+            i.item_name,
+            i.item_group,
+            i.stock_uom,
+            SUM(inv.quantity) as qty,
+            SUM(inv.amount) as revenue
+        FROM `tabShift Inventory Sale` inv
+        JOIN `tabShift` s ON inv.parent = s.name
+        JOIN `tabItem` i ON inv.item = i.name
+        WHERE s.docstatus < 2 AND s.shift_date BETWEEN %s AND %s AND UPPER(i.item_group) IN ('GAS', 'CYLINDER')
+        GROUP BY s.shift_date, inv.item
+        ORDER BY s.shift_date ASC
+    """, (from_date, to_date), as_dict=True)
+
+    daily_gas_kgs = {d: 0.0 for d in date_list}
+    daily_cylinders = {d: 0.0 for d in date_list}
+    gas_items_dict = {}
+    cyl_items_dict = {}
+    total_gas_kgs = 0.0
+    total_cylinders_count = 0.0
+    total_gas_rev = 0.0
+    total_cyl_rev = 0.0
+
+    for row in gas_cyl_raw:
+        sd = str(row.shift_date)
+        grp = (row.item_group or "").upper()
+        qty = flt(row.qty or 0.0)
+        rev = flt(row.revenue or 0.0)
+        code = row.item_code
+        
+        if "GAS" in grp:
+            kg_rating = parse_gas_kg(row.item_code, row.item_name)
+            tot_kg = qty * kg_rating
+            if sd in daily_gas_kgs:
+                daily_gas_kgs[sd] += tot_kg
+            if code not in gas_items_dict:
+                gas_items_dict[code] = {
+                    "item_code": code,
+                    "item_name": row.item_name or code,
+                    "kg_rating": kg_rating,
+                    "qty": 0.0,
+                    "total_kg": 0.0,
+                    "revenue": 0.0
+                }
+            gas_items_dict[code]["qty"] += qty
+            gas_items_dict[code]["total_kg"] += tot_kg
+            gas_items_dict[code]["revenue"] += rev
+            total_gas_kgs += tot_kg
+            total_gas_rev += rev
+        elif "CYLINDER" in grp:
+            if sd in daily_cylinders:
+                daily_cylinders[sd] += qty
+            if code not in cyl_items_dict:
+                cyl_items_dict[code] = {
+                    "item_code": code,
+                    "item_name": row.item_name or code,
+                    "qty": 0.0,
+                    "revenue": 0.0
+                }
+            cyl_items_dict[code]["qty"] += qty
+            cyl_items_dict[code]["revenue"] += rev
+            total_cylinders_count += qty
+            total_cyl_rev += rev
+
+    gas_items_list = sorted(gas_items_dict.values(), key=lambda x: x["total_kg"], reverse=True)
+    cylinder_items_list = sorted(cyl_items_dict.values(), key=lambda x: x["qty"], reverse=True)
+
+    # 4. Filters & Accessories
+    filters_acc_raw = frappe.db.sql("""
+        SELECT 
+            s.shift_date,
+            inv.item as item_code,
+            i.item_name,
+            i.item_group,
+            i.stock_uom,
+            SUM(inv.quantity) as qty,
+            SUM(inv.amount) as revenue
+        FROM `tabShift Inventory Sale` inv
+        JOIN `tabShift` s ON inv.parent = s.name
+        JOIN `tabItem` i ON inv.item = i.name
+        WHERE s.docstatus < 2 AND s.shift_date BETWEEN %s AND %s AND UPPER(i.item_group) IN ('FILTERS', 'ACCESSORIES')
+        GROUP BY s.shift_date, inv.item
+        ORDER BY s.shift_date ASC
+    """, (from_date, to_date), as_dict=True)
+
+    daily_filters_qty = {d: 0.0 for d in date_list}
+    filters_items_dict = {}
+    total_filters_qty = 0.0
+    total_filters_rev = 0.0
+
+    for row in filters_acc_raw:
+        sd = str(row.shift_date)
+        qty = flt(row.qty or 0.0)
+        rev = flt(row.revenue or 0.0)
+        code = row.item_code
+        if sd in daily_filters_qty:
+            daily_filters_qty[sd] += qty
+        if code not in filters_items_dict:
+            filters_items_dict[code] = {
+                "item_code": code,
+                "item_name": row.item_name or code,
+                "item_group": row.item_group or "FILTERS",
+                "qty": 0.0,
+                "revenue": 0.0
+            }
+        filters_items_dict[code]["qty"] += qty
+        filters_items_dict[code]["revenue"] += rev
+        total_filters_qty += qty
+        total_filters_rev += rev
+
+    filters_list = sorted(filters_items_dict.values(), key=lambda x: x["revenue"], reverse=True)
+
+    return {
+        "dates": date_list,
+        "date_labels": date_labels,
+        "fuel": {
+            "products": fuel_products,
+            "series": fuel_series,
+            "summary": fuel_summary,
+            "total_liters": round(total_fuel_liters, 2),
+            "total_revenue": round(total_fuel_revenue, 2)
+        },
+        "lubes": {
+            "timeline_liters": lubes_timeline,
+            "total_liters": round(total_lubes_liters, 2),
+            "total_revenue": round(total_lubes_revenue, 2),
+            "items": lubes_list
+        },
+        "gas": {
+            "timeline_kgs": [round(daily_gas_kgs[d], 2) for d in date_list],
+            "timeline_cylinders": [round(daily_cylinders[d], 2) for d in date_list],
+            "total_kgs": round(total_gas_kgs, 2),
+            "total_cylinders": round(total_cylinders_count, 2),
+            "total_gas_revenue": round(total_gas_rev, 2),
+            "total_cylinder_revenue": round(total_cyl_rev, 2),
+            "gas_items": gas_items_list,
+            "cylinder_items": cylinder_items_list
+        },
+        "accessories": {
+            "timeline_qty": [round(daily_filters_qty[d], 2) for d in date_list],
+            "total_qty": round(total_filters_qty, 2),
+            "total_revenue": round(total_filters_rev, 2),
+            "items": filters_list
+        }
+    }
 
 
 
@@ -308,8 +516,8 @@ def get_topup_statement(from_date, to_date):
         SELECT SUM(jea.debit) as amt 
         FROM `tabJournal Entry` je 
         JOIN `tabJournal Entry Account` jea ON je.name = jea.parent 
-        WHERE je.docstatus = 1 AND je.user_remark LIKE '[TOP-UP DEDUCTION]%' AND jea.debit > 0 AND je.posting_date < %s
-    """, (from_date,), as_dict=1)
+        WHERE je.docstatus = 1 AND je.user_remark LIKE %s AND jea.debit > 0 AND je.posting_date < %s
+    """, ('[TOP-UP DEDUCTION]%', from_date), as_dict=1)
     op_deduct_amt = op_deductions[0].amt if op_deductions and op_deductions[0].amt else 0.0
     
     running_balance = op_topup_amt - op_deduct_amt
@@ -331,10 +539,10 @@ def get_topup_statement(from_date, to_date):
         FROM `tabJournal Entry` je
         JOIN `tabJournal Entry Account` jea ON je.name = jea.parent
         WHERE je.docstatus = 1 
-        AND je.user_remark LIKE '[TOP-UP DEDUCTION]%'
+        AND je.user_remark LIKE %s
         AND jea.debit > 0
         AND je.posting_date BETWEEN %s AND %s
-    """, (from_date, to_date), as_dict=True)
+    """, ('[TOP-UP DEDUCTION]%', from_date, to_date), as_dict=True)
     
     data = topups + deductions
     # Sort by date, then creation

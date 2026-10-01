@@ -24,6 +24,7 @@
   "cards",
   "expenses",
   "rtt_deductions",
+  "discounts",
   "total_deductions",
   "sb_reconciliation",
   "expected_cash",
@@ -144,6 +145,12 @@
    "fieldname": "rtt_deductions",
    "fieldtype": "Currency",
    "label": "RTT Deductions"
+  },
+  {
+   "default": "0",
+   "fieldname": "discounts",
+   "fieldtype": "Currency",
+   "label": "Discounts"
   },
   {
    "bold": 1,

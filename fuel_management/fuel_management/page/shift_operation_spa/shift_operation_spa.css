@@ -22,9 +22,12 @@
 
 /* Frappe overrides scoped to SPA */
 [data-page-route="shift_operation_spa"] .page-head { display: none !important; }
-[data-page-route="shift_operation_spa"] .page-body { margin: 0 !important; padding: 0 !important; }
-[data-page-route="shift_operation_spa"] .layout-main-section { padding: 0 !important; }
-[data-page-route="shift_operation_spa"] .frappe-card { margin: 0 !important; padding: 0 !important; border: none !important; }
+[data-page-route="shift_operation_spa"] .page-body { margin: 0 !important; padding: 0 !important; max-width: 100% !important; width: 100% !important; }
+[data-page-route="shift_operation_spa"] .layout-main-section { padding: 0 !important; max-width: 100% !important; width: 100% !important; }
+[data-page-route="shift_operation_spa"] .layout-main { max-width: 100% !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+[data-page-route="shift_operation_spa"] .page-container { max-width: 100% !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+[data-page-route="shift_operation_spa"] .container { max-width: 100% !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+[data-page-route="shift_operation_spa"] .frappe-card { margin: 0 !important; padding: 0 !important; border: none !important; max-width: 100% !important; width: 100% !important; }
 
 
 
@@ -277,21 +280,109 @@
 }
 .spa-input {
     width: 100%;
-    padding: 0.75rem 1rem;
-    border: 1px solid #e2e8f0;
+    padding: 0.65rem 0.85rem;
+    border: 1.5px solid #cbd5e1;
     border-radius: 8px;
     font-family: inherit;
     font-size: 0.95rem;
+    color: #0f172a;
+    background-color: #ffffff;
     box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+.spa-input:hover {
+    border-color: #94a3b8;
 }
 .spa-input:focus {
     outline: none;
-    border-color: var(--accent);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+select.spa-input, .spa-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='%23475569' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1.25rem;
+    padding-right: 2.25rem;
+    cursor: pointer;
+}
+select.spa-input:focus, .spa-select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.readonly-style {
+    background-color: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+    color: #64748b !important;
+    cursor: not-allowed;
+}
+.active-entry-box {
+    background-color: #ffffff !important;
+    border: 2px solid #059669 !important;
+    color: #065f46 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18) !important;
 }
 .huge-input {
     font-size: 2rem;
     text-align: right;
     padding: 1rem;
+}
+
+/* Searchable Combobox Component */
+.searchable-combobox-wrap {
+    position: relative;
+    width: 100%;
+}
+.combobox-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15);
+    z-index: 9999;
+    padding: 4px 0;
+}
+.combobox-item {
+    padding: 0.65rem 0.85rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s, color 0.15s;
+    color: #1e293b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.combobox-item:last-child {
+    border-bottom: none;
+}
+.combobox-item:hover, .combobox-item.active-hover {
+    background-color: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+.combobox-group-header {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background-color: #f8fafc;
+    color: #64748b;
+    border-top: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 /* Tags */
@@ -363,7 +454,8 @@
 
 /* Meter Center Cards */
 .center-card {
-    max-width: 900px;
+    max-width: 100% !important;
+    width: 100% !important;
     margin: 0 auto;
 }
 
@@ -1084,3 +1176,145 @@
 .table-info {
     background-color: #f1f8ff !important;
 }
+
+/* ------------------------------------------------------------- */
+/* INVENTORY SALES POS STYLES                                    */
+/* ------------------------------------------------------------- */
+.inventory-entry-card {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.inventory-entry-card:focus-within {
+    border-color: #93c5fd !important;
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.08) !important;
+}
+
+@media (max-width: 900px) {
+    .pos-fields-grid {
+        grid-template-columns: 1fr 1fr 1fr !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .pos-fields-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ------------------------------------------------------------- */
+/* SCROLLABLE CART WRAPPERS & STICKY HEADERS                     */
+/* ------------------------------------------------------------- */
+.cart-scrollable-wrap {
+    max-height: 400px;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+}
+.cart-scrollable-wrap table {
+    margin-bottom: 0;
+    width: 100%;
+}
+.cart-scrollable-wrap thead th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc !important;
+    z-index: 5;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.cart-scrollable-wrap tfoot tr td,
+.cart-scrollable-wrap tfoot tr th {
+    position: sticky;
+    bottom: 0;
+    background: #f8fafc !important;
+    z-index: 5;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.06);
+}
+.cart-scrollable-wrap::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.cart-scrollable-wrap::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.cart-scrollable-wrap::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ------------------------------------------------------------- */
+/* GREASING MODULE STYLES                                        */
+/* ------------------------------------------------------------- */
+@media (max-width: 900px) {
+    #greasing-entry-grid {
+        grid-template-columns: 1fr 1fr !important;
+    }
+    #greasing-entry-grid .form-group:first-child,
+    #greasing-entry-grid .form-group:nth-child(2) {
+        grid-column: span 2;
+    }
+    #greasing-entry-grid button#btn-add-greasing {
+        grid-column: span 2;
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 600px) {
+    #greasing-entry-grid {
+        grid-template-columns: 1fr !important;
+    }
+    #greasing-entry-grid .form-group {
+        grid-column: span 1 !important;
+    }
+    #greasing-entry-grid button#btn-add-greasing {
+        grid-column: span 1 !important;
+    }
+}
+
+/* ------------------------------------------------------------- */
+/* SHORTS REPORT STYLES                                          */
+/* ------------------------------------------------------------- */
+.sr-preset-btn {
+    transition: all 0.15s ease-in-out;
+}
+.sr-preset-btn:hover {
+    background: #e2e8f0 !important;
+    color: #1e293b !important;
+}
+.sr-preset-btn.active:hover {
+    background: #c7d2fe !important;
+    color: #312e81 !important;
+}
+
+.sr-status-filter {
+    transition: all 0.15s ease-in-out;
+}
+.sr-status-filter:hover {
+    color: #1e293b !important;
+}
+
+#shortage-balances-body tr:hover {
+    background-color: #f8fafc !important;
+}
+
+#breakdown-modal-body table tbody tr:hover {
+    background-color: #f8fafc !important;
+}
+
+#breakdown-modal-body::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+#breakdown-modal-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+#breakdown-modal-body::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+
