@@ -114,6 +114,11 @@ try {
             if (typeof window.init_debtors_module === 'function') {
                 window.init_debtors_module(wrapper);
             }
+
+            // Initialize Monthly Reports Module (Admin)
+            if (typeof window.init_monthly_reports_module === 'function') {
+                window.init_monthly_reports_module(wrapper);
+            }
         }
     });
 }
@@ -161,9 +166,15 @@ function fetch_active_shift(wrapper) {
 }
 
 function lock_ui_for_no_shift($wrapper) {
-    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-home"])').css({
+    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-home"]):not([data-target="tab-debtors"]):not([data-target="tab-monthly-reports"]):not([data-target="tab-past-reports"])').css({
         'opacity': '0.5',
         'pointer-events': 'none'
+    });
+    
+    // Ensure Debtors, Monthly Reports & Past Reports remain clickable
+    $wrapper.find('.nav-item[data-target="tab-debtors"], .nav-item[data-target="tab-monthly-reports"], .nav-item[data-target="tab-past-reports"]').css({
+        'opacity': '1',
+        'pointer-events': 'auto'
     });
     
     // Update Top Navbar
@@ -1796,6 +1807,10 @@ function setup_tabs(wrapper) {
         } else if (target === 'tab-past-reports') {
             if (typeof render_past_reports === 'function') {
                 render_past_reports($wrapper);
+            }
+        } else if (target === 'tab-monthly-reports') {
+            if (typeof window.load_monthly_volume_analysis === 'function') {
+                window.load_monthly_volume_analysis();
             }
         } else if (target === 'tab-customer-payments') {
             if (typeof render_customer_payments === 'function') {
@@ -12414,3 +12429,655 @@ function fetch_discounts_report($wrapper) {
         }
     });
 }
+
+/* =========================================================================
+   MONTHLY REPORTS MODULE (ADMIN / EXECUTIVE AUDIT)
+   ========================================================================= */
+
+window.MONTHLY_REPORTS_STATE = {
+    station: null,
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
+    from_date: null,
+    to_date: null,
+    preset: 'this-month',
+    data: null,
+    wrapper: null
+};
+
+window.init_monthly_reports_module = function(wrapper) {
+    window.MONTHLY_REPORTS_STATE.wrapper = wrapper;
+    const $wrapper = $(wrapper);
+
+    // 1. Role-based Visibility Check
+    const isAdmin = frappe.user.has_role("System Manager") ||
+                    frappe.user.has_role("Fuel Station Owner") ||
+                    frappe.user.has_role("Fuel Manager") ||
+                    frappe.session.user === "Administrator";
+
+    if (!isAdmin) {
+        $wrapper.find('#nav-monthly-reports').hide();
+        $wrapper.find('#tab-monthly-reports').hide();
+    } else {
+        $wrapper.find('#nav-monthly-reports').show();
+    }
+
+    // 2. Set default month and year dropdowns
+    const now = new Date();
+    const curMonth = now.getMonth() + 1;
+    const curYear = now.getFullYear();
+    
+    $wrapper.find('#mvr-select-month').val(curMonth);
+    $wrapper.find('#mvr-select-year').val(curYear);
+
+    // Default dates for custom date inputs
+    const firstDayStr = `${curYear}-${String(curMonth).padStart(2, '0')}-01`;
+    const lastDay = new Date(curYear, curMonth, 0).getDate();
+    const lastDayStr = `${curYear}-${String(curMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    $wrapper.find('#mvr-from-date').val(firstDayStr);
+    $wrapper.find('#mvr-to-date').val(lastDayStr);
+
+    // 3. Preset Buttons
+    $wrapper.find('.mvr-preset-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        const preset = $(this).attr('data-preset');
+        window.MONTHLY_REPORTS_STATE.preset = preset;
+
+        $wrapper.find('.mvr-preset-btn').removeClass('active').css({ 'background': 'transparent', 'color': '#64748b' });
+        $(this).addClass('active').css({ 'background': '#fff', 'color': '#1e293b' });
+
+        const d = new Date();
+        if (preset === 'this-month') {
+            $wrapper.find('#mvr-custom-date-container').hide();
+            $wrapper.find('#mvr-select-month, #mvr-select-year').closest('div').show();
+            const m = d.getMonth() + 1;
+            const y = d.getFullYear();
+            $wrapper.find('#mvr-select-month').val(m);
+            $wrapper.find('#mvr-select-year').val(y);
+            window.load_monthly_volume_analysis();
+        } else if (preset === 'last-month') {
+            $wrapper.find('#mvr-custom-date-container').hide();
+            $wrapper.find('#mvr-select-month, #mvr-select-year').closest('div').show();
+            let m = d.getMonth();
+            let y = d.getFullYear();
+            if (m === 0) {
+                m = 12;
+                y -= 1;
+            }
+            $wrapper.find('#mvr-select-month').val(m);
+            $wrapper.find('#mvr-select-year').val(y);
+            window.load_monthly_volume_analysis();
+        } else if (preset === 'custom') {
+            $wrapper.find('#mvr-select-month, #mvr-select-year').closest('div').hide();
+            $wrapper.find('#mvr-custom-date-container').css('display', 'flex');
+        }
+    });
+
+    // 4. Month & Year Select Changes
+    $wrapper.find('#mvr-select-month, #mvr-select-year').off('change').on('change', function() {
+        window.load_monthly_volume_analysis();
+    });
+};
+
+window.load_monthly_volume_analysis = function() {
+    const $wrapper = $(window.MONTHLY_REPORTS_STATE.wrapper || document);
+    const preset = window.MONTHLY_REPORTS_STATE.preset;
+    let month = $wrapper.find('#mvr-select-month').val();
+    let year = $wrapper.find('#mvr-select-year').val();
+    let from_date = null;
+    let to_date = null;
+
+    if (preset === 'custom') {
+        from_date = $wrapper.find('#mvr-from-date').val();
+        to_date = $wrapper.find('#mvr-to-date').val();
+        if (!from_date || !to_date) {
+            frappe.show_alert({ message: "Please choose both From and To dates.", indicator: "orange" });
+            return;
+        }
+        month = null;
+        year = null;
+    }
+
+    const station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) ||
+                    (window.SHIFT_DOC && window.SHIFT_DOC.station) ||
+                    (frappe.defaults.get_user_default("station") || null);
+
+    $wrapper.find('.mvr-spinner').removeClass('hidden');
+    $wrapper.find('#btn-mvr-refresh').prop('disabled', true);
+
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_monthly_volume_analysis",
+        args: {
+            station: station,
+            month: month,
+            year: year,
+            from_date: from_date,
+            to_date: to_date
+        },
+        callback: function(r) {
+            $wrapper.find('.mvr-spinner').addClass('hidden');
+            $wrapper.find('#btn-mvr-refresh').prop('disabled', false);
+            if (r.message) {
+                window.MONTHLY_REPORTS_STATE.data = r.message;
+                window.render_monthly_volume_analysis(r.message);
+            }
+        },
+        error: function() {
+            $wrapper.find('.mvr-spinner').addClass('hidden');
+            $wrapper.find('#btn-mvr-refresh').prop('disabled', false);
+            frappe.show_alert({ message: "Error loading monthly volume analysis", indicator: "red" });
+        }
+    });
+};
+
+window.render_monthly_volume_analysis = function(data) {
+    const $wrapper = $(window.MONTHLY_REPORTS_STATE.wrapper || document);
+    if (!data || !data.period_info) return;
+
+    const pInfo = data.period_info;
+    const kpis = data.kpis || {};
+    const prods = data.products || [];
+    const pGroups = data.pump_groups || [];
+    const pLedger = data.purchases_ledger || [];
+
+    function fmtL(val) {
+        let n = parseFloat(val) || 0;
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtM(val, dec) {
+        let n = parseFloat(val) || 0;
+        return n.toLocaleString('en-US', { minimumFractionDigits: dec !== undefined ? dec : 2, maximumFractionDigits: dec !== undefined ? dec : 2 });
+    }
+    function fmtC(val) {
+        let n = parseFloat(val) || 0;
+        return "KES " + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // 1. Header Information
+    $wrapper.find('#mvr-station-subtitle').html(`
+        Station: <strong>${pInfo.station_name || pInfo.station}</strong> &bull; ${pInfo.company_name}
+    `);
+    $wrapper.find('#mvr-period-display').html(`
+        Analysis Period: <strong>${pInfo.month_label}</strong> (${frappe.datetime.str_to_user(pInfo.from_date)} &mdash; ${frappe.datetime.str_to_user(pInfo.to_date)})
+    `);
+    $wrapper.find('#mvr-shifts-count-badge').text(`${pInfo.total_shifts} Shifts`);
+    $wrapper.find('#mvr-first-shift-label').text(`${pInfo.first_shift_name || 'None'} (${pInfo.first_shift_date ? frappe.datetime.str_to_user(pInfo.first_shift_date) : '--'})`);
+    $wrapper.find('#mvr-last-shift-label').text(`${pInfo.last_shift_name || 'None'} (${pInfo.last_shift_date ? frappe.datetime.str_to_user(pInfo.last_shift_date) : '--'})`);
+
+    // 2. Executive KPI Cards
+    $wrapper.find('#mvr-kpi-total-meter').text(`${fmtL(kpis.total_net_meter_litres)} L`);
+    $wrapper.find('#mvr-kpi-meter-split').html(`
+        <span><strong>PMS:</strong> ${fmtL(kpis.pms_net_litres)} L</span> &bull; 
+        <span><strong>AGO:</strong> ${fmtL(kpis.ago_net_litres)} L</span>
+    `);
+    $wrapper.find('#mvr-kpi-purchases').text(`${fmtL(kpis.total_purchases_litres)} L`);
+    $wrapper.find('#mvr-kpi-purchases-sub').text(`${pLedger.length} Fuel Deliveries Received`);
+    $wrapper.find('#mvr-kpi-tank-sales').text(`${fmtL(kpis.total_tank_sales_litres)} L`);
+
+    const varSign = (kpis.total_variance_litres > 0) ? '+' : '';
+    $wrapper.find('#mvr-kpi-variance').text(`${varSign}${fmtL(kpis.total_variance_litres)} L`);
+    
+    const overallStatus = kpis.overall_status || { label: 'Normal', color: '#16a34a' };
+    const pctSign = (kpis.total_variance_percent > 0) ? '+' : '';
+    $wrapper.find('#mvr-kpi-variance-sub').html(`
+        ${pctSign}${kpis.total_variance_percent}% &bull; <span style="color: ${overallStatus.color}; font-weight: 700;">${overallStatus.label}</span>
+    `);
+
+    // 3. Section 1: Product Volume & Tank Dips Reconciliation Table
+    let pBodyHtml = '';
+    prods.forEach(p => {
+        const dotColor = (p.product_type === 'PMS') ? '#ef4444' : '#3b82f6';
+        const vSign = p.variance_litres > 0 ? '+' : '';
+        const vpSign = p.variance_percent > 0 ? '+' : '';
+        const vColor = p.variance_litres >= 0 ? '#16a34a' : '#dc2626';
+
+        let badgeBg = '#dcfce7';
+        let badgeColor = '#166534';
+        if (p.status.status === 'warning') {
+            badgeBg = '#fef3c7';
+            badgeColor = '#92400e';
+        } else if (p.status.status === 'danger') {
+            badgeBg = '#fee2e2';
+            badgeColor = '#991b1b';
+        }
+
+        pBodyHtml += `
+            <tr class="data-row" style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 10px 12px; font-weight: 700; color: #0f172a;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${dotColor}; flex-shrink: 0;"></span>
+                        <span style="font-size: 0.88rem;">${p.product_label}</span>
+                    </div>
+                </td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 600; color: #1e293b;">${fmtL(p.opening_dip)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 700; color: #6b21a8;">+${fmtL(p.purchases)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 600; color: #475569;">-${fmtL(p.closing_dip)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 800; color: #4338ca; background: #f5f3ff;">${fmtL(p.tank_sales)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 600; color: #334155;">${fmtL(p.gross_meter_litres)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 600; color: #b45309;">-${fmtL(p.rtt_litres)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 800; color: #0284c7; background: #f0f9ff; font-size: 0.88rem;">${fmtL(p.net_meter_litres)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 800; color: ${vColor}; font-size: 0.88rem;">${vSign}${fmtL(p.variance_litres)}</td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 800; color: ${vColor};">${vpSign}${p.variance_percent}%</td>
+                <td style="padding: 10px 12px; text-align: center;">
+                    <span style="display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 0.68rem; font-weight: 700; background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeBg};">
+                        ${p.status.label}
+                    </span>
+                </td>
+            </tr>
+        `;
+    });
+
+    if (!pBodyHtml) {
+        pBodyHtml = '<tr><td colspan="11" class="text-center py-6 text-gray-500">No product sales data found for this period.</td></tr>';
+    }
+    $wrapper.find('#mvr-product-summary-body').html(pBodyHtml);
+
+    // Footer Totals
+    const totOpen = prods.reduce((acc, p) => acc + (p.opening_dip || 0), 0);
+    const totPur = prods.reduce((acc, p) => acc + (p.purchases || 0), 0);
+    const totClose = prods.reduce((acc, p) => acc + (p.closing_dip || 0), 0);
+    const totGross = prods.reduce((acc, p) => acc + (p.gross_meter_litres || 0), 0);
+    const totRTT = prods.reduce((acc, p) => acc + (p.rtt_litres || 0), 0);
+
+    const footHtml = `
+        <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1;">
+            <td style="padding: 10px 12px; text-transform: uppercase; color: #0f172a; font-size: 0.78rem;">GRAND TOTALS</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: #0f172a;">${fmtL(totOpen)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: #6b21a8;">+${fmtL(totPur)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: #475569;">-${fmtL(totClose)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: #4338ca; background: #ede9fe; font-size: 0.9rem;">${fmtL(kpis.total_tank_sales_litres)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: #0f172a;">${fmtL(totGross)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: #b45309;">-${fmtL(totRTT)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: #0284c7; background: #e0f2fe; font-size: 0.95rem;">${fmtL(kpis.total_net_meter_litres)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: ${kpis.total_variance_litres >= 0 ? '#16a34a' : '#dc2626'}; font-size: 0.95rem;">${varSign}${fmtL(kpis.total_variance_litres)}</td>
+            <td style="padding: 10px 12px; text-align: right; font-family: monospace; color: ${kpis.total_variance_percent >= 0 ? '#16a34a' : '#dc2626'};">${pctSign}${kpis.total_variance_percent}%</td>
+            <td style="padding: 10px 12px; text-align: center;">
+                <span style="display: inline-block; padding: 3px 8px; border-radius: 9999px; font-size: 0.68rem; font-weight: 700; background: #e2e8f0; color: #1e293b;">
+                    ${overallStatus.label}
+                </span>
+            </td>
+        </tr>
+    `;
+    $wrapper.find('#mvr-product-summary-foot').html(footHtml).show();
+
+    // 4. Section 2: Pump Islands & Nozzle Breakdown Table
+    let pumpsHtml = '';
+    let totalElecGrand = 0;
+    let totalManGrand = 0;
+    let totalRttGrand = 0;
+    let totalNetGrand = 0;
+
+    pGroups.forEach(pg => {
+        // Group Header
+        pumpsHtml += `
+            <tr style="background: #f1f5f9; font-weight: 700; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;">
+                <td colspan="12" style="padding: 6px 12px; font-size: 0.78rem; text-transform: uppercase; color: #1e293b; letter-spacing: 0.04em;">
+                    🏛️ ${pg.group_name} &mdash; <span style="font-weight: normal; color: #64748b;">(${pg.nozzles.length} Nozzles)</span>
+                </td>
+            </tr>
+        `;
+
+        let pgElec = 0, pgMan = 0, pgRtt = 0, pgNet = 0;
+
+        pg.nozzles.forEach(noz => {
+            pgElec += noz.electronic_volume;
+            pgMan += noz.manual_volume;
+            pgRtt += noz.rtt_litres;
+            pgNet += noz.net_volume;
+
+            totalElecGrand += noz.electronic_volume;
+            totalManGrand += noz.manual_volume;
+            totalRttGrand += noz.rtt_litres;
+            totalNetGrand += noz.net_volume;
+
+            const sharePct = (kpis.total_net_meter_litres > 0) ? ((noz.net_volume / kpis.total_net_meter_litres) * 100).toFixed(1) : '0.0';
+            const badgeClass = (noz.product_type === 'PMS') ? 'background: #fee2e2; color: #991b1b;' : 'background: #dbeafe; color: #1e40af;';
+
+            pumpsHtml += `
+                <tr class="data-row" style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 8px 12px; font-weight: 600; color: #475569;">${pg.group_name}</td>
+                    <td style="padding: 8px 12px; font-weight: 700;">
+                        <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; font-family: monospace; ${badgeClass}">
+                            ${noz.nozzle_id}
+                        </span>
+                    </td>
+                    <td style="padding: 8px 12px; font-size: 0.78rem; color: #334155;">${noz.product_name}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #475569;">${fmtM(noz.opening_electronic, 3)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #475569;">${fmtM(noz.closing_electronic, 3)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; font-weight: 700; color: #0284c7;">${fmtL(noz.electronic_volume)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #64748b;">${fmtM(noz.opening_manual, 0)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #64748b;">${fmtM(noz.closing_manual, 0)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; font-weight: 600; color: #64748b;">${fmtL(noz.manual_volume)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #b45309;">${fmtL(noz.rtt_litres)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; font-weight: 800; color: #047857; font-size: 0.85rem;">${fmtL(noz.net_volume)}</td>
+                    <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #64748b; font-size: 0.75rem;">${sharePct}%</td>
+                </tr>
+            `;
+        });
+
+        // Island Subtotal
+        pumpsHtml += `
+            <tr style="background: #f8fafc; font-weight: 700; border-bottom: 2px solid #e2e8f0; font-size: 0.78rem;">
+                <td colspan="3" style="padding: 6px 12px; text-align: right; color: #475569; text-transform: uppercase;">${pg.group_name} Subtotal:</td>
+                <td colspan="2"></td>
+                <td style="padding: 6px 12px; text-align: right; font-family: monospace; color: #0284c7; font-weight: 800;">${fmtL(pgElec)}</td>
+                <td colspan="2"></td>
+                <td style="padding: 6px 12px; text-align: right; font-family: monospace; color: #64748b;">${fmtL(pgMan)}</td>
+                <td style="padding: 6px 12px; text-align: right; font-family: monospace; color: #b45309;">${fmtL(pgRtt)}</td>
+                <td style="padding: 6px 12px; text-align: right; font-family: monospace; color: #047857; font-weight: 800;">${fmtL(pgNet)}</td>
+                <td style="padding: 6px 12px; text-align: right; font-family: monospace; color: #475569;">${((pgNet / (kpis.total_net_meter_litres || 1)) * 100).toFixed(1)}%</td>
+            </tr>
+        `;
+    });
+
+    if (!pumpsHtml) {
+        pumpsHtml = '<tr><td colspan="12" class="text-center py-6 text-gray-500">No meter readings found.</td></tr>';
+    }
+    $wrapper.find('#mvr-pumps-breakdown-body').html(pumpsHtml);
+
+    // Pumps Grand Total Footer
+    const pumpsFootHtml = `
+        <tr style="background: #eef2ff; font-weight: 800; border-top: 2px solid #cbd5e1;">
+            <td colspan="3" style="padding: 8px 12px; text-transform: uppercase; color: #1e1b4b; font-size: 0.78rem;">ALL PUMPS GRAND TOTAL:</td>
+            <td colspan="2"></td>
+            <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #0284c7; font-size: 0.88rem;">${fmtL(totalElecGrand)}</td>
+            <td colspan="2"></td>
+            <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #475569; font-size: 0.85rem;">${fmtL(totalManGrand)}</td>
+            <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #b45309;">${fmtL(totalRttGrand)}</td>
+            <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #047857; font-size: 0.95rem;">${fmtL(totalNetGrand)}</td>
+            <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #1e1b4b;">100.0%</td>
+        </tr>
+    `;
+    $wrapper.find('#mvr-pumps-breakdown-foot').html(pumpsFootHtml).show();
+
+    // 5. Section 3: Inward Deliveries (Purchases Ledger)
+    $wrapper.find('#mvr-purchases-summary-label').text(`${pLedger.length} Fuel Deliveries Injected`);
+    let purHtml = '';
+    let purTotQty = 0;
+    let purTotCost = 0;
+
+    pLedger.forEach((it, idx) => {
+        purTotQty += (it.quantity || 0);
+        purTotCost += (it.total_cost || 0);
+
+        purHtml += `
+            <tr class="data-row" style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 8px 12px; text-align: center; color: #94a3b8; font-size: 0.75rem;">${idx + 1}</td>
+                <td style="padding: 8px 12px; white-space: nowrap; color: #1e293b;">${it.date ? frappe.datetime.str_to_user(it.date) : '--'}</td>
+                <td style="padding: 8px 12px; font-family: monospace; font-weight: 600; color: #2563eb;">${it.invoice_number || it.purchase_name}</td>
+                <td style="padding: 8px 12px; font-weight: 600; color: #0f172a;">${it.supplier || '--'}</td>
+                <td style="padding: 8px 12px;">
+                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; ${it.product_type === 'PMS' ? 'background: #fee2e2; color: #991b1b;' : 'background: #dbeafe; color: #1e40af;'}">
+                        ${it.item}
+                    </span>
+                </td>
+                <td style="padding: 8px 12px; font-size: 0.75rem; color: #475569;">${it.target_tank || '--'}</td>
+                <td style="padding: 8px 12px; text-align: right; font-family: monospace; font-weight: 800; color: #6b21a8; font-size: 0.85rem;">${fmtL(it.quantity)}</td>
+                <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #475569;">${it.unit_cost ? fmtM(it.unit_cost, 2) : '--'}</td>
+                <td style="padding: 8px 12px; text-align: right; font-family: monospace; font-weight: 700; color: #0f172a;">${it.total_cost ? fmtC(it.total_cost) : '--'}</td>
+            </tr>
+        `;
+    });
+
+    if (!purHtml) {
+        purHtml = '<tr><td colspan="9" class="text-center py-6 text-gray-500">No fuel deliveries recorded in this period.</td></tr>';
+    }
+    $wrapper.find('#mvr-purchases-ledger-body').html(purHtml);
+
+    const purFootHtml = `
+        <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1;">
+            <td colspan="6" style="padding: 8px 12px; text-transform: uppercase; color: #1e293b; font-size: 0.78rem;">TOTAL INWARD FUEL DELIVERIES:</td>
+            <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #6b21a8; font-size: 0.9rem;">${fmtL(purTotQty)}</td>
+            <td></td>
+            <td style="padding: 8px 12px; text-align: right; font-family: monospace; color: #0f172a; font-size: 0.9rem;">${fmtC(purTotCost)}</td>
+        </tr>
+    `;
+    $wrapper.find('#mvr-purchases-ledger-foot').html(purFootHtml).show();
+};
+
+window.print_monthly_volume_report = function() {
+    const data = window.MONTHLY_REPORTS_STATE.data;
+    if (!data || !data.period_info) {
+        frappe.msgprint("Please load monthly volume data first.");
+        return;
+    }
+
+    const pInfo = data.period_info;
+    const kpis = data.kpis || {};
+    const prods = data.products || [];
+    const pGroups = data.pump_groups || [];
+
+    function fmtL(val) {
+        let n = parseFloat(val) || 0;
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtM(val, dec) {
+        let n = parseFloat(val) || 0;
+        return n.toLocaleString('en-US', { minimumFractionDigits: dec !== undefined ? dec : 2, maximumFractionDigits: dec !== undefined ? dec : 2 });
+    }
+
+    let prodRows = '';
+    prods.forEach(p => {
+        prodRows += `
+            <tr>
+                <td><b>${p.product_label}</b></td>
+                <td style="text-align: right; font-family: monospace;">${fmtL(p.opening_dip)}</td>
+                <td style="text-align: right; font-family: monospace; color: #6b21a8;">+${fmtL(p.purchases)}</td>
+                <td style="text-align: right; font-family: monospace;">-${fmtL(p.closing_dip)}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: bold; background: #f5f3ff;">${fmtL(p.tank_sales)}</td>
+                <td style="text-align: right; font-family: monospace;">${fmtL(p.gross_meter_litres)}</td>
+                <td style="text-align: right; font-family: monospace; color: #b45309;">-${fmtL(p.rtt_litres)}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: bold; background: #f0f9ff;">${fmtL(p.net_meter_litres)}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: bold; color: ${p.variance_litres >= 0 ? '#16a34a' : '#dc2626'};">${(p.variance_litres > 0 ? '+' : '')}${fmtL(p.variance_litres)}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: bold;">${(p.variance_percent > 0 ? '+' : '')}${p.variance_percent}%</td>
+                <td style="text-align: center; font-size: 10px;">${p.status.label}</td>
+            </tr>
+        `;
+    });
+
+    let pumpRows = '';
+    pGroups.forEach(pg => {
+        pumpRows += `
+            <tr style="background: #f1f5f9; font-weight: bold;">
+                <td colspan="10" style="padding: 4px 6px; font-size: 10px; text-transform: uppercase;">${pg.group_name}</td>
+            </tr>
+        `;
+        pg.nozzles.forEach(noz => {
+            pumpRows += `
+                <tr>
+                    <td style="padding-left: 14px;"><b>${noz.nozzle_id}</b> &bull; ${noz.product_name}</td>
+                    <td style="text-align: right; font-family: monospace;">${fmtM(noz.opening_electronic, 3)}</td>
+                    <td style="text-align: right; font-family: monospace;">${fmtM(noz.closing_electronic, 3)}</td>
+                    <td style="text-align: right; font-family: monospace; font-weight: bold; color: #0284c7;">${fmtL(noz.electronic_volume)}</td>
+                    <td style="text-align: right; font-family: monospace;">${fmtM(noz.opening_manual, 0)}</td>
+                    <td style="text-align: right; font-family: monospace;">${fmtM(noz.closing_manual, 0)}</td>
+                    <td style="text-align: right; font-family: monospace;">${fmtL(noz.manual_volume)}</td>
+                    <td style="text-align: right; font-family: monospace; color: #b45309;">${fmtL(noz.rtt_litres)}</td>
+                    <td style="text-align: right; font-family: monospace; font-weight: bold; color: #166534;">${fmtL(noz.net_volume)}</td>
+                    <td style="text-align: right; font-family: monospace;">${((noz.net_volume / (kpis.total_net_meter_litres || 1)) * 100).toFixed(1)}%</td>
+                </tr>
+            `;
+        });
+    });
+
+    const printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Monthly Volume Analysis - ${pInfo.station_name || pInfo.station}</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; color: #1e293b; padding: 25px; margin: 0; }
+                .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; }
+                .title { font-size: 16px; font-weight: 900; text-transform: uppercase; margin: 0; color: #0f172a; }
+                .subtitle { font-size: 12px; color: #1e3a8a; font-weight: 700; margin: 3px 0 0 0; }
+                .meta { font-size: 10px; color: #64748b; margin-top: 3px; }
+                .kpi-grid { display: flex; gap: 8px; margin-bottom: 14px; }
+                .kpi-card { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; background: #f8fafc; text-align: center; }
+                .kpi-label { font-size: 9px; font-weight: bold; color: #64748b; text-transform: uppercase; }
+                .kpi-val { font-size: 13px; font-weight: 900; font-family: monospace; margin-top: 2px; color: #0f172a; }
+                table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+                th, td { border: 1px solid #cbd5e1; padding: 5px 6px; }
+                th { background: #f1f5f9; text-transform: uppercase; font-size: 9px; color: #334155; }
+                .section-title { font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 14px; text-transform: uppercase; border-left: 3px solid #2563eb; padding-left: 6px; }
+                .sign-row { display: flex; justify-content: space-between; margin-top: 35px; padding-top: 15px; }
+                .sign-box { width: 28%; border-top: 1px dashed #64748b; text-align: center; padding-top: 4px; font-size: 10px; color: #475569; }
+                @media print {
+                    body { padding: 0; }
+                    @page { size: portrait; margin: 12mm; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">${pInfo.company_name}</div>
+                <div class="subtitle">${pInfo.station_name || pInfo.station} &mdash; MONTHLY FUEL VOLUME & TANK RECONCILIATION</div>
+                <div class="meta">Period: <b>${pInfo.month_label}</b> (${frappe.datetime.str_to_user(pInfo.from_date)} to ${frappe.datetime.str_to_user(pInfo.to_date)}) &bull; Shifts: <b>${pInfo.total_shifts}</b> &bull; Generated: ${new Date().toLocaleString()}</div>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Dispensed (Net)</div>
+                    <div class="kpi-val" style="color: #0284c7;">${fmtL(kpis.total_net_meter_litres)} L</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Deliveries (Purchases)</div>
+                    <div class="kpi-val" style="color: #6b21a8;">${fmtL(kpis.total_purchases_litres)} L</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Calculated Tank Sales</div>
+                    <div class="kpi-val" style="color: #4338ca;">${fmtL(kpis.total_tank_sales_litres)} L</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Net Station Variance</div>
+                    <div class="kpi-val" style="color: ${kpis.total_variance_litres >= 0 ? '#16a34a' : '#dc2626'};">${(kpis.total_variance_litres > 0 ? '+' : '')}${fmtL(kpis.total_variance_litres)} L (${(kpis.total_variance_percent > 0 ? '+' : '')}${kpis.total_variance_percent}%)</div>
+                </div>
+            </div>
+
+            <div class="section-title">1. Product Tank Dips Reconciliation Summary</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th style="text-align: right;">Opening Stock</th>
+                        <th style="text-align: right;">+ Purchases</th>
+                        <th style="text-align: right;">- Closing Stock</th>
+                        <th style="text-align: right;">= Tank Sales</th>
+                        <th style="text-align: right;">Gross Metre</th>
+                        <th style="text-align: right;">Less RTT</th>
+                        <th style="text-align: right;">= Net Metre</th>
+                        <th style="text-align: right;">Variance (L)</th>
+                        <th style="text-align: right;">Var %</th>
+                        <th style="text-align: center;">Audit Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${prodRows}
+                </tbody>
+                <tfoot>
+                    <tr style="background: #f8fafc; font-weight: bold;">
+                        <td>TOTALS</td>
+                        <td style="text-align: right;">${fmtL(prods.reduce((a, b) => a + b.opening_dip, 0))}</td>
+                        <td style="text-align: right; color: #6b21a8;">+${fmtL(kpis.total_purchases_litres)}</td>
+                        <td style="text-align: right;">-${fmtL(prods.reduce((a, b) => a + b.closing_dip, 0))}</td>
+                        <td style="text-align: right; background: #ede9fe;">${fmtL(kpis.total_tank_sales_litres)}</td>
+                        <td style="text-align: right;">${fmtL(prods.reduce((a, b) => a + b.gross_meter_litres, 0))}</td>
+                        <td style="text-align: right; color: #b45309;">-${fmtL(prods.reduce((a, b) => a + b.rtt_litres, 0))}</td>
+                        <td style="text-align: right; background: #e0f2fe;">${fmtL(kpis.total_net_meter_litres)}</td>
+                        <td style="text-align: right; color: ${kpis.total_variance_litres >= 0 ? '#16a34a' : '#dc2626'};">${(kpis.total_variance_litres > 0 ? '+' : '')}${fmtL(kpis.total_variance_litres)}</td>
+                        <td style="text-align: right;">${(kpis.total_variance_percent > 0 ? '+' : '')}${kpis.total_variance_percent}%</td>
+                        <td style="text-align: center;">${kpis.overall_status ? kpis.overall_status.label : 'Normal'}</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div class="section-title">2. Pump Island & Nozzle Meter Readings</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Island / Nozzle</th>
+                        <th style="text-align: right;">Op Elec</th>
+                        <th style="text-align: right;">Cl Elec</th>
+                        <th style="text-align: right;">Elec Litres</th>
+                        <th style="text-align: right;">Op Man</th>
+                        <th style="text-align: right;">Cl Man</th>
+                        <th style="text-align: right;">Man Litres</th>
+                        <th style="text-align: right;">RTT</th>
+                        <th style="text-align: right;">Net Litres</th>
+                        <th style="text-align: right;">Share %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${pumpRows}
+                </tbody>
+            </table>
+
+            <div class="sign-row">
+                <div class="sign-box">Prepared By (Station Supervisor)</div>
+                <div class="sign-box">Verified By (Operations Manager)</div>
+                <div class="sign-box">Approved By (Auditor / Owner)</div>
+            </div>
+        </body>
+        </html>
+    `;
+
+    const w = window.open('', '_blank');
+    w.document.write(printHtml);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 500);
+};
+
+window.save_monthly_volume_pdf = function() {
+    window.print_monthly_volume_report();
+};
+
+window.export_monthly_volume_csv = function() {
+    const data = window.MONTHLY_REPORTS_STATE.data;
+    if (!data || !data.period_info) {
+        frappe.msgprint("Please load monthly volume data first.");
+        return;
+    }
+
+    const pInfo = data.period_info;
+    const kpis = data.kpis || {};
+    const prods = data.products || [];
+    const pGroups = data.pump_groups || [];
+    const pLedger = data.purchases_ledger || [];
+
+    let csv = `Station,${pInfo.station_name || pInfo.station}\n`;
+    csv += `Period,${pInfo.month_label} (${pInfo.from_date} to ${pInfo.to_date})\n`;
+    csv += `Total Shifts,${pInfo.total_shifts}\n\n`;
+
+    csv += `1. PRODUCT RECONCILIATION SUMMARY\n`;
+    csv += `Product,Opening Dip (L),Purchases (L),Closing Dip (L),Tank Sales (L),Gross Metre (L),Less RTT (L),Net Metre (L),Variance (L),Variance (%),Audit Status\n`;
+    prods.forEach(p => {
+        csv += `"${p.product_label}",${p.opening_dip},${p.purchases},${p.closing_dip},${p.tank_sales},${p.gross_meter_litres},${p.rtt_litres},${p.net_meter_litres},${p.variance_litres},${p.variance_percent}%,"${p.status.label}"\n`;
+    });
+    csv += `"TOTALS",${prods.reduce((a, b) => a + b.opening_dip, 0)},${kpis.total_purchases_litres},${prods.reduce((a, b) => a + b.closing_dip, 0)},${kpis.total_tank_sales_litres},${prods.reduce((a, b) => a + b.gross_meter_litres, 0)},${prods.reduce((a, b) => a + b.rtt_litres, 0)},${kpis.total_net_meter_litres},${kpis.total_variance_litres},${kpis.total_variance_percent}%,"${kpis.overall_status ? kpis.overall_status.label : 'Normal'}"\n\n`;
+
+    csv += `2. PUMP NOZZLE METER READINGS\n`;
+    csv += `Island,Nozzle,Product,Op Elec,Cl Elec,Elec Litres,Op Man,Cl Man,Man Litres,RTT (L),Net Litres (L),Share (%)\n`;
+    pGroups.forEach(pg => {
+        pg.nozzles.forEach(noz => {
+            const share = (kpis.total_net_meter_litres > 0) ? ((noz.net_volume / kpis.total_net_meter_litres) * 100).toFixed(2) : 0;
+            csv += `"${pg.group_name}","${noz.nozzle_id}","${noz.product_name}",${noz.opening_electronic},${noz.closing_electronic},${noz.electronic_volume},${noz.opening_manual},${noz.closing_manual},${noz.manual_volume},${noz.rtt_litres},${noz.net_volume},${share}%\n`;
+        });
+    });
+    csv += `\n`;
+
+    csv += `3. FUEL DELIVERIES (PURCHASES LEDGER)\n`;
+    csv += `#,Date,Invoice / Ref #,Supplier,Product,Target Tank,Quantity (L),Unit Cost,Total Cost\n`;
+    pLedger.forEach((it, idx) => {
+        csv += `${idx + 1},"${it.date}","${it.invoice_number}","${it.supplier}","${it.item}","${it.target_tank || ''}",${it.quantity},${it.unit_cost || ''},${it.total_cost || ''}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const safeDate = (pInfo.month_label || 'Period').replace(/\s+/g, '_');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `Monthly_Volume_Analysis_${safeDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+

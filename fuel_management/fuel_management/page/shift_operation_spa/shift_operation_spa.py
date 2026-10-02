@@ -460,4 +460,10 @@ def get_daily_sales_breakdown(station=None, from_date=None, to_date=None, month=
     from fuel_management.fuel_management.api import get_daily_sales_breakdown as _get_dsb
     return _get_dsb(station=station, from_date=from_date, to_date=to_date, month=month, year=year)
 
+@frappe.whitelist()
+def get_monthly_volume_analysis(station=None, from_date=None, to_date=None, month=None, year=None):
+    from fuel_management.fuel_management.api import get_monthly_volume_analysis as _get_mva
+    return _get_mva(station=station, from_date=from_date, to_date=to_date, month=month, year=year)
+
+
 
