@@ -4802,78 +4802,481 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
 
     
 window.STOCK_TRANSFER_CART = [];
+window.SPA_ST_MASTER = null;
 
 function render_stock_transfer_cart(wrapper) {
     let $wrapper = $(wrapper);
     let html = '';
-    if(window.STOCK_TRANSFER_CART.length === 0) {
-        html = '<tr><td colspan="4" class="text-center" style="color: #64748b; padding: 2rem;">Cart is empty</td></tr>';
+    let total_units = 0;
+    let total_items = window.STOCK_TRANSFER_CART.length;
+
+    if (total_items === 0) {
+        html = `
+            <tr>
+                <td colspan="6" class="text-center" style="color: #94a3b8; padding: 2.5rem;">
+                    <div style="font-size: 2rem; margin-bottom: 6px;">🛒</div>
+                    <div style="font-weight: 600; font-size: 0.95rem; color: #475569;">Transfer cart is empty</div>
+                    <div style="font-size: 0.8rem; margin-top: 2px;">Select products above and click <b>+ Add to Cart</b> to prepare a stock transfer.</div>
+                </td>
+            </tr>
+        `;
+        $wrapper.find('#st-cart-submit-strip').hide();
+        $wrapper.find('#btn-clear-st-cart').hide();
+        $wrapper.find('#st-cart-count-pill').hide();
+        $wrapper.find('#st-cart-summary-pill').text('0 items');
     } else {
         window.STOCK_TRANSFER_CART.forEach((row, idx) => {
+            let is_s2f = row.direction === "Store to Forecourt";
+            let dirBadge = is_s2f
+                ? `<span style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">🏪 ➔ ⛽ Store to Forecourt</span>`
+                : `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">⛽ ➔ 🏪 Forecourt to Store</span>`;
+
+            let srcQtyStr = row.source_qty !== undefined ? `${parseFloat(row.source_qty).toLocaleString('en-US', {maximumFractionDigits: 2})} ${row.uom || ''}` : '--';
+            let destQtyStr = row.dest_qty !== undefined ? `${parseFloat(row.dest_qty + row.qty).toLocaleString('en-US', {maximumFractionDigits: 2})} ${row.uom || ''}` : '--';
+            total_units += parseFloat(row.qty) || 0;
+
             html += `
-                <tr>
-                    <td>${row.direction}</td>
-                    <td>${row.item_name}</td>
-                    <td>${row.qty}</td>
-                    <td><button class="btn btn-sm btn-remove-st-cart" data-idx="${idx}" style="color: #ef4444; border: 1px solid #ef4444; background: transparent;">X</button></td>
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 10px 12px; vertical-align: middle;">${dirBadge}</td>
+                    <td style="padding: 10px 12px; vertical-align: middle;">
+                        <div style="font-weight: 700; color: #0f172a; font-size: 0.875rem;">${frappe.utils.escape_html(row.item_name)}</div>
+                        <div style="font-size: 0.75rem; color: #64748b; font-family: monospace;">${frappe.utils.escape_html(row.item)}</div>
+                    </td>
+                    <td style="padding: 10px 12px; text-align: center; vertical-align: middle;">
+                        <span style="font-family: monospace; font-weight: 700; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem;">
+                            ${srcQtyStr}
+                        </span>
+                    </td>
+                    <td style="padding: 10px 12px; text-align: center; vertical-align: middle;">
+                        <div style="display: inline-flex; align-items: center; gap: 4px; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff; padding: 2px 4px;">
+                            <button type="button" class="btn-cart-qty-step" data-idx="${idx}" data-step="-1" style="background: #f1f5f9; border: none; width: 24px; height: 24px; border-radius: 4px; font-weight: 800; cursor: pointer; color: #334155;">-</button>
+                            <input type="number" class="st-cart-row-qty" data-idx="${idx}" value="${row.qty}" min="0.01" step="any" style="width: 60px; text-align: center; border: none; font-weight: 800; font-size: 0.9rem; font-family: monospace; outline: none;">
+                            <button type="button" class="btn-cart-qty-step" data-idx="${idx}" data-step="1" style="background: #f1f5f9; border: none; width: 24px; height: 24px; border-radius: 4px; font-weight: 800; cursor: pointer; color: #334155;">+</button>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; text-align: center; vertical-align: middle;">
+                        <span style="font-family: monospace; font-weight: 700; color: #0369a1; background: #f0f9ff; border: 1px solid #bae6fd; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem;">
+                            ${destQtyStr}
+                        </span>
+                    </td>
+                    <td style="padding: 10px 12px; text-align: center; vertical-align: middle;">
+                        <button type="button" class="btn btn-xs btn-remove-st-cart" data-idx="${idx}" style="background: #fef2f2; border: 1px solid #fecaca; color: #ef4444; border-radius: 6px; padding: 4px 8px; cursor: pointer;" title="Remove from Cart">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </td>
                 </tr>
             `;
         });
+
+        $wrapper.find('#st-cart-submit-strip').show().css('display', 'flex');
+        $wrapper.find('#btn-clear-st-cart').show();
+        $wrapper.find('#st-cart-count-pill').text(total_items).show();
+        $wrapper.find('#st-cart-summary-pill').text(`${total_items} items • ${total_units.toLocaleString('en-US', {maximumFractionDigits: 2})} total units`);
+        $wrapper.find('#st-total-items-count').text(total_items);
+        $wrapper.find('#st-total-units-count').text(total_units.toLocaleString('en-US', {maximumFractionDigits: 2}));
     }
+
     $wrapper.find('#st-cart-body').html(html);
-    
+
+    // Quantity change listeners in cart
+    $wrapper.find('.st-cart-row-qty').off('change input').on('change input', function() {
+        let idx = parseInt($(this).attr('data-idx'));
+        let newQty = parseFloat($(this).val()) || 0;
+        if (newQty > 0 && window.STOCK_TRANSFER_CART[idx]) {
+            window.STOCK_TRANSFER_CART[idx].qty = newQty;
+        }
+        render_stock_transfer_cart($wrapper);
+    });
+
+    $wrapper.find('.btn-cart-qty-step').off('click').on('click', function() {
+        let idx = parseInt($(this).attr('data-idx'));
+        let step = parseFloat($(this).attr('data-step')) || 0;
+        if (window.STOCK_TRANSFER_CART[idx]) {
+            let cur = parseFloat(window.STOCK_TRANSFER_CART[idx].qty) || 0;
+            let nextVal = Math.max(1, cur + step);
+            window.STOCK_TRANSFER_CART[idx].qty = nextVal;
+            render_stock_transfer_cart($wrapper);
+        }
+    });
+
     $wrapper.find('.btn-remove-st-cart').off('click').on('click', function() {
         let idx = parseInt($(this).attr('data-idx'));
         window.STOCK_TRANSFER_CART.splice(idx, 1);
         render_stock_transfer_cart($wrapper);
     });
+
+    $wrapper.find('#btn-clear-st-cart').off('click').on('click', function() {
+        frappe.confirm("Are you sure you want to clear all items in the transfer cart?", function() {
+            window.STOCK_TRANSFER_CART = [];
+            render_stock_transfer_cart($wrapper);
+        });
+    });
 }
+
 function render_stock_transfer($wrapper) {
     render_stock_transfer_cart($wrapper);
-    if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
+    if (!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
 
-    if ($wrapper.find('#stock-transfer-item-list').children().length === 0) {
-        fetch_warehouse_inventory_report($wrapper, 'store');
+    const station_id = window.ACTIVE_SHIFT.station;
+
+    // Helper: Load stock transfer data from backend
+    function load_st_master_data(callback) {
+        frappe.call({
+            method: "fuel_management.fuel_management.api.get_spa_stock_transfer_data",
+            args: { station_id: station_id },
+            callback: function(r) {
+                if (r.message && r.message.status === "success") {
+                    window.SPA_ST_MASTER = r.message;
+                    
+                    // Update Warehouse Badges
+                    let storeName = r.message.store_warehouse || "Main Store";
+                    let forecourtName = r.message.forecourt_warehouse || "Forecourt POS";
+                    $wrapper.find('#st-badge-store-name').text(storeName);
+                    $wrapper.find('#st-badge-forecourt-name').text(forecourtName);
+                    $wrapper.find('.st-src-wh-name').text(storeName);
+                    $wrapper.find('.st-dest-wh-name').text(forecourtName);
+
+                    // Update Datalist for backwards compatibility
+                    let dlHtml = '';
+                    (r.message.items || []).forEach(i => {
+                        dlHtml += `<option data-value="${i.item_code}" value="${i.item_name} (${i.item_code})"></option>`;
+                    });
+                    $wrapper.find('#stock-transfer-item-list').html(dlHtml);
+
+                    if (typeof callback === 'function') callback();
+                }
+            }
+        });
     }
 
-    $wrapper.find('#btn-add-st-cart').off('click').on('click', function() {
-        let item_val = $wrapper.find('#stock-transfer-item').val();
-        let selected_option = $wrapper.find(`#stock-transfer-item-list option[value="${item_val}"]`);
-        if (!selected_option.length) {
-            selected_option = $wrapper.find(`#stock-transfer-item-list option[data-value="${item_val}"]`);
-        }
-        let item = selected_option.length ? selected_option.attr('data-value') : item_val;
-        
-        let qty = parseFloat($wrapper.find('#stock-transfer-qty').val()) || 0;
-        let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
-        
-        if(!item || qty <= 0) {
-            frappe.show_alert({message: "Please select an item and enter a valid quantity.", indicator: "orange"});
+    // Helper: Update Live Source and Destination Stock Displays
+    function update_st_live_metrics() {
+        let dir = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
+        let item_code = ($wrapper.find('#stock-transfer-item-code').val() || '').trim();
+        let item_name_input = ($wrapper.find('#stock-transfer-item').val() || '').trim();
+
+        if (!window.SPA_ST_MASTER || (!item_code && !item_name_input)) {
+            $wrapper.find('#st-stock-alert-panel').hide();
+            $wrapper.find('#btn-st-fill-max').hide();
             return;
         }
-        
-        window.STOCK_TRANSFER_CART.push({
-            item: item,
-            item_name: item_val,
-            qty: qty,
-            direction: direction
+
+        let item = null;
+        if (item_code) {
+            item = (window.SPA_ST_MASTER.items || []).find(i => i.item_code === item_code);
+        }
+        if (!item && item_name_input) {
+            item = (window.SPA_ST_MASTER.items || []).find(i => 
+                (i.item_name && i.item_name.toLowerCase() === item_name_input.toLowerCase()) || 
+                (i.item_code && i.item_code.toLowerCase() === item_name_input.toLowerCase())
+            );
+            if (item) {
+                $wrapper.find('#stock-transfer-item-code').val(item.item_code);
+            }
+        }
+
+        if (!item) {
+            $wrapper.find('#st-stock-alert-panel').hide();
+            $wrapper.find('#btn-st-fill-max').hide();
+            return;
+        }
+
+        let store_qty = parseFloat(item.store_qty) || 0;
+        let forecourt_qty = parseFloat(item.forecourt_qty) || 0;
+        let is_store_to_fc = dir === "Store to Forecourt";
+
+        let src_qty = is_store_to_fc ? store_qty : forecourt_qty;
+        let dest_qty = is_store_to_fc ? forecourt_qty : store_qty;
+        let uom_str = item.stock_uom || "Units";
+
+        let src_location_name = is_store_to_fc ? (window.SPA_ST_MASTER.store_warehouse || "Main Store") : (window.SPA_ST_MASTER.forecourt_warehouse || "Forecourt");
+        let dest_location_name = is_store_to_fc ? (window.SPA_ST_MASTER.forecourt_warehouse || "Forecourt") : (window.SPA_ST_MASTER.store_warehouse || "Main Store");
+
+        let src_icon = is_store_to_fc ? "🏪" : "⛽";
+        let dest_icon = is_store_to_fc ? "⛽" : "🏪";
+
+        // Update Labels & Values
+        $wrapper.find('#st-source-location-label').html(`${src_icon} Current in <b>${src_location_name}</b> (Moving From)`);
+        $wrapper.find('#st-source-qty-val').text(src_qty.toLocaleString('en-US', {maximumFractionDigits: 2}));
+        $wrapper.find('#st-source-qty-uom').text(`${uom_str} Available`);
+
+        $wrapper.find('#st-dest-location-label').html(`${dest_icon} Current in <b>${dest_location_name}</b> (Moving To)`);
+        $wrapper.find('#st-dest-qty-val').text(dest_qty.toLocaleString('en-US', {maximumFractionDigits: 2}));
+        $wrapper.find('#st-dest-qty-uom').text(`${uom_str} on Hand`);
+
+        let entered_qty = parseFloat($wrapper.find('#stock-transfer-qty').val()) || 0;
+        let projected_qty = dest_qty + entered_qty;
+        $wrapper.find('#st-projected-qty-val').text(projected_qty.toLocaleString('en-US', {maximumFractionDigits: 2}));
+
+        // Styling based on available quantity
+        if (src_qty > 10) {
+            $wrapper.find('#st-source-stock-box').css({ background: '#ecfdf5', borderColor: '#a7f3d0' });
+            $wrapper.find('#st-source-qty-val').css('color', '#065f46');
+            $wrapper.find('#st-source-status-pill').text('In Stock').css({ background: '#047857', color: '#fff' });
+        } else if (src_qty > 0) {
+            $wrapper.find('#st-source-stock-box').css({ background: '#fffbeb', borderColor: '#fde68a' });
+            $wrapper.find('#st-source-qty-val').css('color', '#92400e');
+            $wrapper.find('#st-source-status-pill').text('Low Stock').css({ background: '#d97706', color: '#fff' });
+        } else {
+            $wrapper.find('#st-source-stock-box').css({ background: '#fef2f2', borderColor: '#fecaca' });
+            $wrapper.find('#st-source-qty-val').css('color', '#991b1b');
+            $wrapper.find('#st-source-status-pill').text('Out of Stock').css({ background: '#dc2626', color: '#fff' });
+        }
+
+        // Over-transfer warning check
+        if (entered_qty > src_qty && src_qty >= 0) {
+            $wrapper.find('#st-over-transfer-alert').show().css('display', 'flex');
+        } else {
+            $wrapper.find('#st-over-transfer-alert').hide();
+        }
+
+        // Max available fill button
+        if (src_qty > 0) {
+            $wrapper.find('#st-max-fill-val').text(src_qty);
+            $wrapper.find('#btn-st-fill-max').show();
+        } else {
+            $wrapper.find('#btn-st-fill-max').hide();
+        }
+
+        $wrapper.find('#st-stock-alert-panel').show().slideDown('fast');
+    }
+
+    // Direction Card Toggle
+    $wrapper.find('.st-dir-card').off('click').on('click', function() {
+        let dir = $(this).attr('data-dir');
+        $wrapper.find('.st-dir-card').removeClass('active').css({
+            border: '1px solid #cbd5e1',
+            background: '#ffffff'
         });
-        
-        $wrapper.find('#stock-transfer-item').val('');
-        $wrapper.find('#stock-transfer-qty').val('');
-        render_stock_transfer_cart($wrapper);
+        $wrapper.find('.st-dir-card .st-dir-radio').css({
+            border: '2px solid #cbd5e1',
+            background: '#ffffff'
+        }).find('div').css('background', 'transparent');
+
+        $(this).addClass('active').css({
+            border: '2px solid #0284c7',
+            background: '#f0f9ff'
+        });
+        $(this).find('.st-dir-radio').css({
+            border: '2px solid #0284c7',
+            background: '#0284c7'
+        }).find('div').css('background', '#ffffff');
+
+        $wrapper.find('#stock-transfer-direction').val(dir);
+        update_st_live_metrics();
     });
 
-    $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
-        if(window.STOCK_TRANSFER_CART.length === 0) {
-            frappe.show_alert({message: "Cart is empty.", indicator: "orange"});
+    // Combobox rendering
+    function render_st_dropdown(filter_text = '') {
+        if (!window.SPA_ST_MASTER || !window.SPA_ST_MASTER.items) return;
+        let query = (filter_text || '').toLowerCase().trim();
+        let items = window.SPA_ST_MASTER.items;
+        let dir = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
+        let is_store_to_fc = dir === "Store to Forecourt";
+
+        let gas_items = [];
+        let lube_items = [];
+        let filter_items = [];
+        let other_items = [];
+
+        items.forEach(i => {
+            let nm = (i.item_name || i.item_code || '').toLowerCase();
+            let code = (i.item_code || '').toLowerCase();
+            let grp = (i.item_group || '').toLowerCase();
+
+            if (query && !nm.includes(query) && !code.includes(query) && !grp.includes(query)) return;
+
+            if (grp.includes('gas') || grp.includes('cylinder') || nm.includes('gas') || nm.includes('cylinder')) {
+                gas_items.push(i);
+            } else if (grp.includes('lube') || grp.includes('oil') || nm.includes('helix') || nm.includes('rimula') || nm.includes('coolant') || nm.includes('fluid') || nm.includes('grease') || nm.includes('brake') || nm.includes('atf') || nm.includes('gtx') || nm.includes('magnatec')) {
+                lube_items.push(i);
+            } else if (grp.includes('filter') || nm.includes('filter') || nm.includes('plug') || nm.includes('pad')) {
+                filter_items.push(i);
+            } else {
+                other_items.push(i);
+            }
+        });
+
+        let total = gas_items.length + lube_items.length + filter_items.length + other_items.length;
+        let html = '';
+
+        if (total === 0) {
+            html = '<div style="padding: 1rem; color: #94a3b8; font-size: 0.85rem; text-align: center;">No matching inventory products found</div>';
+        } else {
+            function build_group(label, list, icon) {
+                if (list.length === 0) return '';
+                let g_html = `<div style="background: #f8fafc; padding: 6px 12px; font-weight: 800; font-size: 0.72rem; color: #475569; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; border-top: 1px solid #e2e8f0;">${icon} ${label}</div>`;
+                list.forEach(i => {
+                    let displayName = i.item_name || i.item_code;
+                    let storeStock = parseFloat(i.store_qty) || 0;
+                    let fcStock = parseFloat(i.forecourt_qty) || 0;
+                    
+                    let srcStock = is_store_to_fc ? storeStock : fcStock;
+                    let srcBadgeColor = srcStock > 10 ? '#047857' : (srcStock > 0 ? '#b45309' : '#dc2626');
+                    let srcBadgeBg = srcStock > 10 ? '#ecfdf5' : (srcStock > 0 ? '#fffbeb' : '#fef2f2');
+
+                    g_html += `
+                        <div class="st-item-opt" data-id="${i.item_code}" data-name="${frappe.utils.escape_html(displayName)}" style="padding: 8px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.15s;">
+                            <div>
+                                <div style="font-weight: 700; color: #0f172a; font-size: 0.875rem;">${frappe.utils.escape_html(displayName)}</div>
+                                <div style="font-size: 0.72rem; color: #64748b; font-family: monospace;">${i.item_code}</div>
+                            </div>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <span style="font-size: 0.75rem; font-weight: 700; color: ${srcBadgeColor}; background: ${srcBadgeBg}; padding: 2px 6px; border-radius: 4px; border: 1px solid ${srcBadgeColor}33;" title="Source Warehouse Stock">
+                                    ${is_store_to_fc ? '🏪 Store' : '⛽ Forecourt'}: ${srcStock}
+                                </span>
+                                <span style="font-size: 0.72rem; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px;" title="Destination Warehouse Stock">
+                                    ${is_store_to_fc ? '⛽ FC' : '🏪 Store'}: ${is_store_to_fc ? fcStock : storeStock}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                });
+                return g_html;
+            }
+
+            html += build_group('Gas Cylinders & LPG', gas_items, '🔥');
+            html += build_group('Lubricants & Engine Fluids', lube_items, '📦');
+            html += build_group('Filters & Service Parts', filter_items, '🚗');
+            html += build_group('Accessories & General Stock', other_items, '🔧');
+        }
+
+        $wrapper.find('#st-item-dropdown').html(html).show();
+    }
+
+    function select_st_item(item_code, item_name) {
+        $wrapper.find('#stock-transfer-item-code').val(item_code);
+        $wrapper.find('#stock-transfer-item').val(item_name);
+        $wrapper.find('#st-item-dropdown').hide();
+
+        if (!$wrapper.find('#stock-transfer-qty').val() || parseFloat($wrapper.find('#stock-transfer-qty').val()) <= 0) {
+            $wrapper.find('#stock-transfer-qty').val(1);
+        }
+
+        update_st_live_metrics();
+        $wrapper.find('#stock-transfer-qty').focus().select();
+    }
+
+    $wrapper.find('#stock-transfer-item').off('focus input').on('focus input', function() {
+        let txt = $(this).val();
+        render_st_dropdown(txt);
+    });
+
+    $wrapper.find('#btn-toggle-st-dropdown').off('click').on('click', function(e) {
+        e.stopPropagation();
+        let $dd = $wrapper.find('#st-item-dropdown');
+        if ($dd.is(':visible')) {
+            $dd.hide();
+        } else {
+            $wrapper.find('#stock-transfer-item').focus();
+            render_st_dropdown($wrapper.find('#stock-transfer-item').val());
+        }
+    });
+
+    $wrapper.find('#st-item-dropdown').off('click', '.st-item-opt').on('click', '.st-item-opt', function() {
+        let id = $(this).attr('data-id');
+        let name = $(this).attr('data-name');
+        select_st_item(id, name);
+    });
+
+    // Close combobox on outside click
+    $(document).off('click.st_combobox').on('click.st_combobox', function(e) {
+        if (!$(e.target).closest('#st-item-combobox-wrap').length) {
+            $wrapper.find('#st-item-dropdown').hide();
+        }
+    });
+
+    // Quantity helpers
+    $wrapper.find('#stock-transfer-qty').off('input change').on('input change', update_st_live_metrics);
+
+    $wrapper.find('.btn-st-preset').off('click').on('click', function() {
+        let q = parseFloat($(this).attr('data-qty')) || 1;
+        $wrapper.find('#stock-transfer-qty').val(q);
+        update_st_live_metrics();
+    });
+
+    $wrapper.find('#btn-st-fill-max').off('click').on('click', function() {
+        let maxVal = parseFloat($wrapper.find('#st-max-fill-val').text()) || 0;
+        if (maxVal > 0) {
+            $wrapper.find('#stock-transfer-qty').val(maxVal);
+            update_st_live_metrics();
+        }
+    });
+
+    // Add to Cart
+    $wrapper.find('#btn-add-st-cart').off('click').on('click', function() {
+        let item_code = ($wrapper.find('#stock-transfer-item-code').val() || '').trim();
+        let item_name = ($wrapper.find('#stock-transfer-item').val() || '').trim();
+        let qty = parseFloat($wrapper.find('#stock-transfer-qty').val()) || 0;
+        let direction = $wrapper.find('#stock-transfer-direction').val() || "Store to Forecourt";
+
+        if (!item_code && item_name && window.SPA_ST_MASTER) {
+            let found = (window.SPA_ST_MASTER.items || []).find(i => 
+                (i.item_name && i.item_name.toLowerCase() === item_name.toLowerCase()) || 
+                (i.item_code && i.item_code.toLowerCase() === item_name.toLowerCase())
+            );
+            if (found) {
+                item_code = found.item_code;
+                item_name = found.item_name || found.item_code;
+            }
+        }
+
+        if (!item_code || qty <= 0) {
+            frappe.show_alert({message: "Please select an item and enter a valid transfer quantity.", indicator: "orange"});
+            if (!item_code) $wrapper.find('#stock-transfer-item').focus();
+            else $wrapper.find('#stock-transfer-qty').focus();
             return;
         }
-        
+
+        let itemObj = (window.SPA_ST_MASTER && window.SPA_ST_MASTER.items) 
+            ? window.SPA_ST_MASTER.items.find(i => i.item_code === item_code) 
+            : null;
+
+        let is_store_to_fc = direction === "Store to Forecourt";
+        let src_qty = itemObj ? (is_store_to_fc ? itemObj.store_qty : itemObj.forecourt_qty) : 0;
+        let dest_qty = itemObj ? (is_store_to_fc ? itemObj.forecourt_qty : itemObj.store_qty) : 0;
+        let uom = itemObj ? itemObj.stock_uom : "Nos";
+
+        // Check if item already exists in cart for this direction
+        let existing = window.STOCK_TRANSFER_CART.find(r => r.item === item_code && r.direction === direction);
+        if (existing) {
+            existing.qty += qty;
+        } else {
+            window.STOCK_TRANSFER_CART.push({
+                item: item_code,
+                item_name: item_name,
+                qty: qty,
+                direction: direction,
+                source_qty: src_qty,
+                dest_qty: dest_qty,
+                uom: uom
+            });
+        }
+
+        frappe.show_alert({message: `Added ${qty} × ${item_name} to cart`, indicator: "green"});
+
+        // Reset form
+        $wrapper.find('#stock-transfer-item-code').val('');
+        $wrapper.find('#stock-transfer-item').val('');
+        $wrapper.find('#stock-transfer-qty').val('');
+        $wrapper.find('#st-stock-alert-panel').hide();
+        $wrapper.find('#btn-st-fill-max').hide();
+
+        render_stock_transfer_cart($wrapper);
+        $wrapper.find('#stock-transfer-item').focus();
+    });
+
+    // Submit Transfers
+    $wrapper.find('#btn-submit-stock-transfer').off('click').on('click', function() {
+        if (window.STOCK_TRANSFER_CART.length === 0) {
+            frappe.show_alert({message: "Transfer cart is empty.", indicator: "orange"});
+            return;
+        }
+
         let $btn = $(this);
         $btn.find('.spinner').removeClass('hidden');
         $btn.prop('disabled', true);
-        
+
         frappe.call({
             method: "fuel_management.fuel_management.api.create_spa_stock_transfer",
             args: {
@@ -4883,14 +5286,20 @@ function render_stock_transfer($wrapper) {
             callback: function(res) {
                 $btn.find('.spinner').addClass('hidden');
                 $btn.prop('disabled', false);
-                
-                if(res.message && res.message.status === "success") {
+
+                if (res.message && res.message.status === "success") {
                     frappe.show_alert({message: res.message.message, indicator: "green"});
                     window.STOCK_TRANSFER_CART = [];
                     render_stock_transfer_cart($wrapper);
+                    $wrapper.find('#stock-transfer-item-code').val('');
                     $wrapper.find('#stock-transfer-item').val('');
                     $wrapper.find('#stock-transfer-qty').val('');
-                    fetch_warehouse_inventory_report($wrapper, 'store');
+                    $wrapper.find('#st-stock-alert-panel').hide();
+
+                    load_st_master_data();
+                    if (typeof fetch_warehouse_inventory_report === 'function') {
+                        fetch_warehouse_inventory_report($wrapper, 'store');
+                    }
                     $wrapper.find('#tab-stock-transfer .seg-btn[data-view="history"]').click();
                     fetch_st_history();
                 }
@@ -4902,37 +5311,58 @@ function render_stock_transfer($wrapper) {
         });
     });
 
-    // Segmented Control Logic
+    // Refresh button
+    $wrapper.find('#btn-refresh-st-data').off('click').on('click', function() {
+        let $icon = $(this).find('i');
+        $icon.addClass('fa-spin');
+        load_st_master_data(function() {
+            $icon.removeClass('fa-spin');
+            frappe.show_alert({message: "Stock balances updated in real-time.", indicator: "blue"});
+            update_st_live_metrics();
+        });
+    });
+
+    // Segmented Control logic
     $wrapper.find('#tab-stock-transfer .seg-btn').off('click').on('click', function() {
         $wrapper.find('#tab-stock-transfer .seg-btn').removeClass('active');
         $(this).addClass('active');
-        
+
         const view = $(this).data('view');
         $wrapper.find('#tab-stock-transfer .view-pane').removeClass('active');
         $wrapper.find('#st-' + view + '-view').addClass('active');
+
+        if (view === 'history') {
+            fetch_st_history();
+        }
     });
 
+    // Initial Master Data Load
+    load_st_master_data();
+
+    // -------------------------------------------------------------
+    // HISTORY VIEW CONTROLLER
+    // -------------------------------------------------------------
     window.ST_HISTORY_CACHE = [];
     window.EDIT_ST_ITEMS = [];
 
     function render_edit_st_items_table() {
         let $tbody = $('#edit-st-items-body');
         $tbody.empty();
-        
+
         if (!window.EDIT_ST_ITEMS || window.EDIT_ST_ITEMS.length === 0) {
             $tbody.html('<tr><td colspan="3" class="text-center" style="color:#94a3b8; padding:1.5rem;">No items in transfer. Use the form above to add items.</td></tr>');
             return;
         }
-        
+
         window.EDIT_ST_ITEMS.forEach((item, idx) => {
             $tbody.append(`
                 <tr>
-                    <td style="padding:8px 12px; font-weight:500; font-size:0.875rem;">
-                        ${item.item_name}
-                        <div style="font-size:0.75rem; color:#64748b;">${item.item}</div>
+                    <td style="padding:8px 12px; font-weight:600; font-size:0.875rem;">
+                        ${frappe.utils.escape_html(item.item_name)}
+                        <div style="font-size:0.75rem; color:#64748b; font-family:monospace;">${item.item}</div>
                     </td>
                     <td style="padding:8px 12px;">
-                        <input type="number" class="spa-input form-control edit-st-item-qty" data-idx="${idx}" min="0.01" step="0.01" value="${item.qty}" style="height:32px; padding:2px 8px; font-size:0.875rem; width:100%;">
+                        <input type="number" class="spa-input form-control edit-st-item-qty" data-idx="${idx}" min="0.01" step="any" value="${item.qty}" style="height:32px; padding:2px 8px; font-size:0.875rem; width:100%; font-weight:700; font-family:monospace;">
                     </td>
                     <td style="text-align:center; padding:8px 12px;">
                         <button type="button" class="btn btn-xs btn-danger btn-remove-edit-st-item" data-idx="${idx}" style="padding:3px 7px;" title="Remove Item">
@@ -4970,14 +5400,14 @@ function render_stock_transfer($wrapper) {
             frappe.show_alert({message: "Please select an item.", indicator: "orange"});
             return;
         }
-        
+
         let selected_option = $(`#stock-transfer-item-list option[value="${item_val}"]`);
         if (!selected_option.length) {
             selected_option = $(`#stock-transfer-item-list option[data-value="${item_val}"]`);
         }
         let item_code = selected_option.length ? selected_option.attr('data-value') : item_val;
         let item_name = item_val;
-        
+
         let qty = parseFloat($('#edit-st-new-qty').val()) || 0;
         if (qty <= 0) {
             frappe.show_alert({message: "Please enter a valid quantity.", indicator: "orange"});
@@ -5004,8 +5434,7 @@ function render_stock_transfer($wrapper) {
     $('#btn-edit-st-save').off('click').on('click', function() {
         let stock_entry_id = $('#edit-st-id').val();
         let direction = $('#edit-st-direction').val();
-        
-        // Sync any active input values
+
         $('#edit-st-items-body .edit-st-item-qty').each(function() {
             let idx = parseInt($(this).attr('data-idx'));
             let val = parseFloat($(this).val()) || 0;
@@ -5039,7 +5468,10 @@ function render_stock_transfer($wrapper) {
                     frappe.show_alert({message: res.message.message, indicator: "green"});
                     $('#modal-edit-stock-transfer').hide();
                     fetch_st_history();
-                    fetch_warehouse_inventory_report($wrapper, 'store');
+                    load_st_master_data();
+                    if (typeof fetch_warehouse_inventory_report === 'function') {
+                        fetch_warehouse_inventory_report($wrapper, 'store');
+                    }
                 }
             },
             error: function() {
@@ -5052,9 +5484,10 @@ function render_stock_transfer($wrapper) {
     function fetch_st_history() {
         let df = $wrapper.find('#st-filter-date-from').val();
         let dt = $wrapper.find('#st-filter-date-to').val();
-        
-        $wrapper.find('#st-history-body').html('<tr><td colspan="5" class="text-center">Loading...</td></tr>');
-        
+        let searchQuery = ($wrapper.find('#st-history-search').val() || '').toLowerCase().trim();
+
+        $wrapper.find('#st-history-body').html('<tr><td colspan="5" class="text-center" style="padding: 2.5rem; color: #64748b;"><div class="spinner" style="margin: 0 auto 10px auto;"></div>Loading stock transfer history...</td></tr>');
+
         frappe.call({
             method: "fuel_management.fuel_management.api.get_historical_stock_transfers",
             args: {
@@ -5064,44 +5497,70 @@ function render_stock_transfer($wrapper) {
             },
             callback: function(r) {
                 window.ST_HISTORY_CACHE = r.message || [];
-                let count = window.ST_HISTORY_CACHE.length;
-                if (!df && !dt) {
-                    $wrapper.find('#st-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 20 entries &bull; Use date filter for more)</span>`);
-                } else {
-                    $wrapper.find('#st-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
+                let filtered = window.ST_HISTORY_CACHE;
+
+                if (searchQuery) {
+                    filtered = filtered.filter(row => {
+                        let nameMatch = (row.name || '').toLowerCase().includes(searchQuery);
+                        let dirMatch = (row.direction || '').toLowerCase().includes(searchQuery);
+                        let itemMatch = (row.items || []).some(i => (i.item_name || i.item_code || '').toLowerCase().includes(searchQuery));
+                        return nameMatch || dirMatch || itemMatch;
+                    });
                 }
+
+                let count = filtered.length;
+                if (!df && !dt && !searchQuery) {
+                    $wrapper.find('#st-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest ${count} entries &bull; Use date filter for more)</span>`);
+                } else {
+                    $wrapper.find('#st-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:700;">(Showing ${count} filtered entries)</span>`);
+                }
+
                 let $tbody = $wrapper.find('#st-history-body');
                 $tbody.empty();
-                
-                if (window.ST_HISTORY_CACHE.length > 0) {
-                    window.ST_HISTORY_CACHE.forEach(row => {
-                        let itemSum = (row.items || []).map(i => `${i.item_name || i.item_code} (${i.qty})`).join(', ');
-                        let dirBadgeStyle = row.direction === "Store to Forecourt" 
+
+                if (filtered.length > 0) {
+                    filtered.forEach(row => {
+                        let itemChips = (row.items || []).map(i => `
+                            <span style="display: inline-flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin: 2px;">
+                                <span style="font-weight: 600; color: #1e293b;">${frappe.utils.escape_html(i.item_name || i.item_code)}</span>
+                                <b style="color: #0284c7; font-family: monospace;">×${i.qty}</b>
+                            </span>
+                        `).join('');
+
+                        let is_s2f = row.direction === "Store to Forecourt";
+                        let dirBadgeStyle = is_s2f 
                             ? "background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;" 
                             : "background:#fef3c7; color:#b45309; border:1px solid #fde68a;";
+                        let dirIcon = is_s2f ? "🏪 ➔ ⛽" : "⛽ ➔ 🏪";
+
                         $tbody.append(`
-                            <tr>
-                                <td style="font-weight:600; color:#1e293b;">${row.name}</td>
-                                <td>${frappe.datetime.str_to_user(row.posting_date)} ${row.posting_time || ''}</td>
-                                <td>
-                                    <span style="display:inline-block; padding:3px 8px; border-radius:4px; font-size:0.75rem; font-weight:600; ${dirBadgeStyle}">
-                                        ${row.direction}
+                            <tr style="border-bottom: 1px solid #f1f5f9;">
+                                <td style="font-weight:700; color:#0f172a; font-family:monospace; padding: 10px 12px;">${row.name}</td>
+                                <td style="padding: 10px 12px; color: #475569; font-size: 0.85rem;">
+                                    <b>${frappe.datetime.str_to_user(row.posting_date)}</b>
+                                    <div style="font-size: 0.75rem; color: #64748b;">${row.posting_time || ''}</div>
+                                </td>
+                                <td style="padding: 10px 12px;">
+                                    <span style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:700; ${dirBadgeStyle}">
+                                        <span>${dirIcon}</span> ${row.direction}
                                     </span>
                                 </td>
-                                <td style="max-width:300px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${itemSum}">${itemSum}</td>
-                                <td style="text-align:center; white-space:nowrap;">
-                                    <button class="btn btn-xs btn-default btn-edit-st" data-entry="${row.name}" style="margin-right:4px; padding:3px 8px; font-size:0.75rem; font-weight:600;" title="Edit Transfer">
+                                <td style="padding: 10px 12px; max-width:400px;">
+                                    <div style="display: flex; flex-wrap: wrap; gap: 2px;">${itemChips}</div>
+                                </td>
+                                <td style="text-align:center; white-space:nowrap; padding: 10px 12px;">
+                                    <button class="btn btn-xs btn-default btn-edit-st" data-entry="${row.name}" style="margin-right:4px; padding:4px 10px; font-size:0.75rem; font-weight:600; border-radius: 6px;" title="Edit Transfer">
                                         <i class="fa fa-pencil text-primary"></i> Edit
                                     </button>
-                                    <button class="btn btn-xs btn-default btn-delete-st" data-entry="${row.name}" style="padding:3px 8px; font-size:0.75rem; font-weight:600;" title="Delete Transfer">
-                                        <i class="fa fa-trash text-danger"></i> Delete
+                                    <button class="btn btn-xs btn-default btn-delete-st" data-entry="${row.name}" style="padding:4px 10px; font-size:0.75rem; font-weight:600; border-radius: 6px; color: #dc2626;" title="Delete Transfer">
+                                        <i class="fa fa-trash"></i> Delete
                                     </button>
                                 </td>
                             </tr>
                         `);
                     });
 
-                    // Bind Edit button click
+                    // Bind Edit button
                     $tbody.find('.btn-edit-st').off('click').on('click', function(e) {
                         e.stopPropagation();
                         let entry_id = $(this).attr('data-entry');
@@ -5124,12 +5583,12 @@ function render_stock_transfer($wrapper) {
                         $('#modal-edit-stock-transfer').css('display', 'flex');
                     });
 
-                    // Bind Delete button click
+                    // Bind Delete button
                     $tbody.find('.btn-delete-st').off('click').on('click', function(e) {
                         e.stopPropagation();
                         let entry_id = $(this).attr('data-entry');
                         frappe.confirm(
-                            `Are you sure you want to delete Stock Transfer <b>${entry_id}</b>?<br><span style="color:#ef4444; font-size:0.85rem;">This will reverse the inventory transfer and remove the entry.</span>`,
+                            `Are you sure you want to delete Stock Transfer <b>${entry_id}</b>?<br><span style="color:#ef4444; font-size:0.85rem;">This will reverse the inventory transfer in both warehouses.</span>`,
                             function() {
                                 frappe.call({
                                     method: "fuel_management.fuel_management.api.delete_spa_stock_transfer",
@@ -5140,7 +5599,10 @@ function render_stock_transfer($wrapper) {
                                         if (res.message && res.message.status === "success") {
                                             frappe.show_alert({message: res.message.message, indicator: "green"});
                                             fetch_st_history();
-                                            fetch_warehouse_inventory_report($wrapper, 'store');
+                                            load_st_master_data();
+                                            if (typeof fetch_warehouse_inventory_report === 'function') {
+                                                fetch_warehouse_inventory_report($wrapper, 'store');
+                                            }
                                         }
                                     }
                                 });
@@ -5149,14 +5611,22 @@ function render_stock_transfer($wrapper) {
                     });
 
                 } else {
-                    $tbody.html('<tr><td colspan="5" class="text-center">No transfers found.</td></tr>');
+                    $tbody.html('<tr><td colspan="5" class="text-center" style="padding: 2.5rem; color: #94a3b8;">No stock transfers found matching filters.</td></tr>');
                 }
             }
         });
     }
 
-    $wrapper.find('#st-filter-date-from, #st-filter-date-to').off('change').on('change', fetch_st_history);
-    fetch_st_history();
+    $wrapper.find('#st-filter-date-from, #st-filter-date-to, #btn-st-history-filter-apply').off('change click').on('change click', fetch_st_history);
+    $wrapper.find('#st-history-search').off('input').on('input', function() {
+        fetch_st_history();
+    });
+    $wrapper.find('#btn-st-history-refresh').off('click').on('click', function() {
+        let $i = $(this).find('i');
+        $i.addClass('fa-spin');
+        fetch_st_history();
+        setTimeout(() => $i.removeClass('fa-spin'), 600);
+    });
 }
 
 function print_stock_sheet(warehouse_type, data, company) {

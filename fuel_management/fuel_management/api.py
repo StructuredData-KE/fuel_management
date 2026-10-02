@@ -822,6 +822,71 @@ def update_pf2():
 
 
 @frappe.whitelist()
+def get_spa_stock_transfer_data(station_id=None):
+    from frappe.utils import flt
+    if not station_id:
+        station_id = frappe.db.get_value("Fuel Station", {}, "name") or "RUBIS POA PLACE"
+        
+    station = frappe.get_doc("Fuel Station", station_id)
+    store_wh = station.default_store_warehouse or ""
+    forecourt_wh = station.default_forecourt_warehouse or ""
+    
+    # Non-fuel items with selling prices
+    items = frappe.db.sql("""
+        SELECT 
+            i.name as item_code, 
+            i.item_name, 
+            i.item_group, 
+            i.stock_uom,
+            IFNULL(ip.price_list_rate, i.standard_rate) as standard_rate
+        FROM `tabItem` i
+        LEFT JOIN `tabItem Price` ip ON (
+            ip.item_code = i.name 
+            AND ip.price_list = 'Standard Selling'
+            AND (ip.valid_from <= CURDATE() OR ip.valid_from IS NULL)
+            AND (ip.valid_upto >= CURDATE() OR ip.valid_upto IS NULL)
+        )
+        WHERE i.disabled = 0
+          AND (i.item_group IS NULL OR UPPER(i.item_group) NOT IN ('FUELS', 'FUEL', 'NOT FOR SALE'))
+        GROUP BY i.name
+        ORDER BY i.item_group ASC, i.item_name ASC
+    """, as_dict=True)
+    
+    stock_levels = {}
+    wh_list = [w for w in [store_wh, forecourt_wh] if w]
+    if wh_list:
+        bins = frappe.get_all(
+            "Bin",
+            filters={"warehouse": ["in", wh_list]},
+            fields=["item_code", "warehouse", "actual_qty"]
+        )
+        for b in bins:
+            code = b.item_code
+            if code not in stock_levels:
+                stock_levels[code] = {"store_qty": 0.0, "forecourt_qty": 0.0}
+            if b.warehouse == store_wh:
+                stock_levels[code]["store_qty"] = flt(b.actual_qty)
+            elif b.warehouse == forecourt_wh:
+                stock_levels[code]["forecourt_qty"] = flt(b.actual_qty)
+                
+    for item in items:
+        lvl = stock_levels.get(item.item_code, {"store_qty": 0.0, "forecourt_qty": 0.0})
+        item.store_qty = flt(lvl["store_qty"])
+        item.forecourt_qty = flt(lvl["forecourt_qty"])
+        item.total_qty = flt(item.store_qty + item.forecourt_qty)
+        
+    return {
+        "status": "success",
+        "station": station.name,
+        "station_name": getattr(station, "station_name", None) or station.name,
+        "store_warehouse": store_wh,
+        "forecourt_warehouse": forecourt_wh,
+        "items": items,
+        "stock_levels": stock_levels
+    }
+
+
+@frappe.whitelist()
 def create_spa_stock_transfer(station_id, item_code=None, qty=None, direction="Store to Forecourt", items=None):
     if not station_id:
         frappe.throw("Station ID is required")
