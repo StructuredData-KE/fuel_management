@@ -5785,29 +5785,39 @@ function render_purchases($wrapper) {
     if(!window.ACTIVE_SHIFT) return;
 
     let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
-    window.PURCHASE_CART = [];
+    window.PURCHASE_CART = window.PURCHASE_CART || [];
+    window.EDITING_PURCHASE_ID = null;
+    window.PURCHASE_HISTORY_CACHE = [];
 
-    // 1. Segments
+    // Header Badges
+    let station_name = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || (window.SHIFT_DOC && window.SHIFT_DOC.station) || 'Active Station';
+    let shift_date_str = (window.SHIFT_DOC && window.SHIFT_DOC.shift_date) ? `${window.SHIFT_DOC.shift_date} (${window.SHIFT_DOC.shift_type || 'Shift'})` : (frappe.datetime.nowdate() || '--');
+    $wrapper.find('#pur-badge-station-name').text(station_name);
+    $wrapper.find('#pur-badge-shift-date').text(shift_date_str);
+
+    // 1. Segments Navigation
     $wrapper.find('#tab-purchases .seg-btn').off('click').on('click', function() {
         let $btn = $(this);
         let targetView = $btn.attr('data-view');
         
-        if(targetView === 'form' && !$btn.hasClass('active')) {
-            // They are manually clicking "New Purchase"
-            window.EDITING_PURCHASE_ID = null;
+        if(targetView === 'entry' && !$btn.hasClass('active') && !window.EDITING_PURCHASE_ID) {
+            // Fresh purchase initialization
             window.PURCHASE_CART = [];
-            
-            // clear form
             $wrapper.find('#pur-supplier').val('');
             $wrapper.find('#pur-doc-invoice').val('');
             $wrapper.find('#pur-kra-invoice').val('');
-            $wrapper.find('#pur-rec-date').val(frappe.datetime.get_today());
-            $wrapper.find('#pur-doc-date').val(frappe.datetime.get_today());
+            $wrapper.find('#pur-rec-date').val(window.SHIFT_DOC ? window.SHIFT_DOC.shift_date : frappe.datetime.nowdate());
+            $wrapper.find('#pur-doc-date').val(window.SHIFT_DOC ? window.SHIFT_DOC.shift_date : frappe.datetime.nowdate());
             $wrapper.find('#pur-transport-charge').val('');
             $wrapper.find('#pur-transport-vat').val('16');
+            $wrapper.find('#pur-item-input').val('');
+            $wrapper.find('#pur-item-code').val('');
+            $wrapper.find('#pur-qty').val('');
+            $wrapper.find('#pur-cost').val('');
             $wrapper.find('#pur-vat-rate').val('8');
-            $wrapper.find('#pur-vat-incl').prop('checked', false);
-            
+            $wrapper.find('#pur-item-category-badge').hide();
+            $wrapper.find('.pur-tax-toggle[data-incl="0"]').click();
+            $wrapper.find('#btn-save-purchase span:last-child').text("🚀 Post & Submit Station Purchase");
             refresh_purchase_cart();
         }
         
@@ -5816,42 +5826,52 @@ function render_purchases($wrapper) {
         
         $wrapper.find('#tab-purchases .view-pane').removeClass('active');
         $wrapper.find(`#purchases-${targetView}-view`).addClass('active');
+
+        if(targetView === 'history') {
+            fetch_history();
+        }
     });
 
-    // 2. Dates
-    $wrapper.find('#pur-rec-date').val(window.SHIFT_DOC.shift_date);
-    $wrapper.find('#pur-doc-date').val(window.SHIFT_DOC.shift_date);
+    // 2. Tax Method Toggle Pills
+    $wrapper.find('.pur-tax-toggle').off('click').on('click', function(e) {
+        e.preventDefault();
+        let is_incl = $(this).attr('data-incl') === '1';
+        $wrapper.find('.pur-tax-toggle').removeClass('active').css({
+            'background': '#ffffff',
+            'color': '#475569',
+            'font-weight': '600'
+        });
+        $(this).addClass('active').css({
+            'background': '#0284c7',
+            'color': '#ffffff',
+            'font-weight': '700'
+        });
+        $wrapper.find('#pur-vat-incl').prop('checked', is_incl).trigger('change');
+    });
+
+    // 3. Dates Initialization
+    let default_date = (window.SHIFT_DOC && window.SHIFT_DOC.shift_date) ? window.SHIFT_DOC.shift_date : frappe.datetime.nowdate();
+    $wrapper.find('#pur-rec-date').val(default_date);
+    $wrapper.find('#pur-doc-date').val(default_date);
     
-    // Set max date to today
     let today = frappe.datetime.nowdate();
     $wrapper.find('#pur-rec-date').attr('max', today);
     $wrapper.find('#pur-doc-date').attr('max', today);
 
-    // 3. Supplier Dropdown
+    // 4. Supplier Dropdown
     frappe.call({
         method: "frappe.client.get_list",
-        args: { doctype: "Supplier", fields: ["name"], limit_page_length: 500 },
+        args: { doctype: "Supplier", fields: ["name", "supplier_name", "supplier_group"], limit_page_length: 500 },
         callback: function(r) {
             let opts = '<option value="">Select Supplier...</option>';
             if(r.message) {
                 window.PURCHASE_SUPPLIERS = r.message;
-                r.message.forEach(s => { opts += `<option value="${s.name}">${s.name}</option>`; });
+                r.message.forEach(s => {
+                    let label = s.supplier_name && s.supplier_name !== s.name ? `${s.supplier_name} (${s.name})` : s.name;
+                    opts += `<option value="${s.name}">${label}</option>`;
+                });
             }
             $wrapper.find('#pur-supplier').html(opts);
-        }
-    });
-
-    // 4. Item Dropdown (Datalist approach)
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: { doctype: "Item", fields: ["name", "item_name", "item_group"], filters: {disabled: 0}, limit_page_length: 5000 },
-        callback: function(r) {
-            let opts = '';
-            if(r.message) {
-                window.PURCHASE_ITEMS = r.message;
-                r.message.forEach(i => { opts += `<option value="${i.item_name} - ${i.name}"></option>`; });
-            }
-            $wrapper.find('#pur-items-list').html(opts);
         }
     });
 
@@ -5863,9 +5883,11 @@ function render_purchases($wrapper) {
             let opts = '<option value="">Select Target...</option>';
             let forecourt_wh = "";
             if(r.message) {
+                window.PURCHASE_WAREHOUSES = r.message;
                 r.message.forEach(w => {
                     opts += `<option value="${w.name}">${w.warehouse_name}</option>`;
-                    if (w.warehouse_name.toLowerCase().includes("forecourt") || w.name.toLowerCase().includes("forecourt")) {
+                    let lower = (w.warehouse_name || w.name || '').toLowerCase();
+                    if (lower.includes("forecourt")) {
                         forecourt_wh = w.name;
                     }
                 });
@@ -5877,131 +5899,348 @@ function render_purchases($wrapper) {
         }
     });
 
-        // 6. Refresh Cart Function
-        let refresh_purchase_cart = function() {
-            let html = '';
-            let items_total = 0;
-            
-            window.PURCHASE_CART.forEach((row, idx) => {
-                let amount = row.quantity * row.unit_cost;
-                let vat_rate = parseFloat(row.vat_rate) || 0;
-                let amount_grand = amount;
-                if(!row.vat_inclusive && vat_rate > 0) {
-                    amount_grand = amount * (1 + (vat_rate / 100));
-                }
-                items_total += amount_grand;
-                
-                let vat_lbl = row.vat_inclusive ? 'Incl' : (vat_rate > 0 ? '+VAT' : 'No VAT');
-                
-                html += `
-                    <tr>
-                        <td>${row.item_name} <br><small style="color:var(--text-muted)">VAT: ${vat_rate}% (${vat_lbl})</small></td>
-                        <td>${row.target_location}</td>
-                        <td>${row.quantity}</td>
-                        <td>${frappe.format(row.unit_cost, {fieldtype: 'Currency'})}</td>
-                        <td>${frappe.format(amount_grand, {fieldtype: 'Currency'})}</td>
-                        <td><button class="btn-secondary btn-remove-pur-cart" data-idx="${idx}" style="padding: 4px 8px; font-size: 12px; color: #ef4444; border-color: #fca5a5;">X</button></td>
-                    </tr>
-                `;
-            });
-            
-            if (window.PURCHASE_CART.length === 0) {
-                html = '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>';
+    // 6. Searchable Item Combobox & Categorized Dropdown
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: { doctype: "Item", fields: ["name", "item_name", "item_group", "stock_uom"], filters: {disabled: 0}, limit_page_length: 5000 },
+        callback: function(r) {
+            if(r.message) {
+                window.PURCHASE_ITEMS = r.message;
             }
-            
-            $wrapper.find('#list-purchase-cart').html(html);
-            
-            $wrapper.find('.btn-remove-pur-cart').off('click').on('click', function() {
-                let idx = parseInt($(this).attr('data-idx'));
-                window.PURCHASE_CART.splice(idx, 1);
-                refresh_purchase_cart();
-            });
-            
-            // Update Totals
-            let transport_base = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
-            let transport_vat = parseFloat($wrapper.find('#pur-transport-vat').val()) || 0;
-            let transport = transport_base;
-            if (transport_vat > 0) {
-                transport = transport_base * (1 + (transport_vat / 100));
-            }
-            
-            let grand_total = items_total + transport;
-            
-            $wrapper.find('#pur-net').html(frappe.format(items_total, {fieldtype: 'Currency'})); // display items total here
-            $wrapper.find('#pur-total').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
-        };
-    
-        $wrapper.find('#pur-transport-charge, #pur-transport-vat').on('input change', refresh_purchase_cart);
+        }
+    });
+
+    function render_pur_item_dropdown(filter_text) {
+        let items = window.PURCHASE_ITEMS || [];
+        let q = (filter_text || '').toLowerCase().trim();
         
-        let calculate_live_total = function() {
-            let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
-            let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
-            let vat_rate = parseFloat($wrapper.find('#pur-vat-rate').val()) || 0;
-            let is_incl = $wrapper.find('#pur-vat-incl').is(':checked');
-            
-            let total = qty * cost;
-            if(!is_incl && vat_rate > 0) {
-                total = total * (1 + (vat_rate / 100));
-            }
-            $wrapper.find('#pur-live-total').html(frappe.format(total, {fieldtype: 'Currency'}));
-        };
+        let matched = items.filter(i => {
+            if (!q) return true;
+            let n = (i.name || '').toLowerCase();
+            let iname = (i.item_name || '').toLowerCase();
+            let grp = (i.item_group || '').toLowerCase();
+            return n.includes(q) || iname.includes(q) || grp.includes(q);
+        });
         
-        $wrapper.find('#pur-qty, #pur-cost, #pur-vat-rate, #pur-vat-incl').on('input change', calculate_live_total);
-
-    
-        $wrapper.find('#pur-item-input').off('input change').on('input change', function() {
-            let val = ($(this).val() || '').trim();
-            if (!val) return;
-            let match = (window.PURCHASE_ITEMS || []).find(i => 
-                `${i.item_name} - ${i.name}`.toLowerCase() === val.toLowerCase() ||
-                (i.name && i.name.toLowerCase() === val.toLowerCase()) ||
-                (i.item_name && i.item_name.toLowerCase() === val.toLowerCase())
-            );
-            if (match) {
-                let group = (match.item_group || '').toUpperCase();
-                let name = (match.item_name || match.name || '').toUpperCase();
-
-                let is_fuel = group.includes("FUEL") || name.includes("PETROL") || name.includes("DIESEL") || name.includes("KEROSENE") || name.includes("AGO") || name.includes("PMS") || name.includes("IK");
-                let is_gas = group.includes("GAS") || group.includes("CYLINDER") || name.includes("GAS") || name.includes("CYLINDER") || name.includes("LPG") || name.includes("6KG") || name.includes("13KG") || name.includes("35KG") || name.includes("50KG");
-
-                let forecourt_wh = "";
-                let store_wh = "";
-                $wrapper.find('#pur-target option').each(function() {
-                    let txt = $(this).text().toLowerCase();
-                    let v = $(this).val();
-                    if (v) {
-                        if (txt.includes("forecourt")) forecourt_wh = v;
-                        else if (txt.includes("store")) store_wh = v;
-                    }
-                });
-
-                if (is_fuel) {
-                    // 1. Fuels -> Forecourt & 8% VAT
-                    if (forecourt_wh) $wrapper.find('#pur-target').val(forecourt_wh);
-                    $wrapper.find('#pur-vat-rate').val('8');
-                } else if (is_gas) {
-                    // 2. Gasses and Cylinders -> Forecourt & 0% VAT
-                    if (forecourt_wh) $wrapper.find('#pur-target').val(forecourt_wh);
-                    $wrapper.find('#pur-vat-rate').val('0');
-                } else {
-                    // 3. Other items (Lubes, Filters, Accessories, etc.) -> Store & 16% VAT
-                    if (store_wh) $wrapper.find('#pur-target').val(store_wh);
-                    $wrapper.find('#pur-vat-rate').val('16');
-                }
-                calculate_live_total();
+        if (matched.length === 0) {
+            $wrapper.find('#pur-item-dropdown').html(`
+                <div style="padding: 1rem; text-align: center; color: #94a3b8; font-size: 0.85rem;">
+                    No matching products found.
+                </div>
+            `).show();
+            return;
+        }
+        
+        let fuel_items = [];
+        let gas_items = [];
+        let lube_items = [];
+        let other_items = [];
+        
+        matched.forEach(i => {
+            let grp = (i.item_group || '').toUpperCase();
+            let nm = (i.item_name || i.name || '').toUpperCase();
+            let code = (i.name || '').toUpperCase();
+            
+            if (grp.includes("FUEL") || nm.includes("PETROL") || nm.includes("DIESEL") || nm.includes("KEROSENE") || nm.includes("AGO") || nm.includes("PMS") || nm.includes("IK") || code.includes("PMS") || code.includes("AGO") || code.includes("IK")) {
+                fuel_items.push(i);
+            } else if (grp.includes("GAS") || grp.includes("CYLINDER") || nm.includes("GAS") || nm.includes("CYLINDER") || nm.includes("LPG") || nm.includes("6KG") || nm.includes("13KG") || nm.includes("35KG") || nm.includes("50KG")) {
+                gas_items.push(i);
+            } else if (grp.includes("LUBE") || grp.includes("OIL") || grp.includes("GREASE") || nm.includes("LUBE") || nm.includes("OIL") || nm.includes("GREASE") || nm.includes("LUBRICANT")) {
+                lube_items.push(i);
+            } else {
+                other_items.push(i);
             }
         });
-
-    // 7. Add Item to Cart
-    $wrapper.find('#btn-add-purchase-item').off('click').on('click', function() {
-        let val = ($wrapper.find('#pur-item-input').val() || '').trim();
-        let match = (window.PURCHASE_ITEMS || []).find(i => 
-            `${i.item_name} - ${i.name}`.toLowerCase() === val.toLowerCase() ||
-            (i.name && i.name.toLowerCase() === val.toLowerCase()) ||
-            (i.item_name && i.item_name.toLowerCase() === val.toLowerCase())
+        
+        let render_group = function(title, icon, list, color) {
+            if (list.length === 0) return '';
+            let h = `
+                <div style="padding: 6px 12px; background: #f8fafc; border-bottom: 1px solid #f1f5f9; font-size: 0.72rem; font-weight: 800; color: ${color}; text-transform: uppercase; letter-spacing: 0.04em;">
+                    ${icon} ${title} (${list.length})
+                </div>
+            `;
+            list.forEach(item => {
+                h += `
+                    <div class="pur-dropdown-item" data-code="${frappe.utils.escape_html(item.name)}" data-name="${frappe.utils.escape_html(item.item_name || item.name)}" data-group="${frappe.utils.escape_html(item.item_group || '')}" data-uom="${frappe.utils.escape_html(item.stock_uom || 'Units')}" style="padding: 8px 12px; border-bottom: 1px solid #f8fafc; cursor: pointer; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 700; font-size: 0.85rem; color: #1e293b;">${frappe.utils.escape_html(item.item_name || item.name)}</div>
+                            <div style="font-size: 0.725rem; color: #64748b; font-family: monospace;">${frappe.utils.escape_html(item.name)} &bull; <span style="color:#0284c7;">${frappe.utils.escape_html(item.item_group || '')}</span></div>
+                        </div>
+                        <div style="font-size: 0.75rem; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px;">
+                            ${frappe.utils.escape_html(item.stock_uom || 'Qty')}
+                        </div>
+                    </div>
+                `;
+            });
+            return h;
+        };
+        
+        let html = '';
+        html += render_group("Fuel Products", "⛽", fuel_items, "#b45309");
+        html += render_group("LPG Gas & Cylinders", "🔥", gas_items, "#c2410c");
+        html += render_group("Lubricants & Fluids", "🛢️", lube_items, "#0284c7");
+        html += render_group("Spares & Store Items", "📦", other_items, "#475569");
+        
+        $wrapper.find('#pur-item-dropdown').html(html).show();
+        
+        $wrapper.find('.pur-dropdown-item').hover(
+            function() { $(this).css('background', '#f0fdf4'); },
+            function() { $(this).css('background', '#ffffff'); }
         );
-        let item_code = match ? match.name : val;
-        let item_name = match ? match.item_name : val;
+        
+        $wrapper.find('.pur-dropdown-item').off('click').on('click', function() {
+            let code = $(this).attr('data-code');
+            let name = $(this).attr('data-name');
+            let group = $(this).attr('data-group');
+            let uom = $(this).attr('data-uom');
+            
+            select_purchase_item({
+                name: code,
+                item_name: name,
+                item_group: group,
+                stock_uom: uom
+            });
+        });
+    }
+
+    function select_purchase_item(item) {
+        $wrapper.find('#pur-item-input').val(`${item.item_name} (${item.name})`);
+        $wrapper.find('#pur-item-code').val(item.name);
+        $wrapper.find('#pur-item-dropdown').hide();
+        
+        let group = (item.item_group || '').toUpperCase();
+        let name = (item.item_name || item.name || '').toUpperCase();
+        let code = (item.name || '').toUpperCase();
+        
+        let is_fuel = group.includes("FUEL") || name.includes("PETROL") || name.includes("DIESEL") || name.includes("KEROSENE") || name.includes("AGO") || name.includes("PMS") || name.includes("IK") || code.includes("PMS") || code.includes("AGO") || code.includes("IK");
+        let is_gas = group.includes("GAS") || group.includes("CYLINDER") || name.includes("GAS") || name.includes("CYLINDER") || name.includes("LPG") || name.includes("6KG") || name.includes("13KG") || name.includes("35KG") || name.includes("50KG");
+        let is_lube = group.includes("LUBE") || group.includes("OIL") || group.includes("GREASE") || name.includes("LUBE") || name.includes("OIL") || name.includes("GREASE") || name.includes("LUBRICANT");
+        
+        let forecourt_wh = "";
+        let store_wh = "";
+        $wrapper.find('#pur-target option').each(function() {
+            let txt = $(this).text().toLowerCase();
+            let v = $(this).val();
+            if (v) {
+                if (txt.includes("forecourt")) forecourt_wh = v;
+                else if (txt.includes("store")) store_wh = v;
+            }
+        });
+        
+        let $badge = $wrapper.find('#pur-item-category-badge');
+        if (is_fuel) {
+            if (forecourt_wh) $wrapper.find('#pur-target').val(forecourt_wh);
+            $wrapper.find('#pur-vat-rate').val('8');
+            $wrapper.find('.pur-tax-toggle[data-incl="0"]').click();
+            $badge.html('<span style="color:#b45309;">⛽ Fuel &bull; 8% VAT &bull; Forecourt Target</span>').show();
+        } else if (is_gas) {
+            if (forecourt_wh) $wrapper.find('#pur-target').val(forecourt_wh);
+            $wrapper.find('#pur-vat-rate').val('0');
+            $wrapper.find('.pur-tax-toggle[data-incl="1"]').click();
+            $badge.html('<span style="color:#c2410c;">🔥 LPG Gas &bull; 0% Zero-Rated</span>').show();
+        } else if (is_lube) {
+            if (store_wh) $wrapper.find('#pur-target').val(store_wh);
+            else if (forecourt_wh) $wrapper.find('#pur-target').val(forecourt_wh);
+            $wrapper.find('#pur-vat-rate').val('16');
+            $wrapper.find('.pur-tax-toggle[data-incl="0"]').click();
+            $badge.html('<span style="color:#0284c7;">🛢️ Lubricants &bull; 16% VAT</span>').show();
+        } else {
+            if (store_wh) $wrapper.find('#pur-target').val(store_wh);
+            $wrapper.find('#pur-vat-rate').val('16');
+            $wrapper.find('.pur-tax-toggle[data-incl="0"]').click();
+            $badge.html('<span style="color:#475569;">📦 Store Product &bull; 16% VAT</span>').show();
+        }
+        
+        calculate_live_total();
+        $wrapper.find('#pur-qty').focus();
+    }
+
+    $wrapper.find('#pur-item-input').off('input focus').on('input focus', function() {
+        render_pur_item_dropdown($(this).val());
+    });
+
+    $wrapper.find('#btn-toggle-pur-dropdown').off('click').on('click', function(e) {
+        e.stopPropagation();
+        let $dropdown = $wrapper.find('#pur-item-dropdown');
+        if ($dropdown.is(':visible')) {
+            $dropdown.hide();
+        } else {
+            render_pur_item_dropdown($wrapper.find('#pur-item-input').val());
+        }
+    });
+
+    $(document).off('click.pur_item_cb').on('click.pur_item_cb', function(e) {
+        if (!$(e.target).closest('#pur-item-combobox-wrap').length) {
+            $wrapper.find('#pur-item-dropdown').hide();
+        }
+    });
+
+    // 7. Live Line Total Calculation
+    let calculate_live_total = function() {
+        let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
+        let cost = parseFloat($wrapper.find('#pur-cost').val()) || 0;
+        let vat_rate = parseFloat($wrapper.find('#pur-vat-rate').val()) || 0;
+        let is_incl = $wrapper.find('#pur-vat-incl').is(':checked');
+        
+        let line_total = 0;
+        if (qty > 0 && cost > 0) {
+            let base = qty * cost;
+            if (!is_incl && vat_rate > 0) {
+                line_total = base * (1 + (vat_rate / 100));
+            } else {
+                line_total = base;
+            }
+        }
+        $wrapper.find('#pur-live-total').text(frappe.format(line_total, {fieldtype: 'Currency'}));
+    };
+    
+    $wrapper.find('#pur-qty, #pur-cost, #pur-vat-rate, #pur-vat-incl').on('input change', calculate_live_total);
+
+    // 8. Refresh Cart Function
+    let refresh_purchase_cart = function() {
+        let html = '';
+        let items_total = 0;
+        let total_units = 0;
+        
+        (window.PURCHASE_CART || []).forEach((row, idx) => {
+            let qty = parseFloat(row.quantity) || 0;
+            let cost = parseFloat(row.unit_cost) || 0;
+            let vat_rate = parseFloat(row.vat_rate) || 0;
+            let is_incl = !!row.vat_inclusive;
+            
+            let amount = qty * cost;
+            let amount_grand = amount;
+            if(!is_incl && vat_rate > 0) {
+                amount_grand = amount * (1 + (vat_rate / 100));
+            }
+            items_total += amount_grand;
+            total_units += qty;
+            
+            let vat_badge = '';
+            if (vat_rate === 0) {
+                vat_badge = `<span style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">0% (Zero)</span>`;
+            } else if (is_incl) {
+                vat_badge = `<span style="background: #ecfdf5; color: #059669; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">${vat_rate}% (Incl)</span>`;
+            } else {
+                vat_badge = `<span style="background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.72rem;">+${vat_rate}% (Excl)</span>`;
+            }
+            
+            let nm = (row.item_name || row.item || '').toUpperCase();
+            let icon = '📦';
+            if (nm.includes('PMS') || nm.includes('PETROL') || nm.includes('DIESEL') || nm.includes('AGO') || nm.includes('IK') || nm.includes('KEROSENE') || nm.includes('FUEL')) icon = '⛽';
+            else if (nm.includes('GAS') || nm.includes('LPG') || nm.includes('CYLINDER')) icon = '🔥';
+            else if (nm.includes('OIL') || nm.includes('LUBE') || nm.includes('GREASE')) icon = '🛢️';
+            
+            html += `
+                <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s;">
+                    <td style="padding: 10px 12px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.2rem;">${icon}</span>
+                            <div>
+                                <div style="font-weight: 800; font-size: 0.875rem; color: #0f172a;">${frappe.utils.escape_html(row.item_name || row.item)}</div>
+                                <div style="font-size: 0.725rem; color: #64748b; font-family: monospace;">${frappe.utils.escape_html(row.item)}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px;">
+                        <span style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 5px; font-size: 0.78rem; font-weight: 600; color: #334155;">
+                            📍 ${frappe.utils.escape_html(row.target_location)}
+                        </span>
+                    </td>
+                    <td style="padding: 10px 12px; text-align: center;">
+                        <span style="font-weight: 800; font-size: 0.95rem; font-family: monospace; color: #0f172a; background: #f1f5f9; padding: 3px 10px; border-radius: 6px;">
+                            ${frappe.format(qty, {fieldtype: 'Float'})}
+                        </span>
+                    </td>
+                    <td style="padding: 10px 12px; text-align: right; font-weight: 700; font-family: monospace; color: #334155;">
+                        ${frappe.format(cost, {fieldtype: 'Currency'})}
+                    </td>
+                    <td style="padding: 10px 12px; text-align: center;">
+                        ${vat_badge}
+                    </td>
+                    <td style="padding: 10px 12px; text-align: right; font-weight: 900; font-size: 0.95rem; font-family: monospace; color: #047857;">
+                        ${frappe.format(amount_grand, {fieldtype: 'Currency'})}
+                    </td>
+                    <td style="padding: 10px 12px; text-align: center;">
+                        <button type="button" class="btn btn-sm btn-remove-pur-cart" data-idx="${idx}" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.15s;" title="Remove Item">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        if ((window.PURCHASE_CART || []).length === 0) {
+            html = `
+                <tr>
+                    <td colspan="7" class="text-center" style="color: #94a3b8; padding: 2.5rem;">
+                        <div style="font-size: 2rem; margin-bottom: 6px;">🛒</div>
+                        <div style="font-weight: 600; font-size: 0.95rem; color: #475569;">Delivery manifest is empty</div>
+                        <div style="font-size: 0.8rem; margin-top: 2px;">Use the form above to add fuel or products to this purchase order.</div>
+                    </td>
+                </tr>
+            `;
+            $wrapper.find('#btn-clear-pur-cart').hide();
+            $wrapper.find('#pur-cart-count-pill').hide().text('0');
+            $wrapper.find('#pur-cart-summary-text').text('0 item(s) in delivery manifest');
+        } else {
+            $wrapper.find('#btn-clear-pur-cart').show();
+            $wrapper.find('#pur-cart-count-pill').show().text(window.PURCHASE_CART.length);
+            $wrapper.find('#pur-cart-summary-text').text(`${window.PURCHASE_CART.length} line item(s) in delivery manifest &bull; ${frappe.format(total_units, {fieldtype: 'Float'})} units total`);
+        }
+        
+        $wrapper.find('#list-purchase-cart').html(html);
+        
+        $wrapper.find('.btn-remove-pur-cart').off('click').on('click', function() {
+            let idx = parseInt($(this).attr('data-idx'));
+            window.PURCHASE_CART.splice(idx, 1);
+            refresh_purchase_cart();
+        });
+        
+        // Calculate Freight & Grand Totals
+        let transport_base = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
+        let transport_vat_rate = parseFloat($wrapper.find('#pur-transport-vat').val()) || 0;
+        let transport_total = transport_base;
+        if (transport_vat_rate > 0) {
+            transport_total = transport_base * (1 + (transport_vat_rate / 100));
+        }
+        
+        let grand_total = items_total + transport_total;
+        
+        $wrapper.find('#pur-net').html(frappe.format(items_total, {fieldtype: 'Currency'}));
+        $wrapper.find('#pur-transport-display').html(frappe.format(transport_total, {fieldtype: 'Currency'}));
+        $wrapper.find('#pur-total').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
+    };
+
+    $wrapper.find('#pur-transport-charge, #pur-transport-vat').on('input change', refresh_purchase_cart);
+    
+    $wrapper.find('#btn-clear-pur-cart').off('click').on('click', function() {
+        frappe.confirm('Are you sure you want to clear all items from this inward manifest?', function() {
+            window.PURCHASE_CART = [];
+            refresh_purchase_cart();
+        });
+    });
+
+    // 9. Add Item to Cart
+    $wrapper.find('#btn-add-purchase-item').off('click').on('click', function() {
+        let code_input = ($wrapper.find('#pur-item-code').val() || '').trim();
+        let val_input = ($wrapper.find('#pur-item-input').val() || '').trim();
+        
+        let match = null;
+        if (code_input) {
+            match = (window.PURCHASE_ITEMS || []).find(i => i.name === code_input);
+        }
+        if (!match && val_input) {
+            match = (window.PURCHASE_ITEMS || []).find(i => 
+                `${i.item_name} (${i.name})`.toLowerCase() === val_input.toLowerCase() ||
+                `${i.item_name} - ${i.name}`.toLowerCase() === val_input.toLowerCase() ||
+                (i.name && i.name.toLowerCase() === val_input.toLowerCase()) ||
+                (i.item_name && i.item_name.toLowerCase() === val_input.toLowerCase())
+            );
+        }
+
+        let item_code = match ? match.name : (code_input || val_input);
+        let item_name = match ? (match.item_name || match.name) : val_input;
         
         let target = $wrapper.find('#pur-target').val();
         let qty = parseFloat($wrapper.find('#pur-qty').val()) || 0;
@@ -6009,8 +6248,24 @@ function render_purchases($wrapper) {
         let vat_rate = parseFloat($wrapper.find('#pur-vat-rate').val()) || 0;
         let vat_incl = $wrapper.find('#pur-vat-incl').is(':checked') ? 1 : 0;
         
-        if (!item_code || !target || qty <= 0 || cost <= 0) {
-            frappe.show_alert({message: "Item, Target, Quantity, and Unit Cost are required.", indicator: "red"});
+        if (!item_code) {
+            frappe.show_alert({message: "Please search and select a valid item.", indicator: "red"});
+            $wrapper.find('#pur-item-input').focus();
+            return;
+        }
+        if (!target) {
+            frappe.show_alert({message: "Please select a target destination (Warehouse or Tank).", indicator: "red"});
+            $wrapper.find('#pur-target').focus();
+            return;
+        }
+        if (qty <= 0) {
+            frappe.show_alert({message: "Quantity must be greater than zero.", indicator: "red"});
+            $wrapper.find('#pur-qty').focus();
+            return;
+        }
+        if (cost <= 0) {
+            frappe.show_alert({message: "Unit cost must be greater than zero.", indicator: "red"});
+            $wrapper.find('#pur-cost').focus();
             return;
         }
         
@@ -6026,19 +6281,100 @@ function render_purchases($wrapper) {
         
         // Clear item inputs
         $wrapper.find('#pur-item-input').val('');
+        $wrapper.find('#pur-item-code').val('');
         $wrapper.find('#pur-qty').val('');
         $wrapper.find('#pur-cost').val('');
         $wrapper.find('#pur-vat-rate').val('8');
-        $wrapper.find('#pur-vat-incl').prop('checked', false);
-        $wrapper.find('#pur-live-total').html('0.00');
+        $wrapper.find('.pur-tax-toggle[data-incl="0"]').click();
+        $wrapper.find('#pur-item-category-badge').hide();
+        $wrapper.find('#pur-live-total').text('0.00');
         
         refresh_purchase_cart();
+        $wrapper.find('#pur-item-input').focus();
     });
 
-    // 8. Fetch History
+    // 10. Purchases History & Filter Management
+    let render_history_rows = function(list) {
+        let q = ($wrapper.find('#pur-history-search').val() || '').toLowerCase().trim();
+        let filtered = (list || []).filter(row => {
+            if (!q) return true;
+            let n = (row.name || '').toLowerCase();
+            let sup = (row.supplier || '').toLowerCase();
+            let doc_inv = (row.document_invoice_number || '').toLowerCase();
+            let tax_inv = (row.tax_invoice_number || '').toLowerCase();
+            let items_match = (row.items || []).some(i => (i.item || '').toLowerCase().includes(q));
+            return n.includes(q) || sup.includes(q) || doc_inv.includes(q) || tax_inv.includes(q) || items_match;
+        });
+        
+        let html = '';
+        if (filtered.length > 0) {
+            filtered.forEach(row => {
+                let items_tags = (row.items || []).map(i => {
+                    let iname = (i.item || '').toUpperCase();
+                    let icon = '📦';
+                    if (iname.includes('PMS') || iname.includes('PETROL') || iname.includes('DIESEL') || iname.includes('AGO') || iname.includes('IK') || iname.includes('FUEL')) icon = '⛽';
+                    else if (iname.includes('GAS') || iname.includes('LPG')) icon = '🔥';
+                    else if (iname.includes('OIL') || iname.includes('LUBE')) icon = '🛢️';
+                    return `<span style="display: inline-flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin: 2px; font-weight: 600; color: #334155;">${icon} <b>${frappe.format(i.quantity, {fieldtype: 'Float'})}</b> &bull; ${frappe.utils.escape_html(i.item)}</span>`;
+                }).join(' ');
+                
+                html += `
+                    <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s;">
+                        <td style="padding: 10px 12px;">
+                            <span style="font-weight: 800; font-size: 0.85rem; color: #0284c7; font-family: monospace;">${frappe.utils.escape_html(row.name)}</span>
+                        </td>
+                        <td style="padding: 10px 12px; font-size: 0.85rem; font-weight: 600; color: #334155; white-space: nowrap;">
+                            📅 ${frappe.utils.escape_html(row.receiving_date || '')}
+                        </td>
+                        <td style="padding: 10px 12px;">
+                            <div style="font-weight: 700; font-size: 0.875rem; color: #0f172a;">🏢 ${frappe.utils.escape_html(row.supplier)}</div>
+                        </td>
+                        <td style="padding: 10px 12px;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 2px;">
+                                ${items_tags || '<span style="color: #94a3b8; font-size: 0.75rem;">No items listed</span>'}
+                            </div>
+                        </td>
+                        <td style="padding: 10px 12px; text-align: center;">
+                            <span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-size: 0.75rem; font-weight: 700; color: #475569;">
+                                ${frappe.utils.escape_html(row.tax_invoice_number || 'N/A')}
+                            </span>
+                        </td>
+                        <td style="padding: 10px 12px; text-align: center;">
+                            <span style="background: #f1f5f9; border: 1px solid #e2e8f0; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-size: 0.75rem; font-weight: 700; color: #475569;">
+                                ${frappe.utils.escape_html(row.document_invoice_number || 'N/A')}
+                            </span>
+                        </td>
+                        <td style="padding: 10px 12px; text-align: right; font-weight: 900; font-size: 0.95rem; font-family: monospace; color: #047857; white-space: nowrap;">
+                            ${frappe.format(row.grand_total || 0, {fieldtype: 'Currency'})}
+                        </td>
+                        <td style="padding: 10px 12px; text-align: center; white-space: nowrap;">
+                            <button type="button" class="btn btn-xs btn-default btn-edit-pur" data-name="${frappe.utils.escape_html(row.name)}" style="padding: 4px 8px; margin-right: 4px; border-radius: 4px;" title="Edit Purchase">
+                                <i class="fa fa-pencil" style="color: #0284c7;"></i>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-danger btn-delete-pur" data-name="${frappe.utils.escape_html(row.name)}" style="padding: 4px 8px; border-radius: 4px; background: #fee2e2; border-color: #fca5a5; color: #b91c1c;" title="Delete Purchase">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        } else {
+            html = `
+                <tr>
+                    <td colspan="8" class="text-center" style="color: #94a3b8; padding: 2.5rem;">
+                        <div style="font-size: 1.8rem; margin-bottom: 4px;">🔍</div>
+                        <div style="font-weight: 600; color: #475569;">No purchases found matching your search.</div>
+                    </td>
+                </tr>
+            `;
+        }
+        $wrapper.find('#list-station-purchases-saved').html(html);
+    };
+
     let fetch_history = function() {
         let date_from = $wrapper.find('#pur-filter-date-from').val();
         let date_to = $wrapper.find('#pur-filter-date-to').val();
+        $wrapper.find('#list-station-purchases-saved').html('<tr><td colspan="8" class="text-center" style="padding: 2.5rem; color: #64748b;"><i class="fa fa-spinner fa-spin"></i> Loading purchases history...</td></tr>');
 
         frappe.call({
             method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.get_purchases_history",
@@ -6047,52 +6383,36 @@ function render_purchases($wrapper) {
                 date_to: date_to
             },
             callback: function(r) {
-                let count = r.message ? r.message.length : 0;
+                window.PURCHASE_HISTORY_CACHE = r.message || [];
+                let count = window.PURCHASE_HISTORY_CACHE.length;
                 if (!date_from && !date_to) {
-                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 20 entries &bull; Use date filter for more)</span>`);
+                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#64748b; font-size:0.825rem;">(Showing latest ${count} entries &bull; Use date filter for custom ranges)</span>`);
                 } else {
-                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
+                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#047857; font-size:0.825rem; font-weight:700;">(Found ${count} delivery records for selected dates)</span>`);
                 }
-                let html = '';
-                let total_amount = 0;
-                if(r.message) {
-                    r.message.forEach(row => {
-                        let items_html = (row.items || []).map(i => `<div><small>${i.quantity}x ${i.item}</small></div>`).join('');
-                        html += `
-                            <tr>
-                                <td>${row.name}</td>
-                                <td>${row.receiving_date}</td>
-                                <td>${row.supplier}</td>
-                                <td>${items_html}</td>
-                                <td><span class="badge" style="background: #f1f5f9;">${row.tax_invoice_number || "N/A"}</span></td>
-                                <td><span class="badge" style="background: #f1f5f9;">${row.document_invoice_number || "N/A"}</span></td>
-                                <td style="font-weight: 600;">${frappe.format(row.grand_total || 0, {fieldtype: 'Currency'})}</td>
-                                <td>
-                                    <button class="btn btn-xs btn-default btn-edit-pur" data-name="${row.name}" style="margin-right: 5px;"><i class="fa fa-pencil"></i></button>
-                                    <button class="btn btn-xs btn-danger btn-delete-pur" data-name="${row.name}"><i class="fa fa-trash"></i></button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                }
-                if(html === '') html = '<tr><td colspan="8" class="text-center" style="color: #94a3b8; padding: 2rem;">No purchases recorded yet.</td></tr>';
-                
-                $wrapper.find('#list-station-purchases-saved').html(html);
+                render_history_rows(window.PURCHASE_HISTORY_CACHE);
             }
         });
     };
     fetch_history();
-    
-    $wrapper.find('#pur-filter-date-from, #pur-filter-date-to').on('change', fetch_history);
-    $wrapper.on('click', '.btn-delete-pur', function() {
+
+    $wrapper.find('#pur-history-search').off('input').on('input', function() {
+        render_history_rows(window.PURCHASE_HISTORY_CACHE);
+    });
+    $wrapper.find('#btn-pur-history-filter-apply').off('click').on('click', fetch_history);
+    $wrapper.find('#btn-pur-history-refresh').off('click').on('click', fetch_history);
+    $wrapper.find('#pur-filter-date-from, #pur-filter-date-to').off('change').on('change', fetch_history);
+
+    // 11. Delete & Edit Handlers
+    $wrapper.off('click', '.btn-delete-pur').on('click', '.btn-delete-pur', function() {
         let name = $(this).data('name');
-        frappe.confirm('Are you sure you want to delete purchase ' + name + '? This will also cancel the associated Purchase Invoice and revert tank volumes.', () => {
+        frappe.confirm(`Are you sure you want to delete purchase record <b>${name}</b>?<br><br><span style="color:#ef4444; font-size:0.85rem;">This will cancel the associated Purchase Invoice and reverse tank and warehouse stock balances.</span>`, () => {
             frappe.call({
                 method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.delete_purchase",
                 args: { purchase_name: name },
                 callback: function(r) {
                     if(!r.exc) {
-                        frappe.show_alert({message: "Purchase deleted successfully.", indicator: "green"});
+                        frappe.show_alert({message: "Purchase deleted and stock reversed successfully.", indicator: "green"});
                         fetch_history();
                     }
                 }
@@ -6100,7 +6420,7 @@ function render_purchases($wrapper) {
         });
     });
 
-    $wrapper.on('click', '.btn-edit-pur', function() {
+    $wrapper.off('click', '.btn-edit-pur').on('click', '.btn-edit-pur', function() {
         let name = $(this).data('name');
         frappe.call({
             method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.get_purchase_details",
@@ -6108,25 +6428,25 @@ function render_purchases($wrapper) {
             callback: function(r) {
                 if(r.message) {
                     let doc = r.message;
-                    // Populate form
+                    // Populate metadata
                     $wrapper.find('#pur-supplier').val(doc.supplier);
                     $wrapper.find('#pur-doc-invoice').val(doc.document_invoice_number);
-                    $wrapper.find('#pur-kra-invoice').val(doc.tax_invoice_number);
+                    $wrapper.find('#pur-kra-invoice').val(doc.tax_invoice_number || doc.custom_kra_invoice_number || '');
                     $wrapper.find('#pur-rec-date').val(doc.receiving_date);
                     $wrapper.find('#pur-doc-date').val(doc.document_date);
-                    $wrapper.find('#pur-transport-charge').val(doc.transport_charge || 0);
-                    $wrapper.find('#pur-transport-vat').val(0); // Optional
+                    $wrapper.find('#pur-transport-charge').val(doc.transport_charge || '');
+                    $wrapper.find('#pur-transport-vat').val(doc.transport_vat_rate || 0);
                     
                     // Populate cart
                     window.PURCHASE_CART = [];
                     (doc.items || []).forEach(item => {
                         window.PURCHASE_CART.push({
                             item: item.item,
-                            item_name: item.item,
+                            item_name: item.item_name || item.item,
                             target_location: item.target_location,
                             quantity: item.quantity,
                             unit_cost: item.unit_cost,
-                            vat_rate: item.vat_rate || 0,
+                            vat_rate: item.vat_rate !== undefined ? item.vat_rate : 8,
                             vat_inclusive: item.vat_inclusive ? 1 : 0
                         });
                     });
@@ -6134,35 +6454,35 @@ function render_purchases($wrapper) {
                     
                     // Set edit mode flag
                     window.EDITING_PURCHASE_ID = name;
+                    $wrapper.find('#btn-save-purchase span:last-child').text(`💾 Update & Save Purchase (${name})`);
                     
-                    // Switch view to New Purchase
+                    // Switch view to New Purchase / Entry
                     $wrapper.find('#purchases-history-view').removeClass('active');
-                    $wrapper.find('#purchases-form-view').addClass('active');
-                    $wrapper.find('.seg-btn').removeClass('active');
-                    $wrapper.find('.seg-btn[data-view="form"]').addClass('active');
+                    $wrapper.find('#purchases-entry-view').addClass('active');
+                    $wrapper.find('#tab-purchases .seg-btn').removeClass('active');
+                    $wrapper.find('#tab-purchases .seg-btn[data-view="entry"]').addClass('active');
                     
-                    frappe.show_alert({message: "Editing Purchase: " + name + ". Save will replace it.", indicator: "blue"});
+                    frappe.show_alert({message: "Editing Purchase: " + name + ". Save will update the record.", indicator: "blue"});
                 }
             }
         });
     });
 
-
-    // 9. Save Entire Purchase
+    // 12. Save Entire Purchase
     $wrapper.find('#btn-save-purchase').off('click').on('click', function() {
         if (is_locked) {
             frappe.show_alert({message: "Shift is closed.", indicator: "red"});
             return;
         }
         
-        if (window.PURCHASE_CART.length === 0) {
-            frappe.show_alert({message: "Cart is empty. Add items first.", indicator: "red"});
+        if (!window.PURCHASE_CART || window.PURCHASE_CART.length === 0) {
+            frappe.show_alert({message: "Cart is empty. Please add items to inward manifest first.", indicator: "red"});
             return;
         }
 
         let supplier = $wrapper.find('#pur-supplier').val();
-        let doc_invoice = $wrapper.find('#pur-doc-invoice').val();
-        let kra_invoice = $wrapper.find('#pur-kra-invoice').val();
+        let doc_invoice = ($wrapper.find('#pur-doc-invoice').val() || '').trim();
+        let kra_invoice = ($wrapper.find('#pur-kra-invoice').val() || '').trim();
         let rec_date = $wrapper.find('#pur-rec-date').val();
         let doc_date = $wrapper.find('#pur-doc-date').val();
         let transport_base = parseFloat($wrapper.find('#pur-transport-charge').val()) || 0;
@@ -6173,12 +6493,7 @@ function render_purchases($wrapper) {
         }
 
         if (!supplier || !doc_invoice || !rec_date || !doc_date) {
-            frappe.show_alert({message: "Supplier, Document Invoice No, Receiving Date and Document Date are required.", indicator: "red"});
-            return;
-        }
-        
-        if (window.PURCHASE_CART.length === 0) {
-            frappe.show_alert({message: "Please add at least one item.", indicator: "red"});
+            frappe.show_alert({message: "Supplier, Delivery Invoice No, Receiving Date and Document Date are required.", indicator: "red"});
             return;
         }
 
@@ -6192,6 +6507,7 @@ function render_purchases($wrapper) {
             tax_invoice_number: kra_invoice,
             custom_kra_invoice_number: kra_invoice,
             transport_charge: transport,
+            transport_vat_rate: transport_vat,
             items: window.PURCHASE_CART.map(item => {
                 return {
                     item: item.item,
@@ -6206,34 +6522,57 @@ function render_purchases($wrapper) {
 
         let $btn = $(this);
         let orig_html = $btn.html();
-        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+        $btn.html('<i class="fa fa-spinner fa-spin"></i> Posting Purchase...').prop('disabled', true);
 
-        frappe.call({
-            method: "frappe.client.insert",
-            args: { doc: pendingPurchase },
-            callback: function(r) {
-                $btn.html(orig_html).prop('disabled', false);
-                
-                if(r.message) {
-                    frappe.show_alert({message: "Purchase recorded successfully!", indicator: "green"});
+        let do_insert = function() {
+            frappe.call({
+                method: "frappe.client.insert",
+                args: { doc: pendingPurchase },
+                callback: function(r) {
+                    $btn.html(orig_html).prop('disabled', false);
                     
-                    // Clear form
-                    $wrapper.find('#pur-supplier').val('').trigger('change');
-                    $wrapper.find('#pur-doc-invoice').val('');
-                    $wrapper.find('#pur-kra-invoice').val('');
-                    $wrapper.find('#pur-transport-charge').val('');
-                    window.PURCHASE_CART = [];
-                    refresh_purchase_cart();
-                    
-                    // Switch to history view and refresh
-                    $wrapper.find('#tab-purchases .seg-btn[data-view="history"]').click();
-                    fetch_history();
+                    if(r.message) {
+                        frappe.show_alert({message: "Station Purchase recorded and posted successfully!", indicator: "green"});
+                        
+                        // Clear form
+                        window.EDITING_PURCHASE_ID = null;
+                        $btn.find('span:last-child').text("🚀 Post & Submit Station Purchase");
+                        $wrapper.find('#pur-supplier').val('').trigger('change');
+                        $wrapper.find('#pur-doc-invoice').val('');
+                        $wrapper.find('#pur-kra-invoice').val('');
+                        $wrapper.find('#pur-transport-charge').val('');
+                        window.PURCHASE_CART = [];
+                        refresh_purchase_cart();
+                        
+                        // Switch to history view and refresh
+                        $wrapper.find('#tab-purchases .seg-btn[data-view="history"]').click();
+                        fetch_history();
+                    }
+                },
+                error: function() {
+                    $btn.html(orig_html).prop('disabled', false);
                 }
-            },
-            error: function() {
-                $btn.html(orig_html).prop('disabled', false);
-            }
-        });
+            });
+        };
+
+        if (window.EDITING_PURCHASE_ID) {
+            frappe.call({
+                method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.delete_purchase",
+                args: { purchase_name: window.EDITING_PURCHASE_ID },
+                callback: function(r) {
+                    if (!r.exc) {
+                        do_insert();
+                    } else {
+                        $btn.html(orig_html).prop('disabled', false);
+                    }
+                },
+                error: function() {
+                    $btn.html(orig_html).prop('disabled', false);
+                }
+            });
+        } else {
+            do_insert();
+        }
     });
 }
 

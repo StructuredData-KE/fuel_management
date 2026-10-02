@@ -3433,161 +3433,393 @@
 
             <!-- PURCHASES -->
 <section id="tab-purchases" class="tab-pane">
-    <div class="segmented-control-wrapper">
-        <div class="segmented-control">
-            <button class="seg-btn active" data-view="history">Historical View</button>
-            <button class="seg-btn" data-view="entry" style="color: #047857; font-weight: 600;">+ New Purchase</button>
+    <!-- Executive Header Strip -->
+    <div class="pos-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 1rem; margin-bottom: 1.25rem;">
+        <div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div style="background: #fef3c7; color: #b45309; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; box-shadow: 0 2px 6px rgba(180, 83, 9, 0.15);">
+                    📥
+                </div>
+                <div>
+                    <h2 style="margin: 0; font-size: 1.35rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">Station Purchases & Inward Goods Receipt</h2>
+                    <p style="color: #64748b; margin: 2px 0 0 0; font-size: 0.85rem;">Record fuel tanker deliveries, LPG gas cylinders, packaged lubricants, and service parts into tanks & warehouses.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Live Quick Stats Badges -->
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <span style="font-size: 1.1rem;">⛽</span>
+                <div>
+                    <div style="font-size: 0.65rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Station</div>
+                    <div id="pur-badge-station-name" style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">Active Station</div>
+                </div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <span style="font-size: 1.1rem;">📅</span>
+                <div>
+                    <div style="font-size: 0.65rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Shift Link</div>
+                    <div id="pur-badge-shift-date" style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">--</div>
+                </div>
+            </div>
         </div>
     </div>
     
+    <!-- Segmented Navigation Control -->
+    <div class="segmented-control-wrapper" style="margin-bottom: 1.25rem;">
+        <div class="segmented-control" id="pur-seg-ctrl" style="background: #f1f5f9; padding: 4px; border-radius: 10px; display: inline-flex; gap: 4px; border: 1px solid #e2e8f0;">
+            <button class="seg-btn active" data-view="history" style="padding: 6px 18px; border-radius: 7px; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                <span>📋 Purchase History & Audit</span>
+            </button>
+            <button class="seg-btn" data-view="entry" style="padding: 6px 18px; border-radius: 7px; font-weight: 700; font-size: 0.85rem; color: #047857; display: flex; align-items: center; gap: 6px;">
+                <span>✨ + Record New Purchase</span>
+                <span id="pur-cart-count-pill" style="display:none; background: #047857; color: #fff; font-size: 0.7rem; padding: 1px 6px; border-radius: 10px;">0</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- ========================================================================= -->
     <!-- HISTORY VIEW -->
+    <!-- ========================================================================= -->
     <div class="view-pane active" id="purchases-history-view">
-        <div class="dash-card center-card" style="max-width: 1200px; width: 100%;">
-            <div class="card-header-flex">
+        <div class="dash-card center-card" style="max-width: 100%; width: 100%; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+            <div class="card-header-flex" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
                 <div>
-                    <h3 style="margin-bottom: 2px;">Purchases History</h3>
-                    <div id="pur-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing latest 20 entries &bull; Use date filter for more)</div>
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #0f172a;">Purchases History & Delivery Audit</h3>
+                    <div id="pur-history-subtitle" style="font-size: 0.825rem; color: #64748b; margin-top: 2px;">(Showing latest 20 entries &bull; Use date filter for more)</div>
                 </div>
-                <div style="display: flex; gap: 10px;">
-                    <input type="date" id="pur-filter-date-from" class="spa-input form-control" style="max-width: 150px;" title="Date From">
-                    <input type="date" id="pur-filter-date-to" class="spa-input form-control" style="max-width: 150px;" title="Date To">
+                
+                <!-- Filter Controls -->
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <div style="position: relative;">
+                        <input type="text" id="pur-history-search" class="spa-input form-control" placeholder="🔍 Search supplier / invoice..." style="font-size: 0.8rem; height: 36px; padding-left: 10px; width: 200px;">
+                    </div>
+                    <input type="date" id="pur-filter-date-from" class="spa-input form-control" style="font-size: 0.8rem; height: 36px; width: 135px;" title="Date From">
+                    <span style="color: #94a3b8; font-size: 0.8rem;">to</span>
+                    <input type="date" id="pur-filter-date-to" class="spa-input form-control" style="font-size: 0.8rem; height: 36px; width: 135px;" title="Date To">
+                    <button type="button" id="btn-pur-history-filter-apply" class="btn btn-sm btn-primary" style="height: 36px; padding: 0 14px; font-weight: 600; font-size: 0.8rem;">Filter</button>
+                    <button type="button" id="btn-pur-history-refresh" class="btn btn-sm btn-secondary" style="height: 36px; padding: 0 12px; font-weight: 600; font-size: 0.8rem;" title="Refresh Purchases">
+                        <i class="fa fa-refresh"></i>
+                    </button>
                 </div>
             </div>
+
             <div class="table-responsive">
-                <table class="dash-table">
+                <table class="dash-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr>
-                            <th>Entry</th>
-                            <th>Date</th>
-                            <th>Supplier</th>
-                            <th>Items</th>
-                            <th>Tax Invoice</th>
-                            <th>Doc Invoice</th>
-                            <th>Grand Total</th>
-                              <th>Action</th>
+                        <tr style="background: #f8fafc; font-size: 0.75rem; text-transform: uppercase; color: #475569;">
+                            <th style="padding: 10px 12px; width: 140px; text-align: left;">Entry No</th>
+                            <th style="padding: 10px 12px; width: 120px; text-align: left;">Receiving Date</th>
+                            <th style="padding: 10px 12px; width: 160px; text-align: left;">Supplier</th>
+                            <th style="padding: 10px 12px; text-align: left;">Inward Items Manifest</th>
+                            <th style="padding: 10px 12px; width: 130px; text-align: center;">KRA Tax Invoice</th>
+                            <th style="padding: 10px 12px; width: 130px; text-align: center;">Doc Invoice No</th>
+                            <th style="padding: 10px 12px; width: 140px; text-align: right;">Grand Total</th>
+                            <th style="padding: 10px 12px; width: 110px; text-align: center;">Action</th>
                         </tr>
                     </thead>
                     <tbody id="list-station-purchases-saved">
-                        <!-- Dynamic rows -->
+                        <tr><td colspan="8" class="text-center" style="padding: 2.5rem; color: #64748b;">Loading purchases history...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
     
-    <!-- ENTRY VIEW -->
+    <!-- ========================================================================= -->
+    <!-- ENTRY VIEW (NEW PURCHASE FORM) -->
+    <!-- ========================================================================= -->
     <div class="view-pane" id="purchases-entry-view">
-        <div class="dash-card center-card" style="max-width: 1200px; width: 100%;">
-            <div class="card-header-flex">
-                <h3>Record New Purchase</h3>
-            </div>
+        <div style="display: flex; flex-direction: column; gap: 1.5rem; max-width: 100%;">
             
-            <div class="form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-                <div class="form-group">
-                    <label>Supplier <span style="color:red;">*</span></label>
-                    <select id="pur-supplier" class="spa-input"></select>
+            <!-- Card 1: Supplier & Invoice Metadata -->
+            <div class="pos-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 1.25rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
+                    <div style="background: #eff6ff; color: #2563eb; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 800;">
+                        1
+                    </div>
+                    <div>
+                        <h4 style="margin: 0; color: #0f172a; font-weight: 800; font-size: 1.05rem;">Supplier & Delivery Invoice Details</h4>
+                        <div style="font-size: 0.78rem; color: #64748b;">Enter supplier information and physical delivery note numbers.</div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Document Invoice No. <span style="color:red;">*</span></label>
-                    <input type="text" id="pur-doc-invoice" class="spa-input" placeholder="Enter Document Invoice No">
-                </div>
-                <div class="form-group">
-                    <label>KRA Invoice No.</label>
-                    <input type="text" id="pur-kra-invoice" class="spa-input" placeholder="Enter KRA Invoice No">
-                </div>
-                <div class="form-group">
-                    <label>Receiving Date <span style="color:red;">*</span></label>
-                    <input type="date" id="pur-rec-date" class="spa-input">
-                </div>
-                <div class="form-group">
-                    <label>Document Date <span style="color:red;">*</span></label>
-                    <input type="date" id="pur-doc-date" class="spa-input">
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                    <!-- Supplier -->
+                    <div>
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                            Supplier <span style="color: #ef4444;">*</span>
+                        </label>
+                        <div style="position: relative;">
+                            <select id="pur-supplier" class="spa-input form-control" style="width: 100%; height: 42px; font-weight: 600; font-size: 0.875rem;">
+                                <option value="">Select Supplier...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Document Invoice Number -->
+                    <div>
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                            Document / Delivery Invoice No. <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input type="text" id="pur-doc-invoice" class="spa-input form-control" placeholder="e.g. INV-98421" style="width: 100%; height: 42px; font-weight: 600; font-size: 0.875rem;">
+                    </div>
+
+                    <!-- KRA Invoice Number -->
+                    <div>
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                            KRA E-TIMS Invoice No.
+                        </label>
+                        <input type="text" id="pur-kra-invoice" class="spa-input form-control" placeholder="e.g. KRA0028919" style="width: 100%; height: 42px; font-weight: 600; font-size: 0.875rem;">
+                    </div>
+
+                    <!-- Receiving Date -->
+                    <div>
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                            Receiving Date <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input type="date" id="pur-rec-date" class="spa-input form-control" style="width: 100%; height: 42px; font-weight: 600; font-size: 0.875rem;">
+                    </div>
+
+                    <!-- Document Date -->
+                    <div>
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                            Document / Invoice Date <span style="color: #ef4444;">*</span>
+                        </label>
+                        <input type="date" id="pur-doc-date" class="spa-input form-control" style="width: 100%; height: 42px; font-weight: 600; font-size: 0.875rem;">
+                    </div>
                 </div>
             </div>
 
-            <!-- Cart Section -->
-            <div class="pos-inline-row" style="margin-top: 1.5rem; flex-wrap: wrap; gap: 10px;">
-                <div class="form-group" style="flex: 2; min-width: 200px;">
-                    <label>Item / Fuel Product</label>
-                    <input type="text" id="pur-item-input" list="pur-items-list" class="spa-input" placeholder="Search item...">
-                    <datalist id="pur-items-list"></datalist>
+            <!-- Card 2: Line Item Entry & Target Destination -->
+            <div class="pos-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="background: #f0fdf4; color: #16a34a; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 800;">
+                            2
+                        </div>
+                        <div>
+                            <h4 style="margin: 0; color: #0f172a; font-weight: 800; font-size: 1.05rem;">Product & Tank / Warehouse Allocation</h4>
+                            <div style="font-size: 0.78rem; color: #64748b;">Select item, destination warehouse or fuel tank, and cost details.</div>
+                        </div>
+                    </div>
+                    <div id="pur-item-category-badge" style="display:none; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 10px; font-size: 0.75rem; font-weight: 700; color: #475569;"></div>
                 </div>
-                <div class="form-group" style="flex: 3; min-width: 250px;">
-                    <label>Target</label>
-                    <select id="pur-target" class="spa-input"></select>
+
+                <!-- Top Row: Item Picker + Target Location -->
+                <div style="display: grid; grid-template-columns: 1.8fr 1.2fr; gap: 1rem; margin-bottom: 1rem;">
+                    
+                    <!-- Searchable Item Combobox -->
+                    <div style="position: relative;" id="pur-item-combobox-wrap">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                            Item / Fuel Product <span style="color: #ef4444;">*</span>
+                        </label>
+                        <div style="position: relative;">
+                            <input type="text" id="pur-item-input" class="spa-input form-control" placeholder="Search fuel, lube, LPG cylinder, part..." style="width: 100%; height: 42px; font-weight: 600; font-size: 0.9rem; padding-right: 36px;" autocomplete="off">
+                            <input type="hidden" id="pur-item-code">
+                            <button type="button" id="btn-toggle-pur-dropdown" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #64748b; cursor: pointer; padding: 4px;">
+                                <i class="fa fa-chevron-down" style="font-size: 0.75rem;"></i>
+                            </button>
+                        </div>
+                        <datalist id="pur-items-list"></datalist>
+
+                        <!-- Dropdown popup -->
+                        <div id="pur-item-dropdown" class="combobox-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; width: 100%; max-height: 280px; overflow-y: auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 1000;">
+                            <!-- Injected dynamically by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Target Location / Tank -->
+                    <div>
+                        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 0.35rem;">
+                            Target Destination (Warehouse / Tank) <span style="color: #ef4444;">*</span>
+                        </label>
+                        <select id="pur-target" class="spa-input form-control" style="width: 100%; height: 42px; font-weight: 600; font-size: 0.875rem;">
+                            <option value="">Select Target...</option>
+                        </select>
+                    </div>
+
                 </div>
-                <div class="form-group" style="flex: 1; min-width: 100px;">
-                    <label>Quantity</label>
-                    <input type="number" id="pur-qty" class="spa-input" placeholder="0.00" step="0.01">
-                </div>
-                <div class="form-group" style="flex: 1; min-width: 100px;">
-                    <label>Unit Cost</label>
-                    <input type="number" id="pur-cost" class="spa-input" placeholder="0.00" step="0.01">
-                </div>
-                <div class="form-group" style="flex: 1; min-width: 80px;">
-                    <label>VAT %</label>
-                    <select id="pur-vat-rate" class="spa-input">
-                        <option value="8" selected>8%</option>
-                        <option value="0">0%</option>
-                        <option value="16">16%</option>
-                    </select>
-                </div>
-                <div class="form-group" style="display: flex; flex-direction: column; align-items: center; min-width: 80px;">
-                    <label style="margin-bottom: 8px;">VAT Incl?</label>
-                    <input type="checkbox" id="pur-vat-incl" style="width: 18px; height: 18px;">
-                </div>
-                <div class="form-group" style="display: flex; flex-direction: column; align-items: center; min-width: 100px; justify-content: flex-end; padding-bottom: 10px;">
-                    <div style="font-size: 0.8em; color: #64748b;">Total</div>
-                    <div id="pur-live-total" style="font-weight: bold; color: var(--text-primary);">0.00</div>
-                </div>
-                <div class="form-group" style="display: flex; align-items: flex-end; min-width: 100px;">
-                    <button class="btn-secondary" id="btn-add-purchase-item" style="height: 42px; width: 100%;">+ Add Item</button>
+
+                <!-- Bottom Row: Quantity, Unit Cost, VAT Rate, VAT Method, Live Line Total, Add Button -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr 1.2fr auto; gap: 0.75rem; align-items: end; background: #f8fafc; padding: 1rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    
+                    <!-- Quantity -->
+                    <div>
+                        <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+                            Quantity
+                        </label>
+                        <input type="number" id="pur-qty" class="spa-input form-control" placeholder="0.00" min="0.01" step="any" style="width: 100%; height: 40px; font-weight: 800; font-size: 0.95rem; font-family: monospace;">
+                    </div>
+
+                    <!-- Unit Cost -->
+                    <div>
+                        <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+                            Unit Cost (KES)
+                        </label>
+                        <input type="number" id="pur-cost" class="spa-input form-control" placeholder="0.00" min="0.01" step="any" style="width: 100%; height: 40px; font-weight: 800; font-size: 0.95rem; font-family: monospace;">
+                    </div>
+
+                    <!-- VAT Rate -->
+                    <div>
+                        <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+                            VAT %
+                        </label>
+                        <select id="pur-vat-rate" class="spa-input form-control" style="width: 100%; height: 40px; font-weight: 700; font-size: 0.85rem;">
+                            <option value="8" selected>8% (Fuel)</option>
+                            <option value="16">16% (Standard)</option>
+                            <option value="0">0% (Zero/Exempt)</option>
+                        </select>
+                    </div>
+
+                    <!-- VAT Method (Exclusive vs Inclusive Pill Toggle) -->
+                    <div>
+                        <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+                            Tax Calculation
+                        </label>
+                        <div style="display: flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; height: 40px; background: #ffffff;">
+                            <button type="button" class="pur-tax-toggle active" data-incl="0" style="flex: 1; border: none; font-size: 0.75rem; font-weight: 700; background: #0284c7; color: #ffffff; cursor: pointer; transition: all 0.15s;">
+                                + VAT (Excl)
+                            </button>
+                            <button type="button" class="pur-tax-toggle" data-incl="1" style="flex: 1; border: none; font-size: 0.75rem; font-weight: 600; background: #ffffff; color: #475569; cursor: pointer; transition: all 0.15s;">
+                                Incl. VAT
+                            </button>
+                        </div>
+                        <input type="checkbox" id="pur-vat-incl" style="display: none;">
+                    </div>
+
+                    <!-- Live Line Total Badge -->
+                    <div style="text-align: right; padding: 4px 8px;">
+                        <div style="font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Line Total (KES)</div>
+                        <div id="pur-live-total" style="font-size: 1.25rem; font-weight: 900; color: #0f172a; font-family: monospace;">0.00</div>
+                    </div>
+
+                    <!-- Add Button -->
+                    <div>
+                        <button type="button" class="btn-primary" id="btn-add-purchase-item" style="height: 40px; padding: 0 1.25rem; font-weight: 700; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+                            <span>+ Add Item</span>
+                        </button>
+                    </div>
+
                 </div>
             </div>
 
-            <div class="table-responsive" style="margin-top: 1.5rem;">
-                <table class="dash-table">
-                    <thead>
-                        <tr>
-                            <th>Item</th>
-                            <th>Target</th>
-                            <th>Qty</th>
-                            <th>Unit Cost</th>
-                            <th>Amount</th>
-                            <th width="50">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="list-purchase-cart">
-                        <tr><td colspan="6" style="text-align: center; color: #64748b; padding: 2rem;">Cart is empty</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            
-            <div style="display: flex; gap: 2rem; margin-top: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 8px;">
-                <div class="form-group" style="flex: 1; max-width: 200px; margin: 0;">
-                    <label>Transport Charge</label>
-                    <input type="number" id="pur-transport-charge" class="spa-input" placeholder="0.00" step="0.01">
-                </div>
-                <div class="form-group" style="flex: 1; max-width: 120px; margin: 0;">
-                    <label>Trans. VAT %</label>
-                    <select id="pur-transport-vat" class="spa-input">
-                        <option value="16" selected>16%</option>
-                        <option value="8">8%</option>
-                        <option value="0">0%</option>
-                    </select>
+            <!-- Card 3: Inward Manifest (Cart) -->
+            <div class="pos-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="background: #faf5ff; color: #7c3aed; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 800;">
+                            3
+                        </div>
+                        <div>
+                            <h4 style="margin: 0; color: #0f172a; font-weight: 800; font-size: 1.05rem;">Inward Purchase Manifest</h4>
+                            <div id="pur-cart-summary-text" style="font-size: 0.78rem; color: #64748b;">0 item(s) in delivery manifest</div>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-clear-pur-cart" class="btn btn-sm btn-secondary" style="font-size: 0.75rem; font-weight: 600; color: #ef4444; border-color: #fecaca; background: #fff5f5; display: none;">
+                        <i class="fa fa-trash"></i> Clear Manifest
+                    </button>
                 </div>
 
-                <div>
-                    <span style="font-size: 0.9rem; color: #64748b;">Items Total:</span>
-                    <div id="pur-net" style="font-size: 1.2rem; font-weight: 600; color: #0f172a;">0.00</div>
-                </div>
-                <div>
-                    <span style="font-size: 0.9rem; color: #64748b;">Grand Total:</span>
-                    <div id="pur-total" style="font-size: 1.2rem; font-weight: 700; color: #047857;">0.00</div>
+                <div class="table-responsive">
+                    <table class="dash-table" style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f8fafc; font-size: 0.75rem; text-transform: uppercase; color: #475569;">
+                                <th style="padding: 10px 12px; text-align: left;">Product Details</th>
+                                <th style="padding: 10px 12px; text-align: left;">Destination Target</th>
+                                <th style="padding: 10px 12px; text-align: center; width: 110px;">Quantity</th>
+                                <th style="padding: 10px 12px; text-align: right; width: 120px;">Unit Cost</th>
+                                <th style="padding: 10px 12px; text-align: center; width: 100px;">VAT Rate</th>
+                                <th style="padding: 10px 12px; text-align: right; width: 140px;">Line Amount</th>
+                                <th style="padding: 10px 12px; text-align: center; width: 60px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="list-purchase-cart">
+                            <tr>
+                                <td colspan="7" class="text-center" style="color: #94a3b8; padding: 2.5rem;">
+                                    <div style="font-size: 2rem; margin-bottom: 6px;">🛒</div>
+                                    <div style="font-weight: 600; font-size: 0.95rem; color: #475569;">Delivery manifest is empty</div>
+                                    <div style="font-size: 0.8rem; margin-top: 2px;">Use the form above to add fuel or products to this purchase order.</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            
-            <button class="btn-primary" id="btn-save-purchase" style="margin-top:1.5rem; width:100%;"><span class="spinner hidden"></span> Save Purchase</button>
+
+            <!-- Card 4: Freight, Taxes & Financial Summary Card -->
+            <div class="pos-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 1.25rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem;">
+                    <div style="background: #fffbeb; color: #d97706; width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 800;">
+                        4
+                    </div>
+                    <div>
+                        <h4 style="margin: 0; color: #0f172a; font-weight: 800; font-size: 1.05rem;">Landed Freight & Financial Settlement</h4>
+                        <div style="font-size: 0.78rem; color: #64748b;">Add transport fees and verify invoice grand totals.</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start;">
+                    
+                    <!-- Left: Transport / Freight Charges -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem;">
+                        <h5 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: #334155; text-transform: uppercase;">
+                            🚚 Transport / Delivery Surcharges
+                        </h5>
+                        <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 0.75rem;">
+                            <div>
+                                <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+                                    Transport Charge (KES)
+                                </label>
+                                <input type="number" id="pur-transport-charge" class="spa-input form-control" placeholder="0.00" min="0" step="any" style="width: 100%; height: 40px; font-weight: 800; font-size: 0.95rem; font-family: monospace;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #475569; margin-bottom: 0.35rem;">
+                                    Transport VAT %
+                                </label>
+                                <select id="pur-transport-vat" class="spa-input form-control" style="width: 100%; height: 40px; font-weight: 700; font-size: 0.85rem;">
+                                    <option value="16" selected>16%</option>
+                                    <option value="8">8%</option>
+                                    <option value="0">0%</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Financial Summary Box -->
+                    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1.25rem;">
+                        <h5 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: #334155; text-transform: uppercase;">
+                            💰 Invoice Value Summary
+                        </h5>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569;">
+                                <span>Items Total (Excl. / Incl. Base):</span>
+                                <b id="pur-net" style="font-family: monospace; color: #0f172a; font-size: 0.95rem;">KES 0.00</b>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569;">
+                                <span>Freight & Transport:</span>
+                                <b id="pur-transport-display" style="font-family: monospace; color: #0f172a; font-size: 0.95rem;">KES 0.00</b>
+                            </div>
+                            <div style="border-top: 2px solid #cbd5e1; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between; align-items: baseline;">
+                                <span style="font-size: 0.95rem; font-weight: 800; color: #0f172a; text-transform: uppercase;">Grand Total Payable:</span>
+                                <div id="pur-total" style="font-size: 1.5rem; font-weight: 900; color: #047857; font-family: monospace;">KES 0.00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Submit Button -->
+                <div style="margin-top: 1.5rem;">
+                    <button class="btn-primary" id="btn-save-purchase" style="width: 100%; height: 48px; font-weight: 800; font-size: 1.05rem; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span class="spinner hidden"></span> 
+                        <span>🚀 Post & Submit Station Purchase</span>
+                    </button>
+                </div>
+            </div>
+
         </div>
     </div>
 </section>
