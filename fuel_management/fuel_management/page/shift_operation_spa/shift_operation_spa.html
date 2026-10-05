@@ -1702,61 +1702,139 @@
 
     <!-- HISTORY VIEW -->
     <div class="view-pane active" id="invoice-history-view">
-        <div class="dash-card center-card" style="max-width: 1100px; width: 100%;">
-            <div style="margin-bottom: 1rem;">
-                <h3 style="margin-bottom: 2px;">Historical Credit Invoices</h3>
-                <div id="inv-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing latest 20 entries &bull; Use date filter for more)</div>
-            </div>
+        <div class="dash-card" style="max-width: 100%; width: 100%; padding: 1.5rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
             
-            <div class="shift-context-box" style="margin-bottom: 1.5rem;">
-                <div class="context-detail">
-                    <span class="label">Shift:</span> <strong id="invoice-history-shift-name"></strong>
+            <!-- Header with Title & Live Context -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem;">
+                <div>
+                    <h3 style="margin-bottom: 4px; font-weight: 800; color: #0f172a; font-size: 1.35rem; display: flex; align-items: center; gap: 8px;">
+                        <span>📜</span> Historical Credit Invoices
+                    </h3>
+                    <div id="inv-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing latest 20 entries &bull; Use date filter for more)</div>
                 </div>
-                <div class="context-detail">
-                    <span class="label">Date:</span> <strong id="invoice-history-shift-date"></strong>
+                
+                <div class="shift-context-box" style="margin-bottom: 0; padding: 0.6rem 1.1rem; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0;">
+                    <div class="context-detail">
+                        <span class="label">Shift:</span> <strong id="invoice-history-shift-name"></strong>
+                    </div>
+                    <div class="context-detail">
+                        <span class="label">Date:</span> <strong id="invoice-history-shift-date"></strong>
+                    </div>
                 </div>
-            </div>
-            
-            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-                <div class="form-group" style="flex: 2; min-width: 200px;">
-                    <label>Search Customer or Entry</label>
-                    <input type="text" id="invoice-filter-search" class="spa-input" placeholder="Search customer, entry no...">
-                </div>
-                  <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                      <label style="margin-bottom: 4px; display: block; font-size: 0.85rem; color: #64748b;">From Date</label>
-                      <input type="date" id="inv-filter-date-from" class="spa-input" style="padding: 0.5rem; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;">
-                  </div>
-                  <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
-                      <label style="margin-bottom: 4px; display: block; font-size: 0.85rem; color: #64748b;">To Date</label>
-                      <input type="date" id="inv-filter-date-to" class="spa-input" style="padding: 0.5rem; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;">
-                  </div>
-                  <div class="form-group" style="flex: 1; min-width: 180px; margin-bottom: 0;">
-                      <label style="margin-bottom: 4px; display: block; font-size: 0.85rem; color: #64748b;">Customer</label>
-                      <select id="inv-filter-customer" class="spa-input" style="padding: 0.5rem; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;">
-                          <option value="">All Customers</option>
-                      </select>
-                  </div>
             </div>
 
-            <div class="table-responsive">
-                <table class="dash-table">
-                    <thead>
+            <!-- Summary Stat Cards (Dynamic Totals) -->
+            <div class="inv-hist-summary-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+                <!-- Total Net Invoiced Card -->
+                <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; padding: 1.1rem 1.25rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.2); display: flex; flex-direction: column; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.95;">Total Net Invoiced</span>
+                        <span style="background: rgba(255,255,255,0.22); padding: 3px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 800;">KES TOTAL</span>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <div id="inv-hist-stat-net" style="font-size: 1.65rem; font-weight: 900; font-family: monospace; letter-spacing: -0.02em;">Sh 0.00</div>
+                        <div id="inv-hist-stat-gross-note" style="font-size: 0.8rem; opacity: 0.9; margin-top: 2px;">Gross: Sh 0.00</div>
+                    </div>
+                </div>
+
+                <!-- Filtered Invoices Count -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.1rem 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Invoices Count</span>
+                        <span style="background: #eff6ff; color: #2563eb; padding: 3px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 800;">ENTRIES</span>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <div id="inv-hist-stat-count" style="font-size: 1.65rem; font-weight: 900; color: #0f172a; font-family: monospace;">0</div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Filtered items</div>
+                    </div>
+                </div>
+
+                <!-- Total Volume / Qty -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.1rem 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Total Volume / Qty</span>
+                        <span style="background: #fef3c7; color: #b45309; padding: 3px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 800;">VOLUME</span>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <div id="inv-hist-stat-qty" style="font-size: 1.65rem; font-weight: 900; color: #0f172a; font-family: monospace;">0.00</div>
+                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Total Units / Litres</div>
+                    </div>
+                </div>
+
+                <!-- Total Discounts -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.1rem 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Total Discounts</span>
+                        <span style="background: #f5f3ff; color: #7c3aed; padding: 3px 9px; border-radius: 20px; font-size: 0.72rem; font-weight: 800;">SAVINGS</span>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <div id="inv-hist-stat-discount" style="font-size: 1.65rem; font-weight: 900; color: #7c3aed; font-family: monospace;">Sh 0.00</div>
+                        <div id="inv-hist-stat-disc-count" style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">0 discounted lines</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modern Filters Bar -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+                <div style="display: flex; gap: 0.85rem; flex-wrap: wrap; align-items: flex-end;">
+                    <div class="form-group" style="flex: 2; min-width: 220px; margin-bottom: 0;">
+                        <label style="margin-bottom: 5px; display: block; font-size: 0.8rem; font-weight: 700; color: #475569;">Search Customer, Entry No, Vehicle</label>
+                        <input type="text" id="invoice-filter-search" class="spa-input" placeholder="Type customer, entry no, or vehicle..." style="height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.875rem; background: #ffffff;">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom: 0;">
+                        <label style="margin-bottom: 5px; display: block; font-size: 0.8rem; font-weight: 700; color: #475569;">From Date</label>
+                        <input type="date" id="inv-filter-date-from" class="spa-input" style="height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.4rem 0.6rem; font-size: 0.875rem; background: #ffffff;">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom: 0;">
+                        <label style="margin-bottom: 5px; display: block; font-size: 0.8rem; font-weight: 700; color: #475569;">To Date</label>
+                        <input type="date" id="inv-filter-date-to" class="spa-input" style="height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.4rem 0.6rem; font-size: 0.875rem; background: #ffffff;">
+                    </div>
+                    <div class="form-group" style="flex: 1.5; min-width: 200px; margin-bottom: 0;">
+                        <label style="margin-bottom: 5px; display: block; font-size: 0.8rem; font-weight: 700; color: #475569;">Customer</label>
+                        <select id="inv-filter-customer" class="spa-input" style="height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.4rem 0.6rem; font-size: 0.875rem; background: #ffffff;">
+                            <option value="">All Customers</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 0;">
+                        <button id="btn-reset-inv-filters" class="btn btn-default" type="button" style="height: 38px; border-radius: 8px; padding: 0 1rem; font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; gap: 6px; background: #ffffff; border: 1px solid #cbd5e1; color: #475569; cursor: pointer;">
+                            <span>↺</span> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Responsive Styled Table with Total Footer -->
+            <div class="table-responsive" style="border: 1px solid #e2e8f0; border-radius: 10px; overflow-x: auto; background: #ffffff; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                <table class="dash-table" style="margin-bottom: 0; min-width: 1050px;">
+                    <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                         <tr>
-                            <th>Entry ID</th>
-                            <th>Date</th>
-                            <th>Shift</th>
-                            <th>Customer</th>
-                            <th>Vehicle</th>
-                            <th>Item</th>
-                            <th>Qty</th>
-                            <th>Gross (KES)</th>
-                            <th>Discount</th>
-                            <th>Net Invoiced</th>
-                            <th>Issuer</th>
-                            <th>Action</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 0.85rem;">Entry ID</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 0.85rem;">Date</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 0.85rem;">Shift</th>
+                            <th style="font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 0.85rem;">Customer</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 0.85rem;">Vehicle</th>
+                            <th style="font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 0.85rem;">Item</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; text-align: right; padding: 0.85rem;">Qty</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; text-align: right; padding: 0.85rem;">Gross (KES)</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; text-align: right; padding: 0.85rem;">Discount</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; text-align: right; padding: 0.85rem;">Net Invoiced</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; padding: 0.85rem;">Issuer</th>
+                            <th style="white-space: nowrap; font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; text-align: center; padding: 0.85rem;">Action</th>
                         </tr>
                     </thead>
                     <tbody id="list-invoice-saved"></tbody>
+                    <tfoot id="foot-invoice-saved" style="background: #f8fafc; border-top: 2px solid #cbd5e1;">
+                        <tr style="font-weight: 800;">
+                            <td colspan="6" style="padding: 1rem 0.85rem; color: #0f172a; font-size: 0.92rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                                Total (Filtered Results):
+                            </td>
+                            <td id="inv-hist-total-qty" style="padding: 1rem 0.85rem; text-align: right; font-family: monospace; font-size: 0.95rem; color: #0f172a; white-space: nowrap;">0.00</td>
+                            <td id="inv-hist-total-gross" style="padding: 1rem 0.85rem; text-align: right; font-family: monospace; font-size: 0.95rem; color: #64748b; white-space: nowrap;">Sh 0.00</td>
+                            <td id="inv-hist-total-discount" style="padding: 1rem 0.85rem; text-align: right; font-family: monospace; font-size: 0.95rem; color: #7c3aed; white-space: nowrap;">-</td>
+                            <td id="inv-hist-total-net" style="padding: 1rem 0.85rem; text-align: right; font-family: monospace; font-size: 1.15rem; color: #047857; font-weight: 900; background: #ecfdf5; white-space: nowrap;">Sh 0.00</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
