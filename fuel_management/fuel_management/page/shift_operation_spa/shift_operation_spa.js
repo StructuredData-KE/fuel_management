@@ -6091,7 +6091,7 @@ function render_purchases($wrapper) {
                 line_total = base;
             }
         }
-        $wrapper.find('#pur-live-total').text(frappe.format(line_total, {fieldtype: 'Currency'}));
+        $wrapper.find('#pur-live-total').text(format_currency(line_total));
     };
     
     $wrapper.find('#pur-qty, #pur-cost, #pur-vat-rate, #pur-vat-incl').on('input change', calculate_live_total);
@@ -6153,13 +6153,13 @@ function render_purchases($wrapper) {
                         </span>
                     </td>
                     <td style="padding: 10px 12px; text-align: right; font-weight: 700; font-family: monospace; color: #334155;">
-                        ${frappe.format(cost, {fieldtype: 'Currency'})}
+                        ${format_currency(cost)}
                     </td>
                     <td style="padding: 10px 12px; text-align: center;">
                         ${vat_badge}
                     </td>
                     <td style="padding: 10px 12px; text-align: right; font-weight: 900; font-size: 0.95rem; font-family: monospace; color: #047857;">
-                        ${frappe.format(amount_grand, {fieldtype: 'Currency'})}
+                        ${format_currency(amount_grand)}
                     </td>
                     <td style="padding: 10px 12px; text-align: center;">
                         <button type="button" class="btn btn-sm btn-remove-pur-cart" data-idx="${idx}" style="background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 4px 8px; border-radius: 6px; cursor: pointer; transition: all 0.15s;" title="Remove Item">
@@ -6207,9 +6207,9 @@ function render_purchases($wrapper) {
         
         let grand_total = items_total + transport_total;
         
-        $wrapper.find('#pur-net').html(frappe.format(items_total, {fieldtype: 'Currency'}));
-        $wrapper.find('#pur-transport-display').html(frappe.format(transport_total, {fieldtype: 'Currency'}));
-        $wrapper.find('#pur-total').html(frappe.format(grand_total, {fieldtype: 'Currency'}));
+        $wrapper.find('#pur-net').text(format_currency(items_total));
+        $wrapper.find('#pur-transport-display').text(format_currency(transport_total));
+        $wrapper.find('#pur-total').text(format_currency(grand_total));
     };
 
     $wrapper.find('#pur-transport-charge, #pur-transport-vat').on('input change', refresh_purchase_cart);
@@ -6287,7 +6287,7 @@ function render_purchases($wrapper) {
         $wrapper.find('#pur-vat-rate').val('8');
         $wrapper.find('.pur-tax-toggle[data-incl="0"]').click();
         $wrapper.find('#pur-item-category-badge').hide();
-        $wrapper.find('#pur-live-total').text('0.00');
+        $wrapper.find('#pur-live-total').text(format_currency(0));
         
         refresh_purchase_cart();
         $wrapper.find('#pur-item-input').focus();
@@ -6345,7 +6345,7 @@ function render_purchases($wrapper) {
                             </span>
                         </td>
                         <td style="padding: 10px 12px; text-align: right; font-weight: 900; font-size: 0.95rem; font-family: monospace; color: #047857; white-space: nowrap;">
-                            ${frappe.format(row.grand_total || 0, {fieldtype: 'Currency'})}
+                            ${format_currency(row.grand_total || 0)}
                         </td>
                         <td style="padding: 10px 12px; text-align: center; white-space: nowrap;">
                             <button type="button" class="btn btn-xs btn-default btn-edit-pur" data-name="${frappe.utils.escape_html(row.name)}" style="padding: 4px 8px; margin-right: 4px; border-radius: 4px;" title="Edit Purchase">
