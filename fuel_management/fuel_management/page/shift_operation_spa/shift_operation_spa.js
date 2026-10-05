@@ -13272,6 +13272,11 @@ window.export_shorts_csv = function() {
 
 
 
+function format_money(val) {
+    let num = parseFloat(val) || 0;
+    return 'Sh ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function fetch_invoice_history($wrapper) {
     if(!window.ACTIVE_SHIFT) return;
     
@@ -13375,7 +13380,7 @@ function render_filtered_invoices_history($wrapper) {
         if (disc_val > 0) {
             let disc_csa_u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === row.discount_csa) : null;
             let disc_csa_label = disc_csa_u ? (disc_csa_u.employee_name || disc_csa_u.full_name) : (row.discount_csa_name || row.discount_csa);
-            disc_cell = `<span style="color:#7c3aed; font-weight:700;">-${frappe.format(disc_val, {fieldtype: 'Currency'})}</span>${disc_csa_label ? `<br><small style="color:#6b21a8; font-size:0.75rem;">${disc_csa_label}</small>` : ''}`;
+            disc_cell = `<span style="color:#7c3aed; font-weight:700;">-${format_money(disc_val)}</span>${disc_csa_label ? `<br><small style="color:#6b21a8; font-size:0.75rem;">${disc_csa_label}</small>` : ''}`;
         }
 
         let date_display = row.shift_date ? frappe.datetime.str_to_user(row.shift_date).split(' ')[0] : '';
@@ -13393,10 +13398,10 @@ function render_filtered_invoices_history($wrapper) {
                 <td style="color: #334155; font-weight: 500; font-size: 0.88rem; white-space: nowrap; padding: 0.75rem 0.85rem;">${row.vehicle_registration || '-'}</td>
                 <td style="color: #475569; font-size: 0.88rem; padding: 0.75rem 0.85rem;">${item_name || ''}</td>
                 <td style="text-align: right; font-family: monospace; font-weight: 700; color: #0f172a; white-space: nowrap; padding: 0.75rem 0.85rem;">${qty_val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 4})}</td>
-                <td style="text-align: right; font-family: monospace; color: #64748b; white-space: nowrap; padding: 0.75rem 0.85rem;">${frappe.format(gross_val, {fieldtype: 'Currency'})}</td>
+                <td style="text-align: right; font-family: monospace; color: #64748b; white-space: nowrap; padding: 0.75rem 0.85rem;">${format_money(gross_val)}</td>
                 <td style="text-align: right; font-family: monospace; white-space: nowrap; padding: 0.75rem 0.85rem;">${disc_cell}</td>
                 <td style="text-align: right; white-space: nowrap; padding: 0.75rem 0.85rem;">
-                    <strong style="color: #047857; font-family: monospace; font-size: 0.95rem; font-weight: 800; background: #f0fdf4; padding: 3px 8px; border-radius: 4px; display: inline-block;">${frappe.format(net, {fieldtype: 'Currency'})}</strong>
+                    <strong style="color: #047857; font-family: monospace; font-size: 0.95rem; font-weight: 800; background: #f0fdf4; padding: 3px 8px; border-radius: 4px; display: inline-block;">${format_money(net)}</strong>
                 </td>
                 <td style="color: #64748b; font-size: 0.85rem; white-space: nowrap; padding: 0.75rem 0.85rem;">${csa_name || ''}</td>
                 <td style="text-align: center; white-space: nowrap; padding: 0.75rem 0.85rem;">${action_html}</td>
@@ -13412,24 +13417,24 @@ function render_filtered_invoices_history($wrapper) {
 
     // Update Subtitle
     if (!from_date && !to_date && !customer && !search) {
-        $wrapper.find('#inv-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest ${count} entries &bull; Total: <strong style="color:#047857;">${frappe.format(total_net, {fieldtype: 'Currency'})}</strong>)</span>`);
+        $wrapper.find('#inv-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest ${count} entries &bull; Total: <strong style="color:#047857;">${format_money(total_net)}</strong>)</span>`);
     } else {
-        $wrapper.find('#inv-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:700;">(Showing ${count} filtered entries &bull; Total: ${frappe.format(total_net, {fieldtype: 'Currency'})})</span>`);
+        $wrapper.find('#inv-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:700;">(Showing ${count} filtered entries &bull; Total: ${format_money(total_net)})</span>`);
     }
 
     // Update Top Stat Cards
-    $wrapper.find('#inv-hist-stat-net').text(frappe.format(total_net, {fieldtype: 'Currency'}));
-    $wrapper.find('#inv-hist-stat-gross-note').text(`Gross: ${frappe.format(total_gross, {fieldtype: 'Currency'})}`);
+    $wrapper.find('#inv-hist-stat-net').text(format_money(total_net));
+    $wrapper.find('#inv-hist-stat-gross-note').text(`Gross: ${format_money(total_gross)}`);
     $wrapper.find('#inv-hist-stat-count').text(count.toLocaleString());
     $wrapper.find('#inv-hist-stat-qty').text(total_qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4}));
-    $wrapper.find('#inv-hist-stat-discount').text(frappe.format(total_discount, {fieldtype: 'Currency'}));
+    $wrapper.find('#inv-hist-stat-discount').text(format_money(total_discount));
     $wrapper.find('#inv-hist-stat-disc-count').text(`${disc_count} discounted lines`);
 
     // Update Table Footer
     $wrapper.find('#inv-hist-total-qty').text(total_qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4}));
-    $wrapper.find('#inv-hist-total-gross').text(frappe.format(total_gross, {fieldtype: 'Currency'}));
-    $wrapper.find('#inv-hist-total-discount').text(total_discount > 0 ? ('-' + frappe.format(total_discount, {fieldtype: 'Currency'})) : '-');
-    $wrapper.find('#inv-hist-total-net').text(frappe.format(total_net, {fieldtype: 'Currency'}));
+    $wrapper.find('#inv-hist-total-gross').text(format_money(total_gross));
+    $wrapper.find('#inv-hist-total-discount').text(total_discount > 0 ? ('-' + format_money(total_discount)) : '-');
+    $wrapper.find('#inv-hist-total-net').text(format_money(total_net));
 
     // Bind Edit and Delete handlers
     bind_invoice_history_actions($wrapper);
