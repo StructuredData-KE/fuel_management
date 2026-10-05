@@ -15,6 +15,7 @@ class Shift(Document):
         self.auto_inject_greasing_sales_from_invoices()
         self.calculate_greasing()
         self.auto_inject_dry_stock_from_invoices()
+        self.assign_inventory_sales_entry_numbers()
         self.validate_csa_reconciliation()
         self.validate_report_sent()
 
@@ -112,11 +113,20 @@ class Shift(Document):
     def auto_inject_dry_stock_from_invoices(self):
         from frappe.utils import flt
         
+        # Map existing entry numbers of injected rows to preserve them on re-save
+        existing_entry_map = {}
+        if getattr(self, "inventory_sales", None):
+            for row in self.inventory_sales:
+                ref = getattr(row, "reference_invoice", None) or (row.get("reference_invoice") if isinstance(row, dict) else None)
+                enum = getattr(row, "entry_number", None) or (row.get("entry_number") if isinstance(row, dict) else None)
+                if ref and enum:
+                    existing_entry_map[ref] = enum
+
         # Clean up ALL injected inventory sales first to prevent duplicates or ghost items on edit
         if getattr(self, "inventory_sales", None):
             self.inventory_sales = [
                 row for row in self.inventory_sales 
-                if not row.get("is_invoice_sale")
+                if not (getattr(row, "is_invoice_sale", 0) if not isinstance(row, dict) else row.get("is_invoice_sale"))
             ]
             
         if not self.invoices:
@@ -142,8 +152,33 @@ class Shift(Document):
                 "amount": gross_val,
                 "sold_by": getattr(inv, "inventory_csa", inv.csa) or getattr(inv, "csa", ""),
                 "is_invoice_sale": 1,
-                "reference_invoice": inv.entry_number
+                "reference_invoice": inv.entry_number,
+                "entry_number": existing_entry_map.get(inv.entry_number)
             })
+
+    def assign_inventory_sales_entry_numbers(self):
+        from frappe.utils import cint
+        max_entry = frappe.db.sql("""
+            SELECT MAX(entry_number) 
+            FROM `tabShift Inventory Sale`
+        """)[0][0]
+        current_max = cint(max_entry) if max_entry else 1000
+        
+        # Consider any already assigned numbers in self.inventory_sales
+        for row in (self.inventory_sales or []):
+            num = getattr(row, "entry_number", None) or (row.get("entry_number") if isinstance(row, dict) else None)
+            if num:
+                current_max = max(current_max, cint(num))
+                
+        # Assign next sequential entry_number to rows that don't have one
+        for row in (self.inventory_sales or []):
+            num = getattr(row, "entry_number", None) or (row.get("entry_number") if isinstance(row, dict) else None)
+            if not num:
+                current_max += 1
+                if isinstance(row, dict):
+                    row["entry_number"] = current_max
+                else:
+                    row.entry_number = current_max
 
     def auto_set_shift_display(self):
         from frappe.utils import getdate

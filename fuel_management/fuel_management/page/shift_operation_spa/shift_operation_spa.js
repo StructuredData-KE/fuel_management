@@ -1149,6 +1149,20 @@ function render_drystock($wrapper) {
     $wrapper.find('#drystock-history-shift-name').text(shiftName);
     $wrapper.find('#drystock-history-shift-date').text(sDate.split(" ")[0]);
 
+    // Fetch and display next entry number
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_next_inventory_sale_number",
+        args: { station: window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : null },
+        callback: function(r) {
+            if (r.message) {
+                let next_num = r.message.next_entry_number || r.message;
+                if (!window.EDITING_DRYSTOCK_ENTRY_NUMBER) {
+                    $wrapper.find('#drystock-entry-number').text('#' + next_num);
+                }
+            }
+        }
+    });
+
     // Initialize date filters if empty
     let curStartDate = $wrapper.find('#drystock-filter-start-date').val();
     let curEndDate = $wrapper.find('#drystock-filter-end-date').val();
@@ -1440,8 +1454,10 @@ function render_drystock($wrapper) {
             total_volume: volume,
             selling_price: price,
             amount: amount,
+            entry_number: window.EDITING_DRYSTOCK_ENTRY_NUMBER ? parseInt(window.EDITING_DRYSTOCK_ENTRY_NUMBER) : undefined,
             _is_new: true
         };
+        window.EDITING_DRYSTOCK_ENTRY_NUMBER = null;
         window.PENDING_DRYSTOCK.push(new_row);
         
         // Reset form
@@ -1455,6 +1471,18 @@ function render_drystock($wrapper) {
         $wrapper.find('#drystock-total-display').text('0.00');
         $wrapper.find('#drystock-fc-stock-pill').html('Select item to view stock').css({ background: '#f1f5f9', color: '#64748b', borderColor: '#e2e8f0' });
         
+        // Refresh entry number badge
+        frappe.call({
+            method: "fuel_management.fuel_management.api.get_next_inventory_sale_number",
+            args: { station: window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : null },
+            callback: function(r) {
+                if (r.message && !window.EDITING_DRYSTOCK_ENTRY_NUMBER) {
+                    let next_num = r.message.next_entry_number || r.message;
+                    $wrapper.find('#drystock-entry-number').text('#' + next_num);
+                }
+            }
+        });
+
         refresh_drystock_cart($wrapper);
         frappe.show_alert({message: `Added ${qty}x ${item.item_name} to cart`, indicator: "green"});
     });
@@ -1516,7 +1544,7 @@ function fetch_drystock_history($wrapper) {
                         if (u) csa_name = u.employee_name || u.full_name || row.sold_by;
                     }
                     
-                    let entry_id = 1000 + (row.idx || (idx + 1));
+                    let entry_id = row.entry_number || (1000 + (row.idx || (idx + 1)));
                     let date_val = row.shift_date ? frappe.datetime.str_to_user(row.shift_date).split(' ')[0] : '';
                     let shift_label = row.shift_template || row.shift_name_display || row.shift || '';
                     
@@ -1528,7 +1556,7 @@ function fetch_drystock_history($wrapper) {
                         del_btn = `<span class="badge" style="background-color: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; white-space: nowrap;">Invoice Sale</span>`;
                     } else if (can_edit) {
                         del_btn = `<div style="display:flex; gap:0.35rem; justify-content:center; align-items:center;">
-                            <button class="btn btn-xs btn-primary btn-edit-saved" data-name="${row.name}" data-item="${frappe.utils.escape_html(row.item)}" data-qty="${row.quantity}" data-price="${row.selling_price}" data-sold-by="${frappe.utils.escape_html(row.sold_by || '')}" data-uom="${row.uom_multiplier || 1}" style="font-weight:700; padding:3px 8px; font-size:0.76rem; border-radius:4px; background:#2563eb; color:#fff; border:none; cursor:pointer;">Edit</button>
+                            <button class="btn btn-xs btn-primary btn-edit-saved" data-name="${row.name}" data-item="${frappe.utils.escape_html(row.item)}" data-qty="${row.quantity}" data-price="${row.selling_price}" data-sold-by="${frappe.utils.escape_html(row.sold_by || '')}" data-uom="${row.uom_multiplier || 1}" data-entry-number="${row.entry_number || ''}" style="font-weight:700; padding:3px 8px; font-size:0.76rem; border-radius:4px; background:#2563eb; color:#fff; border:none; cursor:pointer;">Edit</button>
                             <button class="btn btn-xs btn-danger btn-remove-saved" data-name="${row.name}" style="font-weight:700; padding:3px 7px; font-size:0.76rem; border-radius:4px; background:#ef4444; color:#fff; border:none; cursor:pointer;" title="Delete this sale">✕</button>
                         </div>`;
                     } else {
@@ -1587,8 +1615,9 @@ function fetch_drystock_history($wrapper) {
                 let row_price = parseFloat($(this).attr('data-price') || 0);
                 let row_sold_by = $(this).attr('data-sold-by');
                 let row_uom = parseFloat($(this).attr('data-uom') || 1);
+                let row_entry_number = $(this).attr('data-entry-number') || null;
                 
-                frappe.confirm('This will load the item back into the entry form and remove it from history. Continue?', () => {
+                frappe.confirm(`This will load item ${row_entry_number ? '#' + row_entry_number : ''} back into the entry form and remove it from history. Continue?`, () => {
                     frappe.call({
                         method: "frappe.client.get",
                         args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
@@ -1612,6 +1641,12 @@ function fetch_drystock_history($wrapper) {
                                     callback: function(r3) {
                                         if (r3.message) window.SHIFT_DOC = r3.message;
                                         
+                                        // Retain entry number when editing
+                                        window.EDITING_DRYSTOCK_ENTRY_NUMBER = row.entry_number || row_entry_number || null;
+                                        if (window.EDITING_DRYSTOCK_ENTRY_NUMBER) {
+                                            $wrapper.find('#drystock-entry-number').text('#' + window.EDITING_DRYSTOCK_ENTRY_NUMBER + ' (Editing)');
+                                        }
+
                                         // Load into form
                                         $wrapper.find('#drystock-csa').val(row.sold_by || row_sold_by);
                                         
@@ -1716,7 +1751,7 @@ function refresh_drystock_cart($wrapper) {
 
             html += `
                 <tr data-idx="${idx}">
-                    <td style="font-family: monospace; color: #64748b; font-weight:700; text-align:center;">#${idx + 1}</td>
+                    <td style="font-family: monospace; color: #64748b; font-weight:700; text-align:center;">#${row.entry_number || (idx + 1)}</td>
                     <td><strong style="color: #0f172a; font-size: 0.92rem;">${frappe.utils.escape_html(display_name)}</strong></td>
                     <td><span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: 600;">${frappe.utils.escape_html(category)}</span></td>
                     <td style="color: #475569;">${frappe.utils.escape_html(csa_name || '-')}</td>

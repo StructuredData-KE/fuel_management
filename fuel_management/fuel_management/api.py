@@ -3451,6 +3451,7 @@ def get_inventory_sales_history(station, from_date=None, to_date=None, search=No
             sis.parent as shift,
             sis.parent as parent,
             sis.idx,
+            sis.entry_number,
             sis.item,
             COALESCE(i.item_name, sis.item) as item_name,
             COALESCE(i.item_group, '') as item_group,
@@ -3470,10 +3471,21 @@ def get_inventory_sales_history(station, from_date=None, to_date=None, search=No
         JOIN `tabShift` s ON sis.parent = s.name
         LEFT JOIN `tabItem` i ON sis.item = i.name
         WHERE {' AND '.join(conditions)}
-        ORDER BY s.shift_date DESC, sis.creation DESC, sis.idx ASC
+        ORDER BY COALESCE(sis.entry_number, 0) DESC, s.shift_date DESC, sis.creation DESC
         LIMIT {limit_num}
     """
     return frappe.db.sql(query, values, as_dict=True)
+
+
+@frappe.whitelist()
+def get_next_inventory_sale_number(station=None):
+    from frappe.utils import cint
+    max_entry = frappe.db.sql("""
+        SELECT MAX(entry_number) 
+        FROM `tabShift Inventory Sale`
+    """)[0][0]
+    next_num = (cint(max_entry) if max_entry else 1000) + 1
+    return {"max_num": cint(max_entry) or 1000, "next_entry_number": next_num}
 
 
 @frappe.whitelist()

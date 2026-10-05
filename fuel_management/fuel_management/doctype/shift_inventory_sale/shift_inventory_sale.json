@@ -11,7 +11,8 @@
   "selling_price",
   "amount",
   "is_invoice_sale",
-  "reference_invoice"
+  "reference_invoice",
+  "entry_number"
  ],
  "fields": [
   {
@@ -76,6 +77,13 @@
    "label": "Reference Invoice",
    "read_only": 1,
    "hidden": 1
+  },
+  {
+   "fieldname": "entry_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Entry Number",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
