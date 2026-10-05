@@ -2234,6 +2234,61 @@ function save_child_table(table_name, rows_data, success_msg, btn = null, origin
     });
 }
 
+function unfreeze_all_spa_buttons($wrapper) {
+    if (!$wrapper || !$wrapper.length) return;
+    
+    // 1. Dry stock save button
+    $wrapper.find('#btn-save-drystock').prop('disabled', false).find('.spinner').addClass('hidden');
+    
+    // 2. Invoice save button
+    $wrapper.find('#btn-save-invoice').prop('disabled', false).html('💾 Save Invoice to Shift');
+    
+    // 3. Purchase save button
+    let purchase_edit = $wrapper.data('editing-purchase');
+    let purchase_text = purchase_edit ? `💾 Update & Save Purchase (${purchase_edit})` : '🚀 Post & Submit Station Purchase';
+    $wrapper.find('#btn-save-purchase').prop('disabled', false).find('span:last-child').text(purchase_text);
+    
+    // 4. Station Cards save button
+    let sc_text = $wrapper.data('editing-sc') ? 'Update Payment' : 'Save Payment';
+    $wrapper.find('#btn-save-station-card').prop('disabled', false).html(sc_text);
+    
+    // 5. Customer Payments save button
+    let cp_text = $wrapper.data('editing-cp') ? 'Update Payment' : 'Save Payment';
+    $wrapper.find('#btn-save-customer-payment').prop('disabled', false).html(cp_text);
+    
+    // 6. Station Expenses save button
+    $wrapper.find('#btn-save-station-expense').prop('disabled', false).html('Save Expense');
+    
+    // 7. Station RTT save button
+    $wrapper.find('#btn-save-station-rtt').prop('disabled', false).html('Save RTT');
+    
+    // 8. Station Top-up save button
+    $wrapper.find('#btn-save-station-topup').prop('disabled', false).html('Save Top-up');
+    
+    // 9. Petty Cash save button
+    $wrapper.find('#btn-save-petty-cash').prop('disabled', false).html('Save Record');
+    
+    // 10. Cash Transfer save button
+    $wrapper.find('#btn-save-cash-transfer').prop('disabled', false).find('.spinner').addClass('hidden');
+    
+    // 11. Greasing save button
+    $wrapper.find('#btn-save-greasing').prop('disabled', false).removeClass('opacity-50 cursor-not-allowed');
+    
+    // 12. Catch-all: Re-enable ANY button stuck in disabled loading/spinner state
+    $wrapper.find('button:disabled').each(function() {
+        let $b = $(this);
+        if ($b.find('.spinner, .spinner-border').length > 0 || /Saving|Posting|Submitting|Loading/i.test($b.text())) {
+            $b.prop('disabled', false);
+            $b.find('.spinner, .spinner-border').remove();
+            let txt = $b.text().trim();
+            if (/^(Saving\.\.\.|Posting\.\.\.|Submitting\.\.\.|Loading\.\.\.)$/i.test(txt) || txt === '') {
+                $b.text('Save');
+            }
+        }
+    });
+}
+window.unfreeze_all_spa_buttons = unfreeze_all_spa_buttons;
+
 function setup_actions(wrapper) {
     const $wrapper = $(wrapper);
     
@@ -2245,11 +2300,15 @@ function setup_actions(wrapper) {
         $icon.addClass('animate-spin');
         $btn.prop('disabled', true);
         
+        // Immediately unfreeze any stuck buttons so the user is never blocked
+        unfreeze_all_spa_buttons($wrapper);
+        
         if (!window.ACTIVE_SHIFT) {
             fetch_active_shift(wrapper);
             setTimeout(() => {
                 $icon.removeClass('animate-spin');
                 $btn.prop('disabled', false);
+                unfreeze_all_spa_buttons($wrapper);
             }, 800);
             return;
         }
@@ -2262,16 +2321,14 @@ function setup_actions(wrapper) {
                     window.SHIFT_DOC = r.message;
                     
                     // Unfreeze any stuck save buttons across the SPA
-                    $wrapper.find('#btn-save-drystock').prop('disabled', false).find('.spinner').addClass('hidden');
-                    $wrapper.find('#btn-save-invoice').prop('disabled', false).html('💾 Save Invoice to Shift');
-                    $wrapper.find('#btn-save-purchase').prop('disabled', false).find('span:last-child').text('🚀 Post & Submit Station Purchase');
+                    unfreeze_all_spa_buttons($wrapper);
                     
                     // Re-render carts to ensure display is up-to-date and preserved
                     if (typeof refresh_drystock_cart === 'function') refresh_drystock_cart($wrapper);
                     if (typeof refresh_invoice_cart === 'function') refresh_invoice_cart($wrapper);
                     
                     frappe.show_alert({
-                        message: "✅ Shift data synced! Your cart items are preserved and ready to save.",
+                        message: "✅ Shift data synced! Buttons reset and pending carts preserved.",
                         indicator: "green"
                     }, 5);
                 } else {
@@ -2287,6 +2344,7 @@ function setup_actions(wrapper) {
             always: function() {
                 $icon.removeClass('animate-spin');
                 $btn.prop('disabled', false);
+                unfreeze_all_spa_buttons($wrapper);
             }
         });
     });
@@ -3889,7 +3947,6 @@ function render_customer_payments($wrapper) {
                 }
             },
             callback: function(r) {
-                $btn.html(orig_html).prop('disabled', false);
                 if(r.message) {
                     frappe.show_alert({message: "Customer Payment saved successfully!", indicator: "green"});
                     
@@ -3903,6 +3960,12 @@ function render_customer_payments($wrapper) {
                     $wrapper.find('#tab-customer-payments .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
+            },
+            error: function(err) {
+                $wrapper.find('#cp-trans-no').focus().select();
+            },
+            always: function() {
+                $btn.html(orig_html).prop('disabled', false);
             }
         });
     });
@@ -4051,7 +4114,6 @@ function render_fleet_cards($wrapper) {
                 }
             },
             callback: function(r) {
-                $btn.html(orig_html).prop('disabled', false);
                 if(r.message) {
                     frappe.show_alert({message: "Station Card Payment saved successfully!", indicator: "green"});
                     
@@ -4065,6 +4127,12 @@ function render_fleet_cards($wrapper) {
                     $wrapper.find('#tab-station-cards .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
+            },
+            error: function(err) {
+                $wrapper.find('#sc-receipt-no').focus().select();
+            },
+            always: function() {
+                $btn.html(orig_html).prop('disabled', false);
             }
         });
     });
@@ -4211,7 +4279,6 @@ function render_station_expenses($wrapper) {
                 }
             },
             callback: function(r) {
-                $btn.html(orig_html).prop('disabled', false);
                 if(r.message) {
                     frappe.show_alert({message: "Station Expense saved successfully!", indicator: "green"});
                     
@@ -4224,6 +4291,9 @@ function render_station_expenses($wrapper) {
                     $wrapper.find('#tab-expenses .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
+            },
+            always: function() {
+                $btn.html(orig_html).prop('disabled', false);
             }
         });
     });
@@ -4427,7 +4497,6 @@ function render_rtt($wrapper) {
                 }
             },
             callback: function(r) {
-                $btn.html(orig_html).prop('disabled', false);
                 if(r.message) {
                     frappe.show_alert({message: "Return To Tank saved successfully!", indicator: "green"});
                     
@@ -4440,6 +4509,9 @@ function render_rtt($wrapper) {
                     $wrapper.find('#tab-rtt .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
+            },
+            always: function() {
+                $btn.html(orig_html).prop('disabled', false);
             }
         });
     });
@@ -4641,7 +4713,6 @@ function render_topups($wrapper) {
                 }
             },
             callback: function(r) {
-                $btn.html(orig_html).prop('disabled', false);
                 if(r.message) {
                     frappe.show_alert({message: "Top-Up saved successfully!", indicator: "green"});
                     
@@ -4656,6 +4727,9 @@ function render_topups($wrapper) {
                     $wrapper.find('#tab-topups .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
+            },
+            always: function() {
+                $btn.html(orig_html).prop('disabled', false);
             }
         });
     });
@@ -7249,9 +7323,6 @@ function render_cash_transfers(wrapper) {
                 }
             },
             callback: function(r) {
-                $btn.prop('disabled', false);
-                $btn.find('.spinner').addClass('hidden');
-                
                 if(!r.exc) {
                     frappe.show_alert({message: "Cash Transfer recorded!", indicator: "green"});
                     // Reset form
@@ -7266,6 +7337,14 @@ function render_cash_transfers(wrapper) {
                     // Switch back to history view
                     $wrapper.find('#tab-cash-transfers .seg-btn[data-view="history"]').click();
                 }
+            },
+            error: function(err) {
+                $btn.prop('disabled', false);
+                $btn.find('.spinner').addClass('hidden');
+            },
+            always: function() {
+                $btn.prop('disabled', false);
+                $btn.find('.spinner').addClass('hidden');
             }
         });
     });
@@ -7857,7 +7936,6 @@ function render_station_cards($wrapper) {
             method: method,
             args: args,
             callback: function(r) {
-                $btn.html(orig_html).prop('disabled', false);
                 if(r.message) {
                     frappe.show_alert({message: "Station Card Payment saved successfully!", indicator: "green"});
                     
@@ -7874,6 +7952,27 @@ function render_station_cards($wrapper) {
                     $wrapper.find('#tab-station-cards .seg-btn[data-view="history"]').click();
                     fetch_history();
                 }
+            },
+            error: function(err) {
+                let msg = "";
+                if (err && err.message) {
+                    msg = err.message;
+                } else if (err && err._server_messages) {
+                    try {
+                        let parsed = JSON.parse(err._server_messages);
+                        let inner = JSON.parse(parsed[0]);
+                        msg = inner.message;
+                    } catch(e) {}
+                }
+                if (msg) {
+                    frappe.show_alert({message: "⚠️ " + msg, indicator: "red"}, 7);
+                } else {
+                    frappe.show_alert({message: "⚠️ Receipt number already exists or error saving card payment.", indicator: "red"}, 7);
+                }
+                $wrapper.find('#sc-receipt-no').focus().select();
+            },
+            always: function() {
+                $btn.html(orig_html).prop('disabled', false);
             }
         });
     });
