@@ -6,6 +6,39 @@ try {
     
     window.STATION_SETTINGS = {};
     
+    // Persistent LocalStorage Cart Recovery Helper
+    window.FM_CartStorage = {
+        getKey: function(type) {
+            let shift_name = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.name) ? window.ACTIVE_SHIFT.name : 'active';
+            return 'FM_CART_' + type + '_' + shift_name;
+        },
+        save: function(type, items) {
+            try {
+                if (!items || items.length === 0) {
+                    this.clear(type);
+                } else {
+                    localStorage.setItem(this.getKey(type), JSON.stringify(items));
+                }
+            } catch(e) {
+                console.warn("FM_CartStorage save error:", e);
+            }
+        },
+        load: function(type) {
+            try {
+                let data = localStorage.getItem(this.getKey(type));
+                return data ? JSON.parse(data) : [];
+            } catch(e) {
+                console.warn("FM_CartStorage load error:", e);
+                return [];
+            }
+        },
+        clear: function(type) {
+            try {
+                localStorage.removeItem(this.getKey(type));
+            } catch(e) {}
+        }
+    };
+    
     console.log("HELLO SPA JS LOADED!");
     
     function sort_pump_groups(list) {
@@ -1457,8 +1490,9 @@ function render_drystock($wrapper) {
             entry_number: window.EDITING_DRYSTOCK_ENTRY_NUMBER ? parseInt(window.EDITING_DRYSTOCK_ENTRY_NUMBER) : undefined,
             _is_new: true
         };
-        window.EDITING_DRYSTOCK_ENTRY_NUMBER = null;
         window.PENDING_DRYSTOCK.push(new_row);
+        window.EDITING_DRYSTOCK_ENTRY_NUMBER = null;
+        if (window.FM_CartStorage) window.FM_CartStorage.save('DRYSTOCK', window.PENDING_DRYSTOCK);
         
         // Reset form
         $wrapper.find('#drystock-item-input').val('');
@@ -1774,6 +1808,7 @@ function refresh_drystock_cart($wrapper) {
         if (is_locked) return;
         let idx = parseInt($(this).attr('data-idx'));
         window.PENDING_DRYSTOCK.splice(idx, 1);
+        if (window.FM_CartStorage) window.FM_CartStorage.save('DRYSTOCK', window.PENDING_DRYSTOCK);
         refresh_drystock_cart($wrapper);
     });
 }
@@ -1904,7 +1939,7 @@ function setup_tabs(wrapper) {
 }
 
 window.DRYSTOCK_ITEMS = [];
-window.PENDING_DRYSTOCK = [];
+window.PENDING_DRYSTOCK = (typeof window.FM_CartStorage !== 'undefined') ? window.FM_CartStorage.load('DRYSTOCK') : [];
 function load_dropdowns(wrapper) {
     // Fetch Active Items for Dry Stock
     frappe.call({
@@ -2188,12 +2223,100 @@ function save_child_table(table_name, rows_data, success_msg, btn = null, origin
                 frappe.msgprint("Failed to load shift document.");
                 if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
             }
+        },
+        error: function(err) {
+            frappe.show_alert({
+                message: "⚠️ Network interrupted. Please check your connection or click 'Sync Data' in the header.",
+                indicator: "orange"
+            }, 6);
+            if(btn) { btn.find('.spinner').addClass('hidden'); btn.prop('disabled', false); if(originalText) btn.html(originalText); }
         }
     });
 }
 
 function setup_actions(wrapper) {
     const $wrapper = $(wrapper);
+    
+    // In-SPA Quick Sync / Refresh Shift Button (Preserves pending carts)
+    $wrapper.off('click', '#btn-spa-sync').on('click', '#btn-spa-sync', function() {
+        let $btn = $(this);
+        let $icon = $btn.find('#sync-icon');
+        
+        $icon.addClass('animate-spin');
+        $btn.prop('disabled', true);
+        
+        if (!window.ACTIVE_SHIFT) {
+            fetch_active_shift(wrapper);
+            setTimeout(() => {
+                $icon.removeClass('animate-spin');
+                $btn.prop('disabled', false);
+            }, 800);
+            return;
+        }
+
+        frappe.call({
+            method: "frappe.client.get",
+            args: { doctype: "Shift", name: window.ACTIVE_SHIFT.name },
+            callback: function(r) {
+                if (r.message) {
+                    window.SHIFT_DOC = r.message;
+                    
+                    // Unfreeze any stuck save buttons across the SPA
+                    $wrapper.find('#btn-save-drystock').prop('disabled', false).find('.spinner').addClass('hidden');
+                    $wrapper.find('#btn-save-invoice').prop('disabled', false).html('💾 Save Invoice to Shift');
+                    $wrapper.find('#btn-save-purchase').prop('disabled', false).find('span:last-child').text('🚀 Post & Submit Station Purchase');
+                    
+                    // Re-render carts to ensure display is up-to-date and preserved
+                    if (typeof refresh_drystock_cart === 'function') refresh_drystock_cart($wrapper);
+                    if (typeof refresh_invoice_cart === 'function') refresh_invoice_cart($wrapper);
+                    
+                    frappe.show_alert({
+                        message: "✅ Shift data synced! Your cart items are preserved and ready to save.",
+                        indicator: "green"
+                    }, 5);
+                } else {
+                    frappe.show_alert({message: "Could not sync shift data from server.", indicator: "orange"});
+                }
+            },
+            error: function(err) {
+                frappe.show_alert({
+                    message: "⚠️ Could not connect to server. Check your internet connection.",
+                    indicator: "red"
+                }, 6);
+            },
+            always: function() {
+                $icon.removeClass('animate-spin');
+                $btn.prop('disabled', false);
+            }
+        });
+    });
+
+    // Live Online / Offline Network Monitoring
+    function update_network_status() {
+        let isOnline = navigator.onLine;
+        let $badge = $wrapper.find('#network-status-badge');
+        if (isOnline) {
+            $badge.addClass('hidden').removeClass('flex');
+        } else {
+            $badge.removeClass('hidden').addClass('flex');
+        }
+    }
+    
+    $(window).off('online.spa_net offline.spa_net').on('online.spa_net', function() {
+        update_network_status();
+        frappe.show_alert({
+            message: "🟢 Internet connection restored! You can now click Save or 'Sync Data'.",
+            indicator: "green"
+        }, 5);
+    }).on('offline.spa_net', function() {
+        update_network_status();
+        frappe.show_alert({
+            message: "⚡ Internet connection lost. Any items in your cart are safely preserved offline.",
+            indicator: "orange"
+        }, 6);
+    });
+    
+    update_network_status();
     
     // Home Dashboard Daily Sales Breakdown & Quick Actions
     $wrapper.off('click', '.btn-open-dsb').on('click', '.btn-open-dsb', function() {
@@ -2502,6 +2625,7 @@ function setup_actions(wrapper) {
                                 frappe.show_alert({message: "Inventory Sales saved successfully!", indicator: "green"});
                                 window.SHIFT_DOC = r2.message; 
                                 window.PENDING_DRYSTOCK = [];
+                                if (window.FM_CartStorage) window.FM_CartStorage.clear('DRYSTOCK');
                                 $wrapper.find('#drystock-csa').val('');
                                 refresh_drystock_cart($wrapper);
                                 // Automatically jump back to history view on success
@@ -2510,6 +2634,14 @@ function setup_actions(wrapper) {
                                     fetch_drystock_history($wrapper);
                                 }
                             }
+                        },
+                        error: function(err) {
+                            frappe.show_alert({
+                                message: "⚠️ Network interrupted while saving. Your cart items are safe! Please check connection and click Save again, or click 'Sync Data' in the header.",
+                                indicator: "orange"
+                            }, 8);
+                        },
+                        always: function() {
                             btn.prop('disabled', false).html(originalHTML);
                             btn.find('.spinner').addClass('hidden');
                         }
@@ -2517,7 +2649,16 @@ function setup_actions(wrapper) {
                 } else {
                     btn.prop('disabled', false).html(originalHTML);
                     btn.find('.spinner').addClass('hidden');
+                    frappe.show_alert({message: "Could not load shift document from server. Click 'Sync Data' to retry.", indicator: "orange"});
                 }
+            },
+            error: function(err) {
+                btn.prop('disabled', false).html(originalHTML);
+                btn.find('.spinner').addClass('hidden');
+                frappe.show_alert({
+                    message: "⚠️ Network interrupted. Your cart items are safe! Click 'Sync Data' in the header or try saving again.",
+                    indicator: "orange"
+                }, 8);
             }
         });
     });
@@ -2630,7 +2771,9 @@ function setup_actions(wrapper) {
 
 function render_invoices($wrapper) {
     if (!window.ACTIVE_SHIFT) return;
-    window.PENDING_INVOICES = [];
+    if (!window.PENDING_INVOICES || window.PENDING_INVOICES.length === 0) {
+        window.PENDING_INVOICES = (typeof window.FM_CartStorage !== 'undefined') ? window.FM_CartStorage.load('INVOICES') : [];
+    }
     
     let sDate = window.ACTIVE_SHIFT.shift_date || window.ACTIVE_SHIFT.creation || frappe.datetime.now_date();
     let shiftName = window.ACTIVE_SHIFT.shift_template ? `${window.ACTIVE_SHIFT.shift_template}` : window.ACTIVE_SHIFT.name;
@@ -3279,6 +3422,7 @@ function render_invoices($wrapper) {
             amount: net_amount,
             entry_number: entry_no
         });
+        if (window.FM_CartStorage) window.FM_CartStorage.save('INVOICES', window.PENDING_INVOICES);
 
         // clear item fields
         $wrapper.find('#invoice-item-input').val('');
@@ -3354,6 +3498,7 @@ function render_invoices($wrapper) {
                             if(r2.message) {
                                 window.SHIFT_DOC = r2.message;
                                 window.PENDING_INVOICES = [];
+                                if (window.FM_CartStorage) window.FM_CartStorage.clear('INVOICES');
                                 window.EDITING_INVOICE_ENTRY_NUMBER = null;
                                 
                                 // Reset form header fields
@@ -3372,13 +3517,27 @@ function render_invoices($wrapper) {
                                 frappe.show_alert({message: "Credit Invoice Saved!", indicator: "green"});
                             }
                         },
-                        error: function() {
+                        error: function(err) {
+                            frappe.show_alert({
+                                message: "⚠️ Network interrupted while saving invoice. Your cart items are safe! Please check connection and click Save again, or click 'Sync Data' in the header.",
+                                indicator: "orange"
+                            }, 8);
+                        },
+                        always: function() {
                             $btn.html(orig_html).prop('disabled', false);
                         }
                     });
                 } else {
                     $btn.html(orig_html).prop('disabled', false);
+                    frappe.show_alert({message: "Could not load shift document from server. Click 'Sync Data' to retry.", indicator: "orange"});
                 }
+            },
+            error: function(err) {
+                $btn.html(orig_html).prop('disabled', false);
+                frappe.show_alert({
+                    message: "⚠️ Network interrupted. Your cart items are safe! Click 'Sync Data' in the header or try saving again.",
+                    indicator: "orange"
+                }, 8);
             }
         });
     });
@@ -3470,6 +3629,7 @@ function refresh_invoice_cart($wrapper) {
     $wrapper.find('.btn-remove-invoice-cart').off('click').on('click', function() {
         let idx = parseInt($(this).attr('data-idx'));
         window.PENDING_INVOICES.splice(idx, 1);
+        if (window.FM_CartStorage) window.FM_CartStorage.save('INVOICES', window.PENDING_INVOICES);
         refresh_invoice_cart($wrapper);
         update_inventory_csa_visibility();
     });
@@ -5820,7 +5980,7 @@ function render_purchases($wrapper) {
     if(!window.ACTIVE_SHIFT) return;
 
     let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
-    window.PURCHASE_CART = window.PURCHASE_CART || [];
+    window.PURCHASE_CART = (window.PURCHASE_CART && window.PURCHASE_CART.length > 0) ? window.PURCHASE_CART : ((typeof window.FM_CartStorage !== 'undefined') ? window.FM_CartStorage.load('PURCHASE') : []);
     window.EDITING_PURCHASE_ID = null;
     window.PURCHASE_HISTORY_CACHE = [];
 
@@ -5836,8 +5996,10 @@ function render_purchases($wrapper) {
         let targetView = $btn.attr('data-view');
         
         if(targetView === 'entry' && !$btn.hasClass('active') && !window.EDITING_PURCHASE_ID) {
-            // Fresh purchase initialization
-            window.PURCHASE_CART = [];
+            // Fresh purchase initialization if cart is empty
+            if (!window.PURCHASE_CART || window.PURCHASE_CART.length === 0) {
+                window.PURCHASE_CART = (typeof window.FM_CartStorage !== 'undefined') ? window.FM_CartStorage.load('PURCHASE') : [];
+            }
             $wrapper.find('#pur-supplier').val('');
             $wrapper.find('#pur-doc-invoice').val('');
             $wrapper.find('#pur-kra-invoice').val('');
@@ -6229,6 +6391,7 @@ function render_purchases($wrapper) {
         $wrapper.find('.btn-remove-pur-cart').off('click').on('click', function() {
             let idx = parseInt($(this).attr('data-idx'));
             window.PURCHASE_CART.splice(idx, 1);
+            if (window.FM_CartStorage) window.FM_CartStorage.save('PURCHASE', window.PURCHASE_CART);
             refresh_purchase_cart();
         });
         
@@ -6252,6 +6415,7 @@ function render_purchases($wrapper) {
     $wrapper.find('#btn-clear-pur-cart').off('click').on('click', function() {
         frappe.confirm('Are you sure you want to clear all items from this inward manifest?', function() {
             window.PURCHASE_CART = [];
+            if (window.FM_CartStorage) window.FM_CartStorage.clear('PURCHASE');
             refresh_purchase_cart();
         });
     });
@@ -6313,6 +6477,7 @@ function render_purchases($wrapper) {
             vat_rate: vat_rate,
             vat_inclusive: vat_incl
         });
+        if (window.FM_CartStorage) window.FM_CartStorage.save('PURCHASE', window.PURCHASE_CART);
         
         // Clear item inputs
         $wrapper.find('#pur-item-input').val('');
@@ -6577,6 +6742,7 @@ function render_purchases($wrapper) {
                         $wrapper.find('#pur-kra-invoice').val('');
                         $wrapper.find('#pur-transport-charge').val('');
                         window.PURCHASE_CART = [];
+                        if (window.FM_CartStorage) window.FM_CartStorage.clear('PURCHASE');
                         refresh_purchase_cart();
                         
                         // Switch to history view and refresh
@@ -6584,8 +6750,12 @@ function render_purchases($wrapper) {
                         fetch_history();
                     }
                 },
-                error: function() {
+                error: function(err) {
                     $btn.html(orig_html).prop('disabled', false);
+                    frappe.show_alert({
+                        message: "⚠️ Network interrupted while posting purchase. Your manifest items are safe! Click Save again, or click 'Sync Data' in the header.",
+                        indicator: "orange"
+                    }, 8);
                 }
             });
         };

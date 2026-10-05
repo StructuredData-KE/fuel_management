@@ -52,6 +52,9 @@
     .nav-item span { display: inline !important; }
     .nav-section-title { display: block !important; padding: 1.5rem 1.5rem 0.5rem 1.5rem !important; }
 }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
 </style>
 
 <div class="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans" id="spa-layout-container">
@@ -69,8 +72,20 @@
         </div>
       </div>
 
-      <!-- User Profile -->
+      <!-- User Profile & Shift Controls -->
       <div class="flex items-center gap-2 text-xs md:text-sm text-blue-200 ml-auto">
+        <!-- Live Offline / Online Connection Badge -->
+        <div id="network-status-badge" class="hidden items-center gap-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded text-xs font-semibold">
+          <span class="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span>Offline (Cart Safe)</span>
+        </div>
+
+        <!-- Sync / Refresh Shift Data Button -->
+        <button id="btn-spa-sync" class="flex items-center gap-1.5 text-xs bg-blue-900 hover:bg-blue-800 text-white px-2.5 py-1 rounded transition-colors border border-blue-700 shadow-sm cursor-pointer" title="Refresh Shift Data (Preserves all cart items)">
+          <svg id="sync-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+          <span class="hidden sm:inline font-semibold">Sync Data</span>
+        </button>
+
         <div class="flex items-center gap-2">
           <div id="active-shift-badge" class="badge badge-inactive whitespace-nowrap" style="background: rgba(255,255,255,0.15); border: none; padding: 3px 8px; border-radius: 12px; color: white;">No Active Shift</div>
           <button id="btn-open-history" class="text-white hover:text-blue-200" title="View Historical Shift" style="background:none; border:none; padding:0; cursor:pointer;">
