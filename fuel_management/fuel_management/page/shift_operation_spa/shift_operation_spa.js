@@ -5912,19 +5912,24 @@ function render_stock_transfer($wrapper) {
 }
 
 function print_stock_sheet(warehouse_type, data, company) {
-    if (!window.ACTIVE_SHIFT) return;
+    if (!data || Object.keys(data).length === 0) {
+        frappe.msgprint(__("No inventory data to print. Please refresh."));
+        return;
+    }
     
-    let station_name = window.ACTIVE_SHIFT.station || "";
-    let display_company = company || "K INVESTMENTS";
+    let station_name = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || "";
+    let display_company = company || (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.company) || "K INVESTMENTS";
     
-    let d = new Date(window.ACTIVE_SHIFT.shift_date || new Date());
+    let d = new Date((window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_date) || new Date());
     let formatted_date = ("0" + d.getDate()).slice(-2) + "." + ("0" + (d.getMonth() + 1)).slice(-2) + "." + d.getFullYear();
     
-    let shift_name = (window.ACTIVE_SHIFT.shift_template || "").toUpperCase();
+    let shift_name = ((window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_template) || "").toUpperCase();
     if (shift_name.includes("DAY")) {
         shift_name = "DAY";
     } else if (shift_name.includes("NIGHT")) {
         shift_name = "NIGHT";
+    } else if (!shift_name) {
+        shift_name = "DAY";
     }
     
     let assigned_names = [];
@@ -5935,129 +5940,590 @@ function print_stock_sheet(warehouse_type, data, company) {
                 let u = window.USERS_LIST.find(u => u.name === name);
                 if (u) name = u.employee_name || u.full_name;
             }
-            assigned_names.push(name.toUpperCase());
+            if (name) assigned_names.push(name.toUpperCase());
         });
     }
     let name_str = assigned_names.join(".");
-    if (!name_str) name_str = "STEVE.BEATRICE.SHADDY";
+    if (!name_str) name_str = "STAFF";
     
     let title = (warehouse_type === "forecourt" ? "FORECOURT STOCK SHEET" : "STORE STOCK SHEET");
     
-    let print_html = `
-    <html>
-    <head>
-        <title>${title}</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #000; }
-            .header { text-align: center; margin-bottom: 20px; }
-            .company { font-size: 24px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; color: #1e3a8a; }
-            .station { font-size: 16px; font-weight: bold; text-transform: uppercase; color: #475569; }
-            
-            .meta-bar { 
-                display: flex; 
-                justify-content: space-between; 
-                border: 2px solid #1e3a8a; 
-                padding: 10px 15px; 
-                margin-bottom: 15px; 
-                font-weight: bold;
-                font-size: 14px;
-            }
-            
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            th, td { border: 1px solid #94a3b8; padding: 10px 12px; font-size: 13px; vertical-align: middle; }
-            th { font-weight: bold; background-color: #1e3a8a; color: #ffffff; text-transform: uppercase; border: 1px solid #1e3a8a; }
-            
-            .text-left { text-align: left; }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            
-            tr.group-header td { 
-                background-color: #f1f5f9; 
-                color: #1e3a8a; 
-                font-weight: bold; 
-                font-size: 14px;
-                border: 1px solid #94a3b8;
-            }
-            
-            @media print {
-                body { padding: 0; }
-                @page { margin: 1cm; }
-            }
-            
-            .data-row td { height: 32px; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <div class="company">${display_company}</div>
-            <div class="station">${station_name}</div>
-        </div>
-        
-        <div class="meta-bar">
-            <div>DATE: ${formatted_date}</div>
-            <div>SHIFT: ${shift_name}</div>
-            <div>NAME: ${name_str}</div>
-        </div>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 50px;" class="text-center">NO.</th>
-                    <th class="text-left">PRODUCT</th>
-                    <th style="width: 80px;" class="text-center">O.STOCK</th>
-                    <th style="width: 95px;" class="text-center">ADDITION</th>
-                    <th style="width: 95px;" class="text-center">C.STOCK</th>
-                    <th style="width: 90px;" class="text-center">U.SOLD</th>
-                    <th style="width: 90px;" class="text-center">U.PRICE</th>
-                    <th style="width: 100px;" class="text-center">AMOUNT</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    let no = 1;
-    let groups = Object.keys(data).sort();
-    groups.forEach(group => {
-        print_html += `
-            <tr class="group-header">
-                <td colspan="8" class="text-left">${group.toUpperCase()}</td>
-            </tr>
-        `;
-        
-        data[group].forEach(row => {
-            let o_stock = (warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0;
-            let price = row.unit_price || 0;
-            
-            print_html += `
-                <tr class="data-row">
-                    <td class="text-center">${no++}</td>
-                    <td class="text-left" style="font-weight: bold;">${row.item_name}</td>
-                    <td class="text-center">${o_stock}</td>
-                    <td class="text-center"></td>
-                    <td></td>
-                    <td></td>
-                    <td class="text-center">${price}</td>
-                    <td></td>
-                </tr>
-            `;
-        });
-    });
-    
-    print_html += `
-            </tbody>
-        </table>
-    </body>
-    </html>
-    `;
-    
     let print_win = window.open('', '_blank');
+    if (!print_win) {
+        frappe.msgprint(__("Please allow popups to open the printable stock sheet."));
+        return;
+    }
+
+    let print_html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>${title} - ${formatted_date}</title>
+    <style id="dynamic-page-style">
+        @page { size: A4 portrait; margin: 4mm 5mm 5mm 5mm; }
+    </style>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+            color: #0f172a;
+            background: #0f172a;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        /* Screen Toolbar */
+        .screen-toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 44px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 14px;
+            z-index: 99999;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            color: #f8fafc;
+        }
+        .tb-section {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .tb-title {
+            font-weight: 700;
+            font-size: 13px;
+            color: #38bdf8;
+            margin-right: 8px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .tb-lbl {
+            font-size: 11px;
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .tb-btn {
+            background: #334155;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            line-height: 1.3;
+        }
+        .tb-btn:hover {
+            background: #475569;
+            color: #fff;
+        }
+        .tb-btn.active {
+            background: #2563eb;
+            border-color: #3b82f6;
+            color: #ffffff;
+        }
+        .tb-btn-primary {
+            background: #16a34a;
+            border-color: #22c55e;
+            color: #fff;
+            font-weight: 700;
+            padding: 4px 12px;
+        }
+        .tb-btn-primary:hover {
+            background: #15803d;
+        }
+        .tb-btn-close {
+            background: transparent;
+            border: 1px solid #64748b;
+            color: #cbd5e1;
+            padding: 4px 8px;
+        }
+        .tb-btn-close:hover {
+            background: #334155;
+            color: #fff;
+        }
+        .tb-chk {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11.5px;
+            color: #e2e8f0;
+            cursor: pointer;
+            background: #334155;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #475569;
+        }
+        .tb-badge {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #38bdf8;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background: #ffffff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .sheet-wrapper {
+                padding: 0 !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+                max-width: 100% !important;
+                width: 100% !important;
+            }
+        }
+
+        @media screen {
+            body {
+                padding-top: 50px;
+            }
+            .sheet-wrapper {
+                background: #ffffff;
+                margin: 15px auto 40px auto;
+                padding: 6mm 8mm;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                border-radius: 4px;
+                width: 210mm;
+                min-height: 297mm;
+            }
+            body.landscape .sheet-wrapper {
+                width: 297mm;
+                min-height: 210mm;
+            }
+        }
+
+        /* Compact Header Bar */
+        .sheet-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1.5px solid #1e3a8a;
+            background: #f8fafc;
+            padding: 3px 6px;
+            margin-bottom: 4px;
+            font-size: 8pt;
+            line-height: 1.2;
+        }
+        .header-company {
+            font-weight: 800;
+            color: #1e3a8a;
+            font-size: 9.5pt;
+            letter-spacing: 0.3px;
+        }
+        .header-station {
+            font-weight: 600;
+            color: #475569;
+            font-size: 8.5pt;
+            margin-left: 6px;
+        }
+        .header-title-badge {
+            background: #1e3a8a;
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 8pt;
+            padding: 2px 8px;
+            border-radius: 3px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .header-meta {
+            font-size: 7.5pt;
+            color: #1e293b;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .meta-sep {
+            color: #94a3b8;
+            margin: 0 4px;
+        }
+
+        /* Stock Tables */
+        table.stock-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+            table-layout: fixed;
+        }
+        th, td {
+            border: 0.5pt solid #64748b;
+            vertical-align: middle;
+        }
+        th {
+            font-weight: bold;
+            background-color: #1e3a8a !important;
+            color: #ffffff !important;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        tr.group-header td {
+            background-color: #e2e8f0 !important;
+            color: #1e3a8a !important;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        thead {
+            display: table-header-group;
+        }
+        tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        .text-left { text-align: left; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .fw-bold { font-weight: bold; }
+        .text-muted { color: #64748b; }
+        .item-name {
+            font-weight: 600;
+            color: #0f172a;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-left: 4px !important;
+        }
+
+        /* Density Modes */
+        body.density-tight th { padding: 2px 3px; font-size: 7pt; height: 16px; }
+        body.density-tight td { padding: 1.5px 3px; font-size: 7.5pt; height: 17px; }
+        body.density-tight tr.group-header td { padding: 1.5px 4px; font-size: 7.5pt; height: 16px; }
+
+        body.density-normal th { padding: 3px 4px; font-size: 7.5pt; height: 18px; }
+        body.density-normal td { padding: 2.5px 4px; font-size: 8pt; height: 21px; }
+        body.density-normal tr.group-header td { padding: 2.5px 4px; font-size: 8pt; height: 19px; }
+
+        body.density-spacious th { padding: 4px 5px; font-size: 8pt; height: 22px; }
+        body.density-spacious td { padding: 4px 5px; font-size: 8.5pt; height: 26px; }
+        body.density-spacious tr.group-header td { padding: 3.5px 5px; font-size: 8.5pt; height: 22px; }
+
+        /* 2-Column Side-by-Side */
+        .two-col-layout {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+        .sub-col {
+            display: table-cell;
+            width: 49.5%;
+            vertical-align: top;
+        }
+        .sub-col:first-child {
+            padding-right: 4px;
+        }
+        .sub-col:last-child {
+            padding-left: 4px;
+        }
+
+        /* Sign-off footer */
+        .sheet-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            padding-top: 4px;
+            border-top: 1px dashed #94a3b8;
+            font-size: 7.5pt;
+            color: #475569;
+        }
+        .footer-sign {
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body class="density-tight">
+
+    <!-- Interactive Top Control Bar (Screen Only) -->
+    <div class="screen-toolbar no-print">
+        <div class="tb-section">
+            <span class="tb-title"><span>📋</span> ${title}</span>
+            <span class="tb-lbl">Layout:</span>
+            <button type="button" class="tb-btn active" id="btn-layout-1col" onclick="setLayout('1col')">1-Col Compact</button>
+            <button type="button" class="tb-btn" id="btn-layout-2col" onclick="setLayout('2col')">⚡ 2-Col (1-Page Fit)</button>
+            <button type="button" class="tb-btn" id="btn-layout-landscape" onclick="setLayout('landscape')">↔ Landscape (2-Col)</button>
+        </div>
+
+        <div class="tb-section">
+            <span class="tb-lbl">Density:</span>
+            <button type="button" class="tb-btn active" id="btn-density-tight" onclick="setDensity('tight')">Ultra-Tight</button>
+            <button type="button" class="tb-btn" id="btn-density-normal" onclick="setDensity('normal')">Compact</button>
+            <button type="button" class="tb-btn" id="btn-density-spacious" onclick="setDensity('spacious')">Spacious</button>
+            <label class="tb-chk">
+                <input type="checkbox" id="chk-hide-zero" onchange="toggleHideZero(this.checked)">
+                <span>Hide 0 Stock</span>
+            </label>
+        </div>
+
+        <div class="tb-section">
+            <span class="tb-badge" id="stats-badge">Loading...</span>
+            <button type="button" class="tb-btn tb-btn-primary" onclick="window.print()">🖨️ Print Now</button>
+            <button type="button" class="tb-btn tb-btn-close" onclick="window.close()">✕ Close</button>
+        </div>
+    </div>
+
+    <!-- Printable Sheet Wrapper -->
+    <div class="sheet-wrapper">
+        <div class="sheet-header">
+            <div>
+                <span class="header-company">${display_company}</span>
+                <span class="header-station">• ${station_name}</span>
+            </div>
+            <div>
+                <span class="header-title-badge">${title}</span>
+            </div>
+            <div class="header-meta">
+                <span>DATE: ${formatted_date}</span>
+                <span class="meta-sep">|</span>
+                <span>SHIFT: ${shift_name}</span>
+                <span class="meta-sep">|</span>
+                <span>STAFF: ${name_str}</span>
+            </div>
+        </div>
+
+        <div id="sheet-content"></div>
+
+        <div class="sheet-footer">
+            <div class="footer-sign">Attendant Sign: _____________________</div>
+            <div class="footer-sign">Supervisor Sign: _____________________</div>
+            <div class="footer-sign">Manager Sign: _____________________</div>
+        </div>
+    </div>
+
+    <script>
+        const RAW_DATA = ${JSON.stringify(data)};
+        const META = ${JSON.stringify({ warehouse_type, display_company, station_name, formatted_date, shift_name, name_str, title })};
+
+        let currentLayout = '1col';
+        let currentDensity = 'tight';
+        let hideZero = false;
+
+        function setPageStyle(orientation) {
+            let el = document.getElementById('dynamic-page-style');
+            if (orientation === 'landscape') {
+                el.innerHTML = '@page { size: A4 landscape; margin: 4mm 5mm 5mm 5mm; }';
+                document.body.classList.add('landscape');
+            } else {
+                el.innerHTML = '@page { size: A4 portrait; margin: 4mm 5mm 5mm 5mm; }';
+                document.body.classList.remove('landscape');
+            }
+        }
+
+        function setLayout(mode) {
+            currentLayout = mode;
+            document.querySelectorAll('#btn-layout-1col, #btn-layout-2col, #btn-layout-landscape').forEach(b => b.classList.remove('active'));
+            let activeBtn = document.getElementById('btn-layout-' + mode);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            if (mode === 'landscape') {
+                setPageStyle('landscape');
+            } else {
+                setPageStyle('portrait');
+            }
+            render();
+        }
+
+        function setDensity(density) {
+            currentDensity = density;
+            document.querySelectorAll('#btn-density-tight, #btn-density-normal, #btn-density-spacious').forEach(b => b.classList.remove('active'));
+            let activeBtn = document.getElementById('btn-density-' + density);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            document.body.classList.remove('density-tight', 'density-normal', 'density-spacious');
+            document.body.classList.add('density-' + density);
+        }
+
+        function toggleHideZero(checked) {
+            hideZero = checked;
+            render();
+        }
+
+        function getItems() {
+            let list = [];
+            let groups = Object.keys(RAW_DATA).sort();
+            let totalItems = 0;
+
+            groups.forEach(group => {
+                let groupItems = RAW_DATA[group] || [];
+                if (hideZero) {
+                    groupItems = groupItems.filter(row => {
+                        let o_stock = (META.warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0;
+                        return o_stock > 0;
+                    });
+                }
+                if (groupItems.length > 0) {
+                    list.push({ is_group: true, group_name: group });
+                    groupItems.forEach(row => {
+                        totalItems++;
+                        let o_stock = (META.warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0;
+                        let price = row.unit_price || 0;
+                        list.push({
+                            is_group: false,
+                            group_name: group,
+                            item_name: row.item_name || row.item_code || "",
+                            o_stock: o_stock,
+                            price: price
+                        });
+                    });
+                }
+            });
+            return { list, totalItems };
+        }
+
+        function render1Col(items) {
+            let html = '<table class="stock-table">';
+            html += '<thead><tr>';
+            html += '<th style="width: 24px;" class="text-center">NO.</th>';
+            html += '<th class="text-left">PRODUCT</th>';
+            html += '<th style="width: 50px;" class="text-center">O.STOCK</th>';
+            html += '<th style="width: 55px;" class="text-center">ADDITION</th>';
+            html += '<th style="width: 55px;" class="text-center">C.STOCK</th>';
+            html += '<th style="width: 50px;" class="text-center">U.SOLD</th>';
+            html += '<th style="width: 60px;" class="text-right">U.PRICE</th>';
+            html += '<th style="width: 70px;" class="text-right">AMOUNT</th>';
+            html += '</tr></thead><tbody>';
+
+            let no = 1;
+            items.forEach(it => {
+                if (it.is_group) {
+                    html += '<tr class="group-header"><td colspan="8" class="text-left">' + it.group_name.toUpperCase() + '</td></tr>';
+                } else {
+                    let priceStr = it.price ? Number(it.price).toLocaleString() : '0';
+                    html += '<tr class="data-row">';
+                    html += '<td class="text-center text-muted">' + (no++) + '</td>';
+                    html += '<td class="text-left item-name">' + it.item_name + '</td>';
+                    html += '<td class="text-center fw-bold">' + it.o_stock + '</td>';
+                    html += '<td></td>';
+                    html += '<td></td>';
+                    html += '<td></td>';
+                    html += '<td class="text-right">' + priceStr + '</td>';
+                    html += '<td></td>';
+                    html += '</tr>';
+                }
+            });
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function render2Col(items) {
+            if (items.length === 0) return '<div style="padding: 20px; text-align: center;">No items found.</div>';
+
+            let mid = Math.ceil(items.length / 2);
+            if (mid > 0 && mid < items.length && items[mid - 1].is_group) {
+                mid = mid - 1;
+            }
+
+            let col1 = items.slice(0, mid);
+            let col2 = items.slice(mid);
+
+            if (col2.length > 0 && !col2[0].is_group) {
+                let parentGroup = col2[0].group_name;
+                col2.unshift({ is_group: true, group_name: parentGroup + " (CONT.)" });
+            }
+
+            function buildSubTable(subItems, startNo) {
+                let html = '<table class="stock-table">';
+                html += '<thead><tr>';
+                html += '<th style="width: 20px;" class="text-center">#</th>';
+                html += '<th class="text-left">PRODUCT</th>';
+                html += '<th style="width: 36px;" class="text-center">O.STK</th>';
+                html += '<th style="width: 36px;" class="text-center">ADD</th>';
+                html += '<th style="width: 36px;" class="text-center">C.STK</th>';
+                html += '<th style="width: 32px;" class="text-center">SOLD</th>';
+                html += '<th style="width: 44px;" class="text-right">PRICE</th>';
+                html += '<th style="width: 48px;" class="text-right">AMT</th>';
+                html += '</tr></thead><tbody>';
+
+                let curNo = startNo;
+                subItems.forEach(it => {
+                    if (it.is_group) {
+                        html += '<tr class="group-header"><td colspan="8" class="text-left">' + it.group_name.toUpperCase() + '</td></tr>';
+                    } else {
+                        let priceStr = it.price ? Number(it.price).toLocaleString() : '0';
+                        html += '<tr class="data-row">';
+                        html += '<td class="text-center text-muted">' + (curNo++) + '</td>';
+                        html += '<td class="text-left item-name">' + it.item_name + '</td>';
+                        html += '<td class="text-center fw-bold">' + it.o_stock + '</td>';
+                        html += '<td></td>';
+                        html += '<td></td>';
+                        html += '<td></td>';
+                        html += '<td class="text-right">' + priceStr + '</td>';
+                        html += '<td></td>';
+                        html += '</tr>';
+                    }
+                });
+                html += '</tbody></table>';
+                return { html: html, endNo: curNo };
+            }
+
+            let res1 = buildSubTable(col1, 1);
+            let res2 = buildSubTable(col2, res1.endNo);
+
+            return '<div class="two-col-layout">' +
+                   '<div class="sub-col">' + res1.html + '</div>' +
+                   '<div class="sub-col">' + res2.html + '</div>' +
+                   '</div>';
+        }
+
+        function render() {
+            let { list, totalItems } = getItems();
+            let contentEl = document.getElementById('sheet-content');
+
+            if (currentLayout === '1col') {
+                contentEl.innerHTML = render1Col(list);
+            } else {
+                contentEl.innerHTML = render2Col(list);
+            }
+
+            let estPages = 1;
+            if (currentLayout === '1col') {
+                estPages = Math.max(1, Math.ceil(list.length / 50));
+            } else {
+                estPages = Math.max(1, Math.ceil((list.length / 2) / 48));
+            }
+            document.getElementById('stats-badge').innerText = totalItems + " Products • ~" + estPages + " Page" + (estPages > 1 ? "s" : "");
+        }
+
+        // Auto-select 2-column if inventory has more than 45 items to guarantee 1-page fit
+        let initialCheck = getItems();
+        if (initialCheck.totalItems > 45) {
+            currentLayout = '2col';
+            let b1 = document.getElementById('btn-layout-1col');
+            let b2 = document.getElementById('btn-layout-2col');
+            if (b1) b1.classList.remove('active');
+            if (b2) b2.classList.add('active');
+        }
+
+        render();
+
+        // Trigger print prompt after rendering
+        setTimeout(() => {
+            window.print();
+        }, 400);
+    </script>
+</body>
+</html>`;
+
+    print_win.document.open();
     print_win.document.write(print_html);
     print_win.document.close();
     print_win.focus();
-    setTimeout(() => {
-        print_win.print();
-        print_win.close();
-    }, 500);
 }
 
 // =========================================================
