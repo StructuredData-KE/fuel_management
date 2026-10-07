@@ -46,7 +46,7 @@
    "fieldtype": "Data",
    "insert_after": "status",
    "label": "Owner Email (Reports)",
-   "options": "Email"
+   "description": "Comma-separated emails to receive reports (e.g. user@example.com, boss@example.com)"
   },
   {
    "fieldname": "shift_control_account",

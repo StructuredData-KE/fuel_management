@@ -1316,8 +1316,9 @@ def send_end_shift_report(shift_name, html_content):
     
     pdf_bytes = frappe.utils.pdf.get_pdf(styled_html)
     
+    recipients = [e.strip() for e in owner_email.replace(';', ',').split(',') if e.strip()]
     frappe.sendmail(
-        recipients=[owner_email],
+        recipients=recipients,
         subject=f"End Shift Report: {shift.name} ({shift.shift_date})",
         message="Please find the attached End Shift Report.",
         attachments=[{"fname": f"{shift.name}.pdf", "fcontent": pdf_bytes}]
