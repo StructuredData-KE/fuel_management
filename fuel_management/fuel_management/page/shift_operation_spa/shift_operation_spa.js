@@ -4957,6 +4957,7 @@ function render_warehouse_inventory($wrapper, warehouse_type) {
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
     
     let fromInput = $wrapper.find(`#${warehouse_type}-inventory-date-from`);
+    let toInput = $wrapper.find(`#${warehouse_type}-inventory-date-to`);
     let activeDate = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_date) ? window.ACTIVE_SHIFT.shift_date : frappe.datetime.get_today();
     fromInput.val(activeDate);
     toInput.val(activeDate);
