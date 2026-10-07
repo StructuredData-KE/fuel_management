@@ -13252,8 +13252,15 @@ window.show_shortage_breakdown = function(employee_id, employee_name) {
     let start_date = $('#shorts-report-start').val();
     let end_date = $('#shorts-report-end').val();
 
-    $('#breakdown-modal-title').html(`<span>📜 Statement: ${employee_name}</span>`);
-    $('#breakdown-modal-subtitle').html(`Employee: <b>${employee_id}</b> &bull; Period: <b>${frappe.datetime.str_to_user(start_date)}</b> to <b>${frappe.datetime.str_to_user(end_date)}</b>`);
+    let displayName = employee_name;
+    if ((!displayName || displayName === employee_id) && window.USERS_LIST) {
+        let u = window.USERS_LIST.find(u => u.name === employee_id);
+        if (u) displayName = u.employee_name || u.full_name;
+    }
+    if (!displayName) displayName = employee_id;
+
+    $('#breakdown-modal-title').html(`<span>📜 Statement: ${displayName}</span>`);
+    $('#breakdown-modal-subtitle').html(`Employee: <b>${displayName}</b> &bull; Period: <b>${frappe.datetime.str_to_user(start_date)}</b> to <b>${frappe.datetime.str_to_user(end_date)}</b>`);
     
     $('#breakdown-modal-kpis').html(`
         <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; text-align:center;">
@@ -13298,6 +13305,10 @@ window.show_shortage_breakdown = function(employee_id, employee_name) {
             if (r.message) {
                 let d = r.message;
                 window.CURRENT_STATEMENT_DATA = d;
+
+                let finalName = d.employee_name || displayName;
+                $('#breakdown-modal-title').html(`<span>📜 Statement: ${finalName}</span>`);
+                $('#breakdown-modal-subtitle').html(`Employee: <b>${finalName}</b> &bull; Period: <b>${frappe.datetime.str_to_user(d.start_date || start_date)}</b> to <b>${frappe.datetime.str_to_user(d.end_date || end_date)}</b>`);
 
                 // Update Mini KPIs inside modal
                 $('#breakdown-modal-kpis').html(`
@@ -13349,7 +13360,7 @@ window.show_shortage_breakdown = function(employee_id, employee_name) {
                                 <td style="padding: 0.7rem 0.75rem; text-align: right; color: #94a3b8;">-</td>
                                 <td style="padding: 0.7rem 0.75rem; text-align: right; font-weight: 800; font-family: monospace; color: #0f172a;">${format_currency(d.opening_balance || 0)}</td>
                             </tr>
-                `;
+                        `;
 
                 if (!d.transactions || d.transactions.length === 0) {
                     html += `
@@ -13373,6 +13384,15 @@ window.show_shortage_breakdown = function(employee_id, employee_name) {
                         let reasonText = row.reason || '-';
                         if (row.shift && shiftName !== row.shift) {
                             reasonText = reasonText.replace(row.shift, shiftName);
+                        }
+                        if (window.USERS_LIST) {
+                            window.USERS_LIST.forEach(u => {
+                                let uId = u.name;
+                                let uName = u.employee_name || u.full_name;
+                                if (uId && uName && uId !== uName && reasonText.includes(uId)) {
+                                    reasonText = reasonText.replaceAll(uId, uName);
+                                }
+                            });
                         }
 
                         let typeBadge = '';
@@ -13572,6 +13592,15 @@ window.print_csa_statement = function(data) {
         }
         let reason = tx.reason || '-';
         if (tx.shift && shiftName !== tx.shift) reason = reason.replace(tx.shift, shiftName);
+        if (window.USERS_LIST) {
+            window.USERS_LIST.forEach(u => {
+                let uId = u.name;
+                let uName = u.employee_name || u.full_name;
+                if (uId && uName && uId !== uName && reason.includes(uId)) {
+                    reason = reason.replaceAll(uId, uName);
+                }
+            });
+        }
 
         txRowsHtml += `
             <tr>

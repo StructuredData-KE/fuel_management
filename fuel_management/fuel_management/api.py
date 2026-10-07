@@ -2644,17 +2644,18 @@ def submit_shortage_payment(employee, payment_mode, amount, date, shift_referenc
     return doc.name
 
 def on_submit_shortage_correction(doc, method):
-    # Reference field in Staff Liability Ledger: we should set a custom field or use 'amended_from' to link?
-    # We can just link it in 'reason' for now.
     from frappe.utils import flt, nowdate
     amount = flt(doc.amount)
+    
+    to_emp_name = frappe.db.get_value("Employee", doc.to_employee, "employee_name") or doc.to_employee
+    from_emp_name = frappe.db.get_value("Employee", doc.from_employee, "employee_name") or doc.from_employee
     
     frappe.get_doc({
         'doctype': 'Staff Liability Ledger',
         'employee': doc.from_employee,
         'date': doc.date,
         'amount': -amount,
-        'reason': f'Correction/Transfer to {doc.to_employee} (Ref: {doc.name})',
+        'reason': f'Correction/Transfer to {to_emp_name} (Ref: {doc.name})',
         'status': 'Deducted'
     }).insert(ignore_permissions=True).submit()
     
@@ -2663,7 +2664,7 @@ def on_submit_shortage_correction(doc, method):
         'employee': doc.to_employee,
         'date': doc.date,
         'amount': amount,
-        'reason': f'Correction/Transfer from {doc.from_employee} (Ref: {doc.name})',
+        'reason': f'Correction/Transfer from {from_emp_name} (Ref: {doc.name})',
         'status': 'Unpaid'
     }).insert(ignore_permissions=True).submit()
 
@@ -2931,6 +2932,9 @@ def get_csa_shorts_breakdown(employee, start_date=None, end_date=None):
         ORDER BY sll.date ASC, sll.creation ASC
     """, (employee, start_date, end_date), as_dict=True)
     
+    # Pre-fetch employee names to resolve employee IDs in description strings
+    emp_map = {e.name: (e.employee_name or e.name) for e in frappe.get_all("Employee", fields=["name", "employee_name"])}
+    
     running = opening_balance
     total_short = 0.0
     total_paid = 0.0
@@ -2947,13 +2951,19 @@ def get_csa_shorts_breakdown(employee, start_date=None, end_date=None):
         total_short += short_amt
         total_paid += paid_amt
         
+        # Replace any employee IDs (e.g. HR-EMP-00004) with the actual employee name
+        reason_text = t.reason or ""
+        for emp_id, emp_name in emp_map.items():
+            if emp_id and emp_name and emp_id != emp_name and emp_id in reason_text:
+                reason_text = reason_text.replace(emp_id, emp_name)
+        
         # Format friendly type/category
         entry_type = "Shortage Incurred" if amt > 0 else "Payment / Recovery"
-        if "Correction" in (t.reason or "") or "Transfer" in (t.reason or ""):
+        if "Correction" in reason_text or "Transfer" in reason_text:
             entry_type = "Shortage Transfer"
-        elif "Payment" in (t.reason or ""):
+        elif "Payment" in reason_text:
             entry_type = "Cash / M-Pesa Payment"
-        elif "Shift Cash Variance" in (t.reason or ""):
+        elif "Shift Cash Variance" in reason_text:
             entry_type = "Shift Variance"
             
         formatted_txns.append({
@@ -2966,7 +2976,7 @@ def get_csa_shorts_breakdown(employee, start_date=None, end_date=None):
             "shortage_amount": short_amt,
             "paid_amount": paid_amt,
             "running_balance": running,
-            "reason": t.reason or "",
+            "reason": reason_text,
             "entry_type": entry_type,
             "status": t.status or ""
         })
