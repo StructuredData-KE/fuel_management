@@ -4846,6 +4846,25 @@ function render_inventory_status($wrapper) {
     fetch_inventory_report($wrapper);
 }
 
+function get_stock_group_priority(groupName) {
+    let g = (groupName || "").toUpperCase().trim();
+    if (g.includes("LUBE") || g.includes("LUBRICANT") || g.includes("OIL")) return 1;
+    if (g === "GAS" || (g.includes("GAS") && !g.includes("CYLINDER"))) return 2;
+    if (g.includes("CYLINDER")) return 3;
+    if (g.includes("ACCESSOR")) return 4;
+    if (g.includes("FILTER")) return 5;
+    return 6;
+}
+
+function sort_stock_groups(groupList) {
+    return (groupList || []).slice().sort((a, b) => {
+        let pA = get_stock_group_priority(a);
+        let pB = get_stock_group_priority(b);
+        if (pA !== pB) return pA - pB;
+        return a.localeCompare(b);
+    });
+}
+
 function fetch_inventory_report($wrapper) {
     let fromInput = $wrapper.find('#inventory-date-from');
     let toInput = $wrapper.find('#inventory-date-to');
@@ -4886,7 +4905,7 @@ function fetch_inventory_report($wrapper) {
                 let unique_items = [];
                 let item_opts = '';
                 
-                Object.keys(data).forEach(group => {
+                sort_stock_groups(Object.keys(data)).forEach(group => {
                     // Group Header
                     html += `
                         <tr class="row-group-header">
@@ -5030,7 +5049,7 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
                 let item_opts = '';
                 let unique_items = [];
                 
-                Object.keys(data).forEach(group => {
+                sort_stock_groups(Object.keys(data)).forEach(group => {
                     html += `
                         <tr class="row-group-header">
                             <td colspan="6">${group.toUpperCase()}</td>
@@ -6354,9 +6373,28 @@ function print_stock_sheet(warehouse_type, data, company) {
             render();
         }
 
+        function getGroupPriority(gName) {
+            let g = (gName || "").toUpperCase().trim();
+            if (g.includes("LUBE") || g.includes("LUBRICANT") || g.includes("OIL")) return 1;
+            if (g === "GAS" || (g.includes("GAS") && !g.includes("CYLINDER"))) return 2;
+            if (g.includes("CYLINDER")) return 3;
+            if (g.includes("ACCESSOR")) return 4;
+            if (g.includes("FILTER")) return 5;
+            return 6;
+        }
+
+        function sortGroups(groupNames) {
+            return (groupNames || []).slice().sort((a, b) => {
+                let pA = getGroupPriority(a);
+                let pB = getGroupPriority(b);
+                if (pA !== pB) return pA - pB;
+                return a.localeCompare(b);
+            });
+        }
+
         function getItems() {
             let list = [];
-            let groups = Object.keys(RAW_DATA).sort();
+            let groups = sortGroups(Object.keys(RAW_DATA));
             let totalItems = 0;
 
             groups.forEach(group => {
@@ -6367,6 +6405,7 @@ function print_stock_sheet(warehouse_type, data, company) {
                         return o_stock > 0;
                     });
                 }
+                groupItems = groupItems.slice().sort((a, b) => (a.item_name || a.item_code || "").localeCompare(b.item_name || b.item_code || ""));
                 if (groupItems.length > 0) {
                     list.push({ is_group: true, group_name: group });
                     groupItems.forEach(row => {
