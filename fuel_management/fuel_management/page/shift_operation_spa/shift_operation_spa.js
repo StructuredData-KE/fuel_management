@@ -9618,10 +9618,13 @@ function render_greasing(wrapper) {
 function render_borrowed_products($wrapper) {
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
     
-    // Set Active Shift Display
+    // Set Active Shift & Station Display
     let shiftDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
     let shiftName = window.ACTIVE_SHIFT.shift_template || "";
     $wrapper.find('#bp-shift-display').text(`${shiftDate} (${shiftName})`);
+    if (window.ACTIVE_SHIFT.station) {
+        $wrapper.find('#bp-station-badge').text(`⛽ ${window.ACTIVE_SHIFT.station}`);
+    }
     
     // Segmented control
     $wrapper.find('#tab-borrowed .seg-btn').off('click').on('click', function() {
@@ -9634,22 +9637,94 @@ function render_borrowed_products($wrapper) {
         
         if (view === 'history') {
             fetch_bp_history($wrapper);
+        } else if (view === 'entry') {
+            if ($wrapper.find('#bp-items-container').children().length === 0) {
+                add_bp_item_row($wrapper);
+            }
+        }
+    });
+
+    // Dynamic Type Hint Toggle
+    $wrapper.find('#bp-type').off('change').on('change', function() {
+        let t = $(this).val();
+        if (t === 'Borrowed Out') {
+            $wrapper.find('#bp-type-hint').html('🔻 <b>Deducts</b> items from our station forecourt/store inventory').css('color', '#dc2626');
+        } else {
+            $wrapper.find('#bp-type-hint').html('🔺 <b>Adds</b> items to our station inventory from counterparty').css('color', '#16a34a');
         }
     });
     
-    // Fetch Counterparties
+    // Fetch Counterparties and set up typable combobox
     frappe.call({
         method: 'fuel_management.fuel_management.api.get_borrowing_counterparties',
         callback: function(r) {
             if(r.message) {
-                let select = $wrapper.find('#bp-counterparty');
-                select.empty().append('<option value="">Select Counterparty...</option>');
-                r.message.forEach(c => {
-                    select.append(`<option value="${c.value}">${c.label}</option>`);
-                });
+                window.BP_COUNTERPARTIES = r.message;
             }
         }
     });
+
+    function render_bp_cp_dropdown(query) {
+        let list = window.BP_COUNTERPARTIES || [];
+        let q = (query || '').toLowerCase().trim();
+        let matched = list.filter(c => !q || (c.label || '').toLowerCase().includes(q) || (c.value || '').toLowerCase().includes(q));
+        let $dd = $wrapper.find('#bp-counterparty-dropdown');
+        if (matched.length === 0) {
+            $dd.html('<div style="padding: 10px; text-align: center; color: #94a3b8; font-size: 0.85rem;">No matching counterparty found</div>').show();
+            return;
+        }
+        let html = '';
+        matched.forEach(c => {
+            html += `
+                <div class="bp-cp-item" data-value="${frappe.utils.escape_html(c.value)}" data-label="${frappe.utils.escape_html(c.label)}" style="padding: 8px 12px; border-bottom: 1px solid #f8fafc; cursor: pointer; transition: background 0.15s; font-size: 0.85rem; font-weight: 600; color: #1e293b;">
+                    🏢 ${frappe.utils.escape_html(c.label)}
+                </div>
+            `;
+        });
+        $dd.html(html).show();
+
+        $dd.find('.bp-cp-item').hover(
+            function() { $(this).css('background', '#eff6ff'); },
+            function() { $(this).css('background', '#ffffff'); }
+        );
+    }
+
+    $wrapper.find('#bp-counterparty-search').off('focus input').on('focus input', function() {
+        render_bp_cp_dropdown($(this).val());
+    });
+
+    $wrapper.find('#btn-toggle-bp-cp-dd').off('click').on('click', function(e) {
+        e.stopPropagation();
+        let $dd = $wrapper.find('#bp-counterparty-dropdown');
+        if ($dd.is(':visible')) {
+            $dd.hide();
+        } else {
+            $wrapper.find('#bp-counterparty-search').focus();
+            render_bp_cp_dropdown($wrapper.find('#bp-counterparty-search').val());
+        }
+    });
+
+    $wrapper.find('#bp-counterparty-dropdown').off('click', '.bp-cp-item').on('click', '.bp-cp-item', function() {
+        let val = $(this).attr('data-value');
+        let lbl = $(this).attr('data-label');
+        $wrapper.find('#bp-counterparty').val(val);
+        $wrapper.find('#bp-counterparty-search').val(lbl);
+        $wrapper.find('#bp-counterparty-dropdown').hide();
+        $wrapper.find('#bp-items-container .bp-item-search-input').first().focus();
+    });
+
+    // Pre-cache item list for quick search
+    if (!window.cached_items) {
+        frappe.call({
+            method: 'frappe.client.get_list',
+            args: { doctype: "Item", fields: ["name", "item_name", "item_group", "stock_uom"], filters: {disabled: 0}, limit_page_length: 5000 },
+            callback: function(r) {
+                if (r.message) {
+                    window.cached_items = r.message;
+                }
+            }
+        });
+    }
     
     // Add first item row if empty
     if ($wrapper.find('#bp-items-container').children().length === 0) {
@@ -9658,6 +9733,8 @@ function render_borrowed_products($wrapper) {
     
     $wrapper.find('#btn-add-bp-item').off('click').on('click', function() {
         add_bp_item_row($wrapper);
+        let $lastInput = $wrapper.find('#bp-items-container .bp-item-search-input').last();
+        $lastInput.focus();
     });
     
     // Set default filter dates to first and last of month
@@ -9678,13 +9755,23 @@ function render_borrowed_products($wrapper) {
     
     $wrapper.find('#btn-cancel-bp').off('click').on('click', function() {
         $wrapper.find('#bp-counterparty').val('');
+        $wrapper.find('#bp-counterparty-search').val('');
         $wrapper.find('#bp-memo').val('');
         $wrapper.find('#bp-items-container').empty();
         add_bp_item_row($wrapper);
+        update_bp_items_summary($wrapper);
+        $wrapper.find('#tab-borrowed .seg-btn[data-view="history"]').click();
     });
     
     $wrapper.find('#btn-save-bp').off('click').on('click', function() {
         submit_borrowed_product($wrapper);
+    });
+
+    // Close any floating comboboxes on document click
+    $(document).off('click.bp_combobox').on('click.bp_combobox', function(e) {
+        if (!$(e.target).closest('.searchable-combobox-wrap').length) {
+            $('.bp-item-dropdown, #bp-counterparty-dropdown').hide();
+        }
     });
     
     // Initial fetch history
@@ -9700,43 +9787,266 @@ function render_borrowed_products($wrapper) {
     });
 }
 
-function add_bp_item_row($wrapper) {
+function update_bp_items_summary($wrapper) {
+    let totalItems = 0;
+    let totalUnits = 0;
+
+    $wrapper.find('.bp-item-row').each(function() {
+        let code = $(this).find('.bp-item-code').val();
+        let qty = parseFloat($(this).find('.bp-qty').val()) || 0;
+        if (code && qty > 0) {
+            totalItems++;
+            totalUnits += qty;
+        }
+    });
+
+    let text = `${totalItems} Product${totalItems === 1 ? '' : 's'} • ${totalUnits.toLocaleString('en-US', {maximumFractionDigits: 2})} Units`;
+    $wrapper.find('#bp-items-summary-badge').text(text);
+}
+
+function add_bp_item_row($wrapper, initial_item_code, initial_qty) {
     let container = $wrapper.find('#bp-items-container');
     let row_id = frappe.utils.get_random(8);
-    
+    let row_index = container.children('.bp-item-row').length + 1;
+
     let html = `
-        <div class="bp-item-row" id="bp-row-${row_id}" style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
-            <select class="spa-input bp-item-code" style="flex:2;"></select>
-            <input type="number" class="spa-input bp-qty" placeholder="Qty" style="flex:1;">
-            <button class="btn btn-secondary" onclick="$(this).closest('.bp-item-row').remove();" style="color: #ef4444; border-color: #ef4444; background: transparent; padding: 0.5rem 1rem;">&times;</button>
+        <div class="bp-item-row" id="bp-row-${row_id}" style="display:flex; gap:10px; align-items:flex-start; margin-bottom:8px;">
+            <div class="bp-row-num" style="width: 24px; padding-top: 10px; text-align: center; font-size: 0.8rem; font-weight: 700; color: #94a3b8;">${row_index}</div>
+            
+            <!-- Searchable Item Combobox -->
+            <div class="searchable-combobox-wrap bp-item-search-wrap" style="flex: 3; position: relative;">
+                <input type="text" class="spa-input form-control bp-item-search-input" placeholder="🔍 Type product name or code..." style="width: 100%; height: 38px; font-size: 0.85rem; font-weight: 600; padding-right: 28px; border-radius: 6px;" autocomplete="off">
+                <input type="hidden" class="bp-item-code" value="">
+                <button type="button" class="btn-toggle-bp-dd" style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px;">
+                    <i class="fa fa-chevron-down" style="font-size: 0.7rem;"></i>
+                </button>
+                <div class="combobox-dropdown-menu bp-item-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 260px; overflow-y: auto; background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.18); z-index: 9999;"></div>
+            </div>
+
+            <!-- Group & UOM Badge -->
+            <div class="bp-item-meta" style="flex: 1.2; height: 38px; font-size: 0.75rem; font-weight: 700; color: #475569; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span class="bp-item-meta-text">--</span>
+            </div>
+
+            <!-- Quantity Input -->
+            <div style="flex: 1.2;">
+                <input type="number" class="spa-input form-control bp-qty" placeholder="0" min="0.01" step="any" style="width: 100%; height: 38px; font-family: monospace; font-weight: 800; font-size: 0.95rem; text-align: right; border-radius: 6px;">
+            </div>
+
+            <!-- Remove Button -->
+            <button type="button" class="btn-remove-bp-row" style="width: 36px; height: 38px; background: #fef2f2; border: 1px solid #fecaca; color: #ef4444; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s;" title="Remove this product">
+                <i class="fa fa-trash-o" style="font-size: 0.95rem;"></i>
+            </button>
         </div>
     `;
-    
+
     let $row = $(html);
     container.append($row);
-    
-    if (window.cached_items) {
-        let select = $row.find('.bp-item-code');
-        select.append('<option value="">Select Product...</option>');
-        window.cached_items.forEach(item => {
-            select.append(`<option value="${item.name}">${item.item_name}</option>`);
+
+    function render_row_dropdown(query) {
+        let items = window.cached_items || window.PURCHASE_ITEMS || [];
+        let q = (query || '').toLowerCase().trim();
+        let $dd = $row.find('.bp-item-dropdown');
+
+        let matched = items.filter(i => {
+            if (!q) return true;
+            let code = (i.name || '').toLowerCase();
+            let name = (i.item_name || '').toLowerCase();
+            let grp = (i.item_group || '').toLowerCase();
+            return code.includes(q) || name.includes(q) || grp.includes(q);
         });
-    } else {
-        frappe.call({
-            method: 'frappe.client.get_list',
-            args: { doctype: "Item", fields: ["name", "item_name", "item_group"], filters: {disabled: 0}, limit_page_length: 5000 },
-            callback: function(r) {
-                if (r.message) {
-                    window.cached_items = r.message;
-                    let select = $row.find('.bp-item-code');
-                    select.append('<option value="">Select Product...</option>');
-                    r.message.forEach(item => {
-                        select.append(`<option value="${item.name}">${item.item_name}</option>`);
-                    });
-                }
+
+        if (matched.length === 0) {
+            $dd.html(`
+                <div style="padding: 0.85rem; text-align: center; color: #94a3b8; font-size: 0.82rem;">
+                    No matching products found for "<b>${frappe.utils.escape_html(q)}</b>"
+                </div>
+            `).show();
+            return;
+        }
+
+        let fuel_items = [];
+        let gas_items = [];
+        let lube_items = [];
+        let other_items = [];
+
+        matched.forEach(i => {
+            let grp = (i.item_group || '').toUpperCase();
+            let nm = (i.item_name || i.name || '').toUpperCase();
+            let code = (i.name || '').toUpperCase();
+            
+            if (grp.includes("FUEL") || nm.includes("PETROL") || nm.includes("DIESEL") || nm.includes("KEROSENE") || nm.includes("AGO") || nm.includes("PMS") || nm.includes("IK") || code.includes("PMS") || code.includes("AGO") || code.includes("IK")) {
+                fuel_items.push(i);
+            } else if (grp.includes("GAS") || grp.includes("CYLINDER") || nm.includes("GAS") || nm.includes("CYLINDER") || nm.includes("LPG") || nm.includes("6KG") || nm.includes("13KG") || nm.includes("35KG") || nm.includes("50KG")) {
+                gas_items.push(i);
+            } else if (grp.includes("LUBE") || grp.includes("OIL") || grp.includes("GREASE") || nm.includes("LUBE") || nm.includes("OIL") || nm.includes("GREASE") || nm.includes("LUBRICANT")) {
+                lube_items.push(i);
+            } else {
+                other_items.push(i);
             }
         });
+
+        let build_group = function(title, icon, list, color) {
+            if (list.length === 0) return '';
+            let h = `
+                <div style="padding: 5px 10px; background: #f8fafc; border-bottom: 1px solid #f1f5f9; font-size: 0.72rem; font-weight: 800; color: ${color}; text-transform: uppercase; letter-spacing: 0.04em;">
+                    ${icon} ${title} (${list.length})
+                </div>
+            `;
+            list.slice(0, 30).forEach(it => {
+                h += `
+                    <div class="bp-dropdown-item" data-code="${frappe.utils.escape_html(it.name)}" data-name="${frappe.utils.escape_html(it.item_name || it.name)}" data-group="${frappe.utils.escape_html(it.item_group || '')}" data-uom="${frappe.utils.escape_html(it.stock_uom || 'Units')}" style="padding: 7px 10px; border-bottom: 1px solid #f8fafc; cursor: pointer; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="overflow: hidden; text-overflow: ellipsis; padding-right: 8px;">
+                            <div style="font-weight: 700; font-size: 0.85rem; color: #1e293b;">${frappe.utils.escape_html(it.item_name || it.name)}</div>
+                            <div style="font-size: 0.72rem; color: #64748b; font-family: monospace;">${frappe.utils.escape_html(it.name)} &bull; <span style="color: ${color};">${frappe.utils.escape_html(it.item_group || '')}</span></div>
+                        </div>
+                        <span style="font-size: 0.72rem; font-weight: 700; color: #475569; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; white-space: nowrap;">
+                            ${frappe.utils.escape_html(it.stock_uom || 'Qty')}
+                        </span>
+                    </div>
+                `;
+            });
+            return h;
+        };
+
+        let h_all = '';
+        h_all += build_group("Lubricants & Fluids", "🛢️", lube_items, "#0284c7");
+        h_all += build_group("LPG Gas & Cylinders", "🔥", gas_items, "#c2410c");
+        h_all += build_group("Fuel Products", "⛽", fuel_items, "#b45309");
+        h_all += build_group("Other Store Products", "📦", other_items, "#475569");
+
+        $dd.html(h_all).show();
+
+        $dd.find('.bp-dropdown-item').hover(
+            function() { $(this).css('background', '#eff6ff'); },
+            function() { $(this).css('background', '#ffffff'); }
+        );
     }
+
+    $row.find('.bp-item-search-input').off('focus input').on('focus input', function() {
+        $('.bp-item-dropdown').not($row.find('.bp-item-dropdown')).hide();
+        render_row_dropdown($(this).val());
+    }).on('keydown', function(e) {
+        let $dd = $row.find('.bp-item-dropdown');
+        let $items = $dd.find('.bp-dropdown-item');
+        let $active = $items.filter('.active-hover');
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!$dd.is(':visible')) {
+                render_row_dropdown($(this).val());
+                return;
+            }
+            if ($active.length === 0 || $active.is(':last-child')) {
+                $items.removeClass('active-hover').css('background', '#ffffff');
+                $items.first().addClass('active-hover').css('background', '#eff6ff');
+            } else {
+                $active.removeClass('active-hover').css('background', '#ffffff');
+                $active.nextAll('.bp-dropdown-item').first().addClass('active-hover').css('background', '#eff6ff');
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if ($active.length > 0 && !$active.is(':first-child')) {
+                $active.removeClass('active-hover').css('background', '#ffffff');
+                $active.prevAll('.bp-dropdown-item').first().addClass('active-hover').css('background', '#eff6ff');
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if ($active.length > 0) {
+                $active.click();
+            } else if ($items.length > 0) {
+                $items.first().click();
+            }
+        } else if (e.key === 'Escape') {
+            $dd.hide();
+        }
+    });
+
+    $row.find('.btn-toggle-bp-dd').off('click').on('click', function(e) {
+        e.stopPropagation();
+        let $dd = $row.find('.bp-item-dropdown');
+        if ($dd.is(':visible')) {
+            $dd.hide();
+        } else {
+            $('.bp-item-dropdown').hide();
+            $row.find('.bp-item-search-input').focus();
+            render_row_dropdown($row.find('.bp-item-search-input').val());
+        }
+    });
+
+    $row.find('.bp-item-dropdown').off('click', '.bp-dropdown-item').on('click', '.bp-dropdown-item', function() {
+        let code = $(this).attr('data-code');
+        let name = $(this).attr('data-name');
+        let group = $(this).attr('data-group');
+        let uom = $(this).attr('data-uom');
+
+        $row.find('.bp-item-code').val(code);
+        $row.find('.bp-item-search-input').val(name);
+        $row.find('.bp-item-dropdown').hide();
+
+        let metaText = (group ? group : '') + (uom ? ` • ${uom}` : '');
+        $row.find('.bp-item-meta-text').text(metaText || 'Selected');
+        $row.find('.bp-item-meta').css({ 'background': '#f0fdf4', 'border-color': '#86efac', 'color': '#15803d' });
+
+        let $qty = $row.find('.bp-qty');
+        $qty.focus();
+        $qty.select();
+        update_bp_items_summary($wrapper);
+    });
+
+    $row.find('.bp-qty').off('input change keydown').on('input change', function() {
+        update_bp_items_summary($wrapper);
+    }).on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            let val = parseFloat($(this).val());
+            if (val > 0) {
+                let $container = $row.closest('#bp-items-container');
+                if ($row.is(':last-child')) {
+                    add_bp_item_row($wrapper);
+                    let $newRow = $container.children('.bp-item-row').last();
+                    $newRow.find('.bp-item-search-input').focus();
+                } else {
+                    $row.next('.bp-item-row').find('.bp-item-search-input').focus();
+                }
+            }
+        }
+    });
+
+    $row.find('.btn-remove-bp-row').off('click').on('click', function() {
+        let $container = $row.closest('#bp-items-container');
+        if ($container.children('.bp-item-row').length <= 1) {
+            $row.find('.bp-item-code').val('');
+            $row.find('.bp-item-search-input').val('');
+            $row.find('.bp-qty').val('');
+            $row.find('.bp-item-meta-text').text('--');
+            $row.find('.bp-item-meta').css({ 'background': '#f8fafc', 'border-color': '#cbd5e1', 'color': '#475569' });
+        } else {
+            $row.remove();
+            $container.children('.bp-item-row').each(function(idx) {
+                $(this).find('.bp-row-num').text(idx + 1);
+            });
+        }
+        update_bp_items_summary($wrapper);
+    });
+
+    // Handle initial item selection if provided
+    if (initial_item_code) {
+        $row.find('.bp-item-code').val(initial_item_code);
+        let items = window.cached_items || window.PURCHASE_ITEMS || [];
+        let it = items.find(i => i.name === initial_item_code);
+        if (it) {
+            $row.find('.bp-item-search-input').val(it.item_name || it.name);
+            let metaText = (it.item_group ? it.item_group : '') + (it.stock_uom ? ` • ${it.stock_uom}` : '');
+            $row.find('.bp-item-meta-text').text(metaText);
+            $row.find('.bp-item-meta').css({ 'background': '#f0fdf4', 'border-color': '#86efac', 'color': '#15803d' });
+        }
+        if (initial_qty) {
+            $row.find('.bp-qty').val(initial_qty);
+        }
+    }
+
+    update_bp_items_summary($wrapper);
 }
 
 function submit_borrowed_product($wrapper) {
@@ -9745,30 +10055,54 @@ function submit_borrowed_product($wrapper) {
     let memo = $wrapper.find('#bp-memo').val();
     let date = window.ACTIVE_SHIFT.shift_date || frappe.datetime.get_today();
     
+    // Auto-resolve counterparty if typed but not selected from dropdown
     if (!counterparty) {
-        frappe.msgprint("Please select a Counterparty.");
+        let typed = ($wrapper.find('#bp-counterparty-search').val() || '').trim().toLowerCase();
+        if (typed && window.BP_COUNTERPARTIES) {
+            let found = window.BP_COUNTERPARTIES.find(c => (c.label || '').toLowerCase() === typed || (c.value || '').toLowerCase() === typed);
+            if (found) {
+                counterparty = found.value;
+                $wrapper.find('#bp-counterparty').val(counterparty);
+            }
+        }
+    }
+    
+    if (!counterparty) {
+        frappe.msgprint("Please select or search a Counterparty.");
+        $wrapper.find('#bp-counterparty-search').focus();
         return;
     }
     
     let items = [];
     let has_error = false;
+    let all_items = window.cached_items || window.PURCHASE_ITEMS || [];
     
     $wrapper.find('.bp-item-row').each(function() {
         let item_code = $(this).find('.bp-item-code').val();
+        let search_text = ($(this).find('.bp-item-search-input').val() || '').trim().toLowerCase();
         let qty = parseFloat($(this).find('.bp-qty').val());
+        
+        // Auto-resolve item if user typed exact name/code without clicking dropdown
+        if (!item_code && search_text && all_items.length > 0) {
+            let match = all_items.find(i => (i.item_name || '').toLowerCase() === search_text || (i.name || '').toLowerCase() === search_text);
+            if (match) {
+                item_code = match.name;
+                $(this).find('.bp-item-code').val(item_code);
+            }
+        }
         
         if (item_code && qty > 0) {
             items.push({
                 item_code: item_code,
                 qty: qty
             });
-        } else if (item_code || qty) {
+        } else if (item_code || qty || search_text) {
             has_error = true;
         }
     });
     
     if (has_error || items.length === 0) {
-        frappe.msgprint("Please select a product and enter a valid quantity for all rows.");
+        frappe.msgprint("Please select a valid product and enter quantity for all added rows.");
         return;
     }
     
@@ -9795,9 +10129,11 @@ function submit_borrowed_product($wrapper) {
             if (!r.exc && r.message) {
                 frappe.show_alert({message: "Successfully recorded " + type, indicator: "green"});
                 $wrapper.find('#bp-counterparty').val('');
+                $wrapper.find('#bp-counterparty-search').val('');
                 $wrapper.find('#bp-memo').val('');
                 $wrapper.find('#bp-items-container').empty();
                 add_bp_item_row($wrapper);
+                update_bp_items_summary($wrapper);
                 
                 // Switch to history tab
                 $wrapper.find('#tab-borrowed .seg-btn[data-view="history"]').click();
