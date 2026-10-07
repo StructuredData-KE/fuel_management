@@ -1167,28 +1167,37 @@ def create_borrowed_doctypes():
 def get_or_create_transit_warehouse(station, company):
     import frappe
     warehouse_name = f"{station} - Borrowed Transit"
-    if not frappe.db.exists("Warehouse", {"warehouse_name": warehouse_name, "company": company}):
-        # Need to find the parent warehouse for the station
-        station_doc = frappe.get_doc("Fuel Station", station)
-        store_warehouse = station_doc.default_store_warehouse
+    existing_wh = frappe.db.get_value("Warehouse", {"warehouse_name": warehouse_name, "company": company}, ["name", "account"], as_dict=True)
+    
+    station_doc = frappe.get_doc("Fuel Station", station)
+    store_warehouse = station_doc.default_store_warehouse
+    
+    if not store_warehouse:
+        frappe.throw("Station default store warehouse is not configured.")
         
-        if not store_warehouse:
-            frappe.throw("Station default store warehouse is not configured.")
-            
-        store_doc = frappe.get_doc("Warehouse", store_warehouse)
-        parent_warehouse = store_doc.parent_warehouse
-        
+    store_doc = frappe.get_doc("Warehouse", store_warehouse)
+    parent_warehouse = store_doc.parent_warehouse
+    account = store_doc.account or frappe.get_cached_value("Company", company, "default_inventory_account")
+    
+    if not existing_wh:
         new_wh = frappe.get_doc({
             "doctype": "Warehouse",
             "warehouse_name": warehouse_name,
             "company": company,
             "parent_warehouse": parent_warehouse,
+            "account": account,
             "is_group": 0
         })
         new_wh.insert(ignore_permissions=True)
-        return new_wh.name
+        wh_name = new_wh.name
     else:
-        return frappe.db.get_value("Warehouse", {"warehouse_name": warehouse_name, "company": company}, "name")
+        wh_name = existing_wh.name
+        if not existing_wh.account and account:
+            frappe.db.set_value("Warehouse", wh_name, "account", account)
+            
+    # Reset cached warehouse account map so ERPNext can validate stock entry accounting
+    frappe.flags.warehouse_account_map = {}
+    return wh_name
 
 @frappe.whitelist()
 def create_borrowed_product(payload):
@@ -1207,8 +1216,13 @@ def create_borrowed_product(payload):
         frappe.throw("Missing station or items")
         
     station_doc = frappe.get_doc("Fuel Station", station)
-    company = station_doc.company if hasattr(station_doc, "company") and station_doc.company else frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
     store_warehouse = station_doc.default_store_warehouse
+    company = (
+        station_doc.company if hasattr(station_doc, "company") and station_doc.company
+        else (frappe.db.get_value("Warehouse", store_warehouse, "company") if store_warehouse else None)
+        or frappe.defaults.get_user_default("Company")
+        or frappe.db.get_single_value("Global Defaults", "default_company")
+    )
     
     doc = frappe.get_doc({
         "doctype": "Borrowed Product",
@@ -1229,6 +1243,7 @@ def create_borrowed_product(payload):
     doc.insert(ignore_permissions=True)
     
     # Handle Stock Entry
+    frappe.flags.warehouse_account_map = {}
     se = frappe.new_doc("Stock Entry")
     se.posting_date = date
     se.company = company
@@ -3398,7 +3413,14 @@ def return_borrowed_product(docname, return_date, returned_items):
     se.stock_entry_type = purpose
     se.posting_date = return_date
     se.posting_time = frappe.utils.nowtime()
-    se.company = station.company if hasattr(station, "company") and station.company else frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+    frappe.flags.warehouse_account_map = {}
+    company = (
+        station.company if hasattr(station, "company") and station.company
+        else (frappe.db.get_value("Warehouse", warehouse, "company") if warehouse else None)
+        or frappe.defaults.get_user_default("Company")
+        or frappe.db.get_single_value("Global Defaults", "default_company")
+    )
+    se.company = company
     
     has_items = False
     for r_item in returned_items:
