@@ -4759,14 +4759,9 @@ function render_inventory_status($wrapper) {
     let fromInput = $wrapper.find('#inventory-date-from');
     let toInput = $wrapper.find('#inventory-date-to');
     
-    if (!fromInput.val()) {
-        let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
-    }
-    if (!toInput.val()) {
-        let d = new Date();
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
-    }
+    let activeDate = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_date) ? window.ACTIVE_SHIFT.shift_date : frappe.datetime.get_today();
+    fromInput.val(activeDate);
+    toInput.val(activeDate);
 
     $wrapper.find('#btn-refresh-inventory-report').off('click').on('click', function() {
         fetch_inventory_report($wrapper);
@@ -4869,14 +4864,9 @@ function fetch_inventory_report($wrapper) {
     let fromInput = $wrapper.find('#inventory-date-from');
     let toInput = $wrapper.find('#inventory-date-to');
     
-    if (!fromInput.val()) {
-        let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
-    }
-    if (!toInput.val()) {
-        let d = new Date();
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
-    }
+    let activeDate = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_date) ? window.ACTIVE_SHIFT.shift_date : frappe.datetime.get_today();
+    if (!fromInput.val()) fromInput.val(activeDate);
+    if (!toInput.val()) toInput.val(activeDate);
     
     let fromDate = fromInput.val();
     let toDate = toInput.val();
@@ -4967,16 +4957,9 @@ function render_warehouse_inventory($wrapper, warehouse_type) {
     if(!window.ACTIVE_SHIFT || !window.ACTIVE_SHIFT.station) return;
     
     let fromInput = $wrapper.find(`#${warehouse_type}-inventory-date-from`);
-    let toInput = $wrapper.find(`#${warehouse_type}-inventory-date-to`);
-    
-    if (!fromInput.val()) {
-        let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
-    }
-    if (!toInput.val()) {
-        let d = new Date();
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
-    }
+    let activeDate = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_date) ? window.ACTIVE_SHIFT.shift_date : frappe.datetime.get_today();
+    fromInput.val(activeDate);
+    toInput.val(activeDate);
 
     $wrapper.find(`#btn-refresh-${warehouse_type}-inventory`).off('click').on('click', function() {
         fetch_warehouse_inventory_report($wrapper, warehouse_type);
@@ -5007,14 +4990,9 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
     let fromInput = $wrapper.find(`#${warehouse_type}-inventory-date-from`);
     let toInput = $wrapper.find(`#${warehouse_type}-inventory-date-to`);
     
-    if (!fromInput.val()) {
-        let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
-    }
-    if (!toInput.val()) {
-        let d = new Date();
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
-    }
+    let activeDate = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_date) ? window.ACTIVE_SHIFT.shift_date : frappe.datetime.get_today();
+    if (!fromInput.val()) fromInput.val(activeDate);
+    if (!toInput.val()) toInput.val(activeDate);
     
     let fromDate = fromInput.val();
     let toDate = toInput.val();
@@ -5950,6 +5928,13 @@ function print_stock_sheet(warehouse_type, data, company) {
     } else if (!shift_name) {
         shift_name = "DAY";
     }
+
+    let next_shift_name = (shift_name === "DAY") ? "NIGHT" : "DAY";
+    let next_d = new Date(d);
+    if (shift_name === "NIGHT") {
+        next_d.setDate(next_d.getDate() + 1);
+    }
+    let next_formatted_date = ("0" + next_d.getDate()).slice(-2) + "." + ("0" + (next_d.getMonth() + 1)).slice(-2) + "." + next_d.getFullYear();
     
     let assigned_names = [];
     if (window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas) {
@@ -6274,9 +6259,15 @@ function print_stock_sheet(warehouse_type, data, company) {
         <div class="tb-section">
             <span class="tb-title"><span>📋</span> ${title}</span>
             <span class="tb-lbl">Layout:</span>
-            <button type="button" class="tb-btn active" id="btn-layout-1col" onclick="setLayout('1col')">1-Col Compact</button>
-            <button type="button" class="tb-btn" id="btn-layout-2col" onclick="setLayout('2col')">⚡ 2-Col (1-Page Fit)</button>
+            <button type="button" class="tb-btn" id="btn-layout-1col" onclick="setLayout('1col')">1-Col</button>
+            <button type="button" class="tb-btn active" id="btn-layout-2col" onclick="setLayout('2col')">⚡ 2-Col (1-Page Fit)</button>
             <button type="button" class="tb-btn" id="btn-layout-landscape" onclick="setLayout('landscape')">↔ Landscape (2-Col)</button>
+        </div>
+
+        <div class="tb-section">
+            <span class="tb-lbl">Stock Basis:</span>
+            <button type="button" class="tb-btn active" id="btn-stock-closing" onclick="setStockBasis('closing')">⚡ Next Shift (Closing Stk)</button>
+            <button type="button" class="tb-btn" id="btn-stock-opening" onclick="setStockBasis('opening')">Current Shift (Opening Stk)</button>
         </div>
 
         <div class="tb-section">
@@ -6307,12 +6298,12 @@ function print_stock_sheet(warehouse_type, data, company) {
             <div>
                 <span class="header-title-badge">${title}</span>
             </div>
-            <div class="header-meta">
-                <span>DATE: ${formatted_date}</span>
+            <div class="header-meta" id="header-meta-info">
+                <span>DATE: ${next_formatted_date}</span>
                 <span class="meta-sep">|</span>
-                <span>SHIFT: ${shift_name}</span>
+                <span>SHIFT: ${next_shift_name}</span>
                 <span class="meta-sep">|</span>
-                <span>STAFF: ${name_str}</span>
+                <span>STAFF: _____________________</span>
             </div>
         </div>
 
@@ -6327,11 +6318,43 @@ function print_stock_sheet(warehouse_type, data, company) {
 
     <script>
         const RAW_DATA = ${JSON.stringify(data)};
-        const META = ${JSON.stringify({ warehouse_type, display_company, station_name, formatted_date, shift_name, name_str, title })};
+        const META = ${JSON.stringify({ warehouse_type, display_company, station_name, formatted_date, shift_name, next_formatted_date, next_shift_name, name_str, title })};
 
-        let currentLayout = '1col';
+        let currentLayout = '2col';
         let currentDensity = 'tight';
+        let currentStockBasis = 'closing';
         let hideZero = false;
+
+        function updateHeaderMeta() {
+            let metaEl = document.getElementById('header-meta-info');
+            if (!metaEl) return;
+            if (currentStockBasis === 'closing') {
+                metaEl.innerHTML = `
+                    <span>DATE: \${META.next_formatted_date}</span>
+                    <span class="meta-sep">|</span>
+                    <span>SHIFT: \${META.next_shift_name}</span>
+                    <span class="meta-sep">|</span>
+                    <span>STAFF: _____________________</span>
+                `;
+            } else {
+                metaEl.innerHTML = `
+                    <span>DATE: \${META.formatted_date}</span>
+                    <span class="meta-sep">|</span>
+                    <span>SHIFT: \${META.shift_name}</span>
+                    <span class="meta-sep">|</span>
+                    <span>STAFF: \${META.name_str}</span>
+                `;
+            }
+        }
+
+        function setStockBasis(basis) {
+            currentStockBasis = basis;
+            document.querySelectorAll('#btn-stock-closing, #btn-stock-opening').forEach(b => b.classList.remove('active'));
+            let activeBtn = document.getElementById('btn-stock-' + basis);
+            if (activeBtn) activeBtn.classList.add('active');
+            updateHeaderMeta();
+            render();
+        }
 
         function setPageStyle(orientation) {
             let el = document.getElementById('dynamic-page-style');
@@ -6401,7 +6424,9 @@ function print_stock_sheet(warehouse_type, data, company) {
                 let groupItems = RAW_DATA[group] || [];
                 if (hideZero) {
                     groupItems = groupItems.filter(row => {
-                        let o_stock = (META.warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0;
+                        let o_stock = (currentStockBasis === 'closing')
+                            ? ((META.warehouse_type === "forecourt" ? row.cl_forecourt : row.cl_store) || 0)
+                            : ((META.warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0);
                         return o_stock > 0;
                     });
                 }
@@ -6410,7 +6435,9 @@ function print_stock_sheet(warehouse_type, data, company) {
                     list.push({ is_group: true, group_name: group });
                     groupItems.forEach(row => {
                         totalItems++;
-                        let o_stock = (META.warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0;
+                        let o_stock = (currentStockBasis === 'closing')
+                            ? ((META.warehouse_type === "forecourt" ? row.cl_forecourt : row.cl_store) || 0)
+                            : ((META.warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0);
                         let price = row.unit_price || 0;
                         list.push({
                             is_group: false,
