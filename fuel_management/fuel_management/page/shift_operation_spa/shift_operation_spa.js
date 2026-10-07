@@ -6329,21 +6329,17 @@ function print_stock_sheet(warehouse_type, data, company) {
             let metaEl = document.getElementById('header-meta-info');
             if (!metaEl) return;
             if (currentStockBasis === 'closing') {
-                metaEl.innerHTML = `
-                    <span>DATE: \${META.next_formatted_date}</span>
-                    <span class="meta-sep">|</span>
-                    <span>SHIFT: \${META.next_shift_name}</span>
-                    <span class="meta-sep">|</span>
-                    <span>STAFF: _____________________</span>
-                `;
+                metaEl.innerHTML = '<span>DATE: ' + META.next_formatted_date + '</span>' +
+                    '<span class="meta-sep">|</span>' +
+                    '<span>SHIFT: ' + META.next_shift_name + '</span>' +
+                    '<span class="meta-sep">|</span>' +
+                    '<span>STAFF: _____________________</span>';
             } else {
-                metaEl.innerHTML = `
-                    <span>DATE: \${META.formatted_date}</span>
-                    <span class="meta-sep">|</span>
-                    <span>SHIFT: \${META.shift_name}</span>
-                    <span class="meta-sep">|</span>
-                    <span>STAFF: \${META.name_str}</span>
-                `;
+                metaEl.innerHTML = '<span>DATE: ' + META.formatted_date + '</span>' +
+                    '<span class="meta-sep">|</span>' +
+                    '<span>SHIFT: ' + META.shift_name + '</span>' +
+                    '<span class="meta-sep">|</span>' +
+                    '<span>STAFF: ' + META.name_str + '</span>';
             }
         }
 
