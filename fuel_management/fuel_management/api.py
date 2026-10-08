@@ -3460,7 +3460,7 @@ def return_borrowed_product(docname, return_date, returned_items):
     return "success"
 
 @frappe.whitelist()
-def get_inventory_sales_history(station, from_date=None, to_date=None, search=None, limit=None):
+def get_inventory_sales_history(station, from_date=None, to_date=None, search=None, limit=None, shift=None):
     conditions = ["s.station = %s", "s.docstatus < 2"]
     values = [station]
     
@@ -3470,12 +3470,15 @@ def get_inventory_sales_history(station, from_date=None, to_date=None, search=No
     if to_date:
         conditions.append("s.shift_date <= %s")
         values.append(to_date)
+    if shift:
+        conditions.append("(s.shift_template = %s OR s.name = %s)")
+        values.extend([shift, shift])
     if search:
-        conditions.append("(sis.item LIKE %s OR sis.sold_by LIKE %s OR i.item_name LIKE %s OR i.item_group LIKE %s)")
+        conditions.append("(sis.item LIKE %s OR sis.sold_by LIKE %s OR i.item_name LIKE %s OR i.item_group LIKE %s OR s.shift_template LIKE %s OR s.name LIKE %s OR sis.entry_number LIKE %s)")
         s_val = f"%{search}%"
-        values.extend([s_val, s_val, s_val, s_val])
+        values.extend([s_val, s_val, s_val, s_val, s_val, s_val, s_val])
         
-    limit_num = int(limit) if limit else (2000 if (from_date or to_date or search) else 200)
+    limit_num = int(limit) if limit else (2000 if (from_date or to_date or search or shift) else 200)
         
     query = f"""
         SELECT 

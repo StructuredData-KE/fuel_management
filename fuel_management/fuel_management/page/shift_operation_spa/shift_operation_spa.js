@@ -1224,6 +1224,26 @@ function render_drystock($wrapper) {
         $wrapper.find('#drystock-filter-end-date').val(sDate.split(" ")[0]);
     }
 
+    // Initialize shift filter dropdown
+    let $shiftFilter = $wrapper.find('#drystock-filter-shift');
+    let curShiftFilterVal = $shiftFilter.val();
+    let shiftOpts = `<option value="">All Shifts</option>`;
+    if (window.ACTIVE_SHIFT) {
+        let activeLabel = window.ACTIVE_SHIFT.shift_template ? `⚡ Active Shift (${window.ACTIVE_SHIFT.shift_template})` : '⚡ Active Shift';
+        shiftOpts += `<option value="__ACTIVE__">${activeLabel}</option>`;
+    }
+    let knownTemplates = ['Day Shift', 'Night Shift'];
+    if (window.SHIFT_TEMPLATES && window.SHIFT_TEMPLATES.length) {
+        knownTemplates = window.SHIFT_TEMPLATES.map(t => t.name || t.shift_template || t);
+    }
+    knownTemplates.forEach(t => {
+        shiftOpts += `<option value="${t}">${t}</option>`;
+    });
+    $shiftFilter.html(shiftOpts);
+    if (curShiftFilterVal) {
+        $shiftFilter.val(curShiftFilterVal);
+    }
+
     // Calculate Liability CSA
     let lubes_assignment = (window.SHIFT_DOC.assigned_csas || []).find(a => (a.pump_group || '').toLowerCase().includes('lube'));
     if (lubes_assignment) {
@@ -1431,7 +1451,7 @@ function render_drystock($wrapper) {
     $wrapper.find('#drystock-qty, #drystock-uom').off('input').on('input', calc_drystock);
 
     // Filter events for historical view
-    $wrapper.find('#drystock-filter-start-date, #drystock-filter-end-date').off('change').on('change', function() {
+    $wrapper.find('#drystock-filter-start-date, #drystock-filter-end-date, #drystock-filter-shift').off('change').on('change', function() {
         fetch_drystock_history($wrapper);
     });
     $wrapper.find('#drystock-filter-search').off('input').on('input', function() {
@@ -1551,27 +1571,42 @@ function fetch_drystock_history($wrapper) {
     
     let start_date = $wrapper.find('#drystock-filter-start-date').val();
     let end_date = $wrapper.find('#drystock-filter-end-date').val();
+    let shift_filter = $wrapper.find('#drystock-filter-shift').val() || '';
     let filter_search = ($wrapper.find('#drystock-filter-search').val() || '').trim().toLowerCase();
     
     let is_locked = window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.status !== "Open" && !(frappe.user.has_role("System Manager") || frappe.user.has_role("Fuel Station Owner"));
     
     $wrapper.find('#list-drystock-saved').html('<tr><td colspan="10" class="text-center" style="color: #64748b; padding: 2rem;">Loading sales history...</td></tr>');
     
+    let api_shift = shift_filter;
+    if (shift_filter === '__ACTIVE__' && window.ACTIVE_SHIFT) {
+        api_shift = window.ACTIVE_SHIFT.name;
+    }
+
     frappe.call({
         method: "fuel_management.fuel_management.api.get_inventory_sales_history",
         args: {
             station: window.ACTIVE_SHIFT.station,
             from_date: start_date || undefined,
             to_date: end_date || undefined,
-            search: filter_search || undefined
+            search: filter_search || undefined,
+            shift: api_shift || undefined
         },
         callback: function(r) {
             let sales = r.message || [];
             let count = sales.length;
-            if (!start_date && !end_date && !filter_search) {
-                $wrapper.find('#drystock-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest ${count} entries &bull; Use date filter for more)</span>`);
+            if (!start_date && !end_date && !filter_search && !shift_filter) {
+                $wrapper.find('#drystock-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest ${count} entries &bull; Use date and shift filters for more)</span>`);
             } else {
-                $wrapper.find('#drystock-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
+                let badge_details = [];
+                if (shift_filter) {
+                    badge_details.push(shift_filter === '__ACTIVE__' ? 'Active Shift' : shift_filter);
+                }
+                if (start_date || end_date) {
+                    badge_details.push(`${start_date || 'Start'} to ${end_date || 'End'}`);
+                }
+                let detail_str = badge_details.length ? ` &bull; ${badge_details.join(' | ')}` : '';
+                $wrapper.find('#drystock-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries${detail_str})</span>`);
             }
             let html_saved = '';
             let total_amount_saved = 0;
@@ -1583,8 +1618,22 @@ function fetch_drystock_history($wrapper) {
                     let category = row.item_group || (item_obj ? item_obj.item_group : '') || 'Stock';
 
                     if (filter_search) {
-                        let matchStr = `${display_name} ${category} ${row.sold_by || ''}`.toLowerCase();
+                        let matchStr = `${display_name} ${category} ${row.sold_by || ''} ${row.shift_template || ''} ${row.entry_number || ''}`.toLowerCase();
                         if (!matchStr.includes(filter_search)) return;
+                    }
+
+                    if (shift_filter) {
+                        if (shift_filter === '__ACTIVE__') {
+                            let is_active = (row.shift === window.ACTIVE_SHIFT.name || row.parent === window.ACTIVE_SHIFT.name);
+                            if (!is_active) return;
+                        } else {
+                            let r_shift_tmpl = (row.shift_template || '').toLowerCase();
+                            let r_shift_name = (row.shift || '').toLowerCase();
+                            let target_s = shift_filter.toLowerCase();
+                            if (r_shift_tmpl !== target_s && r_shift_name !== target_s && !r_shift_tmpl.includes(target_s)) {
+                                return;
+                            }
+                        }
                     }
 
                     let csa_name = row.sold_by;
@@ -2472,7 +2521,7 @@ function setup_actions(wrapper) {
     });
 
     // Bind Dry Stock History Filters
-    $wrapper.find('#drystock-filter-start-date, #drystock-filter-end-date').off('change').on('change', function() {
+    $wrapper.find('#drystock-filter-start-date, #drystock-filter-end-date, #drystock-filter-shift').off('change').on('change', function() {
         if(typeof fetch_drystock_history === 'function') {
             fetch_drystock_history($wrapper);
         }

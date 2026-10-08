@@ -2220,18 +2220,27 @@
                 </div>
             </div>
             
-            <div style="display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem;">
-                <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; align-items: flex-end;">
+                <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom: 0;">
                     <label style="font-weight: 700; color: #475569; font-size: 0.82rem;">Start Date</label>
                     <input type="date" id="drystock-filter-start-date" class="spa-input" style="border-radius: 6px; border: 1.5px solid #cbd5e1;">
                 </div>
-                <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 0;">
+                <div class="form-group" style="flex: 1; min-width: 140px; margin-bottom: 0;">
                     <label style="font-weight: 700; color: #475569; font-size: 0.82rem;">End Date</label>
                     <input type="date" id="drystock-filter-end-date" class="spa-input" style="border-radius: 6px; border: 1.5px solid #cbd5e1;">
                 </div>
+                <div class="form-group" style="flex: 1; min-width: 160px; margin-bottom: 0;">
+                    <label style="font-weight: 700; color: #475569; font-size: 0.82rem;">Filter by Shift</label>
+                    <select id="drystock-filter-shift" class="spa-input" style="border-radius: 6px; border: 1.5px solid #cbd5e1; background: #ffffff; height: 38px;">
+                        <option value="">All Shifts</option>
+                        <option value="__ACTIVE__">⚡ Active Shift</option>
+                        <option value="Day Shift">Day Shift</option>
+                        <option value="Night Shift">Night Shift</option>
+                    </select>
+                </div>
                 <div class="form-group" style="flex: 2; min-width: 220px; margin-bottom: 0;">
                     <label style="font-weight: 700; color: #475569; font-size: 0.82rem;">Search Product / Item</label>
-                    <input type="text" id="drystock-filter-search" class="spa-input" placeholder="Filter by product name..." style="border-radius: 6px; border: 1.5px solid #cbd5e1;">
+                    <input type="text" id="drystock-filter-search" class="spa-input" placeholder="Filter by product name, sold by, entry #..." style="border-radius: 6px; border: 1.5px solid #cbd5e1;">
                 </div>
             </div>
 
