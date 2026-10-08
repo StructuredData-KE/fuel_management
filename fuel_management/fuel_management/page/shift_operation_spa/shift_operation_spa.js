@@ -211,9 +211,14 @@ function lock_ui_for_no_shift($wrapper) {
     });
     
     // Update Top Navbar
-    $wrapper.find('#active-shift-badge').text('No Active Shift');
+    $wrapper.find('#active-shift-badge').html(`
+        <span class="hidden sm:inline">No Active Shift</span>
+        <span class="sm:hidden font-medium">No Shift</span>
+    `);
     $wrapper.find('#active-shift-badge').css('background', 'rgba(255,255,255,0.15)');
-    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
+    let user_name = frappe.session.user_fullname || frappe.session.user || "User";
+    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${user_name}`);
+    $wrapper.find('.user-greeting-mobile').text(user_name);
     let hour = new Date().getHours();
     let time_greeting = "Good morning";
     if (hour >= 12 && hour < 17) time_greeting = "Good afternoon";
@@ -234,9 +239,14 @@ function lock_ui_for_active_shift($wrapper) {
     // Update Top Navbar
     let bShiftName = window.ACTIVE_SHIFT.shift_template ? window.ACTIVE_SHIFT.shift_template : "Shift";
     let formattedDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
-    $wrapper.find('#active-shift-badge').text(`Active Shift: ${formattedDate} (${bShiftName})`);
+    $wrapper.find('#active-shift-badge').html(`
+        <span class="hidden sm:inline">Active Shift: ${formattedDate} (${bShiftName})</span>
+        <span class="sm:hidden font-bold">🟢 ${formattedDate} (${bShiftName})</span>
+    `);
     $wrapper.find('#active-shift-badge').css('background', '#16a34a'); // Green badge for active
-    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${frappe.session.user_fullname || frappe.session.user || "User"}`);
+    let user_name_active = frappe.session.user_fullname || frappe.session.user || "User";
+    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${user_name_active}`);
+    $wrapper.find('.user-greeting-mobile').text(user_name_active);
     let hour = new Date().getHours();
     let time_greeting = "Good morning";
     if (hour >= 12 && hour < 17) time_greeting = "Good afternoon";
@@ -1816,9 +1826,51 @@ function refresh_drystock_cart($wrapper) {
 function setup_tabs(wrapper) {
     const $wrapper = $(wrapper);
     
-    // Sidebar Toggle
-    $wrapper.on('click', '#sidebar-toggle', function() {
-        $wrapper.find('.sidebar').toggleClass('sidebar-collapsed');
+    // Mobile Drawer Handlers
+    function open_mobile_sidebar() {
+        const $sidebar = $wrapper.find('#sidebar');
+        const $overlay = $wrapper.find('#mobile-overlay');
+        $sidebar.addClass('mobile-open').removeClass('-translate-x-full').addClass('translate-x-0');
+        $overlay.removeClass('hidden');
+        $('body').addClass('overflow-hidden');
+    }
+
+    function close_mobile_sidebar() {
+        const $sidebar = $wrapper.find('#sidebar');
+        const $overlay = $wrapper.find('#mobile-overlay');
+        $sidebar.removeClass('mobile-open').removeClass('translate-x-0').addClass('-translate-x-full');
+        $overlay.addClass('hidden');
+        $('body').removeClass('overflow-hidden');
+    }
+
+    // Hamburger Button Click (Mobile + Desktop)
+    $wrapper.on('click', '#hamburger-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const $sidebar = $wrapper.find('#sidebar');
+        if (window.innerWidth <= 768) {
+            if ($sidebar.hasClass('mobile-open') || $sidebar.hasClass('translate-x-0')) {
+                close_mobile_sidebar();
+            } else {
+                open_mobile_sidebar();
+            }
+        } else {
+            $sidebar.toggleClass('sidebar-collapsed');
+        }
+    });
+
+    // Close button & Mobile Backdrop Click
+    $wrapper.on('click', '#mobile-overlay, #btn-close-sidebar', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        close_mobile_sidebar();
+    });
+
+    // Close mobile drawer on Escape key
+    $(document).off('keydown.mobileNav').on('keydown.mobileNav', function(e) {
+        if (e.key === 'Escape' && window.innerWidth <= 768) {
+            close_mobile_sidebar();
+        }
     });
 
     $wrapper.on('click', '.seg-btn', function() {
@@ -1845,6 +1897,11 @@ function setup_tabs(wrapper) {
     
     $wrapper.find('.nav-item').on('click', function(e) {
         e.preventDefault();
+        
+        // Auto-close mobile navigation drawer once a module is chosen
+        if (window.innerWidth <= 768) {
+            close_mobile_sidebar();
+        }
         
         // Remove active class from all tabs and panes
         $wrapper.find('.nav-item').removeClass('active');
