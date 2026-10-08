@@ -152,6 +152,11 @@ try {
             if (typeof window.init_monthly_reports_module === 'function') {
                 window.init_monthly_reports_module(wrapper);
             }
+
+            // Initialize Stock Take Module (Admin)
+            if (typeof window.init_stock_take_module === 'function') {
+                window.init_stock_take_module(wrapper);
+            }
         }
     });
 }
@@ -199,13 +204,13 @@ function fetch_active_shift(wrapper) {
 }
 
 function lock_ui_for_no_shift($wrapper) {
-    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-home"]):not([data-target="tab-debtors"]):not([data-target="tab-monthly-reports"]):not([data-target="tab-past-reports"])').css({
+    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-home"]):not([data-target="tab-debtors"]):not([data-target="tab-monthly-reports"]):not([data-target="tab-past-reports"]):not([data-target="tab-stock-take"])').css({
         'opacity': '0.5',
         'pointer-events': 'none'
     });
     
-    // Ensure Debtors, Monthly Reports & Past Reports remain clickable
-    $wrapper.find('.nav-item[data-target="tab-debtors"], .nav-item[data-target="tab-monthly-reports"], .nav-item[data-target="tab-past-reports"]').css({
+    // Ensure Debtors, Monthly Reports, Past Reports & Stock Take remain clickable
+    $wrapper.find('.nav-item[data-target="tab-debtors"], .nav-item[data-target="tab-monthly-reports"], .nav-item[data-target="tab-past-reports"], .nav-item[data-target="tab-stock-take"]').css({
         'opacity': '1',
         'pointer-events': 'auto'
     });
@@ -1927,6 +1932,10 @@ function setup_tabs(wrapper) {
             render_stock_transfer($wrapper);
         } else if (target === 'tab-borrowed') {
             render_borrowed_products($wrapper);
+        } else if (target === 'tab-stock-take') {
+            if (typeof window.render_stock_take === 'function') {
+                window.render_stock_take($wrapper);
+            }
         } else if (target === 'tab-report') {
             if (typeof window.generate_end_shift_report === 'function') {
                 window.generate_end_shift_report($wrapper);
@@ -15238,4 +15247,553 @@ window.export_monthly_volume_csv = function() {
     link.click();
     document.body.removeChild(link);
 };
+
+/* =========================================================================
+   STOCK TAKE & PHYSICAL COUNT MODULE (ADMIN ONLY)
+   ========================================================================= */
+window.STOCK_TAKE_STATE = {
+    wrapper: null,
+    items: [],
+    stations: [],
+    stationDocs: {},
+    currentStation: null,
+    currentWarehouse: null,
+    initialized: false
+};
+
+window.init_stock_take_module = function(wrapper) {
+    window.STOCK_TAKE_STATE.wrapper = wrapper;
+    const $wrapper = $(wrapper);
+
+    // 1. Role-based Visibility Check
+    const isAdmin = frappe.user.has_role("System Manager") ||
+                    frappe.user.has_role("Fuel Station Owner") ||
+                    frappe.user.has_role("Fuel Manager") ||
+                    frappe.session.user === "Administrator";
+
+    if (!isAdmin) {
+        $wrapper.find('#nav-stock-take').remove();
+        $wrapper.find('#tab-stock-take').remove();
+        return;
+    } else {
+        $wrapper.find('#nav-stock-take').show();
+    }
+
+    if (window.STOCK_TAKE_STATE.initialized) return;
+    window.STOCK_TAKE_STATE.initialized = true;
+
+    // Station dropdown change
+    $wrapper.on('change', '#stock-take-station', function() {
+        const station = $(this).val();
+        window.STOCK_TAKE_STATE.currentStation = station;
+        populate_stock_take_warehouses($wrapper, station, function() {
+            load_stock_take_inventory($wrapper);
+        });
+    });
+
+    // Warehouse dropdown change
+    $wrapper.on('change', '#stock-take-warehouse', function() {
+        window.STOCK_TAKE_STATE.currentWarehouse = $(this).val();
+        load_stock_take_inventory($wrapper);
+    });
+
+    // Refresh button
+    $wrapper.on('click', '#btn-refresh-stock-take', function(e) {
+        e.preventDefault();
+        load_stock_take_inventory($wrapper);
+    });
+
+    // Reset counts button
+    $wrapper.on('click', '#btn-reset-stock-take-counts', function(e) {
+        e.preventDefault();
+        frappe.confirm('Are you sure you want to clear all entered physical counts?', function() {
+            $wrapper.find('.st-phys-input').val('');
+            $wrapper.find('.st-item-row').each(function() {
+                calculate_stock_take_row_variance($(this));
+            });
+            recalculate_stock_take_summary($wrapper);
+        });
+    });
+
+    // Real-time calculation on typing physical count
+    $wrapper.on('input', '.st-phys-input', function() {
+        const $input = $(this);
+        const $row = $input.closest('tr.st-item-row');
+        calculate_stock_take_row_variance($row);
+        recalculate_stock_take_summary($wrapper);
+    });
+
+    // Enter key navigation to next input
+    $wrapper.on('keydown', '.st-phys-input', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const $inputs = $wrapper.find('.st-phys-input:visible');
+            const idx = $inputs.index(this);
+            if (idx >= 0 && idx < $inputs.length - 1) {
+                $inputs.eq(idx + 1).focus().select();
+            }
+        }
+    });
+
+    // Search filter
+    $wrapper.on('input', '#stock-take-search', function() {
+        filter_stock_take_table($wrapper);
+    });
+
+    // Category filter
+    $wrapper.on('change', '#stock-take-group-filter', function() {
+        filter_stock_take_table($wrapper);
+    });
+
+    // Submit Stock Correction button
+    $wrapper.on('click', '#btn-submit-stock-take', function(e) {
+        e.preventDefault();
+        submit_stock_take_correction($wrapper);
+    });
+};
+
+window.render_stock_take = function($wrapper) {
+    if (!window.STOCK_TAKE_STATE.wrapper) {
+        window.init_stock_take_module($wrapper);
+    }
+
+    const $stationSelect = $wrapper.find('#stock-take-station');
+    if ($stationSelect.children().length === 0) {
+        // Fetch Stations
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Fuel Station",
+                fields: ["name", "station_name", "company", "default_forecourt_warehouse", "default_store_warehouse"],
+                limit_page_length: 50
+            },
+            callback: function(r) {
+                const stations = r.message || [];
+                window.STOCK_TAKE_STATE.stations = stations;
+                $stationSelect.empty();
+                
+                let defaultStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                                     frappe.defaults.get_user_default("station") || 
+                                     (stations.length > 0 ? stations[0].name : "");
+
+                stations.forEach(st => {
+                    window.STOCK_TAKE_STATE.stationDocs[st.name] = st;
+                    $stationSelect.append(`<option value="${st.name}">${st.station_name || st.name}</option>`);
+                });
+
+                if (defaultStation) {
+                    $stationSelect.val(defaultStation);
+                }
+                window.STOCK_TAKE_STATE.currentStation = $stationSelect.val();
+
+                populate_stock_take_warehouses($wrapper, window.STOCK_TAKE_STATE.currentStation, function() {
+                    load_stock_take_inventory($wrapper);
+                });
+            }
+        });
+    } else {
+        // If already populated but table is empty, reload
+        if ($wrapper.find('#list-stock-take .st-item-row').length === 0) {
+            load_stock_take_inventory($wrapper);
+        }
+    }
+};
+
+function populate_stock_take_warehouses($wrapper, stationName, callback) {
+    const $whSelect = $wrapper.find('#stock-take-warehouse');
+    $whSelect.empty();
+
+    const stDoc = window.STOCK_TAKE_STATE.stationDocs[stationName];
+    if (stDoc && (stDoc.default_forecourt_warehouse || stDoc.default_store_warehouse)) {
+        if (stDoc.default_forecourt_warehouse) {
+            $whSelect.append(`<option value="${stDoc.default_forecourt_warehouse}">Forecourt (${stDoc.default_forecourt_warehouse})</option>`);
+        }
+        if (stDoc.default_store_warehouse) {
+            $whSelect.append(`<option value="${stDoc.default_store_warehouse}">Store (${stDoc.default_store_warehouse})</option>`);
+        }
+        window.STOCK_TAKE_STATE.currentWarehouse = $whSelect.val();
+        if (callback) callback();
+    } else {
+        // Fetch warehouses for this company/station
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Warehouse",
+                filters: { is_group: 0, disabled: 0 },
+                fields: ["name", "warehouse_name", "company"],
+                limit_page_length: 50
+            },
+            callback: function(r) {
+                const whs = r.message || [];
+                whs.forEach(wh => {
+                    $whSelect.append(`<option value="${wh.name}">${wh.name}</option>`);
+                });
+                window.STOCK_TAKE_STATE.currentWarehouse = $whSelect.val();
+                if (callback) callback();
+            }
+        });
+    }
+}
+
+function load_stock_take_inventory($wrapper) {
+    const station = $wrapper.find('#stock-take-station').val();
+    const warehouse = $wrapper.find('#stock-take-warehouse').val();
+    const $tbody = $wrapper.find('#list-stock-take');
+
+    if (!warehouse) {
+        $tbody.html(`<tr><td colspan="9" style="text-align: center; padding: 2rem; color: #dc2626; font-weight: 600;">Please select a warehouse.</td></tr>`);
+        return;
+    }
+
+    $tbody.html(`<tr><td colspan="9" style="text-align: center; padding: 3rem; color: #64748b;"><i class="fa fa-spinner fa-spin fa-2x"></i><div style="margin-top: 0.5rem; font-weight: 600;">Loading live bin balances for ${warehouse}...</div></td></tr>`);
+
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_stock_take_inventory",
+        args: {
+            station: station,
+            warehouse: warehouse
+        },
+        callback: function(r) {
+            if (r.message && r.message.items) {
+                window.STOCK_TAKE_STATE.items = r.message.items;
+                render_stock_take_table($wrapper, r.message.items);
+            } else {
+                $tbody.html(`<tr><td colspan="9" style="text-align: center; padding: 2rem; color: #64748b;">No stock items found in warehouse.</td></tr>`);
+            }
+        },
+        error: function(err) {
+            $tbody.html(`<tr><td colspan="9" style="text-align: center; padding: 2rem; color: #dc2626;">Error loading stock items: ${err.message || 'Check permissions.'}</td></tr>`);
+        }
+    });
+}
+
+function render_stock_take_table($wrapper, items) {
+    const $tbody = $wrapper.find('#list-stock-take');
+    $tbody.empty();
+
+    if (!items || items.length === 0) {
+        $tbody.html(`<tr><td colspan="9" style="text-align: center; padding: 2rem; color: #64748b;">No stock items available for count.</td></tr>`);
+        recalculate_stock_take_summary($wrapper);
+        return;
+    }
+
+    // Group items by item_group
+    let currentGroup = null;
+    let rowIndex = 1;
+
+    items.forEach(it => {
+        if (it.item_group !== currentGroup) {
+            currentGroup = it.item_group;
+            $tbody.append(`
+                <tr class="st-group-header" data-group="${currentGroup}">
+                    <td colspan="9" style="background-color: #1e293b; color: #fbbf24; font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 0.5rem 1rem;">
+                        📁 ${currentGroup}
+                    </td>
+                </tr>
+            `);
+        }
+
+        const isWhole = (it.stock_uom === 'Nos' || it.stock_uom === 'Unit' || it.stock_uom === 'Pcs');
+        const sysQtyFormatted = isWhole ? Math.round(it.system_qty) : it.system_qty.toFixed(2);
+        const rateFormatted = it.valuation_rate ? it.valuation_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00';
+
+        const rowHtml = `
+            <tr class="st-item-row" data-item-code="${it.item_code}" data-group="${it.item_group}" data-uom="${it.stock_uom}" data-sys-qty="${it.system_qty}" data-rate="${it.valuation_rate}">
+                <td style="text-align: center; font-size: 0.8rem; color: #94a3b8; padding: 0.6rem 0.5rem;">${rowIndex++}</td>
+                <td style="padding: 0.6rem 1rem;">
+                    <div style="font-weight: 700; color: #0f172a; font-size: 0.875rem;">${it.item_name}</div>
+                    <div style="font-size: 0.75rem; color: #64748b; font-family: monospace;">${it.item_code}</div>
+                </td>
+                <td style="padding: 0.6rem 0.75rem;">
+                    <span style="background: #f1f5f9; color: #475569; font-size: 0.75rem; font-weight: 600; padding: 2px 6px; border-radius: 4px;">${it.item_group}</span>
+                </td>
+                <td style="text-align: center; padding: 0.6rem 0.5rem; font-size: 0.8rem; color: #64748b;">${it.stock_uom}</td>
+                <td style="text-align: right; padding: 0.6rem 1rem; font-family: monospace; font-size: 0.95rem; font-weight: 700; color: #1e293b;">
+                    ${sysQtyFormatted}
+                </td>
+                <td style="text-align: center; padding: 0.4rem 0.75rem; background-color: #eff6ff; border-left: 2px solid #bfdbfe; border-right: 2px solid #bfdbfe;">
+                    <input type="number" 
+                           step="${isWhole ? '1' : '0.01'}" 
+                           min="0"
+                           class="st-phys-input" 
+                           placeholder="Physical..." 
+                           style="width: 100px; padding: 0.4rem 0.6rem; text-align: center; font-weight: 800; font-size: 0.95rem; border: 2px solid #93c5fd; border-radius: 6px; outline: none; background: #ffffff; color: #1e40af;">
+                </td>
+                <td style="text-align: center; padding: 0.6rem 0.75rem;">
+                    <span class="st-variance-badge" style="display: inline-block; min-width: 50px; padding: 3px 8px; border-radius: 9999px; font-weight: 800; font-size: 0.8rem; background: #f1f5f9; color: #94a3b8; font-family: monospace;">
+                        —
+                    </span>
+                </td>
+                <td style="text-align: right; padding: 0.6rem 1rem; font-family: monospace; font-size: 0.85rem; color: #64748b;">
+                    KES ${rateFormatted}
+                </td>
+                <td style="text-align: right; padding: 0.6rem 1rem; font-family: monospace; font-size: 0.85rem;">
+                    <span class="st-adj-val" style="font-weight: 700; color: #94a3b8;">—</span>
+                </td>
+            </tr>
+        `;
+        $tbody.append(rowHtml);
+    });
+
+    recalculate_stock_take_summary($wrapper);
+}
+
+function calculate_stock_take_row_variance($row) {
+    const $input = $row.find('.st-phys-input');
+    const $badge = $row.find('.st-variance-badge');
+    const $adjVal = $row.find('.st-adj-val');
+
+    const valStr = $input.val().trim();
+    if (valStr === '') {
+        $badge.css({ 'background': '#f1f5f9', 'color': '#94a3b8' }).text('—');
+        $adjVal.css('color', '#94a3b8').text('—');
+        $row.removeAttr('data-has-count').removeAttr('data-diff').removeAttr('data-diff-val');
+        return;
+    }
+
+    const sysQty = parseFloat($row.attr('data-sys-qty')) || 0;
+    const physQty = parseFloat(valStr) || 0;
+    const rate = parseFloat($row.attr('data-rate')) || 0;
+    const isWhole = ($row.attr('data-uom') === 'Nos' || $row.attr('data-uom') === 'Unit' || $row.attr('data-uom') === 'Pcs');
+
+    let diff = physQty - sysQty;
+    if (isWhole) diff = Math.round(diff);
+    else diff = Math.round(diff * 100) / 100;
+
+    const diffVal = diff * rate;
+
+    $row.attr('data-has-count', '1');
+    $row.attr('data-diff', diff);
+    $row.attr('data-diff-val', diffVal);
+
+    if (diff < 0) {
+        // Shortage (Stock Loss Expense)
+        $badge.css({ 'background': '#fee2e2', 'color': '#dc2626' }).text(diff.toString());
+        $adjVal.css('color', '#dc2626').text(`- KES ${Math.abs(diffVal).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    } else if (diff > 0) {
+        // Surplus (Gain)
+        $badge.css({ 'background': '#dcfce7', 'color': '#16a34a' }).text(`+${diff.toString()}`);
+        $adjVal.css('color', '#16a34a').text(`+ KES ${diffVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    } else {
+        // Balanced (Match)
+        $badge.css({ 'background': '#f1f5f9', 'color': '#475569' }).text('0');
+        $adjVal.css('color', '#475569').text('KES 0.00');
+    }
+}
+
+function recalculate_stock_take_summary($wrapper) {
+    const $rows = $wrapper.find('.st-item-row');
+    const totalItems = $rows.length;
+    let countedItems = 0;
+    let shortageCount = 0;
+    let shortageVal = 0;
+    let surplusCount = 0;
+    let surplusVal = 0;
+
+    $rows.each(function() {
+        const $row = $(this);
+        if ($row.attr('data-has-count') === '1') {
+            countedItems++;
+            const diff = parseFloat($row.attr('data-diff')) || 0;
+            const diffVal = parseFloat($row.attr('data-diff-val')) || 0;
+
+            if (diff < 0) {
+                shortageCount++;
+                shortageVal += Math.abs(diffVal);
+            } else if (diff > 0) {
+                surplusCount++;
+                surplusVal += diffVal;
+            }
+        }
+    });
+
+    const netVal = surplusVal - shortageVal;
+
+    $wrapper.find('#st-kpi-counted').text(`${countedItems} / ${totalItems}`);
+    $wrapper.find('#st-kpi-shortages').text(`${shortageCount} items (KES ${shortageVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`);
+    $wrapper.find('#st-kpi-surpluses').text(`${surplusCount} items (KES ${surplusVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})`);
+
+    const $net = $wrapper.find('#st-kpi-net');
+    if (netVal < 0) {
+        $net.css('color', '#dc2626').text(`- KES ${Math.abs(netVal).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    } else if (netVal > 0) {
+        $net.css('color', '#16a34a').text(`+ KES ${netVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+    } else {
+        $net.css('color', '#0f172a').text(`KES 0.00`);
+    }
+
+    const totalDiffItems = shortageCount + surplusCount;
+    $wrapper.find('#st-pending-count-label').text(`${totalDiffItems} items with differences`);
+
+    const $btnSubmit = $wrapper.find('#btn-submit-stock-take');
+    if (totalDiffItems > 0) {
+        $btnSubmit.prop('disabled', false).css({
+            'opacity': '1',
+            'cursor': 'pointer'
+        }).html(`
+            <svg style="width: 18px; height: 18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Post Stock Correction (${totalDiffItems} Items)
+        `);
+    } else {
+        $btnSubmit.prop('disabled', true).css({
+            'opacity': '0.5',
+            'cursor': 'not-allowed'
+        }).html(`
+            <svg style="width: 18px; height: 18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Post Stock Correction to Expense
+        `);
+    }
+}
+
+function filter_stock_take_table($wrapper) {
+    const searchVal = ($wrapper.find('#stock-take-search').val() || '').toLowerCase().trim();
+    const groupVal = ($wrapper.find('#stock-take-group-filter').val() || '').toLowerCase().trim();
+
+    $wrapper.find('.st-item-row').each(function() {
+        const $row = $(this);
+        const itemCode = ($row.attr('data-item-code') || '').toLowerCase();
+        const itemName = $row.find('td:nth-child(2)').text().toLowerCase();
+        const itemGroup = ($row.attr('data-group') || '').toLowerCase();
+
+        const matchesSearch = !searchVal || itemCode.includes(searchVal) || itemName.includes(searchVal);
+        const matchesGroup = !groupVal || itemGroup.includes(groupVal);
+
+        $row.toggle(matchesSearch && matchesGroup);
+    });
+
+    // Toggle group headers if all items under it are hidden
+    $wrapper.find('.st-group-header').each(function() {
+        const $hdr = $(this);
+        const grp = $hdr.attr('data-group');
+        const $items = $wrapper.find(`.st-item-row[data-group="${grp}"]:visible`);
+        $hdr.toggle($items.length > 0);
+    });
+}
+
+function submit_stock_take_correction($wrapper) {
+    const station = $wrapper.find('#stock-take-station').val();
+    const warehouse = $wrapper.find('#stock-take-warehouse').val();
+    const remarks = $wrapper.find('#stock-take-remarks').val().trim();
+
+    if (!warehouse) {
+        frappe.msgprint("Please select a warehouse first.");
+        return;
+    }
+
+    const itemsToCorrect = [];
+    let shortageCount = 0;
+    let shortageVal = 0;
+    let surplusCount = 0;
+    let surplusVal = 0;
+
+    $wrapper.find('.st-item-row').each(function() {
+        const $row = $(this);
+        if ($row.attr('data-has-count') === '1') {
+            const diff = parseFloat($row.attr('data-diff')) || 0;
+            if (diff !== 0) {
+                const itemCode = $row.attr('data-item-code');
+                const sysQty = parseFloat($row.attr('data-sys-qty')) || 0;
+                const physQty = parseFloat($row.find('.st-phys-input').val()) || 0;
+                const rate = parseFloat($row.attr('data-rate')) || 0;
+                const diffVal = parseFloat($row.attr('data-diff-val')) || 0;
+
+                itemsToCorrect.push({
+                    item_code: itemCode,
+                    system_qty: sysQty,
+                    physical_qty: physQty,
+                    valuation_rate: rate
+                });
+
+                if (diff < 0) {
+                    shortageCount++;
+                    shortageVal += Math.abs(diffVal);
+                } else {
+                    surplusCount++;
+                    surplusVal += diffVal;
+                }
+            }
+        }
+    });
+
+    if (itemsToCorrect.length === 0) {
+        frappe.msgprint("No quantity differences detected. Please enter physical counts that differ from system stock.");
+        return;
+    }
+
+    const confirmHtml = `
+        <div style="font-size: 0.95rem; line-height: 1.6; color: #1e293b;">
+            <p><strong>Are you sure you want to post this Stock Correction?</strong></p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem; margin: 0.75rem 0;">
+                <div><strong>Warehouse:</strong> <span style="font-family: monospace;">${warehouse}</span></div>
+                ${shortageCount > 0 ? `
+                    <div style="color: #dc2626; font-weight: 600; margin-top: 4px;">
+                        • <strong>Shortages:</strong> ${shortageCount} items (KES ${shortageVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})
+                        <br><span style="font-size: 0.8rem; color: #7f1d1d; font-weight: normal;">Will be expensed to company <strong>Stock Loss Account</strong>.</span>
+                    </div>` : ''}
+                ${surplusCount > 0 ? `
+                    <div style="color: #16a34a; font-weight: 600; margin-top: 4px;">
+                        • <strong>Surpluses:</strong> ${surplusCount} items (KES ${surplusVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})})
+                        <br><span style="font-size: 0.8rem; color: #14532d; font-weight: normal;">Will be adjusted into inventory via Stock Adjustment.</span>
+                    </div>` : ''}
+                <div style="margin-top: 6px; font-size: 0.85rem; color: #64748b;">
+                    <strong>Audit Reason:</strong> ${remarks || "Physical Stock Count Audit"}
+                </div>
+            </div>
+            <p style="font-size: 0.85rem; color: #475569;">
+                This action creates and immediately submits official ERPNext Stock Entries, adjusting bin balances and ledger entries.
+            </p>
+        </div>
+    `;
+
+    frappe.confirm(confirmHtml, function() {
+        const $btn = $wrapper.find('#btn-submit-stock-take');
+        $btn.prop('disabled', true).html(`<i class="fa fa-spinner fa-spin"></i> Posting Correction...`);
+
+        frappe.call({
+            method: "fuel_management.fuel_management.api.post_stock_take_correction",
+            args: {
+                station: station,
+                warehouse: warehouse,
+                items: JSON.stringify(itemsToCorrect),
+                remarks: remarks
+            },
+            callback: function(r) {
+                $btn.prop('disabled', false);
+                if (r.message && r.message.success) {
+                    let msg = `<div style="font-weight: 600; font-size: 1rem; color: #15803d; margin-bottom: 0.5rem;">✅ Stock Correction Successfully Submitted!</div>`;
+                    msg += `<div style="font-size: 0.9rem; line-height: 1.5;">`;
+                    if (r.message.issue_entry) {
+                        msg += `<div><strong>Shortage Issue Voucher:</strong> <a href="/app/stock-entry/${r.message.issue_entry}" target="_blank" style="color: #2563eb; text-decoration: underline;">${r.message.issue_entry}</a> (Expensed to <em>${r.message.stock_loss_account}</em>)</div>`;
+                    }
+                    if (r.message.receipt_entry) {
+                        msg += `<div><strong>Surplus Receipt Voucher:</strong> <a href="/app/stock-entry/${r.message.receipt_entry}" target="_blank" style="color: #2563eb; text-decoration: underline;">${r.message.receipt_entry}</a></div>`;
+                    }
+                    msg += `<div style="margin-top: 0.5rem; color: #475569;">Warehouse actual stock balances and General Ledger have been updated.</div></div>`;
+
+                    frappe.msgprint({
+                        title: "Stock Correction Posted",
+                        message: msg,
+                        indicator: "green"
+                    });
+
+                    // Clear remarks input
+                    $wrapper.find('#stock-take-remarks').val('');
+
+                    // Automatically reload inventory to show new system stock
+                    load_stock_take_inventory($wrapper);
+                }
+            },
+            error: function(err) {
+                $btn.prop('disabled', false);
+                recalculate_stock_take_summary($wrapper);
+                frappe.msgprint({
+                    title: "Correction Failed",
+                    message: err.message || "Failed to post stock correction.",
+                    indicator: "red"
+                });
+            }
+        });
+    });
+}
+
 

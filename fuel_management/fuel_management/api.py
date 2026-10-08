@@ -4638,6 +4638,237 @@ def get_monthly_volume_analysis(station=None, from_date=None, to_date=None, mont
         "purchases_ledger": purchases_ledger
     }
 
+def get_or_create_stock_loss_account(company="KILIBET INVESTMENT LTD"):
+    abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
+    acc_name = f"Stock Loss - {abbr}"
+    if not frappe.db.exists("Account", acc_name):
+        parent = f"Stock Expenses - {abbr}"
+        if not frappe.db.exists("Account", parent):
+            parent = frappe.db.get_value("Account", {"company": company, "account_name": "Direct Expenses", "is_group": 1}) or frappe.db.get_value("Account", {"company": company, "root_type": "Expense", "is_group": 1})
+        doc = frappe.new_doc("Account")
+        doc.account_name = "Stock Loss"
+        doc.parent_account = parent
+        doc.company = company
+        doc.root_type = "Expense"
+        doc.account_type = "Expense Account"
+        doc.is_group = 0
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+    return acc_name
+
+@frappe.whitelist()
+def get_stock_take_inventory(station=None, warehouse=None):
+    from frappe.utils import flt
+    is_admin = (
+        "System Manager" in frappe.get_roles() or
+        "Fuel Station Owner" in frappe.get_roles() or
+        "Fuel Manager" in frappe.get_roles() or
+        frappe.session.user == "Administrator"
+    )
+    if not is_admin:
+        frappe.throw("Access Restricted: Only Administrators and Managers can access Stock Take.", frappe.PermissionError)
+
+    if not warehouse and station:
+        station_doc = frappe.get_doc("Fuel Station", station)
+        warehouse = station_doc.default_forecourt_warehouse or station_doc.default_store_warehouse
+
+    if not warehouse:
+        frappe.throw("Warehouse is required.")
+
+    # Get all active non-fuel stock items
+    stock_items = frappe.get_all("Item",
+        filters={"is_stock_item": 1, "disabled": 0},
+        fields=["name", "item_name", "item_group", "stock_uom"]
+    )
+
+    # Exclude bulk fuel products like DIESEL, PMS, Petrol
+    stock_items = [it for it in stock_items if not any(f in (it.item_name or "").lower() or f in (it.name or "").lower() for f in ["diesel", "pms 0", "petrol 0", "ago 0"])]
+
+    # Fetch bins for this warehouse
+    bin_map = {}
+    bins = frappe.get_all("Bin",
+        filters={"warehouse": warehouse},
+        fields=["item_code", "actual_qty", "valuation_rate"]
+    )
+    for b in bins:
+        bin_map[b.item_code] = {
+            "actual_qty": flt(b.actual_qty),
+            "valuation_rate": flt(b.valuation_rate)
+        }
+
+    # Fetch standard selling prices from Price List
+    price_map = {}
+    prices = frappe.get_all("Item Price",
+        filters={"price_list": "Standard Selling"},
+        fields=["item_code", "price_list_rate"]
+    )
+    for p in prices:
+        price_map[p.item_code] = flt(p.price_list_rate)
+
+    # Priority ordering for item groups: Lubes -> Gas -> Cylinders -> Accessories -> Filters
+    group_priority = {
+        "lubes": 1, "lubricants": 1,
+        "gas": 2, "lpg": 2,
+        "cylinders": 3, "cylinder": 3,
+        "accessories": 4, "accessory": 4,
+        "filters": 5, "filter": 5
+    }
+
+    result = []
+    for it in stock_items:
+        b_info = bin_map.get(it.name, {"actual_qty": 0.0, "valuation_rate": 0.0})
+        rate = b_info["valuation_rate"] or price_map.get(it.name, 0.0)
+        
+        grp_lower = (it.item_group or "").lower()
+        prio = 99
+        for k, v in group_priority.items():
+            if k in grp_lower:
+                prio = v
+                break
+
+        result.append({
+            "item_code": it.name,
+            "item_name": it.item_name or it.name,
+            "item_group": it.item_group or "Other",
+            "stock_uom": it.stock_uom or "Nos",
+            "system_qty": b_info["actual_qty"],
+            "valuation_rate": rate,
+            "selling_rate": price_map.get(it.name, 0.0),
+            "priority": prio
+        })
+
+    # Sort by priority, then item_group, then item_name
+    result.sort(key=lambda x: (x["priority"], x["item_group"], x["item_name"]))
+    return {
+        "warehouse": warehouse,
+        "items": result
+    }
+
+@frappe.whitelist()
+def post_stock_take_correction(station, warehouse, items, remarks=None):
+    import json
+    from frappe.utils import flt, nowdate, cint
+    
+    is_admin = (
+        "System Manager" in frappe.get_roles() or
+        "Fuel Station Owner" in frappe.get_roles() or
+        "Fuel Manager" in frappe.get_roles() or
+        frappe.session.user == "Administrator"
+    )
+    if not is_admin:
+        frappe.throw("Access Restricted: Only Administrators and Managers can post stock corrections.", frappe.PermissionError)
+
+    if isinstance(items, str):
+        items = json.loads(items)
+
+    if not items or len(items) == 0:
+        frappe.throw("No item count changes provided.")
+
+    company = frappe.get_cached_value('Warehouse', warehouse, 'company')
+    if not company:
+        station_doc = frappe.get_doc("Fuel Station", station) if station else None
+        company = station_doc.company if station_doc else "KILIBET INVESTMENT LTD"
+
+    abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
+    stock_loss_acc = get_or_create_stock_loss_account(company)
+    stock_adj_acc = frappe.get_cached_value('Company', company, 'stock_adjustment_account') or f"Stock Adjustment - {abbr}"
+
+    shortage_items = []
+    surplus_items = []
+    total_shortage_val = 0.0
+    total_surplus_val = 0.0
+
+    for it in items:
+        item_code = it.get("item_code")
+        sys_qty = flt(it.get("system_qty", 0.0))
+        phys_qty = flt(it.get("physical_qty", 0.0))
+        val_rate = flt(it.get("valuation_rate", 0.0))
+
+        # Check if UOM must be whole number
+        uom = frappe.db.get_value("Item", item_code, "stock_uom") or "Nos"
+        must_be_whole = frappe.db.get_value("UOM", uom, "must_be_whole_number")
+
+        diff = round(phys_qty - sys_qty, 4)
+        if diff == 0:
+            continue
+
+        if must_be_whole:
+            diff_qty = abs(cint(round(diff)))
+        else:
+            diff_qty = abs(diff)
+
+        if diff_qty == 0:
+            continue
+
+        if diff < 0:
+            # Shortage -> Material Issue (Expense to Company: Stock Loss)
+            shortage_items.append({
+                "item_code": item_code,
+                "s_warehouse": warehouse,
+                "qty": diff_qty,
+                "expense_account": stock_loss_acc
+            })
+            total_shortage_val += diff_qty * val_rate
+        else:
+            # Surplus -> Material Receipt (Gain/Adjustment)
+            surplus_items.append({
+                "item_code": item_code,
+                "t_warehouse": warehouse,
+                "qty": diff_qty,
+                "basic_rate": val_rate,
+                "expense_account": stock_adj_acc
+            })
+            total_surplus_val += diff_qty * val_rate
+
+    if not shortage_items and not surplus_items:
+        frappe.throw("No quantity differences detected between physical count and system stock.")
+
+    issue_doc_name = None
+    receipt_doc_name = None
+
+    # 1. Post Shortages (Material Issue)
+    if shortage_items:
+        se_issue = frappe.new_doc("Stock Entry")
+        se_issue.stock_entry_type = "Material Issue"
+        se_issue.purpose = "Material Issue"
+        se_issue.company = company
+        se_issue.posting_date = nowdate()
+        se_issue.remarks = f"Stock Take Shortage Adjustment - Station: {station or 'Station'} - Warehouse: {warehouse}. {remarks or ''}".strip()
+        for s_item in shortage_items:
+            se_issue.append("items", s_item)
+        se_issue.insert(ignore_permissions=True)
+        se_issue.submit()
+        issue_doc_name = se_issue.name
+
+    # 2. Post Surpluses (Material Receipt)
+    if surplus_items:
+        se_receipt = frappe.new_doc("Stock Entry")
+        se_receipt.stock_entry_type = "Material Receipt"
+        se_receipt.purpose = "Material Receipt"
+        se_receipt.company = company
+        se_receipt.posting_date = nowdate()
+        se_receipt.remarks = f"Stock Take Surplus Adjustment - Station: {station or 'Station'} - Warehouse: {warehouse}. {remarks or ''}".strip()
+        for r_item in surplus_items:
+            se_receipt.append("items", r_item)
+        se_receipt.insert(ignore_permissions=True)
+        se_receipt.submit()
+        receipt_doc_name = se_receipt.name
+
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "issue_entry": issue_doc_name,
+        "receipt_entry": receipt_doc_name,
+        "shortage_count": len(shortage_items),
+        "surplus_count": len(surplus_items),
+        "total_shortage_value": total_shortage_val,
+        "total_surplus_value": total_surplus_val,
+        "stock_loss_account": stock_loss_acc,
+        "message": "Stock correction successfully posted. Bins and general ledger updated."
+    }
+
+
 
 
 
