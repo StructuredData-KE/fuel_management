@@ -1195,6 +1195,63 @@ class Shift(Document):
         from fuel_management.fuel_management.api import get_daily_dip_summary
         return get_daily_dip_summary(self.name)
 
+    def get_pump_group_sales_summary(self):
+        from frappe.utils import flt
+        
+        # 1. Map Assigned CSAs to Pump Groups
+        csa_by_group = {}
+        for ac in (self.assigned_csas or []):
+            if ac.pump_group:
+                emp_name = frappe.db.get_value("Employee", ac.csa, "employee_name") or ac.csa
+                csa_by_group.setdefault(ac.pump_group, []).append(emp_name)
+
+        # 2. Group Nozzle Sales by Pump Group
+        group_data = {}
+        st_groups = frappe.get_all("Pump Group", filters={"station": self.station}, order_by="name asc", pluck="name") if self.station else []
+        for pg in st_groups:
+            if "lube" not in pg.lower():
+                group_data[pg] = {
+                    "pump_group": pg,
+                    "csas": ", ".join(csa_by_group.get(pg, [])) or "-",
+                    "pms_liters": 0.0,
+                    "ago_liters": 0.0,
+                    "total_liters": 0.0,
+                    "nozzles": []
+                }
+
+        for m in (self.pump_meter_readings or []):
+            nz_info = frappe.db.get_value("Pump Nozzle", m.pump_nozzle, ["pump_group", "fuel_tank"], as_dict=True)
+            tank_info = frappe.db.get_value("Fuel Tank", nz_info.fuel_tank, "fuel_product") if nz_info else ""
+            prod = tank_info or (nz_info.fuel_tank if nz_info else "") or ""
+            qty = max(0.0, flt(m.sales_quantity_electronic) or (flt(m.closing_electronic_meter) - flt(m.opening_electronic_meter)))
+            pg = nz_info.pump_group if (nz_info and nz_info.pump_group) else "Other"
+
+            if pg not in group_data:
+                group_data[pg] = {
+                    "pump_group": pg,
+                    "csas": ", ".join(csa_by_group.get(pg, [])) or "-",
+                    "pms_liters": 0.0,
+                    "ago_liters": 0.0,
+                    "total_liters": 0.0,
+                    "nozzles": []
+                }
+
+            is_pms = any(k in prod.lower() for k in ['petrol', 'pms', 'super']) or 'pms' in (m.pump_nozzle or '').lower()
+            if is_pms:
+                group_data[pg]["pms_liters"] += qty
+            else:
+                group_data[pg]["ago_liters"] += qty
+            group_data[pg]["total_liters"] += qty
+            group_data[pg]["nozzles"].append({
+                "nozzle": m.pump_nozzle,
+                "product": prod,
+                "opening": flt(m.opening_electronic_meter),
+                "closing": flt(m.closing_electronic_meter),
+                "sales_qty": qty
+            })
+
+        return [group_data[pg] for pg in sorted(group_data.keys())]
+
 @frappe.whitelist()
 def reopen_shift(shift_name):
     shift = frappe.get_doc("Shift", shift_name)
