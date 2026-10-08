@@ -4767,7 +4767,7 @@ def post_stock_take_correction(station, warehouse, items, remarks=None):
     company = frappe.get_cached_value('Warehouse', warehouse, 'company')
     if not company:
         station_doc = frappe.get_doc("Fuel Station", station) if station else None
-        company = station_doc.company if station_doc else "KILIBET INVESTMENT LTD"
+        company = getattr(station_doc, "company", None) or "KILIBET INVESTMENT LTD"
 
     abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
     stock_loss_acc = get_or_create_stock_loss_account(company)

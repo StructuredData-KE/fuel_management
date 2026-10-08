@@ -15364,7 +15364,7 @@ window.render_stock_take = function($wrapper) {
             method: "frappe.client.get_list",
             args: {
                 doctype: "Fuel Station",
-                fields: ["name", "station_name", "company", "default_forecourt_warehouse", "default_store_warehouse"],
+                fields: ["name", "station_name", "default_forecourt_warehouse", "default_store_warehouse"],
                 limit_page_length: 50
             },
             callback: function(r) {
