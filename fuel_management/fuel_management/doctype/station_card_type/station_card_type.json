@@ -8,6 +8,11 @@
  "field_order": [
   "card_name",
   "status",
+  "is_multi_station",
+  "station",
+  "station_accounts_section",
+  "station_accounts",
+  "fallback_section",
   "default_account"
  ],
  "fields": [
@@ -28,6 +33,43 @@
    "options": "Active\nInactive"
   },
   {
+   "default": "0",
+   "description": "Check if this card type is accepted across multiple or all stations (e.g. KCB Visa, Equity Card)",
+   "fieldname": "is_multi_station",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Multi-Station (Usable Across Multiple Stations)"
+  },
+  {
+   "depends_on": "eval:!doc.is_multi_station",
+   "description": "If station-specific (e.g. Rubis Card), select which station can use this card",
+   "fieldname": "station",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Station (Single Station Only)",
+   "options": "Fuel Station"
+  },
+  {
+   "depends_on": "eval:doc.is_multi_station",
+   "fieldname": "station_accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Station Accounts Mapping"
+  },
+  {
+   "depends_on": "eval:doc.is_multi_station",
+   "description": "Map which GL bank/clearing account to debit when this card is swiped at each station",
+   "fieldname": "station_accounts",
+   "fieldtype": "Table",
+   "label": "Station Accounts",
+   "options": "Station Card Account"
+  },
+  {
+   "fieldname": "fallback_section",
+   "fieldtype": "Section Break",
+   "label": "Default / Fallback Account"
+  },
+  {
+   "description": "Default Bank / POS Clearing account if station mapping is not explicitly set above",
    "fieldname": "default_account",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -36,7 +78,7 @@
   }
  ],
  "links": [],
- "modified": "2026-07-25 22:50:00.000000",
+ "modified": "2026-10-21 16:30:00.000000",
  "modified_by": "Administrator",
  "module": "Fuel Management",
  "name": "Station Card Type",

@@ -16,8 +16,60 @@ class Shift(Document):
         self.calculate_greasing()
         self.auto_inject_dry_stock_from_invoices()
         self.assign_inventory_sales_entry_numbers()
+        self.auto_register_customer_vehicles()
         self.validate_csa_reconciliation()
         self.validate_report_sent()
+
+    def auto_register_customer_vehicles(self):
+        if not getattr(self, "invoices", None):
+            return
+            
+        seen_cust_plates = set()
+        for inv in self.invoices:
+            cust = getattr(inv, "customer", None)
+            veh = getattr(inv, "vehicle_registration", None)
+            if not cust or not veh:
+                continue
+            plate = str(veh).strip().upper()
+            if not plate:
+                continue
+                
+            key = (cust, plate)
+            if key in seen_cust_plates:
+                continue
+            seen_cust_plates.add(key)
+            
+            # Check if this plate is already registered under this customer
+            exists = frappe.db.sql("""
+                SELECT name FROM `tabCustomer Vehicle`
+                WHERE parent = %s AND parenttype = 'Customer'
+                AND UPPER(TRIM(vehicle_registration)) = %s
+            """, (cust, plate))
+            
+            if not exists:
+                try:
+                    if not frappe.db.exists("Customer", cust):
+                        continue
+                    fuel_prod = getattr(inv, "item", None)
+                    if fuel_prod and not frappe.db.exists("Item", fuel_prod):
+                        fuel_prod = None
+                    
+                    max_idx = frappe.db.sql("SELECT COALESCE(MAX(idx), 0) FROM `tabCustomer Vehicle` WHERE parent=%s", (cust,))[0][0] or 0
+                    child_doc = frappe.get_doc({
+                        "doctype": "Customer Vehicle",
+                        "parent": cust,
+                        "parenttype": "Customer",
+                        "parentfield": "customer_vehicles",
+                        "idx": max_idx + 1,
+                        "vehicle_registration": plate,
+                        "fuel_product": fuel_prod,
+                        "is_active": 1,
+                        "notes": f"Auto-registered from Shift Invoice on {self.shift_date or nowdate()}"
+                    })
+                    child_doc.insert(ignore_permissions=True)
+                except Exception as e:
+                    frappe.log_error(title="Auto Register Vehicle Error", message=f"Error auto-registering vehicle {plate} for customer {cust}: {e}")
+
 
     def auto_inject_greasing_sales_from_invoices(self):
         from frappe.utils import flt, cint
@@ -44,11 +96,17 @@ class Shift(Document):
         for inv in self.invoices:
             if not inv.item: continue
             
-            item_group = frappe.db.get_value("Item", inv.item, "item_group")
+            item_group = frappe.db.get_value("Item", inv.item, "item_group") or ""
+            is_stock_item = frappe.db.get_value("Item", inv.item, "is_stock_item")
+            
+            # Physical stock items (like GREASE EPLEX 17KG) are Dry Stock / Lubes, NOT greasing vehicle services!
+            if is_stock_item:
+                continue
+
             is_greasing = False
-            if item_group and "GREAS" in item_group.upper():
+            if item_group.upper() in ["GREASING SERVICES", "GREASING SERVICE"]:
                 is_greasing = True
-            elif inv.item.startswith("Greasing - ") or "GREASING" in inv.item.upper() or "GREASE" in inv.item.upper():
+            elif inv.item.startswith("Greasing - "):
                 is_greasing = True
 
             if not is_greasing:
@@ -66,8 +124,10 @@ class Shift(Document):
                     if k in raw_type.upper() or raw_type.upper() in k:
                         target_vt = v
                         break
-            if not target_vt:
-                target_vt = raw_type
+                        
+            # Ensure target_vt is a valid Grease Vehicle Type before adding, avoiding Link validation failure
+            if not target_vt or not frappe.db.exists("Grease Vehicle Type", target_vt):
+                continue
                 
             qty = flt(inv.quantity) or 1.0
             rate = flt(inv.rate)
@@ -106,9 +166,11 @@ class Shift(Document):
         if self.pump_meter_readings:
             for row in self.pump_meter_readings:
                 if row.closing_electronic_meter is not None and row.opening_electronic_meter is not None:
-                    row.sales_quantity_electronic = max(0, flt(row.closing_electronic_meter) - flt(row.opening_electronic_meter))
+                    row.sales_quantity_electronic = round(max(0, flt(row.closing_electronic_meter) - flt(row.opening_electronic_meter)), 3)
                 if row.closing_manual_meter is not None and row.opening_manual_meter is not None:
-                    row.sales_quantity_manual = max(0, flt(row.closing_manual_meter) - flt(row.opening_manual_meter))
+                    row.sales_quantity_manual = round(max(0, flt(row.closing_manual_meter) - flt(row.opening_manual_meter)), 3)
+                if getattr(row, "sales_quantity_electronic", None) is not None and getattr(row, "sales_quantity_manual", None) is not None:
+                    row.variance = round(abs(flt(row.sales_quantity_electronic) - flt(row.sales_quantity_manual)), 3)
 
     def auto_inject_dry_stock_from_invoices(self):
         from frappe.utils import flt
@@ -208,13 +270,21 @@ class Shift(Document):
                     if tank:
                         item_code = frappe.db.get_value("Fuel Tank", tank, "fuel_product")
                         if item_code:
+                            station_pl = frappe.db.get_value("Fuel Station", self.station, "default_selling_price_list") or "Standard Selling"
                             # Pricing Engine: Fetch historical price where Valid From <= Shift Date
                             price_record = frappe.get_all("Item Price", 
-                                filters={"item_code": item_code, "price_list": "Standard Selling", "valid_from": ("<=", self.shift_date)},
+                                filters={"item_code": item_code, "price_list": station_pl, "valid_from": ("<=", self.shift_date)},
                                 fields=["price_list_rate"],
                                 order_by="valid_from desc",
                                 limit=1
                             )
+                            if not price_record and station_pl != "Standard Selling":
+                                price_record = frappe.get_all("Item Price", 
+                                    filters={"item_code": item_code, "price_list": "Standard Selling", "valid_from": ("<=", self.shift_date)},
+                                    fields=["price_list_rate"],
+                                    order_by="valid_from desc",
+                                    limit=1
+                                )
                             price = price_record[0].price_list_rate if price_record else 0.0
                             total_fuel_amount += (row.sales_quantity_electronic * price)
 
@@ -325,7 +395,10 @@ class Shift(Document):
                 if not item: continue
                 
                 if item not in item_prices:
-                    price = frappe.db.get_value("Item Price", {"item_code": item, "price_list": "Standard Selling"}, "price_list_rate")
+                    station_pl = frappe.db.get_value("Fuel Station", self.station, "default_selling_price_list") or "Standard Selling"
+                    price = frappe.db.get_value("Item Price", {"item_code": item, "price_list": station_pl}, "price_list_rate")
+                    if not price and station_pl != "Standard Selling":
+                        price = frappe.db.get_value("Item Price", {"item_code": item, "price_list": "Standard Selling"}, "price_list_rate")
                     if not price:
                         price = frappe.db.get_value("Item", item, "standard_rate") or 0.0
                     item_prices[item] = flt(price)
@@ -628,20 +701,28 @@ class Shift(Document):
                 card_name = c.get("card")
                 mop_account = None
                 
-                # 1. Check if Station Card Type has default_account set directly
-                if card_name and frappe.db.exists("Station Card Type", card_name):
+                # 1. Check if Station Card Type has station-specific account mapping in Station Card Account
+                if card_name and frappe.db.exists("DocType", "Station Card Account"):
+                    mop_account = frappe.db.get_value(
+                        "Station Card Account", 
+                        {"parent": card_name, "parenttype": "Station Card Type", "station": self.station, "is_active": 1}, 
+                        "account"
+                    )
+
+                # 2. Check if Station Card Type has default_account set directly
+                if not mop_account and card_name and frappe.db.exists("Station Card Type", card_name):
                     mop_account = frappe.db.get_value("Station Card Type", card_name, "default_account")
                     
-                # 2. Check Mode of Payment Account for specific card name
+                # 3. Check Mode of Payment Account for specific card name
                 if not mop_account and card_name:
                     mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": card_name, "company": company}, "default_account")
                     
-                # 3. Fallback to Mode of Payment Account for 'Card'
+                # 4. Fallback to Mode of Payment Account for 'Card'
                 if not mop_account:
                     mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": "Card", "company": company}, "default_account")
                     
                 if not mop_account:
-                    frappe.throw(f"No Default Account mapped for Card '{card_name or 'Card'}'. Please configure the Default Account in Station Card Type '{card_name}' or Mode of Payment 'Card'.")
+                    frappe.throw(f"No Default Account mapped for Card '{card_name or 'Card'}' at Station '{self.station}'. Please configure the Account in Station Card Type '{card_name}'.")
                     
                 je.append("accounts", {
                     "account": mop_account,
@@ -702,7 +783,10 @@ class Shift(Document):
         # F. Return to Tank (RTT)
         for rtt in frappe.get_all("Station Return To Tank", filters={"shift": self.name}, fields=["item", "volume_returned"]):
             if flt(rtt.volume_returned) > 0:
-                price_rec = frappe.get_all("Item Price", filters={"item_code": rtt.item, "price_list": "Standard Selling", "valid_from": ("<=", self.shift_date)}, fields=["price_list_rate"], order_by="valid_from desc", limit=1)
+                station_pl = getattr(station_doc, "default_selling_price_list", None) or frappe.db.get_value("Fuel Station", self.station, "default_selling_price_list") or "Standard Selling"
+                price_rec = frappe.get_all("Item Price", filters={"item_code": rtt.item, "price_list": station_pl, "valid_from": ("<=", self.shift_date)}, fields=["price_list_rate"], order_by="valid_from desc", limit=1)
+                if not price_rec and station_pl != "Standard Selling":
+                    price_rec = frappe.get_all("Item Price", filters={"item_code": rtt.item, "price_list": "Standard Selling", "valid_from": ("<=", self.shift_date)}, fields=["price_list_rate"], order_by="valid_from desc", limit=1)
                 price = flt(price_rec[0].price_list_rate) if price_rec else 0.0
                 rtt_gross = flt(flt(rtt.volume_returned) * flt(price), 2)
                 if rtt_gross > 0:
@@ -726,12 +810,14 @@ class Shift(Document):
                     })
                 
         # G. Non-Cash Customer Payments
-        customer_payments = frappe.get_all("Customer Payment", filters={"shift": self.name, "docstatus": 1})
+        customer_payments = frappe.get_all("Customer Payment", filters={"shift": self.name, "docstatus": ["<", 2]})
         for cp in customer_payments:
             cp_doc = frappe.get_doc("Customer Payment", cp.name)
             cp_amt = flt(cp_doc.amount, 2)
-            if cp_doc.mode_of_payment != "Cash" and cp_amt > 0:
+            if "CASH" not in (cp_doc.mode_of_payment or "").upper() and cp_amt > 0:
                 mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": cp_doc.mode_of_payment, "company": company}, "default_account")
+                if not mop_account and "MPESA" in cp_doc.mode_of_payment.upper():
+                    mop_account = frappe.db.get_value("M-Pesa Till", {"station": self.station, "is_active": 1}, "default_account")
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for Mode of Payment: {cp_doc.mode_of_payment} (Customer Payment {cp_doc.name})")
                 je.append("accounts", {
@@ -979,6 +1065,8 @@ class Shift(Document):
 
         if not self.mpesa_payments and self.station:
             tills = frappe.get_all("M-Pesa Till", filters={"station": self.station, "is_active": 1}, fields=["name"])
+            import re
+            tills.sort(key=lambda t: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', t.name or '')])
             for till in tills:
                 opening_bal = 0
                 found = False
@@ -1015,6 +1103,12 @@ class Shift(Document):
                         if getattr(prev_row, "mpesa_till", None) == row.mpesa_till:
                             row.opening_balance = prev_row.opening_balance or 0
                             break
+
+        if self.mpesa_payments:
+            import re
+            self.mpesa_payments.sort(key=lambda r: [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', getattr(r, 'mpesa_till', None) or '')])
+            for i, r in enumerate(self.mpesa_payments, 1):
+                r.idx = i
 
     def calculate_expected_stock(self):
         from frappe.utils import flt
@@ -1082,11 +1176,20 @@ class Shift(Document):
                 return
 
 
+            from frappe.utils import nowdate, nowtime, getdate
+
+            shift_posting_date = self.shift_date or nowdate()
             se = frappe.new_doc("Stock Entry")
             se.stock_entry_type = "Material Issue"
             se.purpose = "Material Issue"
             se.from_warehouse = station_doc.default_forecourt_warehouse
             se.remarks = f"Fuel Sales for Shift {self.name}"
+            se.posting_date = shift_posting_date
+            se.set_posting_time = 1
+            if getdate(shift_posting_date) < getdate(nowdate()):
+                se.posting_time = "23:59:59"
+            else:
+                se.posting_time = nowtime()
 
             for item_code, qty in sales_per_item.items():
                 company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
@@ -1292,6 +1395,7 @@ def get_nozzle_prices(station, shift_date):
     # 2. Get all Nozzles in those groups
     nozzles = frappe.get_all("Pump Nozzle", filters={"pump_group": ["in", pump_groups]}, fields=["name", "fuel_tank"])
     
+    station_pl = frappe.db.get_value("Fuel Station", station, "default_selling_price_list") or "Standard Selling"
     # Cache to avoid duplicate queries for same fuel_product
     product_price_cache = {}
     
@@ -1311,13 +1415,24 @@ def get_nozzle_prices(station, shift_date):
             price_record = frappe.get_all("Item Price", 
                 filters={
                     "item_code": fuel_product, 
-                    "price_list": "Standard Selling", 
+                    "price_list": station_pl, 
                     "valid_from": ("<=", shift_date)
                 },
                 fields=["price_list_rate"],
                 order_by="valid_from desc",
                 limit=1
             )
+            if not price_record and station_pl != "Standard Selling":
+                price_record = frappe.get_all("Item Price", 
+                    filters={
+                        "item_code": fuel_product, 
+                        "price_list": "Standard Selling", 
+                        "valid_from": ("<=", shift_date)
+                    },
+                    fields=["price_list_rate"],
+                    order_by="valid_from desc",
+                    limit=1
+                )
             price = flt(price_record[0].price_list_rate) if price_record else 0.0
             product_price_cache[fuel_product] = {"price": price, "item": fuel_product}
             nozzle_prices[nozzle.name] = {"price": price, "item": fuel_product}
@@ -1340,7 +1455,84 @@ def send_end_shift_report(shift_name, html_content):
     if not owner_email:
         frappe.throw("Please configure an Owner Email in the Fuel Station document before sending the report.")
         
-    # Inject minimal styling for PDF
+    # Format date and shift details
+    formatted_date = frappe.utils.formatdate(shift.shift_date) if getattr(shift, "shift_date", None) else (str(shift.shift_date) if shift.shift_date else "")
+    shift_title = shift.shift_template or "Shift"
+    
+    csa_row = ""
+    if getattr(shift, "head_csa", None):
+        emp_name = frappe.db.get_value("User", shift.head_csa, "full_name") or frappe.db.get_value("Employee", shift.head_csa, "employee_name") or shift.head_csa
+        csa_row = f"""
+        <tr>
+            <td style="padding: 7px 0; color: #64748b; font-weight: 600;">👤 Head CSA:</td>
+            <td style="padding: 7px 0; color: #0f172a; font-weight: 700;">{emp_name}</td>
+        </tr>
+        """
+        
+    subject = f"End Shift Report: {shift.station} | {shift_title} - {formatted_date} ({shift.name})"
+    
+    email_body_html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+        <!-- Header Banner -->
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color: #ffffff; padding: 24px 28px;">
+            <div style="text-transform: uppercase; font-size: 11px; letter-spacing: 1.5px; opacity: 0.85; font-weight: 700; margin-bottom: 6px;">
+                Fuel Management &bull; End of Shift Report
+            </div>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #ffffff; line-height: 1.3;">
+                {shift.station}
+            </h1>
+            <div style="margin-top: 6px; font-size: 15px; color: #38bdf8; font-weight: 600;">
+                {shift_title} &bull; {formatted_date}
+            </div>
+        </div>
+
+        <!-- Shift Overview Details -->
+        <div style="padding: 20px 28px; background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <tr>
+                    <td style="padding: 7px 0; color: #64748b; font-weight: 600; width: 36%;">⛽ Fuel Station:</td>
+                    <td style="padding: 7px 0; color: #0f172a; font-weight: 700; font-size: 14px;">{shift.station}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 7px 0; color: #64748b; font-weight: 600;">🕒 Shift Name:</td>
+                    <td style="padding: 7px 0; color: #0f172a; font-weight: 700;">{shift_title}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 7px 0; color: #64748b; font-weight: 600;">📅 Shift Date:</td>
+                    <td style="padding: 7px 0; color: #0f172a; font-weight: 700;">{formatted_date}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 7px 0; color: #64748b; font-weight: 600;">🔖 Shift ID:</td>
+                    <td style="padding: 7px 0; color: #0284c7; font-weight: 700; font-family: monospace;">{shift.name}</td>
+                </tr>
+                {csa_row}
+            </table>
+        </div>
+
+        <!-- Message Body -->
+        <div style="padding: 24px 28px; color: #334155; font-size: 14px; line-height: 1.6;">
+            <p style="margin: 0 0 16px 0;">
+                Hello,
+            </p>
+            <p style="margin: 0 0 16px 0;">
+                The <strong>End of Shift Report</strong> for <strong>{shift.station}</strong> (<strong>{shift_title}</strong>) conducted on <strong>{formatted_date}</strong> has been completed and is attached to this email as a PDF.
+            </p>
+            
+            <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; padding: 14px 18px; border-radius: 6px; margin: 20px 0;">
+                <div style="font-size: 11px; color: #1e40af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Attached Report File</div>
+                <div style="font-weight: 700; font-size: 14px; color: #1e3a8a; margin-top: 4px;">
+                    📎 {shift.name}.pdf
+                </div>
+            </div>
+
+            <p style="margin: 16px 0 0 0; color: #64748b; font-size: 12px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
+                This report was generated and dispatched automatically from the Fuel Management System.
+            </p>
+        </div>
+    </div>
+    """
+
+    # Inject styling for PDF
     styled_html = f"""
     <html>
     <head>
@@ -1362,9 +1554,12 @@ def send_end_shift_report(shift_name, html_content):
         </style>
     </head>
     <body>
-        <div style="font-size: 18px; font-weight: bold; text-align: center; margin-bottom: 20px;">
-            END OF SHIFT REPORT<br>
-            <span style="font-size: 14px; font-weight: normal;">{shift.station} - {shift.shift_date}</span>
+        <div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #0f172a;">
+            <div style="font-size: 20px; font-weight: 800; letter-spacing: 0.5px; color: #0f172a;">END OF SHIFT REPORT</div>
+            <div style="font-size: 16px; font-weight: 700; color: #0284c7; margin-top: 4px;">{shift.station}</div>
+            <div style="font-size: 13px; font-weight: 600; color: #475569; margin-top: 4px;">
+                Shift Name: <b>{shift_title}</b> &bull; Date: <b>{formatted_date}</b> &bull; Reference ID: <span style="font-family: monospace;">{shift.name}</span>
+            </div>
         </div>
         {html_content}
     </body>
@@ -1376,8 +1571,8 @@ def send_end_shift_report(shift_name, html_content):
     recipients = [e.strip() for e in owner_email.replace(';', ',').split(',') if e.strip()]
     frappe.sendmail(
         recipients=recipients,
-        subject=f"End Shift Report: {shift.name} ({shift.shift_date})",
-        message="Please find the attached End Shift Report.",
+        subject=subject,
+        message=email_body_html,
         attachments=[{"fname": f"{shift.name}.pdf", "fcontent": pdf_bytes}]
     )
     

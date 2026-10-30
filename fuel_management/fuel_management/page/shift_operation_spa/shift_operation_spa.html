@@ -141,38 +141,44 @@
         <button id="hamburger-btn" class="p-2 -ml-1 hover:bg-blue-800 active:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 min-w-[42px] min-h-[42px] flex items-center justify-center cursor-pointer" aria-label="Toggle Navigation Menu">
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
         </button>
-        <!-- Branding: Truncate on very small screens -->
+        <!-- Branding & Station Switcher: Truncate on very small screens -->
         <div class="flex items-center gap-2 md:border-l md:border-blue-800 md:pl-4 truncate">
-           <span class="text-sm md:text-base font-bold tracking-wide truncate">Kilibet - Rubis</span>
+           <span class="text-sm md:text-base font-bold tracking-wide hidden sm:inline">Kilibet</span>
+           <select id="navbar-select-station" class="bg-blue-900 border border-blue-700 text-white text-xs font-semibold rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer shadow-sm hover:bg-blue-850"></select>
         </div>
       </div>
 
       <!-- User Profile & Shift Controls -->
-      <div class="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm text-blue-200 ml-auto shrink-0">
+      <div class="flex items-center gap-2 md:gap-3 text-xs md:text-sm text-blue-200 ml-auto shrink-0">
         <!-- Live Offline / Online Connection Badge -->
         <div id="network-status-badge" class="hidden items-center gap-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded text-xs font-semibold">
           <span class="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
           <span>Offline (Cart Safe)</span>
         </div>
 
+        <!-- ACTIVE SHIFT BADGE -->
+        <div id="active-shift-badge-wrap" class="flex items-center">
+          <div id="active-shift-badge" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(22, 163, 74, 0.95); border: 1px solid rgba(74, 222, 128, 0.5); padding: 4px 12px; border-radius: 9999px; color: white; font-size: 12px; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.25); white-space: nowrap;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade80;"></span>
+            <span id="active-shift-text">Checking active shift...</span>
+          </div>
+        </div>
+
+        <!-- LOGGED IN USER BADGE -->
+        <div id="user-badge-wrap" class="flex items-center gap-1.5" style="background: rgba(30, 58, 138, 0.85); border: 1px solid rgba(59, 130, 246, 0.45); padding: 4px 11px; border-radius: 9999px; color: white; white-space: nowrap;">
+          <svg class="w-3.5 h-3.5 text-blue-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+          <span class="font-semibold text-white text-xs md:text-sm whitespace-nowrap" id="user-greeting-desktop">User</span>
+        </div>
+
         <!-- Sync / Refresh Shift Data Button -->
-        <button id="btn-spa-sync" class="flex items-center justify-center gap-1.5 text-xs bg-blue-900 hover:bg-blue-800 active:bg-blue-700 text-white px-2 sm:px-2.5 py-1.5 rounded transition-colors border border-blue-700 shadow-sm cursor-pointer min-h-[34px]" title="Refresh Shift Data (Preserves all cart items)">
+        <button id="btn-spa-sync" class="flex items-center justify-center gap-1 text-xs bg-blue-900 hover:bg-blue-800 active:bg-blue-700 text-white px-2 sm:px-2.5 py-1.5 rounded transition-colors border border-blue-700 shadow-sm cursor-pointer min-h-[30px]" title="Refresh Shift Data (Preserves all cart items)">
           <svg id="sync-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-          <span class="hidden sm:inline font-semibold">Sync Data</span>
+          <span class="hidden sm:inline font-semibold">Sync</span>
         </button>
 
-        <div class="flex items-center gap-1.5">
-          <div id="active-shift-badge" class="badge badge-inactive whitespace-nowrap text-[11px] md:text-xs font-semibold truncate max-w-[130px] sm:max-w-none" style="background: rgba(255,255,255,0.15); border: none; padding: 4px 8px; border-radius: 12px; color: white;">
-            No Active Shift
-          </div>
-          <button id="btn-open-history" class="text-white hover:text-blue-200 p-1.5 rounded hover:bg-blue-800/50 transition-colors flex items-center justify-center min-w-[34px] min-h-[34px]" title="View Historical Shift" style="background:none; border:none; cursor:pointer;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          </button>
-        </div>
-        <div class="hidden lg:flex items-center gap-1 cursor-pointer hover:text-white transition-colors ml-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-          <span class="font-bold whitespace-nowrap" id="user-greeting-desktop" style="font-size: 13px;">Welcome</span>
-        </div>
+        <button id="btn-open-history" class="text-white hover:text-blue-200 p-1.5 rounded hover:bg-blue-800/50 transition-colors flex items-center justify-center min-w-[30px] min-h-[30px]" title="View Historical Shift" style="background:none; border:none; cursor:pointer;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        </button>
       </div>
     </header>
 
@@ -346,12 +352,18 @@
 
               
               <div class="nav-section-title">STAFF</div>
-              <a href="#" class="nav-item" data-target="tab-shortage-mgmt">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                  <span>Shortage Mgmt</span>
+              <a href="#" class="nav-item" data-target="tab-shortage-payment" id="nav-shortage-payment">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  <span>Shortage Payment</span>
               </a>
-              <a href="#" class="nav-item" data-target="tab-shorts-report">
+              <a href="#" class="nav-item" data-target="tab-shortage-transfer" id="nav-shortage-transfer">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                  <span>Shortage Transfer</span>
+              </a>
+              <a href="#" class="nav-item" data-target="tab-shorts-report" id="nav-shorts-report">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  <span>Shorts Report</span>
+              </a>
                 <!-- DEBTORS MANAGEMENT SECTION -->
               <div class="mt-6">
                 <!-- Section Header -->
@@ -822,6 +834,15 @@
                                             <option value="">All Vehicles</option>
                                         </select>
                                     </div>
+                                    <!-- Station Filter -->
+                                    <div style="display: flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 6px;" id="stmt-station-filter-container">
+                                        <span style="font-size: 0.72rem; font-weight: 600; color: #64748b; margin-right: 4px;">⛽ Station:</span>
+                                        <select id="stmt-station-select" class="spa-input" style="padding: 2px 4px; font-size: 0.8rem; border: none; background: transparent; height: 26px; width: 135px; font-weight: 600;">
+                                            <option value="">All Stations</option>
+                                            <option value="RUBIS POA PLACE">Rubis Poa Place</option>
+                                            <option value="Galana Annex">Galana Annex</option>
+                                        </select>
+                                    </div>
                                     <!-- Date Range -->
                                     <div style="display: flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 6px;">
                                         <span style="font-size: 0.72rem; font-weight: 600; color: #64748b; margin-right: 4px;">From:</span>
@@ -923,6 +944,7 @@
                                 <thead>
                                     <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; font-size: 0.72rem; text-transform: uppercase; color: #475569; letter-spacing: 0.03em;">
                                         <th style="padding: 6px 8px; width: 80px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Date</th>
+                                        <th style="padding: 6px 8px; width: 85px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Station</th>
                                         <th style="padding: 6px 8px; width: 90px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Voucher Type</th>
                                         <th style="padding: 6px 8px; width: 95px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Reference #</th>
                                         <th style="padding: 6px 8px; width: 110px; position: sticky; top: 0; background: #f8fafc; z-index: 5;">Vehicle Plate</th>
@@ -935,12 +957,13 @@
                                 </thead>
                                 <tbody id="debtors-statement-body">
                                     <tr>
-                                        <td colspan="9" class="text-center py-8 text-gray-500" style="font-size: 0.82rem;">Please select a customer and date range above to load statement.</td>
+                                        <td colspan="10" class="text-center py-8 text-gray-500" style="font-size: 0.82rem;">Please select a customer and date range above to load statement.</td>
                                     </tr>
                                 </tbody>
                                 <tfoot id="debtors-statement-foot" style="display: none;">
                                     <tr style="background: #eef2ff; font-weight: 800; border-top: 2px solid #cbd5e1;">
                                         <td id="stmt-foot-date" style="padding: 6px 8px; color: #1e1b4b; white-space: nowrap; font-size: 0.75rem; vertical-align: middle;">--</td>
+                                        <td id="stmt-foot-station" style="padding: 6px 8px; font-size: 0.72rem; color: #475569; font-weight: 700; vertical-align: middle;">All</td>
                                         <td style="padding: 6px 8px; vertical-align: middle;">
                                             <span style="background: #3730a3; color: #ffffff; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase;">CLOSING C/F</span>
                                         </td>
@@ -1217,6 +1240,36 @@
                     <span style="color: #7c3aed; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;">Kilograms ➔</span>
                 </div>
             </div>
+
+            <!-- Filters Sold (Month) -->
+            <div class="home-quick-action cursor-pointer" data-nav="tab-drystock" title="Click to view Inventory & Filters sales" style="background: #ffffff; border: 1px solid #e2e8f0; border-top: 4px solid #06b6d4; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer; transition: all 0.2s;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                    <div style="font-size: 0.75rem; color: #475569; font-weight: 700; text-transform: uppercase;">Filters Sold (Month)</div>
+                    <span style="background: #cffafe; color: #0891b2; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.7rem; font-weight: 700;">Filters</span>
+                </div>
+                <div style="font-size: 1.65rem; font-weight: 800; font-family: monospace; color: #0891b2; margin-bottom: 0.25rem;">
+                    <span id="mon-kpi-filters-qty">0</span> <span style="font-size: 0.95rem; font-weight: 600; color: #64748b;">PCS</span>
+                </div>
+                <div style="font-size: 0.75rem; color: #64748b; display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
+                    <span id="mon-kpi-filters-amount">KES 0.00</span>
+                    <span style="color: #0891b2; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;">Filters ➔</span>
+                </div>
+            </div>
+
+            <!-- Greasing Sales (Month) -->
+            <div class="home-quick-action cursor-pointer" data-nav="tab-greasing" title="Click to view Greasing Sales module" style="background: #ffffff; border: 1px solid #e2e8f0; border-top: 4px solid #f97316; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.04); cursor: pointer; transition: all 0.2s;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                    <div style="font-size: 0.75rem; color: #475569; font-weight: 700; text-transform: uppercase;">Greasing Sales (Month)</div>
+                    <span style="background: #ffedd5; color: #c2410c; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.7rem; font-weight: 700;">Grease</span>
+                </div>
+                <div style="font-size: 1.65rem; font-weight: 800; font-family: monospace; color: #ea580c; margin-bottom: 0.25rem;">
+                    <span style="font-size: 1rem; font-weight: 700; color: #94a3b8;">KES</span> <span id="mon-kpi-greasing-amount">0</span>
+                </div>
+                <div style="font-size: 0.75rem; color: #64748b; display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
+                    <span id="mon-kpi-greasing-vehicles">0 vehicles</span>
+                    <span style="color: #ea580c; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;">Greasing ➔</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1266,6 +1319,13 @@
         <div>
           <div style="font-weight: 600; color: #0f172a; font-size: 0.875rem;">Inventory Sales</div>
           <div style="color: #94a3b8; font-size: 0.75rem;" id="qa-inv-status">Go to module</div>
+        </div>
+      </div>
+      <div class="home-quick-action" data-nav="tab-greasing" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: transform 0.2s, box-shadow 0.2s;">
+        <div style="background: #fff7ed; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #ea580c;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><path d="M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg></div>
+        <div>
+          <div style="font-weight: 600; color: #0f172a; font-size: 0.875rem;">Greasing Sales</div>
+          <div style="color: #94a3b8; font-size: 0.75rem;" id="qa-grease-status">Go to module</div>
         </div>
       </div>
       <div class="home-quick-action" data-nav="tab-report" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: transform 0.2s, box-shadow 0.2s;">
@@ -1356,10 +1416,16 @@
                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Station</label>
                            <select id="select-station" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2 text-slate-800"></select>
                        </div>
-                       <div>
-                           <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Head CSA</label>
-                           <select id="select-head-csa" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-2 text-slate-800"></select>
-                       </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Head CSA</label>
+                            <div class="relative flex items-center">
+                                <div class="absolute left-3 text-slate-400 pointer-events-none">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                </div>
+                                <input type="text" id="display-head-csa" readonly class="w-full bg-slate-100 border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-slate-800 font-semibold cursor-default select-none focus:outline-none" />
+                                <input type="hidden" id="select-head-csa" />
+                            </div>
+                        </div>
                     </div>
                   </div>
 
@@ -1387,17 +1453,96 @@
 
             <!-- METER READINGS (FUEL NOZZLES) -->
             <section id="tab-fuel" class="tab-pane">
-                <div class="dash-card center-card mb-4">
-                    <div class="card-header-flex">
-                        <h3>Meter Readings</h3>
-                        <button id="btn-save-wetstock" class="btn-secondary btn-sm"><span class="spinner hidden"></span> Save Readings</button>
+                <div class="segmented-control-wrapper">
+                    <div class="segmented-control">
+                        <button class="seg-btn active" data-view="entry">Current Shift Readings</button>
+                        <button class="seg-btn" data-view="history">Historical View</button>
                     </div>
+                </div>
+
+                <!-- ENTRY VIEW (CURRENT SHIFT) -->
+                <div class="view-pane active" id="fuel-entry-view">
+                    <div class="dash-card center-card mb-4">
+                        <div class="card-header-flex">
+                            <h3>Meter Readings (Current Shift)</h3>
+                            <button id="btn-save-wetstock" class="btn-secondary btn-sm"><span class="spinner hidden"></span> Save Readings</button>
+                        </div>
                         <div class="meters-cards-wrapper">
                             <div id="meters-container" class="meters-cards-container">
                                 <!-- Dynamic cards -->
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- HISTORY VIEW -->
+                <div class="view-pane" id="fuel-history-view">
+                    <div class="dash-card center-card" style="width: 100%;">
+                        <div class="card-header-flex" style="align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                            <div>
+                                <h3 style="margin-bottom: 0.25rem;">Meter Readings History</h3>
+                                <div id="meter-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing latest 100 entries &bull; Use date filter for more)</div>
+                            </div>
+                            <div style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">From Date</label>
+                                    <input type="date" id="meter-filter-date-from" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">To Date</label>
+                                    <input type="date" id="meter-filter-date-to" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">Pump Group</label>
+                                    <select id="meter-filter-pump-group" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 140px;">
+                                        <option value="">All Pump Groups</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">Nozzle</label>
+                                    <select id="meter-filter-nozzle" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 130px;">
+                                        <option value="">All Nozzles</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">Shift</label>
+                                    <select id="meter-filter-shift-type" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 120px;">
+                                        <option value="">All Shifts</option>
+                                        <option value="Day Shift">Day Shift</option>
+                                        <option value="Night Shift">Night Shift</option>
+                                    </select>
+                                </div>
+                                <button id="btn-filter-meter-history" class="btn btn-secondary btn-sm" style="height: 36px; padding: 0 1rem; display: flex; align-items: center; gap: 0.35rem; border-radius: 6px;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                    Filter
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="dash-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date & Shift</th>
+                                        <th>Pump Group</th>
+                                        <th>Nozzle</th>
+                                        <th>Fuel Type</th>
+                                        <th style="text-align: right;">Opening (Elec)</th>
+                                        <th style="text-align: right;">Closing (Elec)</th>
+                                        <th style="text-align: right;">Sold Qty (L)</th>
+                                        <th style="text-align: right;">Opening (Man)</th>
+                                        <th style="text-align: right;">Closing (Man)</th>
+                                        <th style="text-align: right;">Man Sold (L)</th>
+                                        <th style="text-align: right;">Variance</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="meter-history-container">
+                                    <!-- Dynamic historical rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </section>
                 
             <!-- DIP STICKS -->
@@ -1550,24 +1695,58 @@
                 </div>
                 
                 <div class="view-pane" id="mpesa-history-view">
-                    <div class="dash-card center-card" style="background: #f8fafc;">
-                        <div class="card-header-flex">
-                            <h3>Posted M-Pesa Tills</h3>
+                    <div class="dash-card center-card" style="width: 100%;">
+                        <div class="card-header-flex" style="align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                            <div>
+                                <h3 style="margin-bottom: 0.25rem;">M-Pesa Tills History</h3>
+                                <div id="mpesa-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing latest 50 entries &bull; Use date filter for more)</div>
+                            </div>
+                            <div style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">From Date</label>
+                                    <input type="date" id="mpesa-filter-date-from" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">To Date</label>
+                                    <input type="date" id="mpesa-filter-date-to" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">Till</label>
+                                    <select id="mpesa-filter-till" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 150px;">
+                                        <option value="">All Tills</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="margin-bottom: 4px; display: block; font-size: 0.8rem; color: #64748b; font-weight: 600;">Shift</label>
+                                    <select id="mpesa-filter-shift-type" class="spa-input" style="padding: 0.4rem 0.6rem; height: 36px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 120px;">
+                                        <option value="">All Shifts</option>
+                                        <option value="Day Shift">Day Shift</option>
+                                        <option value="Night Shift">Night Shift</option>
+                                    </select>
+                                </div>
+                                <button id="btn-filter-mpesa-history" class="btn btn-secondary btn-sm" style="height: 36px; padding: 0 1rem; display: flex; align-items: center; gap: 0.35rem; border-radius: 6px;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                                    Filter
+                                </button>
+                            </div>
                         </div>
+
                         <div class="table-responsive">
-                            <table class="dash-table meters-table">
+                            <table class="dash-table">
                                 <thead>
                                     <tr>
+                                        <th>Date & Shift</th>
                                         <th>Till Name</th>
-                                        <th>Opening Bal.</th>
-                                        <th>Bank Transfers</th>
-                                        <th>Closing Bal.</th>
-                                        <th>Amount Collected</th>
-                                        <th>Actions</th>
+                                        <th>Bank / Account</th>
+                                        <th style="text-align: right;">Opening Bal.</th>
+                                        <th style="text-align: right;">Bank Transfers</th>
+                                        <th style="text-align: right;">Closing Bal.</th>
+                                        <th style="text-align: right;">Collected Amount</th>
+                                        <th style="text-align: center;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="posted-mpesa-container">
-                                    <!-- Posted Rows -->
+                                    <!-- Dynamic rows -->
                                 </tbody>
                             </table>
                         </div>
@@ -1612,6 +1791,14 @@
                           <label style="margin-bottom: 4px; display: block; font-size: 0.85rem; color: #64748b;">CSA</label>
                           <select id="sc-filter-csa" class="spa-input" style="padding: 0.5rem; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;">
                               <option value="">All CSAs</option>
+                          </select>
+                      </div>
+                      <div class="form-group" style="margin-bottom: 0;">
+                          <label style="margin-bottom: 4px; display: block; font-size: 0.85rem; color: #64748b;">Shift</label>
+                          <select id="sc-filter-shift-type" class="spa-input" style="padding: 0.5rem; height: 36px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                              <option value="">All Shifts</option>
+                              <option value="Day Shift">Day Shift</option>
+                              <option value="Night Shift">Night Shift</option>
                           </select>
                       </div>
                 </div>
@@ -2290,15 +2477,15 @@
                 </div>
             </div>
 
-            <!-- Performance Tracking (Sold By) -->
+            <!-- Performance Tracking / Sold By -->
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
                 <div class="form-group" style="margin-bottom: 0; max-width: 450px;">
                     <label style="font-weight: 700; color: #334155; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
-                        <span>👤 Performance Tracking (Sold By)</span>
-                        <span style="font-size: 0.75rem; font-weight: 600; color: #64748b; background: #e2e8f0; padding: 2px 6px; border-radius: 4px;">Optional Pitch Attribution</span>
+                        <span id="drystock-csa-label-title">👤 Performance Tracking (Sold By)</span>
+                        <span id="drystock-csa-badge" style="font-size: 0.75rem; font-weight: 600; color: #64748b; background: #e2e8f0; padding: 2px 6px; border-radius: 4px;">Optional Pitch Attribution</span>
                     </label>
                     <select id="drystock-csa" class="spa-input" style="border: 1.5px solid #cbd5e1; border-radius: 8px; font-weight: 600;"></select>
-                    <small style="color: #64748b; font-size: 0.78rem; display: block; margin-top: 0.25rem;">Select the CSA who pitched or sold this item to attribute their sales performance.</small>
+                    <small id="drystock-csa-help" style="color: #64748b; font-size: 0.78rem; display: block; margin-top: 0.25rem;">Select the CSA who pitched or sold this item to attribute their sales performance.</small>
                 </div>
             </div>
 
@@ -2854,43 +3041,120 @@
     </div>
 
     <!-- ENTRY VIEW -->
+    <style>
+        #cp-entry-view .cp-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 1.25rem; max-width: 1100px; width: 100%; margin: 0 auto; align-items: start; }
+        @media (max-width: 900px) { #cp-entry-view .cp-layout { grid-template-columns: 1fr; } }
+        #cp-entry-view .cp-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 1px 3px rgba(15,23,42,0.06); }
+        #cp-entry-view .cp-section { padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9; }
+        #cp-entry-view .cp-section:last-child { border-bottom: none; }
+        #cp-entry-view .cp-section-title { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; margin-bottom: 0.9rem; }
+        #cp-entry-view .cp-step { width: 22px; height: 22px; border-radius: 50%; background: #e0e7ff; color: #3730a3; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 800; }
+        #cp-entry-view .cp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 1.25rem; }
+        #cp-entry-view .cp-label { font-weight: 600; font-size: 0.83rem; color: #334155; margin-bottom: 0.4rem; display: block; }
+        #cp-entry-view .cp-label .req { color: #dc2626; margin-left: 2px; }
+        #cp-entry-view .cp-label .opt { color: #94a3b8; font-weight: 500; font-size: 0.75rem; margin-left: 4px; }
+        #cp-entry-view .cp-icon-wrap { position: relative; }
+        #cp-entry-view .cp-icon-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #94a3b8; pointer-events: none; }
+        #cp-entry-view .cp-icon-wrap .spa-input { padding-left: 2.4rem; }
+        #cp-entry-view .spa-input { height: 42px; border-radius: 8px; transition: border-color .15s, box-shadow .15s; }
+        #cp-entry-view .spa-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); outline: none; }
+        #cp-entry-view .cp-amount-wrap { display: flex; align-items: stretch; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #fff; transition: border-color .15s, box-shadow .15s; }
+        #cp-entry-view .cp-amount-wrap:focus-within { border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,0.15); }
+        #cp-entry-view .cp-amount-prefix { background: #ecfdf5; color: #047857; font-weight: 800; font-size: 0.9rem; padding: 0 1rem; display: flex; align-items: center; border-right: 1px solid #d1fae5; }
+        #cp-entry-view #cp-amount { border: none !important; box-shadow: none !important; height: 52px; font-size: 1.35rem; font-weight: 700; color: #0f172a; flex: 1; border-radius: 0; }
+        #cp-entry-view textarea.spa-input { height: auto; min-height: 70px; resize: vertical; padding-top: 0.6rem; }
+        #cp-entry-view .cp-summary { position: sticky; top: 1rem; overflow: hidden; }
+        #cp-entry-view .cp-summary-head { background: linear-gradient(135deg, #1e293b 0%, #312e81 100%); color: #fff; padding: 1.25rem 1.5rem; }
+        #cp-entry-view .cp-summary-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.65rem 0; border-bottom: 1px dashed #e2e8f0; font-size: 0.85rem; }
+        #cp-entry-view .cp-summary-row:last-child { border-bottom: none; }
+        #cp-entry-view .cp-summary-row span:first-child { color: #64748b; }
+        #cp-entry-view .cp-summary-row span:last-child { color: #0f172a; font-weight: 600; text-align: right; word-break: break-word; }
+        #cp-entry-view .cp-btn-clear { width: 100%; padding: 0.65rem 1rem; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; cursor: pointer; margin-top: 0.6rem; }
+        #cp-entry-view .cp-btn-clear:hover { background: #f8fafc; }
+    </style>
     <div class="view-pane" id="cp-entry-view">
-        <div class="dash-card center-card" style="max-width: 900px; width: 100%; padding: 1.5rem 2rem;">
-            <div class="card-header-flex" style="margin-bottom: 1.25rem;">
-                <h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b;">Record Customer Payment</h3>
+        <div class="cp-layout">
+            <!-- FORM -->
+            <div class="cp-card">
+                <div class="cp-section" style="display:flex; align-items:center; gap:0.85rem;">
+                    <div style="width:42px; height:42px; border-radius:10px; background:#eef2ff; color:#4338ca; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
+                    </div>
+                    <div>
+                        <h3 style="margin:0; font-size:1.15rem; font-weight:700; color:#0f172a;">Record Customer Payment</h3>
+                        <div style="font-size:0.82rem; color:#64748b; margin-top:2px;">Payments received from credit customers during this shift</div>
+                    </div>
+                </div>
+
+                <div class="cp-section">
+                    <div class="cp-section-title"><span class="cp-step">1</span> Customer &amp; Attendant</div>
+                    <div class="cp-grid">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="cp-label">Customer<span class="req">*</span></label>
+                            <div class="cp-icon-wrap">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                                <input type="text" id="cp-customer-input" list="cp-customers-list" class="spa-input" placeholder="Search customer by name or code..." autocomplete="off">
+                            </div>
+                            <datalist id="cp-customers-list"></datalist>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="cp-label">Received By (CSA)</label>
+                            <select id="cp-csa" class="spa-input"></select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cp-section">
+                    <div class="cp-section-title"><span class="cp-step">2</span> Payment Details</div>
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label class="cp-label">Amount Received<span class="req">*</span></label>
+                        <div class="cp-amount-wrap">
+                            <div class="cp-amount-prefix">KES</div>
+                            <input type="number" id="cp-amount" class="spa-input" placeholder="0.00" step="0.01" min="0">
+                        </div>
+                    </div>
+                    <div class="cp-grid">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="cp-label">Mode of Payment<span class="req">*</span></label>
+                            <select id="cp-mode" class="spa-input"></select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="cp-label">Transaction No.<span class="opt">(optional)</span></label>
+                            <div class="cp-icon-wrap">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/></svg>
+                                <input type="text" id="cp-trans-no" class="spa-input" placeholder="e.g. QWE123RTY" style="text-transform:uppercase;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cp-section">
+                    <div class="cp-section-title"><span class="cp-step">3</span> Notes</div>
+                    <label class="cp-label">Memo<span class="opt">(optional)</span></label>
+                    <textarea id="cp-memo" class="spa-input" rows="2" placeholder="Any additional notes about this payment..."></textarea>
+                </div>
             </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem 1.25rem; margin-bottom: 1.25rem;">
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-weight: 600; font-size: 0.85rem; color: #475569; margin-bottom: 0.35rem; display: block;">Customer</label>
-                    <input type="text" id="cp-customer-input" list="cp-customers-list" class="spa-input" placeholder="Type to search..." autocomplete="off">
-                    <datalist id="cp-customers-list"></datalist>
+
+            <!-- SUMMARY -->
+            <div class="cp-card cp-summary">
+                <div class="cp-summary-head">
+                    <div style="font-size:0.72rem; letter-spacing:0.08em; text-transform:uppercase; opacity:0.75; font-weight:700;">Payment Summary</div>
+                    <div style="font-size:0.8rem; opacity:0.7; margin-top:0.6rem;">Amount</div>
+                    <div id="cp-sum-amount" style="font-size:1.9rem; font-weight:800; line-height:1.15;">KES 0.00</div>
                 </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-weight: 600; font-size: 0.85rem; color: #475569; margin-bottom: 0.35rem; display: block;">CSA</label>
-                    <select id="cp-csa" class="spa-input"></select>
+                <div style="padding:0.75rem 1.5rem 0.25rem;">
+                    <div class="cp-summary-row"><span>Customer</span><span id="cp-sum-customer">&mdash;</span></div>
+                    <div class="cp-summary-row"><span>CSA</span><span id="cp-sum-csa">&mdash;</span></div>
+                    <div class="cp-summary-row"><span>Mode</span><span id="cp-sum-mode">&mdash;</span></div>
+                    <div class="cp-summary-row"><span>Trans No.</span><span id="cp-sum-trans">&mdash;</span></div>
                 </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-weight: 600; font-size: 0.85rem; color: #475569; margin-bottom: 0.35rem; display: block;">Mode of Payment</label>
-                    <select id="cp-mode" class="spa-input"></select>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-weight: 600; font-size: 0.85rem; color: #475569; margin-bottom: 0.35rem; display: block;">Amount (KES)</label>
-                    <input type="number" id="cp-amount" class="spa-input" placeholder="0.00" step="0.01">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-weight: 600; font-size: 0.85rem; color: #475569; margin-bottom: 0.35rem; display: block;">Trans No. (Optional)</label>
-                    <input type="text" id="cp-trans-no" class="spa-input" placeholder="e.g. QWE123RTY">
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-weight: 600; font-size: 0.85rem; color: #475569; margin-bottom: 0.35rem; display: block;">Memo (Optional)</label>
-                    <input type="text" id="cp-memo" class="spa-input" placeholder="Notes...">
+                <div style="padding:1rem 1.5rem 1.5rem;">
+                    <button class="btn-primary" id="btn-save-customer-payment" style="width: 100%; justify-content: center; font-size: 1rem; padding: 0.8rem 1.5rem; font-weight: 700; border-radius: 8px;">
+                        <span class="spinner hidden"></span> Add Payment
+                    </button>
+                    <button type="button" class="cp-btn-clear" id="btn-clear-customer-payment">Clear Form</button>
                 </div>
             </div>
-            
-            <button class="btn-primary" id="btn-save-customer-payment" style="width: 100%; justify-content: center; font-size: 1rem; padding: 0.75rem 1.5rem; font-weight: 600; border-radius: 8px;">
-                <span class="spinner hidden"></span> Add Payment
-            </button>
         </div>
     </div>
 </section>
@@ -2990,6 +3254,7 @@
                             <th>Item</th>
                             <th>Volume</th>
                             <th>Value</th>
+                            <th style="text-align: center; width: 140px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="list-station-rtt-saved">
@@ -3038,6 +3303,64 @@
             <button class="btn-primary" id="btn-save-station-rtt" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Add Return To Tank</button>
         </div>
     </div>
+
+    <!-- EDIT RTT MODAL -->
+    <div id="modal-edit-rtt" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(3px); padding: 15px;">
+        <div style="background:#ffffff; border-radius:12px; width:100%; max-width:540px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.04); overflow:hidden;">
+            <!-- Modal Header -->
+            <div style="padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc;">
+                <div>
+                    <h3 style="margin:0; font-size:1.15rem; font-weight:700; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-blue-600" style="width:20px;height:20px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <span>Edit Return To Tank (RTT)</span>
+                    </h3>
+                    <div id="edit-rtt-badge" style="font-size:0.78rem; color:#64748b; margin-top:2px; font-family:monospace; font-weight:700;"></div>
+                </div>
+                <button type="button" id="btn-close-edit-rtt" style="background:#f1f5f9; border:none; width:32px; height:32px; border-radius:6px; font-size:1.25rem; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center; line-height:1;">&times;</button>
+            </div>
+
+            <!-- Modal Body Form -->
+            <div style="padding:20px; max-height:80vh; overflow-y:auto;">
+                <input type="hidden" id="edit-rtt-name">
+
+                <div class="space-y-4">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Nozzle / Pump Group <span style="color:red;">*</span></label>
+                        <select id="edit-rtt-nozzle" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border bg-white" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Auto-Linked CSA</label>
+                        <input type="text" id="edit-rtt-csa-display" class="w-full border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm border" readonly style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; background:#f1f5f9; color:#475569;">
+                        <input type="hidden" id="edit-rtt-csa">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Item <span style="color:red;">*</span></label>
+                        <select id="edit-rtt-item" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border bg-white" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Value Returned (KES) <span style="font-weight:normal; font-size:0.8rem; color:#64748b;" id="edit-rtt-price-indicator"></span> <span style="color:red;">*</span></label>
+                        <input type="number" step="0.01" id="edit-rtt-amount" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;" placeholder="0.00">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Volume Returned (Liters)</label>
+                        <input type="number" step="0.0001" id="edit-rtt-volume" class="w-full border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm border" readonly style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; background:#f1f5f9; color:#475569; font-weight:700;" placeholder="0.00">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Memo (Optional)</label>
+                        <input type="text" id="edit-rtt-memo" class="w-full border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm border" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;" placeholder="Notes...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div style="padding:14px 20px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" id="btn-cancel-edit-rtt" style="padding:8px 16px; border-radius:6px; font-size:0.875rem; font-weight:600; color:#475569; background:#ffffff; border:1px solid #cbd5e1; cursor:pointer;">Cancel</button>
+                <button type="button" id="btn-save-edit-rtt" style="padding:8px 18px; border-radius:6px; font-size:0.875rem; font-weight:700; color:#ffffff; background:#2563eb; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                    <span class="spinner hidden" style="width:14px;height:14px;"></span> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
 </section>
 
                         <!-- SUPPLIER TOP-UPS -->
@@ -3081,6 +3404,7 @@
                             <th>RRN Number</th>
                             <th>Pay Mode</th>
                             <th>Amount</th>
+                            <th style="text-align: center;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="list-station-topups-saved">
@@ -3124,88 +3448,457 @@
             <button class="btn-primary" id="btn-save-station-topup" style="margin-top:1rem; width:100%;"><span class="spinner hidden"></span> Add Top-Up</button>
         </div>
     </div>
+
+    <!-- EDIT TOP-UP MODAL -->
+    <div id="modal-edit-topup" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(3px); padding: 15px;">
+        <div style="background:#ffffff; border-radius:12px; width:100%; max-width:540px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.04); overflow:hidden;">
+            <!-- Modal Header -->
+            <div style="padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc;">
+                <div>
+                    <h3 style="margin:0; font-size:1.15rem; font-weight:700; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-blue-600" style="width:20px;height:20px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <span>Edit Supplier Top-Up</span>
+                    </h3>
+                    <div id="edit-topup-badge" style="font-size:0.78rem; color:#64748b; margin-top:2px; font-family:monospace; font-weight:700;"></div>
+                </div>
+                <button type="button" id="btn-close-edit-topup" style="background:#f1f5f9; border:none; width:32px; height:32px; border-radius:6px; font-size:1.25rem; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center; line-height:1;">&times;</button>
+            </div>
+
+            <!-- Modal Body Form -->
+            <div style="padding:20px; max-height:80vh; overflow-y:auto;">
+                <input type="hidden" id="edit-topup-name">
+
+                <div class="space-y-4">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Supplier Card <span style="color:red;">*</span></label>
+                        <select id="edit-topup-card" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border bg-white" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">CSA <span style="color:red;">*</span></label>
+                        <select id="edit-topup-csa" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border bg-white" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">RRN Number <span style="color:red;">*</span></label>
+                        <input type="text" id="edit-topup-rrn" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;" placeholder="e.g. 123456789">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Payment Mode <span style="color:red;">*</span></label>
+                        <select id="edit-topup-mop" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border bg-white" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px;"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label style="display:block; font-size: 0.8rem; font-weight:700; color:#475569; text-transform:uppercase; margin-bottom: 4px;">Amount (KES) <span style="color:red;">*</span></label>
+                        <input type="number" step="0.01" id="edit-topup-amount" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700;" placeholder="0.00">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div style="padding:14px 20px; border-top:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" id="btn-cancel-edit-topup" style="padding:8px 16px; border-radius:6px; font-size:0.875rem; font-weight:600; color:#475569; background:#ffffff; border:1px solid #cbd5e1; cursor:pointer;">Cancel</button>
+                <button type="button" id="btn-save-edit-topup" style="padding:8px 18px; border-radius:6px; font-size:0.875rem; font-weight:700; color:#ffffff; background:#2563eb; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                    <span class="spinner hidden" style="width:14px;height:14px;"></span> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
 </section>
 
               <!-- INVENTORY STATUS -->
               <section id="tab-inventory" class="tab-pane">
-                  
-                  <div style="background-color: #ffffff; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
-                      <div>
-                          <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">Inventory Status Report</h3>
-                          <p style="margin:0; font-size: 0.85rem; color: #64748b;" id="inventory-report-company">Loading...</p>
+                  <style>
+                  .inv-toolbar-card {
+                      background: #ffffff;
+                      padding: 1.25rem 1.5rem;
+                      border-radius: 12px;
+                      border: 1px solid #e2e8f0;
+                      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+                      margin-bottom: 1rem;
+                  }
+                  .inv-metrics-bar {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                      gap: 0.85rem;
+                      margin-bottom: 1rem;
+                  }
+                  .inv-metric-chip {
+                      background: #ffffff;
+                      border: 1px solid #e2e8f0;
+                      border-radius: 10px;
+                      padding: 0.75rem 1rem;
+                      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+                      display: flex;
+                      align-items: center;
+                      gap: 0.75rem;
+                  }
+                  .inv-metric-chip .chip-icon {
+                      width: 38px;
+                      height: 38px;
+                      border-radius: 8px;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      flex-shrink: 0;
+                      font-size: 1.15rem;
+                  }
+                  .inv-metric-chip .chip-label {
+                      font-size: 0.72rem;
+                      font-weight: 700;
+                      text-transform: uppercase;
+                      letter-spacing: 0.05em;
+                      color: #64748b;
+                  }
+                  .inv-metric-chip .chip-value {
+                      font-size: 1.25rem;
+                      font-weight: 800;
+                      color: #0f172a;
+                      font-family: Consolas, monospace;
+                      line-height: 1.2;
+                  }
+
+                  .new-inv-table-unified {
+                      width: 100%;
+                      font-size: 0.85rem;
+                      text-align: left;
+                      border-collapse: separate;
+                      border-spacing: 0;
+                  }
+                  .new-inv-table-unified th, .new-inv-table-unified td {
+                      border-bottom: 1px solid #e2e8f0;
+                      transition: background-color 0.15s ease;
+                  }
+
+                  /* Tier 1 Header: Group Labels */
+                  .new-inv-table-unified thead tr.header-main th {
+                      padding: 0.65rem 0.85rem;
+                      font-size: 0.72rem;
+                      text-transform: uppercase;
+                      letter-spacing: 0.06em;
+                      font-weight: 800;
+                      text-align: center;
+                      border-top: 1px solid #e2e8f0;
+                  }
+                  .new-inv-table-unified thead tr.header-main th.th-base {
+                      background: #f8fafc;
+                      color: #475569;
+                  }
+                  .new-inv-table-unified thead tr.header-main th.th-group-opening {
+                      background: #eff6ff;
+                      color: #1e40af;
+                      border-left: 2px solid #bfdbfe;
+                      border-right: 2px solid #bfdbfe;
+                  }
+                  .new-inv-table-unified thead tr.header-main th.th-group-trans {
+                      background: #f0fdf4;
+                      color: #166534;
+                      border-right: 2px solid #bbf7d0;
+                  }
+                  .new-inv-table-unified thead tr.header-main th.th-group-closing {
+                      background: #eef2ff;
+                      color: #4338ca;
+                      border-right: 2px solid #c7d2fe;
+                  }
+
+                  /* Tier 2 Header: Column Names */
+                  .new-inv-table-unified thead tr.header-sub th {
+                      padding: 0.55rem 0.75rem;
+                      font-size: 0.72rem;
+                      font-weight: 700;
+                      text-transform: uppercase;
+                      text-align: center;
+                      border-bottom: 2px solid #cbd5e1;
+                  }
+                  .new-inv-table-unified thead tr.header-sub th.th-sub-op {
+                      background: #f8fafc;
+                      color: #1e40af;
+                  }
+                  .new-inv-table-unified thead tr.header-sub th.th-sub-op-total {
+                      background: #eff6ff;
+                      color: #1e3a8a;
+                      font-weight: 800;
+                      border-right: 2px solid #bfdbfe;
+                  }
+                  .new-inv-table-unified thead tr.header-sub th.th-sub-tr {
+                      background: #f8fafc;
+                      color: #166534;
+                  }
+                  .new-inv-table-unified thead tr.header-sub th.th-sub-tr.th-tr-last {
+                      border-right: 2px solid #bbf7d0;
+                  }
+                  .new-inv-table-unified thead tr.header-sub th.th-sub-cl {
+                      background: #f8fafc;
+                      color: #4338ca;
+                  }
+                  .new-inv-table-unified thead tr.header-sub th.th-sub-cl-total {
+                      background: #eef2ff;
+                      color: #3730a3;
+                      font-weight: 800;
+                      border-right: 2px solid #c7d2fe;
+                  }
+
+                  /* Category Group Dividers */
+                  .new-inv-table-unified .row-group-header td {
+                      background: #f8fafc;
+                      border-left: 4px solid #2563eb;
+                      border-top: 2px solid #e2e8f0;
+                      border-bottom: 2px solid #e2e8f0;
+                      padding: 0.65rem 1rem;
+                      color: #0f172a;
+                      font-weight: 800;
+                      font-size: 0.82rem;
+                      letter-spacing: 0.06em;
+                      text-transform: uppercase;
+                  }
+
+                  /* Rows & Hover */
+                  .new-inv-table-unified tbody tr.data-row:nth-child(even) {
+                      background-color: #fafbfc;
+                  }
+                  .new-inv-table-unified tbody tr.data-row:hover {
+                      background-color: #f1f5f9;
+                  }
+                  .new-inv-table-unified tbody td {
+                      padding: 0.55rem 0.75rem;
+                      font-size: 0.84rem;
+                  }
+
+                  /* Product & Number Columns */
+                  .new-inv-table-unified td.th-no {
+                      color: #94a3b8;
+                      font-weight: 600;
+                      text-align: center;
+                      font-size: 0.78rem;
+                      width: 48px;
+                  }
+                  .new-inv-table-unified td.th-product {
+                      font-weight: 600;
+                      color: #1e293b;
+                      white-space: nowrap;
+                  }
+
+                  /* Highlighted Column Backgrounds */
+                  .new-inv-table-unified td.col-op-total {
+                      background: rgba(239, 246, 255, 0.45);
+                      border-right: 2px solid #dbeafe;
+                      font-weight: 700;
+                      text-align: center;
+                  }
+                  .new-inv-table-unified td.col-trans-last {
+                      border-right: 2px solid #dcfce7;
+                  }
+                  .new-inv-table-unified td.col-cl-total {
+                      background: rgba(238, 242, 255, 0.55);
+                      border-right: 2px solid #e0e7ff;
+                      font-weight: 800;
+                      text-align: center;
+                  }
+
+                  /* Number Values Styling */
+                  .cell-zero {
+                      color: #cbd5e1;
+                      font-weight: 400;
+                  }
+                  .cell-negative {
+                      display: inline-block;
+                      padding: 1px 7px;
+                      border-radius: 5px;
+                      background: #fef2f2;
+                      color: #dc2626;
+                      border: 1px solid #fecaca;
+                      font-weight: 800;
+                      font-family: Consolas, monospace;
+                      font-size: 0.82rem;
+                  }
+                  .cell-sale {
+                      display: inline-block;
+                      padding: 1px 6px;
+                      border-radius: 5px;
+                      background: #ecfdf5;
+                      color: #047857;
+                      font-weight: 800;
+                      font-family: monospace;
+                  }
+                  .cell-purchase {
+                      display: inline-block;
+                      padding: 1px 6px;
+                      border-radius: 5px;
+                      background: #eff6ff;
+                      color: #1d4ed8;
+                      font-weight: 800;
+                      font-family: monospace;
+                  }
+                  .cell-positive-stock {
+                      color: #0f172a;
+                      font-weight: 700;
+                      font-family: monospace;
+                  }
+
+                  /* Modern Collapse Pill */
+                  .collapse-pill {
+                      display: inline-flex;
+                      align-items: center;
+                      gap: 4px;
+                      padding: 2px 8px;
+                      border-radius: 12px;
+                      font-size: 0.68rem;
+                      font-weight: 700;
+                      cursor: pointer;
+                      background: #ffffff;
+                      border: 1px solid currentColor;
+                      margin-left: 6px;
+                      transition: all 0.15s ease;
+                      vertical-align: middle;
+                  }
+                  .collapse-pill:hover {
+                      filter: brightness(0.95);
+                      transform: translateY(-1px);
+                  }
+                  .new-inv-table-unified.collapsed-op .col-op { display: none; }
+                  .new-inv-table-unified.collapsed-cl .col-cl { display: none; }
+
+                  .inventory-report-wrapper.compact-mode .new-inv-table-unified td,
+                  .inventory-report-wrapper.compact-mode .new-inv-table-unified th {
+                      padding: 0.35rem 0.5rem;
+                      font-size: 0.78rem;
+                  }
+                  </style>
+
+                  <!-- Header Toolbar Card -->
+                  <div class="inv-toolbar-card">
+                      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem; margin-bottom: 1rem;">
+                          <div style="display: flex; align-items: center; gap: 0.85rem;">
+                              <div style="width: 44px; height: 44px; border-radius: 12px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 1.3rem;">
+                                  📦
+                              </div>
+                              <div>
+                                  <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                                      <span>Total Inventory Status</span>
+                                      <span class="badge" style="background: #ecfdf5; color: #047857; font-size: 0.72rem; padding: 3px 8px; border-radius: 999px; font-weight: 700;">Live Stock</span>
+                                  </h3>
+                                  <p style="margin: 2px 0 0; font-size: 0.85rem; color: #64748b;" id="inventory-report-company">Loading company...</p>
+                              </div>
+                          </div>
+                          
+                          <!-- Date Filters & Refresh -->
+                          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                              <div style="display: flex; align-items: center; gap: 0.5rem; background: #f8fafc; padding: 0.4rem 0.75rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+                                  <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase;">From</span>
+                                  <input type="date" id="inventory-date-from" style="border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #1e293b; outline: none;">
+                                  <span style="color: #cbd5e1;">&bull;</span>
+                                  <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase;">To</span>
+                                  <input type="date" id="inventory-date-to" style="border: none; background: transparent; font-size: 0.82rem; font-weight: 600; color: #1e293b; outline: none;">
+                              </div>
+                              <button id="btn-refresh-inventory-report" style="background: #1e40af; color: #ffffff; font-weight: 700; padding: 0.55rem 1.25rem; border-radius: 8px; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 1px 2px rgba(30, 64, 175, 0.2); transition: background 0.15s;">
+                                  <span class="spinner hidden" style="width: 14px; height: 14px; border-width: 2px;"></span>
+                                  <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                  Refresh
+                              </button>
+                          </div>
                       </div>
-                      <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                          <div style="display: flex; align-items: center; gap: 0.5rem; background: #f8fafc; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1;">
-                              <span style="font-size: 0.8rem; font-weight: 600; color: #475569;">Zoom:</span>
-                              <button id="btn-zoom-out" style="border:none; background:#e2e8f0; width:24px; height:24px; border-radius:4px; cursor:pointer; font-weight:bold;">-</button>
-                              <span id="zoom-level" style="font-size:0.85rem; font-weight:bold; min-width:35px; text-align:center;">100%</span>
-                              <button id="btn-zoom-in" style="border:none; background:#e2e8f0; width:24px; height:24px; border-radius:4px; cursor:pointer; font-weight:bold;">+</button>
-                              <button id="btn-zoom-reset" style="border:none; background:transparent; color:#1e3a8a; font-size:0.8rem; cursor:pointer; text-decoration:underline;">Reset</button>
+
+                      <!-- Sub-toolbar: Search & View Options -->
+                      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                          <div style="position: relative; width: 280px; max-width: 100%;">
+                              <svg style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #94a3b8;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                              <input type="text" id="inventory-search" placeholder="Search product name or SKU..." style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.45rem 0.75rem 0.45rem 2.2rem; font-size: 0.85rem; outline: none; transition: border-color 0.15s;">
                           </div>
-                          <div style="display: flex; align-items: center; gap: 0.5rem; background: #f8fafc; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1;">
-                              <input type="checkbox" id="toggle-compact" style="width: 16px; height: 16px; cursor: pointer;">
-                              <label for="toggle-compact" style="font-size: 0.875rem; font-weight: 600; color: #475569; margin: 0; cursor: pointer;">Compact View</label>
+
+                          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                              <!-- Zoom Pill -->
+                              <div style="display: flex; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; padding: 2px 4px;">
+                                  <span style="font-size: 0.72rem; font-weight: 700; color: #64748b; padding: 0 6px; text-transform: uppercase;">Zoom</span>
+                                  <button id="btn-zoom-out" style="border: none; background: #e2e8f0; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-weight: bold; line-height: 1; color: #334155;">&minus;</button>
+                                  <span id="zoom-level" style="font-size: 0.8rem; font-weight: 800; min-width: 42px; text-align: center; color: #0f172a; font-family: monospace;">100%</span>
+                                  <button id="btn-zoom-in" style="border: none; background: #e2e8f0; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-weight: bold; line-height: 1; color: #334155;">&#43;</button>
+                                  <button id="btn-zoom-reset" style="border: none; background: transparent; color: #2563eb; font-size: 0.75rem; font-weight: 600; cursor: pointer; margin-left: 4px; padding: 0 4px;">Reset</button>
+                              </div>
+
+                              <!-- Compact Toggle -->
+                              <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 8px;">
+                                  <input type="checkbox" id="toggle-compact" style="width: 15px; height: 15px; cursor: pointer;">
+                                  Compact View
+                              </label>
                           </div>
-                          <div style="display: flex; align-items: center; gap: 0.5rem;">
-                              <input type="text" id="inventory-search" placeholder="Search product..." style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none; width: 180px;">
-                          </div>
-                          <div style="display: flex; align-items: center; gap: 0.5rem;">
-                              <label style="font-weight:600; font-size:0.875rem; color:#475569;">From</label>
-                              <input type="date" id="inventory-date-from" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
-                          </div>
-                          <div style="display: flex; align-items: center; gap: 0.5rem;">
-                              <label style="font-weight:600; font-size:0.875rem; color:#475569;">To</label>
-                              <input type="date" id="inventory-date-to" style="border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none;">
-                          </div>
-                          <button id="btn-refresh-inventory-report" style="background-color: #172554; color: #ffffff; font-weight: 600; padding: 0.5rem 1.25rem; border-radius: 0.5rem; transition: background-color 0.2s; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
-                              <span class="spinner hidden" style="width: 14px; height: 14px; border-width: 2px;"></span> Refresh
-                          </button>
                       </div>
                   </div>
-                  
-                  <style>
-                  .new-inv-table-unified { width: 100%; font-size: 0.875rem; text-align: left; border-collapse: collapse; }
-                  .new-inv-table-unified th, .new-inv-table-unified td { transition: all 0.2s; }
-                  .new-inv-table-unified .header-main th { background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #334155; font-size: 0.75rem; text-transform: uppercase; font-weight: 700; text-align: center; padding: 0.75rem; }
-                  .new-inv-table-unified .header-sub th { background-color: #f8fafc; border-bottom: 2px solid #1e3a8a; color: #475569; font-size: 0.75rem; font-weight: 600; padding: 0.5rem 1rem; text-align: center; }
-                  .new-inv-table-unified .header-sub th.text-left { text-align: left; }
-                  .new-inv-table-unified .row-group-header td { background-color: #172554; color: #fbbf24; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.5rem 1rem; }
-                  .new-inv-table-unified tbody tr.data-row:hover { background-color: #f8fafc; }
-                  .new-inv-table-unified tbody td { border-bottom: 1px solid #f1f5f9; padding: 0.5rem 1rem; }
-                  .new-inv-table-unified .text-right { text-align: center; font-family: monospace; }
-                  .new-inv-table-unified .negative-val { color: #dc2626; font-weight: 700; }
-                  .new-inv-table-unified.collapsed-op .col-op { display: none; }
-                    .new-inv-table-unified.collapsed-cl .col-cl { display: none; }
-                    </style>
 
-                  <div class="inventory-report-wrapper" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); overflow-x: auto;">
+                  <!-- Quick Stats Chips -->
+                  <div class="inv-metrics-bar">
+                      <div class="inv-metric-chip">
+                          <div class="chip-icon" style="background: #eff6ff; color: #2563eb;">📦</div>
+                          <div>
+                              <div class="chip-label">Total SKUs</div>
+                              <div class="chip-value" id="metric-inv-skus">0</div>
+                          </div>
+                      </div>
+                      <div class="inv-metric-chip">
+                          <div class="chip-icon" style="background: #f0fdf4; color: #16a34a;">📥</div>
+                          <div>
+                              <div class="chip-label">Opening Stock</div>
+                              <div class="chip-value" id="metric-inv-opening">0</div>
+                          </div>
+                      </div>
+                      <div class="inv-metric-chip">
+                          <div class="chip-icon" style="background: #fefce8; color: #ca8a04;">🏷️</div>
+                          <div>
+                              <div class="chip-label">Period Sales</div>
+                              <div class="chip-value" id="metric-inv-sales">0</div>
+                          </div>
+                      </div>
+                      <div class="inv-metric-chip">
+                          <div class="chip-icon" style="background: #eef2ff; color: #4f46e5;">📤</div>
+                          <div>
+                              <div class="chip-label">Closing Stock</div>
+                              <div class="chip-value" id="metric-inv-closing">0</div>
+                          </div>
+                      </div>
+                      <div class="inv-metric-chip" id="chip-inv-negatives" style="display: none;">
+                          <div class="chip-icon" style="background: #fef2f2; color: #dc2626;">⚠️</div>
+                          <div>
+                              <div class="chip-label" style="color: #dc2626;">Deficits / Negatives</div>
+                              <div class="chip-value" style="color: #dc2626;" id="metric-inv-negatives">0</div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- Inventory Table Wrapper -->
+                  <div class="inventory-report-wrapper" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05); overflow-x: auto;">
                       <table class="new-inv-table-unified inventory-report-table collapsed-op collapsed-cl" id="table-inventory-status">
                           <thead>
                               <tr class="header-main">
-                                  <th rowspan="2" class="sticky-col th-no">NO.</th>
-                                  <th rowspan="2" class="sticky-col th-product" style="text-align: left;">PRODUCT</th>
-                                  <th colspan="1" class="th-group-opening" id="th-op-group">OPENING STOCK <span class="collapse-icon" data-target="op" style="cursor:pointer; font-size:1.1em; margin-left:5px; color: #ffffff;">[+]</span></th>
+                                  <th rowspan="2" class="th-base th-no">NO.</th>
+                                  <th rowspan="2" class="th-base th-product" style="text-align: left;">PRODUCT</th>
+                                  <th colspan="1" class="th-group-opening" id="th-op-group">
+                                      <span>OPENING STOCK</span>
+                                      <span class="collapse-pill collapse-icon" data-target="op" title="Toggle Store / Forecourt Breakdown">
+                                          <span class="pill-sym">&#43;</span> Breakdown
+                                      </span>
+                                  </th>
                                   <th colspan="4" class="th-group-trans">TRANSACTIONS</th>
-                                  <th colspan="1" class="th-group-closing" id="th-cl-group">CLOSING STOCK <span class="collapse-icon" data-target="cl" style="cursor:pointer; font-size:1.1em; margin-left:5px; color: #ffffff;">[+]</span></th>
+                                  <th colspan="1" class="th-group-closing" id="th-cl-group">
+                                      <span>CLOSING STOCK</span>
+                                      <span class="collapse-pill collapse-icon" data-target="cl" title="Toggle Store / Forecourt Breakdown">
+                                          <span class="pill-sym">&#43;</span> Breakdown
+                                      </span>
+                                  </th>
                               </tr>
                               <tr class="header-sub">
                                   <!-- Opening -->
                                   <th class="th-sub-op col-op">STORE</th>
                                   <th class="th-sub-op col-op">FORECOURT</th>
-                                  <th class="th-sub-op">TOTAL O.STOCK</th>
+                                  <th class="th-sub-op-total">TOTAL O.STOCK</th>
                                   <!-- Trans -->
                                   <th class="th-sub-tr">PURCHASES</th>
                                   <th class="th-sub-tr">SALES</th>
-                                    <th class="th-sub-tr">BORROWED IN</th>
-                                    <th class="th-sub-tr">BORROWED OUT</th>
+                                  <th class="th-sub-tr">BORROWED IN</th>
+                                  <th class="th-sub-tr th-tr-last">BORROWED OUT</th>
                                   <!-- Closing -->
                                   <th class="th-sub-cl col-cl">STORE</th>
                                   <th class="th-sub-cl col-cl">FORECOURT</th>
-                                  <th class="th-sub-cl">TOTAL C.STOCK</th>
+                                  <th class="th-sub-cl-total">TOTAL C.STOCK</th>
                               </tr>
                           </thead>
                           <tbody id="list-inventory-status">
-                              <tr><td colspan="10" class="text-center" style="padding: 2rem;">Loading inventory report...</td></tr>
+                              <tr><td colspan="12" class="text-center" style="padding: 2.5rem; color: #94a3b8;"><div class="spinner" style="margin: 0 auto 0.5rem;"></div>Loading inventory report...</td></tr>
                           </tbody>
                       </table>
                   </div>
@@ -4287,126 +4980,203 @@
 
 <!-- RECONCILE -->
             
-            <section id="tab-shortage-mgmt" class="tab-pane">
+            <!-- ========================================== -->
+            <!-- STAFF SHORTAGE PAYMENT SCREEN              -->
+            <!-- ========================================== -->
+            <section id="tab-shortage-payment" class="tab-pane">
                 <div class="header-banner" style="background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%); padding: 24px; border-radius: 12px; margin-bottom: 24px; color: white;">
-                    <div class="banner-title">
-                        <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0; color: white;">Staff Shortages</h2>
-                        <p style="margin: 4px 0 0; opacity: 0.9;">Record Shortage Payments and Corrections</p>
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="banner-title">
+                            <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0; color: white; display: flex; align-items: center; gap: 8px;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-6 h-6"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                Staff Shortage Payments
+                            </h2>
+                            <p style="margin: 4px 0 0; opacity: 0.9; font-size: 0.88rem;">Record employee shortage recoveries, cash/bank payments, and back-dated settlements</p>
+                        </div>
+                        <!-- Top Nav Pills -->
+                        <div class="flex items-center gap-2 bg-blue-900/60 p-1.5 rounded-lg border border-blue-400/30 text-xs">
+                            <button type="button" class="px-3 py-1.5 rounded-md font-bold bg-white text-blue-900 shadow-sm flex items-center gap-1.5 cursor-default">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                Record Payment
+                            </button>
+                            <button type="button" onclick="window.switch_to_shortage_transfer()" class="px-3 py-1.5 rounded-md font-medium text-blue-100 hover:text-white hover:bg-blue-800/60 transition-colors flex items-center gap-1.5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                                Shortage Transfer
+                            </button>
+                            <button type="button" onclick="window.switch_to_shorts_report()" class="px-3 py-1.5 rounded-md font-medium text-blue-100 hover:text-white hover:bg-blue-800/60 transition-colors flex items-center gap-1.5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+                                Shorts Report
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <div class="content-body">
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        <!-- Shortage Payment Card -->
-                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                            <div class="bg-blue-50 px-6 py-4 border-b border-blue-100 flex justify-between items-center">
-                                <h3 class="text-blue-900 font-semibold text-lg m-0 flex items-center gap-2">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                                    Record Payment
+                    <!-- Payment Form Card -->
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+                        <div class="bg-blue-50/80 px-6 py-4 border-b border-blue-100 flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                                <h3 class="text-blue-900 font-bold text-lg m-0 flex items-center gap-2">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-blue-700"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                    Record Shortage Payment
                                 </h3>
+                                <p class="text-xs text-blue-700/80 m-0 mt-0.5">Enter details of money received from staff to reduce their shortage liability</p>
                             </div>
-                            <div class="p-6">
-                                <div class="space-y-4">
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Staff Member</label>
-                                        <select id="shortage-pay-employee" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border"></select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
-                                        <select id="shortage-pay-mode" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border">
-                                            <option value="Cash">Cash</option>
-                                            <option value="M-Pesa">M-Pesa</option>
-                                            <option value="Bank Transfer">Bank Transfer</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                                        <input type="number" id="shortage-pay-amount" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border" placeholder="0.00">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Reference No (M-Pesa/Bank)</label>
-                                        <input type="text" id="shortage-pay-reference" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border" placeholder="Optional">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
-                                        <input type="text" id="shortage-pay-remarks" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border" placeholder="Optional notes">
-                                    </div>
-                                    <button id="btn-submit-shortage-pay" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2" onclick="window.submit_shortage_payment()">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                        Submit Payment
-                                    </button>
-                                </div>
-                            </div>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                📅 Supports Back-Dating
+                            </span>
                         </div>
 
-                        <!-- Shortage Correction Card -->
-                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                            <div class="bg-orange-50 px-6 py-4 border-b border-orange-100 flex justify-between items-center">
-                                <h3 class="text-orange-900 font-semibold text-lg m-0 flex items-center gap-2">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
-                                    Shortage Transfer
-                                </h3>
-                            </div>
-                            <div class="p-6">
-                                <div class="space-y-4">
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">From Staff (Reduces Shortage)</label>
-                                        <select id="shortage-cor-from" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border"></select>
-                                    </div>
-                                    <div class="form-group flex justify-center py-2">
-                                        <div class="bg-orange-100 text-orange-600 p-2 rounded-full">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-6 h-6"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
-                                        </div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">To Staff (Increases Shortage)</label>
-                                        <select id="shortage-cor-to" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border"></select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                                        <input type="number" id="shortage-cor-amount" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border" placeholder="0.00">
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Remarks / Reason</label>
-                                        <input type="text" id="shortage-cor-remarks" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border" placeholder="Required">
-                                    </div>
-                                    <button id="btn-submit-shortage-cor" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 mt-4" onclick="window.submit_shortage_correction()">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                        Submit Correction
-                                    </button>
+                        <div class="p-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <!-- Date Field (Allows backdating) -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Payment Date <span class="text-blue-600 font-normal lowercase">(backdate support, e.g. 3rd Oct)</span> <span class="text-red-500">*</span>
+                                    </label>
+                                    <input type="date" id="shortage-pay-date" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border text-sm font-medium">
                                 </div>
+
+                                <!-- Staff Member -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Staff Member <span class="text-red-500">*</span>
+                                    </label>
+                                    <select id="shortage-pay-employee" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border text-sm"></select>
+                                    
+                                    <!-- Dynamic Balance Banner -->
+                                    <div id="shortage-pay-emp-balance-box" class="p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs flex items-center justify-between mt-2 hidden">
+                                        <span class="text-gray-700">Outstanding Shortage: <strong id="shortage-pay-emp-balance" class="text-red-600 font-bold ml-1">KES 0.00</strong></span>
+                                        <button type="button" id="btn-pay-full-shortage" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-[11px] transition-colors shadow-sm">
+                                            Pay Full Shortage
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Payment Mode -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Payment Mode <span class="text-red-500">*</span>
+                                    </label>
+                                    <select id="shortage-pay-mode" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border text-sm">
+                                        <option value="Cash">Cash</option>
+                                        <option value="M-Pesa">M-Pesa</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Salary Deduction">Salary Deduction</option>
+                                    </select>
+                                </div>
+
+                                <!-- Amount -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Amount Received (KES) <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative">
+                                        <span class="absolute left-3.5 top-2 text-gray-500 font-bold text-sm">KES</span>
+                                        <input type="number" step="0.01" id="shortage-pay-amount" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 pl-14 pr-3 py-2 border text-sm font-bold text-gray-900" placeholder="0.00">
+                                    </div>
+                                </div>
+
+                                <!-- Reference No -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Reference No (M-Pesa / Bank Slip / Cheque)
+                                    </label>
+                                    <input type="text" id="shortage-pay-reference" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border text-sm" placeholder="e.g. QK8912KL / Receipt No (Optional)">
+                                </div>
+
+                                <!-- Cash Account -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Deposit Account <span class="text-gray-400 font-normal lowercase">(Optional)</span>
+                                    </label>
+                                    <select id="shortage-pay-cash-account" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border text-sm">
+                                        <option value="">Default Cash Account</option>
+                                    </select>
+                                </div>
+
+                                <!-- Remarks -->
+                                <div class="form-group md:col-span-2">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Remarks / Notes
+                                    </label>
+                                    <input type="text" id="shortage-pay-remarks" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border text-sm" placeholder="Optional notes, reason, receipt details...">
+                                </div>
+                            </div>
+
+                            <div class="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                                <button id="btn-submit-shortage-pay" class="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm" onclick="window.submit_shortage_payment()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    Submit Shortage Payment
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Recent Activity Table -->
-                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mt-6">
-                        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <!-- Payment History Table Card -->
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div>
-                                <h3 class="text-gray-900 font-semibold text-lg m-0 flex items-center gap-2">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-gray-500"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                    Recent Shortage Activity
+                                <h3 class="text-gray-900 font-bold text-lg m-0 flex items-center gap-2">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-blue-600"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    Shortage Payments History
                                 </h3>
-                                <div id="shortage-history-subtitle" style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">(Showing latest 20 entries &bull; Use date filter for more)</div>
+                                <div id="shortage-pay-history-subtitle" style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">
+                                    Historical records of all shortage payments and settlements
+                                </div>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <input type="date" id="shortage-history-start" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1 text-sm border">
-                                <span class="text-gray-500">to</span>
-                                <input type="date" id="shortage-history-end" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1 text-sm border">
-                                <button class="text-white bg-blue-600 hover:bg-blue-700 font-medium text-sm transition-colors px-3 py-1.5 rounded-md shadow-sm" onclick="window.load_shortage_history()">Filter</button>
+                            
+                            <!-- KPI Summary Badges -->
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span id="kpi-pay-total-count" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                                    0 Records
+                                </span>
+                                <span id="kpi-pay-total-amount" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                    Payments: Sh 0.00
+                                </span>
                             </div>
                         </div>
+
+                        <!-- Filter Controls Bar -->
+                        <div class="px-6 py-3 bg-white border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                                    <label class="font-medium text-gray-700">Staff:</label>
+                                    <select id="shortage-pay-filter-staff" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1 text-xs border" onchange="window.load_shortage_pay_history()">
+                                        <option value="">All Staff</option>
+                                    </select>
+                                </div>
+
+                                <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                                    <label class="font-medium text-gray-700">Dates:</label>
+                                    <input type="date" id="shortage-pay-filter-start" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1 text-xs border">
+                                    <span class="text-gray-400">to</span>
+                                    <input type="date" id="shortage-pay-filter-end" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1 text-xs border">
+                                    <button class="text-white bg-blue-600 hover:bg-blue-700 font-medium text-xs transition-colors px-3 py-1 rounded shadow-sm" onclick="window.load_shortage_pay_history()">Filter</button>
+                                    <button class="text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium text-xs transition-colors px-2.5 py-1 rounded border border-gray-200" onclick="window.reset_shortage_pay_filters()">Reset</button>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="shortage-pay-filter-search" placeholder="Search staff, ref, ID..." class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-1 text-xs border w-48 md:w-56" oninput="window.filter_shortage_pay_table()">
+                            </div>
+                        </div>
+
+                        <!-- Table -->
                         <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse">
                                 <thead>
-                                    <tr class="bg-gray-100 text-gray-700 text-sm border-b border-gray-200">
-                                        <th class="px-4 py-3 font-semibold">Date</th>
-                                        <th class="px-4 py-3 font-semibold">Type</th>
-                                        <th class="px-4 py-3 font-semibold">Staff Involved</th>
-                                        <th class="px-4 py-3 font-semibold text-right">Amount</th>`n                                        <th class="px-4 py-3 font-semibold text-right">Action</th>
+                                    <tr class="bg-gray-50 text-gray-700 text-xs uppercase tracking-wider border-b border-gray-200 font-semibold">
+                                        <th class="px-4 py-3">Date</th>
+                                        <th class="px-4 py-3">Ref ID</th>
+                                        <th class="px-4 py-3">Staff Member</th>
+                                        <th class="px-4 py-3">Payment Mode / Ref</th>
+                                        <th class="px-4 py-3">Remarks</th>
+                                        <th class="px-4 py-3 text-right">Amount (KES)</th>
+                                        <th class="px-4 py-3 text-center" style="width: 100px;">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody id="shortage-history-body" class="text-sm">
+                                <tbody id="shortage-pay-table-body" class="text-sm divide-y divide-gray-100">
                                     <!-- Populated by JS -->
                                 </tbody>
                             </table>
@@ -4414,6 +5184,293 @@
                     </div>
                 </div>
             </section>
+
+            <!-- ========================================== -->
+            <!-- STAFF SHORTAGE TRANSFER SCREEN             -->
+            <!-- ========================================== -->
+            <section id="tab-shortage-transfer" class="tab-pane">
+                <div class="header-banner" style="background: linear-gradient(135deg, #c2410c 0%, #ea580c 100%); padding: 24px; border-radius: 12px; margin-bottom: 24px; color: white;">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="banner-title">
+                            <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0; color: white; display: flex; align-items: center; gap: 8px;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-6 h-6"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                                Staff Shortage Transfers & Corrections
+                            </h2>
+                            <p style="margin: 4px 0 0; opacity: 0.9; font-size: 0.88rem;">Reallocate shortage liability between staff members with full back-dating support</p>
+                        </div>
+                        <!-- Top Nav Pills -->
+                        <div class="flex items-center gap-2 bg-orange-950/40 p-1.5 rounded-lg border border-orange-300/30 text-xs">
+                            <button type="button" onclick="window.switch_to_shortage_payment()" class="px-3 py-1.5 rounded-md font-medium text-orange-100 hover:text-white hover:bg-orange-800/60 transition-colors flex items-center gap-1.5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                Record Payment
+                            </button>
+                            <button type="button" class="px-3 py-1.5 rounded-md font-bold bg-white text-orange-900 shadow-sm flex items-center gap-1.5 cursor-default">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                                Shortage Transfer
+                            </button>
+                            <button type="button" onclick="window.switch_to_shorts_report()" class="px-3 py-1.5 rounded-md font-medium text-orange-100 hover:text-white hover:bg-orange-800/60 transition-colors flex items-center gap-1.5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+                                Shorts Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="content-body">
+                    <!-- Transfer Form Card -->
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+                        <div class="bg-orange-50/80 px-6 py-4 border-b border-orange-100 flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                                <h3 class="text-orange-900 font-bold text-lg m-0 flex items-center gap-2">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-orange-700"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                                    Transfer Shortage Liability
+                                </h3>
+                                <p class="text-xs text-orange-700/80 m-0 mt-0.5">Deducts shortage liability from one employee and assigns it to another employee</p>
+                            </div>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+                                📅 Supports Back-Dating
+                            </span>
+                        </div>
+
+                        <div class="p-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                                <!-- Transfer Date -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Transfer Date <span class="text-orange-600 font-normal lowercase">(backdate support, e.g. 3rd Oct)</span> <span class="text-red-500">*</span>
+                                    </label>
+                                    <input type="date" id="shortage-cor-date" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border text-sm font-medium">
+                                </div>
+
+                                <!-- Transfer Amount -->
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                        Amount to Transfer (KES) <span class="text-red-500">*</span>
+                                    </label>
+                                    <div class="relative">
+                                        <span class="absolute left-3.5 top-2 text-orange-600 font-bold text-sm">KES</span>
+                                        <input type="number" step="0.01" id="shortage-cor-amount" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 pl-14 pr-3 py-2 border text-sm font-bold text-gray-900" placeholder="0.00">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Visual Transfer Flow Container -->
+                            <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 mb-5">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                    <!-- From Staff -->
+                                    <div class="form-group">
+                                        <label class="block text-xs font-bold text-gray-800 uppercase mb-1 flex items-center gap-1.5">
+                                            <span class="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
+                                            From Staff (Reduces Shortage) <span class="text-red-500">*</span>
+                                        </label>
+                                        <select id="shortage-cor-from" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border text-sm"></select>
+                                        <div id="shortage-cor-from-balance-box" class="p-2 rounded-lg bg-green-50 border border-green-200 text-xs flex items-center justify-between mt-2 hidden">
+                                            <span class="text-gray-700">Current Balance: <strong id="shortage-cor-from-balance" class="text-green-700 font-bold ml-1">KES 0.00</strong></span>
+                                            <button type="button" id="btn-transfer-full-shortage" class="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-[11px] font-semibold transition-colors shadow-sm">
+                                                Transfer Full
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- To Staff -->
+                                    <div class="form-group">
+                                        <label class="block text-xs font-bold text-gray-800 uppercase mb-1 flex items-center gap-1.5">
+                                            <span class="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>
+                                            To Staff (Increases Shortage) <span class="text-red-500">*</span>
+                                        </label>
+                                        <select id="shortage-cor-to" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border text-sm"></select>
+                                        <div id="shortage-cor-to-balance-box" class="p-2 rounded-lg bg-orange-50 border border-orange-200 text-xs flex items-center justify-between mt-2 hidden">
+                                            <span class="text-gray-700">Current Balance: <strong id="shortage-cor-to-balance" class="text-orange-700 font-bold ml-1">KES 0.00</strong></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Remarks / Reason -->
+                            <div class="form-group mb-5">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">
+                                    Remarks / Reason for Transfer <span class="text-red-500">*</span>
+                                </label>
+                                <input type="text" id="shortage-cor-remarks" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border text-sm" placeholder="Required reason (e.g. Pump shortage assigned to wrong attendant, transferring balance)...">
+                            </div>
+
+                            <div class="pt-4 border-t border-gray-100 flex justify-end">
+                                <button id="btn-submit-shortage-cor" class="w-full sm:w-auto px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm" onclick="window.submit_shortage_correction()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    Submit Shortage Transfer
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Transfer History Table Card -->
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 class="text-gray-900 font-bold text-lg m-0 flex items-center gap-2">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-orange-600"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    Shortage Transfers & Corrections History
+                                </h3>
+                                <div id="shortage-cor-history-subtitle" style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">
+                                    Historical records of all shortage transfers between attendants
+                                </div>
+                            </div>
+                            
+                            <!-- KPI Summary Badges -->
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span id="kpi-cor-total-count" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+                                    0 Records
+                                </span>
+                                <span id="kpi-cor-total-amount" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+                                    Transfers: Sh 0.00
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Filter Controls Bar -->
+                        <div class="px-6 py-3 bg-white border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                                    <label class="font-medium text-gray-700">Staff:</label>
+                                    <select id="shortage-cor-filter-staff" class="border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-2 py-1 text-xs border" onchange="window.load_shortage_cor_history()">
+                                        <option value="">All Staff</option>
+                                    </select>
+                                </div>
+
+                                <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                                    <label class="font-medium text-gray-700">Dates:</label>
+                                    <input type="date" id="shortage-cor-filter-start" class="border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-2 py-1 text-xs border">
+                                    <span class="text-gray-400">to</span>
+                                    <input type="date" id="shortage-cor-filter-end" class="border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-2 py-1 text-xs border">
+                                    <button class="text-white bg-orange-600 hover:bg-orange-700 font-medium text-xs transition-colors px-3 py-1 rounded shadow-sm" onclick="window.load_shortage_cor_history()">Filter</button>
+                                    <button class="text-gray-600 bg-gray-100 hover:bg-gray-200 font-medium text-xs transition-colors px-2.5 py-1 rounded border border-gray-200" onclick="window.reset_shortage_cor_filters()">Reset</button>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="shortage-cor-filter-search" placeholder="Search staff, ref, reason..." class="border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-1 text-xs border w-48 md:w-56" oninput="window.filter_shortage_cor_table()">
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 text-gray-700 text-xs uppercase tracking-wider border-b border-gray-200 font-semibold">
+                                        <th class="px-4 py-3">Date</th>
+                                        <th class="px-4 py-3">Ref ID</th>
+                                        <th class="px-4 py-3">From Staff (Deducted)</th>
+                                        <th class="px-4 py-3">To Staff (Added)</th>
+                                        <th class="px-4 py-3">Remarks / Reason</th>
+                                        <th class="px-4 py-3 text-right">Amount (KES)</th>
+                                        <th class="px-4 py-3 text-center" style="width: 100px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="shortage-cor-table-body" class="text-sm divide-y divide-gray-100">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Fallback alias for legacy shortage-mgmt navigation -->
+            <section id="tab-shortage-mgmt" class="tab-pane" style="display:none;"></section>
+
+            <!-- SHORTAGE EDIT MODAL (Shared across Payment & Transfer screens) -->
+            <div id="modal-edit-shortage" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(3px); padding: 15px;">
+                <div style="background:#ffffff; border-radius:12px; width:100%; max-width:540px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.04); overflow:hidden;">
+                    <!-- Modal Header -->
+                    <div style="padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center; background:#f8fafc;">
+                        <div>
+                            <h3 id="edit-shortage-title" style="margin:0; font-size:1.15rem; font-weight:700; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-blue-600"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                <span id="edit-shortage-title-text">Edit Shortage Record</span>
+                            </h3>
+                            <div id="edit-shortage-badge" style="font-size:0.78rem; color:#64748b; margin-top:2px; font-family:monospace;"></div>
+                        </div>
+                        <button type="button" onclick="window.close_edit_shortage_modal()" style="background:#f1f5f9; border:none; width:32px; height:32px; border-radius:6px; font-size:1.25rem; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center; line-height:1;">&times;</button>
+                    </div>
+
+                    <!-- Modal Body Form -->
+                    <div style="padding:20px; max-height:80vh; overflow-y:auto;">
+                        <input type="hidden" id="edit-shortage-doctype">
+                        <input type="hidden" id="edit-shortage-name">
+
+                        <!-- Payment Fields Container -->
+                        <div id="edit-shortage-payment-fields" class="space-y-4" style="display:none;">
+                            <div class="form-group">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Staff Member</label>
+                                <select id="edit-pay-employee" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border"></select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Payment Mode</label>
+                                    <select id="edit-pay-mode" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border">
+                                        <option value="Cash">Cash</option>
+                                        <option value="M-Pesa">M-Pesa</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Salary Deduction">Salary Deduction</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Date</label>
+                                    <input type="date" id="edit-pay-date" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Amount (KES)</label>
+                                <input type="number" step="0.01" id="edit-pay-amount" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Reference No (M-Pesa / Bank)</label>
+                                <input type="text" id="edit-pay-reference" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border" placeholder="Optional reference">
+                            </div>
+                            <div class="form-group">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Remarks</label>
+                                <input type="text" id="edit-pay-remarks" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 text-sm border" placeholder="Optional notes">
+                            </div>
+                        </div>
+
+                        <!-- Correction Fields Container -->
+                        <div id="edit-shortage-correction-fields" class="space-y-4" style="display:none;">
+                            <div class="form-group">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">From Staff (Reduces Shortage)</label>
+                                <select id="edit-cor-from" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 text-sm border"></select>
+                            </div>
+                            <div class="form-group">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">To Staff (Increases Shortage)</label>
+                                <select id="edit-cor-to" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 text-sm border"></select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Amount (KES)</label>
+                                    <input type="number" step="0.01" id="edit-cor-amount" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 text-sm border" placeholder="0.00">
+                                </div>
+                                <div class="form-group">
+                                    <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Date</label>
+                                    <input type="date" id="edit-cor-date" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border text-sm">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="block text-xs font-semibold text-gray-700 uppercase mb-1">Remarks / Reason</label>
+                                <input type="text" id="edit-cor-remarks" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-orange-500 focus:ring-orange-500 px-3 py-2 border text-sm" placeholder="Required reason">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Modal Footer -->
+                    <div style="padding:14px 20px; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px; background:#f8fafc;">
+                        <button type="button" onclick="window.close_edit_shortage_modal()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="button" id="btn-save-edit-shortage" onclick="window.save_edit_shortage_modal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <!-- SHORTS REPORT TAB -->
             <section id="tab-shorts-report" class="tab-pane">
@@ -5065,6 +6122,15 @@
                                                 </td>
                                                 <td id="recon-rtt" style="text-align: right; font-weight: 700; font-family: monospace; font-size: 0.95rem; color: #be123c;">Sh 0.00</td>
                                             </tr>
+                                            <tr style="border-bottom: 1px solid #fff1f2;">
+                                                <td style="padding: 0.65rem 0;">
+                                                    <a href="javascript:void(0)" class="recon-link recon-link-deduct" data-type="discounts" title="Click to view Discounts breakdown">
+                                                        <span style="color: #7c3aed;">🏷️</span> Discounts
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                    </a>
+                                                </td>
+                                                <td id="recon-discounts" style="text-align: right; font-weight: 700; font-family: monospace; font-size: 0.95rem; color: #be123c;">Sh 0.00</td>
+                                            </tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -5209,10 +6275,15 @@
                 <div class="pos-header" style="justify-content: space-between;">
                     <div style="font-size:1.25rem; font-weight:600; color:#1e293b;">Past Shift Reports</div>
                     <div class="flex items-center gap-3">
+                        <select id="past-reports-shift" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-1 text-sm border bg-white font-medium text-slate-700">
+                            <option value="">All Shifts</option>
+                            <option value="Day Shift">Day Shift</option>
+                            <option value="Night Shift">Night Shift</option>
+                        </select>
                         <input type="date" id="past-reports-start" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1 text-sm border">
                         <span class="text-gray-500">to</span>
                         <input type="date" id="past-reports-end" class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1 text-sm border">
-                        <button class="text-white bg-blue-600 hover:bg-blue-700 font-medium text-sm transition-colors px-4 py-1.5 rounded-md shadow-sm" onclick="window.load_past_shifts()">Search</button>
+                        <button class="text-white bg-blue-600 hover:bg-blue-700 font-medium text-sm transition-colors px-4 py-1.5 rounded-md shadow-sm cursor-pointer" onclick="window.load_past_shifts()">Search</button>
                     </div>
                 </div>
                 
@@ -5221,15 +6292,17 @@
                         <table class="w-full text-left border-collapse" id="past-shifts-table">
                             <thead>
                                 <tr class="bg-gray-100 text-gray-700 text-sm border-b border-gray-200">
-                                    <th class="px-6 py-4 font-semibold">Shift Reference</th>
-                                    <th class="px-6 py-4 font-semibold">Date</th>
-                                    <th class="px-6 py-4 font-semibold">Cashier</th>
-                                    <th class="px-6 py-4 font-semibold text-right">Action</th>
+                                    <th class="px-6 py-4 font-semibold" style="padding: 12px 16px;">Shift Name</th>
+                                    <th class="px-6 py-4 font-semibold" style="padding: 12px 16px;">Shift Reference</th>
+                                    <th class="px-6 py-4 font-semibold" style="padding: 12px 16px;">Date</th>
+                                    <th class="px-6 py-4 font-semibold" style="padding: 12px 16px;">Cashier</th>
+                                    <th class="px-6 py-4 font-semibold" style="padding: 12px 16px;">Status</th>
+                                    <th class="px-6 py-4 font-semibold text-right" style="padding: 12px 16px; text-align: right;">Action</th>
                                 </tr>
                             </thead>
                             <tbody id="past-shifts-body" class="text-sm divide-y divide-gray-100">
                                 <tr>
-                                    <td colspan="4" class="text-center py-8 text-gray-500">Select a date range and click Search.</td>
+                                    <td colspan="6" class="text-center py-8 text-gray-500">Select a date range and click Search.</td>
                                 </tr>
                             </tbody>
                         </table>

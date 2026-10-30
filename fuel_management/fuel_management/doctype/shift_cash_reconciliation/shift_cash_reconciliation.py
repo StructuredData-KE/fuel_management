@@ -16,7 +16,8 @@ class ShiftCashReconciliation(Document):
             flt(self.invoices) + 
             flt(self.cards) + 
             flt(self.expenses) + 
-            flt(self.rtt_deductions)
+            flt(self.rtt_deductions) + 
+            flt(self.discounts)
         )
         
         self.expected_cash = self.total_liabilities - self.total_deductions

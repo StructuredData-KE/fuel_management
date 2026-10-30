@@ -9,9 +9,30 @@ class StationPurchase(Document):
         net_total = 0
         total_vat = 0
 
-        # Cache warehouses for default target location fallback
-        forecourt_wh = frappe.db.get_value("Warehouse", {"warehouse_name": ["like", "%Forecourt%"], "is_group": 0, "disabled": 0}, "name")
-        store_wh = frappe.db.get_value("Warehouse", {"warehouse_name": ["like", "%Store%"], "is_group": 0, "disabled": 0}, "name")
+        # Determine station from shift or doc
+        station = getattr(self, "station", None)
+        if not station and getattr(self, "shift", None):
+            station = frappe.db.get_value("Shift", self.shift, "station")
+        
+        forecourt_wh = None
+        store_wh = None
+        if station:
+            st_doc = frappe.db.get_value("Fuel Station", station, ["default_forecourt_warehouse", "default_store_warehouse"], as_dict=True)
+            if st_doc:
+                forecourt_wh = st_doc.get("default_forecourt_warehouse")
+                store_wh = st_doc.get("default_store_warehouse")
+                
+        if not forecourt_wh:
+            wh_f = {"warehouse_name": ["like", "%Forecourt%"], "is_group": 0, "disabled": 0}
+            if station:
+                wh_f["name"] = ["like", f"%{station}%"]
+            forecourt_wh = frappe.db.get_value("Warehouse", wh_f, "name") or frappe.db.get_value("Warehouse", {"warehouse_name": ["like", "%Forecourt%"], "is_group": 0, "disabled": 0}, "name")
+
+        if not store_wh:
+            wh_s = {"warehouse_name": ["like", "%Store%"], "is_group": 0, "disabled": 0}
+            if station:
+                wh_s["name"] = ["like", f"%{station}%"]
+            store_wh = frappe.db.get_value("Warehouse", wh_s, "name") or frappe.db.get_value("Warehouse", {"warehouse_name": ["like", "%Store%"], "is_group": 0, "disabled": 0}, "name")
 
         for item in self.items:
             item_info = frappe.db.get_value("Item", item.item, ["item_group", "item_name"], as_dict=True) or {}
@@ -218,18 +239,38 @@ class StationPurchase(Document):
         frappe.msgprint(f"Generated Purchase Invoice {pi.name}")
 
 @frappe.whitelist()
-def get_purchases_history(date_from=None, date_to=None, limit=None):
-    filters = {}
-    if date_from and date_to:
-        filters['receiving_date'] = ['between', [date_from, date_to]]
-    elif date_from:
-        filters['receiving_date'] = ['>=', date_from]
-    elif date_to:
-        filters['receiving_date'] = ['<=', date_to]
+def get_purchases_history(date_from=None, date_to=None, limit=None, station=None):
+    conditions = []
+    values = []
     
+    if date_from and date_to:
+        conditions.append("sp.receiving_date BETWEEN %s AND %s")
+        values.extend([date_from, date_to])
+    elif date_from:
+        conditions.append("sp.receiving_date >= %s")
+        values.append(date_from)
+    elif date_to:
+        conditions.append("sp.receiving_date <= %s")
+        values.append(date_to)
+    
+    if station:
+        conditions.append("sh.station = %s")
+        values.append(station)
+    
+    where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     limit_num = int(limit) if limit else (1000 if (date_from or date_to) else 20)
     
-    purchases = frappe.get_all('Station Purchase', filters=filters, fields=['name', 'receiving_date', 'supplier', 'tax_invoice_number', 'document_invoice_number', 'grand_total'], order_by='receiving_date desc, name desc', limit_page_length=limit_num)
+    query = f"""
+        SELECT 
+            sp.name, sp.receiving_date, sp.supplier, sp.tax_invoice_number, 
+            sp.document_invoice_number, sp.grand_total, sh.station
+        FROM `tabStation Purchase` sp
+        LEFT JOIN `tabShift` sh ON sp.shift = sh.name
+        {where_clause}
+        ORDER BY sp.receiving_date DESC, sp.name DESC
+        LIMIT {limit_num}
+    """
+    purchases = frappe.db.sql(query, tuple(values), as_dict=True)
     
     for p in purchases:
         p.items = frappe.get_all('Station Purchase Item', filters={'parent': p.name}, fields=['item', 'quantity'])

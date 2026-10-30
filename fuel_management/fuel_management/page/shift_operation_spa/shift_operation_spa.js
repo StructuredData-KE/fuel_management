@@ -141,6 +141,7 @@ try {
                 window.STATION_SETTINGS = r.message;
                 apply_global_settings(wrapper);
             }
+            render_navbar_status($(wrapper));
             fetch_active_shift(wrapper);
             
             // Initialize Debtors Module
@@ -186,10 +187,16 @@ function apply_global_settings(wrapper) {
 
 function fetch_active_shift(wrapper) {
     const $wrapper = $(wrapper);
+    let curStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || $wrapper.find('#navbar-select-station').val() || $wrapper.find('#select-station').val() || null;
+    if (!curStation) {
+        window.ACTIVE_SHIFT = null;
+        lock_ui_for_no_station($wrapper);
+        return;
+    }
     frappe.call({
         method: "fuel_management.fuel_management.api.get_active_shift",
         args: {
-            station: (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || (frappe.defaults.get_user_default("station") || null)
+            station: curStation
         },
         callback: function(r) {
             if(r.message) {
@@ -203,27 +210,87 @@ function fetch_active_shift(wrapper) {
     });
 }
 
-function lock_ui_for_no_shift($wrapper) {
-    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-home"]):not([data-target="tab-debtors"]):not([data-target="tab-monthly-reports"]):not([data-target="tab-past-reports"]):not([data-target="tab-stock-take"])').css({
-        'opacity': '0.5',
+function render_navbar_status($wrapper) {
+    if (!$wrapper || !$wrapper.length) $wrapper = $('#spa-layout-container');
+    
+    // 1. Get current logged in user name
+    let user_name = "";
+    if (frappe.session && frappe.session.user_fullname && frappe.session.user_fullname !== "None") {
+        user_name = frappe.session.user_fullname;
+    } else if (frappe.user && typeof frappe.user.full_name === 'function') {
+        user_name = frappe.user.full_name();
+    } else if (frappe.boot && frappe.boot.user_info && frappe.boot.user_info[frappe.session.user]) {
+        user_name = frappe.boot.user_info[frappe.session.user].fullname;
+    } else if (frappe.session && frappe.session.user) {
+        user_name = frappe.session.user;
+    }
+    if (!user_name || user_name.trim() === "") user_name = "User";
+
+    $wrapper.find('#user-logged-in-name').text(user_name);
+    $wrapper.find('#user-greeting-desktop').text(user_name);
+    $wrapper.find('.user-greeting-mobile').text(user_name);
+
+    // 2. Display Active Shift or No Active Shift
+    let current_st = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || $wrapper.find('#navbar-select-station').val() || $wrapper.find('#select-station').val() || "";
+    if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.name) {
+        let template = window.ACTIVE_SHIFT.shift_template || "Shift";
+        let shiftName = window.ACTIVE_SHIFT.name;
+        
+        $wrapper.find('#active-shift-badge').css({
+            'background': 'rgba(22, 163, 74, 0.95)',
+            'border': '1px solid rgba(74, 222, 128, 0.5)',
+            'color': '#ffffff'
+        }).html(`
+            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#4ade80; box-shadow:0 0 6px #4ade80;"></span>
+            <span style="font-weight:700;">Active: ${template}</span>
+            <span style="opacity:0.9; font-size:11px; margin-left:2px;">(${shiftName})</span>
+        `);
+    } else if (current_st) {
+        $wrapper.find('#active-shift-badge').css({
+            'background': 'rgba(255, 255, 255, 0.12)',
+            'border': '1px solid rgba(255, 255, 255, 0.25)',
+            'color': '#cbd5e1'
+        }).html(`
+            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#94a3b8;"></span>
+            <span style="font-weight:600;">No Active Shift (${current_st})</span>
+        `);
+    } else {
+        $wrapper.find('#active-shift-badge').css({
+            'background': 'rgba(234, 179, 8, 0.18)',
+            'border': '1px solid rgba(234, 179, 8, 0.45)',
+            'color': '#fef08a'
+        }).html(`
+            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#facc15; box-shadow:0 0 6px #facc15;"></span>
+            <span style="font-weight:700;">Select Station...</span>
+        `);
+    }
+}
+window.render_navbar_status = render_navbar_status;
+
+function lock_ui_for_no_station($wrapper) {
+    if (!$wrapper || !$wrapper.length) $wrapper = $('#spa-layout-container');
+    
+    // Disable shift operational tabs until a station is chosen
+    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-debtors"]):not([data-target="tab-monthly-reports"]):not([data-target="tab-past-reports"]):not([data-target="tab-stock-take"])').css({
+        'opacity': '0.45',
         'pointer-events': 'none'
     });
     
-    // Ensure Debtors, Monthly Reports, Past Reports & Stock Take remain clickable
+    // Allow non-shift administrative modules
     $wrapper.find('.nav-item[data-target="tab-debtors"], .nav-item[data-target="tab-monthly-reports"], .nav-item[data-target="tab-past-reports"], .nav-item[data-target="tab-stock-take"]').css({
         'opacity': '1',
         'pointer-events': 'auto'
     });
     
+    $wrapper.find('#navbar-select-station').val('').prop('disabled', false);
+    $wrapper.find('#select-station').val('').prop('disabled', false);
+    
+    window.ACTIVE_SHIFT = null;
+    window.SHIFT_DOC = null;
+
     // Update Top Navbar
-    $wrapper.find('#active-shift-badge').html(`
-        <span class="hidden sm:inline">No Active Shift</span>
-        <span class="sm:hidden font-medium">No Shift</span>
-    `);
-    $wrapper.find('#active-shift-badge').css('background', 'rgba(255,255,255,0.15)');
-    let user_name = frappe.session.user_fullname || frappe.session.user || "User";
-    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${user_name}`);
-    $wrapper.find('.user-greeting-mobile').text(user_name);
+    render_navbar_status($wrapper);
+    
     let hour = new Date().getHours();
     let time_greeting = "Good morning";
     if (hour >= 12 && hour < 17) time_greeting = "Good afternoon";
@@ -231,8 +298,79 @@ function lock_ui_for_no_shift($wrapper) {
     let fname = frappe.session.user_fullname || frappe.session.user || "User";
     $wrapper.find('#home-greeting').text(`${time_greeting}, ${fname}`);
     
-    // Switch to Home Shift tab
-    $wrapper.find('.nav-item[data-target="tab-home"]').click();
+    // Switch to Start Shift tab
+    $wrapper.find('.nav-item[data-target="tab-start"]').click();
+    
+    // Clear/hide start shift specifics
+    $wrapper.find('#previous-shift-badge').addClass('hidden');
+    $wrapper.find('#btn-start-shift').show();
+    $wrapper.find('#btn-close-shift').hide();
+    $wrapper.find('#btn-email-shift-report').hide();
+    $wrapper.find('#btn-update-assignments').hide();
+    
+    $wrapper.find('#csa-assignment-body').html(`
+        <div style="grid-column: 1 / -1; padding: 2.5rem 1.5rem; text-align: center; color: #475569; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px;">
+            <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">⛽</div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-bottom: 0.35rem;">Please Select a Station</div>
+            <div style="font-size: 0.875rem; color: #64748b; max-width: 480px; margin: 0 auto;">Select your station from the dropdown above to view active shift operations or configure a new shift.</div>
+        </div>
+    `);
+}
+window.lock_ui_for_no_station = lock_ui_for_no_station;
+
+function lock_ui_for_no_shift($wrapper) {
+    let curStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || $wrapper.find('#navbar-select-station').val() || $wrapper.find('#select-station').val() || "";
+    if (!curStation) {
+        lock_ui_for_no_station($wrapper);
+        return;
+    }
+
+    $wrapper.find('.nav-item:not([data-target="tab-start"]):not([data-target="tab-home"]):not([data-target="tab-debtors"]):not([data-target="tab-monthly-reports"]):not([data-target="tab-past-reports"]):not([data-target="tab-stock-take"]):not([data-target="tab-shortage-payment"]):not([data-target="tab-shortage-transfer"]):not([data-target="tab-shorts-report"]):not([data-target="tab-shortage-mgmt"])').css({
+        'opacity': '0.5',
+        'pointer-events': 'none'
+    });
+    
+    // Ensure Debtors, Monthly Reports, Past Reports, Stock Take & Shortages remain clickable
+    $wrapper.find('.nav-item[data-target="tab-debtors"], .nav-item[data-target="tab-monthly-reports"], .nav-item[data-target="tab-past-reports"], .nav-item[data-target="tab-stock-take"], .nav-item[data-target="tab-shortage-payment"], .nav-item[data-target="tab-shortage-transfer"], .nav-item[data-target="tab-shorts-report"], .nav-item[data-target="tab-shortage-mgmt"]').css({
+        'opacity': '1',
+        'pointer-events': 'auto'
+    });
+    
+    let hasMultiStations = ($wrapper.find('#navbar-select-station option').length > 1 || $wrapper.find('#select-station option').length > 1);
+    
+    // Enable Start Shift controls so a new shift can be started for this station
+    $wrapper.find('#input-shift-date').prop('disabled', false);
+    $wrapper.find('#select-shift-template').prop('disabled', false);
+    $wrapper.find('#select-station').prop('disabled', !hasMultiStations);
+    $wrapper.find('#navbar-select-station').prop('disabled', !hasMultiStations);
+    
+    // Auto-populate logged-in user as Head CSA
+    let current_user = frappe.session.user || "Administrator";
+    let current_name = (frappe.boot && frappe.boot.user_info && frappe.boot.user_info[current_user] && frappe.boot.user_info[current_user].fullname) || frappe.session.user_fullname || current_user;
+    $wrapper.find('#display-head-csa').val(current_name);
+    $wrapper.find('#select-head-csa').val(current_user);
+
+    $wrapper.find('#btn-start-shift').show();
+    $wrapper.find('#btn-close-shift').hide();
+    $wrapper.find('#btn-email-shift-report').hide();
+    $wrapper.find('#btn-update-assignments').hide();
+    $wrapper.find('#csa-assignment-body .csa-select').prop('disabled', false);
+    
+    window.ACTIVE_SHIFT = null;
+    window.SHIFT_DOC = null;
+
+    // Update Top Navbar
+    render_navbar_status($wrapper);
+    
+    let hour = new Date().getHours();
+    let time_greeting = "Good morning";
+    if (hour >= 12 && hour < 17) time_greeting = "Good afternoon";
+    else if (hour >= 17) time_greeting = "Good evening";
+    let fname = frappe.session.user_fullname || frappe.session.user || "User";
+    $wrapper.find('#home-greeting').text(`${time_greeting}, ${fname}`);
+    
+    // Switch to Start Shift tab
+    $wrapper.find('.nav-item[data-target="tab-start"]').click();
 }
 
 function lock_ui_for_active_shift($wrapper) {
@@ -242,16 +380,8 @@ function lock_ui_for_active_shift($wrapper) {
     });
     
     // Update Top Navbar
-    let bShiftName = window.ACTIVE_SHIFT.shift_template ? window.ACTIVE_SHIFT.shift_template : "Shift";
-    let formattedDate = window.ACTIVE_SHIFT.shift_date ? frappe.datetime.str_to_user(window.ACTIVE_SHIFT.shift_date) : "";
-    $wrapper.find('#active-shift-badge').html(`
-        <span class="hidden sm:inline">Active Shift: ${formattedDate} (${bShiftName})</span>
-        <span class="sm:hidden font-bold">🟢 ${formattedDate} (${bShiftName})</span>
-    `);
-    $wrapper.find('#active-shift-badge').css('background', '#16a34a'); // Green badge for active
-    let user_name_active = frappe.session.user_fullname || frappe.session.user || "User";
-    $wrapper.find('#user-greeting-desktop').text(`Welcome back ${user_name_active}`);
-    $wrapper.find('.user-greeting-mobile').text(user_name_active);
+    render_navbar_status($wrapper);
+    
     let hour = new Date().getHours();
     let time_greeting = "Good morning";
     if (hour >= 12 && hour < 17) time_greeting = "Good afternoon";
@@ -261,12 +391,41 @@ function lock_ui_for_active_shift($wrapper) {
     
     // Switch to Home tab automatically
     $wrapper.find('.nav-item[data-target="tab-home"]').click();
+    if (window.render_homepage) {
+        window.render_homepage($wrapper, true);
+    }
     
+    let hasMultiStations = ($wrapper.find('#navbar-select-station option').length > 1 || $wrapper.find('#select-station option').length > 1);
+
     // Pre-fill Start Shift form just for viewing
     $wrapper.find('#input-shift-date').val(window.ACTIVE_SHIFT.shift_date).prop('disabled', true);
     $wrapper.find('#select-shift-template').val(window.ACTIVE_SHIFT.shift_template).prop('disabled', true);
-    $wrapper.find('#select-station').val(window.ACTIVE_SHIFT.station).prop('disabled', true);
-    $wrapper.find('#select-head-csa').val(window.ACTIVE_SHIFT.head_csa).prop('disabled', true);
+    $wrapper.find('#previous-shift-badge')
+        .text(`Active Shift: ${window.ACTIVE_SHIFT.shift_template}`)
+        .removeClass('hidden')
+        .css({
+            'background': '#dcfce7',
+            'color': '#166534',
+            'border': '1px solid #bbf7d0',
+            'font-weight': '700'
+        });
+    // Station dropdown remains enabled for multi-station admins, locked for single-station operators
+    $wrapper.find('#select-station').val(window.ACTIVE_SHIFT.station).prop('disabled', !hasMultiStations);
+    $wrapper.find('#navbar-select-station').val(window.ACTIVE_SHIFT.station).prop('disabled', !hasMultiStations);
+    if (typeof window.load_station_items === 'function') {
+        window.load_station_items(window.ACTIVE_SHIFT.station, $wrapper);
+    }
+    
+    let head_csa_id = window.ACTIVE_SHIFT.head_csa || frappe.session.user;
+    let head_csa_name = head_csa_id;
+    if (frappe.boot && frappe.boot.user_info && frappe.boot.user_info[head_csa_id]) {
+        head_csa_name = frappe.boot.user_info[head_csa_id].fullname || head_csa_id;
+    } else if (head_csa_id === frappe.session.user && frappe.session.user_fullname) {
+        head_csa_name = frappe.session.user_fullname;
+    }
+    $wrapper.find('#display-head-csa').val(head_csa_name);
+    $wrapper.find('#select-head-csa').val(head_csa_id);
+    
     $wrapper.find('#btn-start-shift').hide();
     
     if (window.ACTIVE_SHIFT.status === 'Closed') {
@@ -370,6 +529,24 @@ function render_meters($wrapper) {
                     sorted_pg_names.forEach(pg => {
                         pg_options += `<option value="${pg}">${pg}</option>`;
                     });
+                    
+                    // Populate Meter History Filters
+                    let curPgFilter = $wrapper.find('#meter-filter-pump-group').val();
+                    let filter_pg_opts = '<option value="">All Pump Groups</option>';
+                    sorted_pg_names.forEach(pg => {
+                        filter_pg_opts += `<option value="${pg}">${pg}</option>`;
+                    });
+                    $wrapper.find('#meter-filter-pump-group').html(filter_pg_opts);
+                    if (curPgFilter) $wrapper.find('#meter-filter-pump-group').val(curPgFilter);
+
+                    let curNozFilter = $wrapper.find('#meter-filter-nozzle').val();
+                    let filter_noz_opts = '<option value="">All Nozzles</option>';
+                    let unique_noz_names = (window.PUMP_NOZZLES || []).map(n => n.name).sort();
+                    unique_noz_names.forEach(noz => {
+                        filter_noz_opts += `<option value="${noz}">${noz}</option>`;
+                    });
+                    $wrapper.find('#meter-filter-nozzle').html(filter_noz_opts);
+                    if (curNozFilter) $wrapper.find('#meter-filter-nozzle').val(curNozFilter);
                     
                     let html = `
                     <div class="meter-entry-header" style="margin-bottom: 15px;">
@@ -524,6 +701,8 @@ function render_meters($wrapper) {
                                 if (noz_upper.indexOf('PMS') !== -1 || noz_upper.indexOf('SUPER') !== -1) is_pms = true;
                             }
                             let fuel_type = is_ago ? 'AGO' : (is_pms ? 'PMS' : (item_code || 'UNKNOWN'));
+                            let elec_val = (row.closing_electronic_meter && parseFloat(row.closing_electronic_meter) > 0) ? Number(row.closing_electronic_meter).toFixed(3) : '';
+                            let man_val = (row.closing_manual_meter && parseFloat(row.closing_manual_meter) > 0) ? Number(row.closing_manual_meter).toFixed(3) : '';
                             
                             html += `
                                 <div class="meter-row" data-name="${row.name}" data-fuel-type="${fuel_type}" style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; padding: 1rem 0; border-bottom: 1px solid #f1f5f9; align-items: center; transition: background-color 0.2s;">
@@ -534,20 +713,20 @@ function render_meters($wrapper) {
                                     
                                     <div style="grid-column: span 4 / span 4;">
                                         <span style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 0.5rem;">ELECTRONIC</span>
-                                        <div style="font-size: 0.875rem; margin-bottom: 0.5rem;">Opening: <span class="read-only-cell" style="background-color: #f1f5f9; border: 1px solid #e2e8f0; color: #475569; font-family: monospace; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">${row.opening_electronic_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-elec" data-opening="${row.opening_electronic_meter}" data-price="${price}" value="${row.closing_electronic_meter || ''}" placeholder="Closing Elec" style="width: 100%; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #0f172a; font-family: monospace; outline: none; transition: all 0.2s;" ${disable_attr}>
-                                        <div style="font-size: 0.75rem; font-weight: 500; color: #64748b; margin-top: 0.25rem;">Sales: <span class="meter-sales-elec" style="font-weight: 700;">0.00</span></div>
+                                        <div style="font-size: 0.875rem; margin-bottom: 0.5rem;">Opening: <span class="read-only-cell" style="background-color: #f1f5f9; border: 1px solid #e2e8f0; color: #475569; font-family: monospace; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">${Number(row.opening_electronic_meter || 0).toFixed(3)}</span></div>
+                                        <input type="number" step="0.001" class="spa-input meter-closing-elec" data-opening="${row.opening_electronic_meter || 0}" data-price="${price}" value="${elec_val}" placeholder="Closing Elec" style="width: 100%; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #0f172a; font-family: monospace; outline: none; transition: all 0.2s;" ${disable_attr}>
+                                        <div style="font-size: 0.75rem; font-weight: 500; color: #64748b; margin-top: 0.25rem;">Sales: <span class="meter-sales-elec" style="font-weight: 700;">0.000</span></div>
                                     </div>
                                     
                                     <div style="grid-column: span 4 / span 4;">
                                         <span style="display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 0.5rem;">MANUAL</span>
-                                        <div style="font-size: 0.875rem; margin-bottom: 0.5rem;">Opening: <span class="read-only-cell" style="background-color: #f1f5f9; border: 1px solid #e2e8f0; color: #475569; font-family: monospace; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">${row.opening_manual_meter}</span></div>
-                                        <input type="number" step="0.01" class="spa-input meter-closing-manual" data-opening="${row.opening_manual_meter}" value="${row.closing_manual_meter || ''}" placeholder="Closing Manual" style="width: 100%; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #0f172a; font-family: monospace; outline: none; transition: all 0.2s;" ${disable_attr}>
-                                        <div style="font-size: 0.75rem; font-weight: 500; color: #64748b; margin-top: 0.25rem;">Sales: <span class="meter-sales-manual" style="font-weight: 700;">0.00</span></div>
+                                        <div style="font-size: 0.875rem; margin-bottom: 0.5rem;">Opening: <span class="read-only-cell" style="background-color: #f1f5f9; border: 1px solid #e2e8f0; color: #475569; font-family: monospace; padding: 0.25rem 0.5rem; border-radius: 0.25rem;">${Number(row.opening_manual_meter || 0).toFixed(3)}</span></div>
+                                        <input type="number" step="0.001" class="spa-input meter-closing-manual" data-opening="${row.opening_manual_meter || 0}" value="${man_val}" placeholder="Closing Manual" style="width: 100%; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #0f172a; font-family: monospace; outline: none; transition: all 0.2s;" ${disable_attr}>
+                                        <div style="font-size: 0.75rem; font-weight: 500; color: #64748b; margin-top: 0.25rem;">Sales: <span class="meter-sales-manual" style="font-weight: 700;">0.000</span></div>
                                     </div>
                                     
                                     <div style="grid-column: span 2 / span 2; text-align: right;">
-                                        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem;">Variance: <span class="meter-variance">0.00</span></div>
+                                        <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem;">Variance: <span class="meter-variance">0.000</span></div>
                                         <div style="font-size: 1.125rem; font-weight: 700; color: #172554;">Value: <br><span class="meter-total-value">0.00</span></div>
                                     </div>
                                 </div>
@@ -560,11 +739,11 @@ function render_meters($wrapper) {
                                     <div class="row text-center">
                                         <div class="col-md-3" style="border-right: 1px solid #e2e8f0;">
                                             <div style="font-size: 0.85em; color: #64748b; font-weight: bold; text-transform: uppercase;">Total AGO Ltrs</div>
-                                            <div id="sum-ago-ltrs" style="font-size: 1.4em; color: var(--primary); font-weight: bold;">0.00</div>
+                                            <div id="sum-ago-ltrs" style="font-size: 1.4em; color: var(--primary); font-weight: bold;">0.000</div>
                                         </div>
                                         <div class="col-md-3" style="border-right: 1px solid #e2e8f0;">
                                             <div style="font-size: 0.85em; color: #64748b; font-weight: bold; text-transform: uppercase;">Total PMS Ltrs</div>
-                                            <div id="sum-pms-ltrs" style="font-size: 1.4em; color: var(--primary); font-weight: bold;">0.00</div>
+                                            <div id="sum-pms-ltrs" style="font-size: 1.4em; color: var(--primary); font-weight: bold;">0.000</div>
                                         </div>
                                         <div class="col-md-3" style="border-right: 1px solid #e2e8f0;">
                                             <div style="font-size: 0.85em; color: #64748b; font-weight: bold; text-transform: uppercase;">Total AGO Value</div>
@@ -592,41 +771,63 @@ function render_meters($wrapper) {
                         $wrapper.find('#pg-entry-form').html(html);
                         
                         $wrapper.find('.meter-closing-elec, .meter-closing-manual').on('blur', function() {
-                            if($(this).val()) $(this).val(parseFloat($(this).val()).toFixed(2));
+                            let raw = $(this).val();
+                            if(raw !== "" && raw !== null && !isNaN(parseFloat(raw))) {
+                                let val = parseFloat(raw);
+                                if (val > 0) {
+                                    $(this).val(val.toFixed(3));
+                                } else {
+                                    $(this).val('');
+                                }
+                            }
                         });
                         
                         function calc_row() {
                             let $row = $(this).closest('.meter-row');
-                            let closing_elec = parseFloat($row.find('.meter-closing-elec').val());
+                            let elec_raw = ($row.find('.meter-closing-elec').val() || '').trim();
+                            let closing_elec = parseFloat(elec_raw);
                             let opening_elec = parseFloat($row.find('.meter-closing-elec').attr('data-opening')) || 0;
                             let price = parseFloat($row.find('.meter-closing-elec').attr('data-price')) || 0;
                             
-                            let closing_manual = parseFloat($row.find('.meter-closing-manual').val());
+                            let man_raw = ($row.find('.meter-closing-manual').val() || '').trim();
+                            let closing_manual = parseFloat(man_raw);
                             let opening_manual = parseFloat($row.find('.meter-closing-manual').attr('data-opening')) || 0;
                             
                             let sales_elec = 0;
-                            if (!isNaN(closing_elec) && closing_elec >= opening_elec) {
-                                sales_elec = closing_elec - opening_elec;
-                                $row.find('.meter-sales-elec').text(sales_elec.toFixed(2)).css('color', 'var(--text-primary)');
+                            if (elec_raw !== "" && !isNaN(closing_elec)) {
+                                if (closing_elec >= opening_elec) {
+                                    sales_elec = closing_elec - opening_elec;
+                                    $row.find('.meter-sales-elec').text(sales_elec.toFixed(3)).css('color', 'var(--text-primary)');
+                                    $row.find('.meter-closing-elec').removeClass('error-input');
+                                } else {
+                                    sales_elec = 0;
+                                    $row.find('.meter-sales-elec').text('ERR').css('color', 'var(--danger)');
+                                    $row.find('.meter-closing-elec').addClass('error-input');
+                                }
+                            } else {
+                                $row.find('.meter-sales-elec').text('0.000').css('color', '#64748b');
                                 $row.find('.meter-closing-elec').removeClass('error-input');
-                            } else if(!isNaN(closing_elec)) {
-                                $row.find('.meter-sales-elec').text('ERR').css('color', 'var(--danger)');
-                                $row.find('.meter-closing-elec').addClass('error-input');
                             }
                             
                             let sales_manual = 0;
-                            if (!isNaN(closing_manual) && closing_manual >= opening_manual) {
-                                sales_manual = closing_manual - opening_manual;
-                                $row.find('.meter-sales-manual').text(sales_manual.toFixed(2)).css('color', 'var(--text-primary)');
+                            if (man_raw !== "" && !isNaN(closing_manual)) {
+                                if (closing_manual >= opening_manual) {
+                                    sales_manual = closing_manual - opening_manual;
+                                    $row.find('.meter-sales-manual').text(sales_manual.toFixed(3)).css('color', 'var(--text-primary)');
+                                    $row.find('.meter-closing-manual').removeClass('error-input');
+                                } else {
+                                    sales_manual = 0;
+                                    $row.find('.meter-sales-manual').text('ERR').css('color', 'var(--danger)');
+                                    $row.find('.meter-closing-manual').addClass('error-input');
+                                }
+                            } else {
+                                $row.find('.meter-sales-manual').text('0.000').css('color', '#64748b');
                                 $row.find('.meter-closing-manual').removeClass('error-input');
-                            } else if(!isNaN(closing_manual)) {
-                                $row.find('.meter-sales-manual').text('ERR').css('color', 'var(--danger)');
-                                $row.find('.meter-closing-manual').addClass('error-input');
                             }
                             
                             let variance = Math.abs(sales_elec - sales_manual);
-                            $row.find('.meter-variance').text(variance.toFixed(2));
-                            if (variance > 2.0 && sales_manual > 0) {
+                            $row.find('.meter-variance').text(variance.toFixed(3));
+                            if (variance > 2.0 && sales_manual > 0 && sales_elec > 0) {
                                 $row.find('.meter-variance').addClass('variance-alert');
                             } else {
                                 $row.find('.meter-variance').removeClass('variance-alert');
@@ -649,8 +850,8 @@ function render_meters($wrapper) {
                                 if (fuel === 'AGO') { ago_ltrs += ltrs; ago_val += val; }
                                 else if (fuel === 'PMS') { pms_ltrs += ltrs; pms_val += val; }
                             });
-                            $wrapper.find('#sum-ago-ltrs').text(ago_ltrs.toFixed(2));
-                            $wrapper.find('#sum-pms-ltrs').text(pms_ltrs.toFixed(2));
+                            $wrapper.find('#sum-ago-ltrs').text(ago_ltrs.toFixed(3));
+                            $wrapper.find('#sum-pms-ltrs').text(pms_ltrs.toFixed(3));
                             $wrapper.find('#sum-ago-val').text(ago_val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
                             $wrapper.find('#sum-pms-val').text(pms_val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
                         }
@@ -717,11 +918,127 @@ function render_meters($wrapper) {
                             });
                         });
                     }
+                    // Meter Readings Segmented Control
+                    $wrapper.find('#tab-fuel .seg-btn').off('click').on('click', function() {
+                        let targetView = $(this).attr('data-view');
+                        $wrapper.find('#tab-fuel .seg-btn').removeClass('active');
+                        $(this).addClass('active');
+                        
+                        $wrapper.find('#tab-fuel .view-pane').removeClass('active');
+                        $wrapper.find(`#fuel-${targetView}-view`).addClass('active');
+
+                        if (targetView === 'history') {
+                            fetch_meter_history($wrapper);
+                        }
+                    });
+
+                    $wrapper.find('#btn-filter-meter-history').off('click').on('click', function() {
+                        fetch_meter_history($wrapper);
+                    });
+                    $wrapper.find('#meter-filter-pump-group, #meter-filter-nozzle, #meter-filter-shift-type, #meter-filter-date-from, #meter-filter-date-to').off('change').on('change', function() {
+                        fetch_meter_history($wrapper);
+                    });
+
+                    if ($wrapper.find('#fuel-history-view').hasClass('active')) {
+                        fetch_meter_history($wrapper);
+                    }
                 }
             });
         }
     });
 }
+
+function fetch_meter_history($wrapper) {
+    let station = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : (window.SHIFT_DOC ? window.SHIFT_DOC.station : null);
+    let from_date = $wrapper.find('#meter-filter-date-from').val();
+    let to_date = $wrapper.find('#meter-filter-date-to').val();
+    let pump_group = $wrapper.find('#meter-filter-pump-group').val();
+    let nozzle = $wrapper.find('#meter-filter-nozzle').val();
+    let shift_type = $wrapper.find('#meter-filter-shift-type').val();
+
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_meter_readings_history",
+        args: {
+            station: station,
+            from_date: from_date || null,
+            to_date: to_date || null,
+            pump_group: pump_group || null,
+            nozzle: nozzle || null,
+            shift_type: shift_type || null
+        },
+        callback: function(r) {
+            let count = r.message ? r.message.length : 0;
+            if (!from_date && !to_date && !pump_group && !nozzle && !shift_type) {
+                $wrapper.find('#meter-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 100 entries &bull; Use date filter for more)</span>`);
+            } else {
+                $wrapper.find('#meter-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
+            }
+
+            let html = '';
+            let total_elec_qty = 0;
+            let total_man_qty = 0;
+
+            if (r.message && r.message.length > 0) {
+                r.message.forEach(row => {
+                    let elec_qty = parseFloat(row.sales_quantity_electronic || 0);
+                    let man_qty = parseFloat(row.sales_quantity_manual || 0);
+                    let variance = parseFloat(row.variance || 0);
+                    total_elec_qty += elec_qty;
+                    total_man_qty += man_qty;
+
+                    let shift_label = row.shift_template || row.shift;
+                    let date_str = row.shift_date ? frappe.datetime.str_to_user(row.shift_date) : '';
+
+                    let var_badge = '';
+                    if (Math.abs(variance) > 0.001) {
+                        var_badge = `<span class="badge" style="background: #fef2f2; color: #dc2626; font-weight: 600;">${variance.toFixed(3)}</span>`;
+                    } else {
+                        var_badge = `<span style="color: #64748b;">0.000</span>`;
+                    }
+
+                    html += `
+                        <tr data-name="${row.name}">
+                            <td>
+                                <div style="font-weight: 600; color: #1e293b;">${date_str}</div>
+                                <small style="color: #64748b;">${shift_label}</small>
+                            </td>
+                            <td><strong style="color: #334155;">${row.pump_group || '-'}</strong></td>
+                            <td><strong style="color: var(--primary);">${row.pump_nozzle}</strong></td>
+                            <td>
+                                <span class="badge" style="background: #e0f2fe; color: #0369a1; font-weight: 600; font-size: 0.8rem; padding: 3px 8px; border-radius: 4px;">
+                                    ${row.fuel_type || '-'}
+                                </span>
+                            </td>
+                            <td style="text-align: right;">${Number(row.opening_electronic_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                            <td style="text-align: right;">${Number(row.closing_electronic_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                            <td style="text-align: right; font-weight: 700; color: #047857; font-size: 1.05em;">${Number(elec_qty).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                            <td style="text-align: right;">${Number(row.opening_manual_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                            <td style="text-align: right;">${Number(row.closing_manual_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                            <td style="text-align: right; font-weight: 600; color: #1e293b;">${Number(man_qty).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                            <td style="text-align: right;">${var_badge}</td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                    <tr style="background-color: #f8fafc; font-weight: 700; border-top: 2px solid #e2e8f0;">
+                        <td colspan="6" style="text-align: right; color: #475569;">TOTAL</td>
+                        <td style="text-align: right; color: #047857; font-size: 1.1em;">${Number(total_elec_qty).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td colspan="2"></td>
+                        <td style="text-align: right; color: #1e293b; font-size: 1.05em;">${Number(total_man_qty).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                        <td></td>
+                    </tr>
+                `;
+            } else {
+                html = '<tr><td colspan="11" class="text-center" style="padding: 2rem; color: #64748b;">No meter readings found matching the filters.</td></tr>';
+            }
+
+            $wrapper.find('#meter-history-container').html(html);
+        }
+    });
+}
+window.fetch_meter_history = fetch_meter_history;
+
 function render_dips($wrapper) {
     if (!window.ACTIVE_SHIFT) return;
 
@@ -914,9 +1231,18 @@ function fetch_dips_history($wrapper) {
                     let expStock = row.expected_stock !== null ? parseFloat(row.expected_stock) : null;
                     let variance = row.variance !== null ? parseFloat(row.variance) : null;
 
-                    let statusBadge = row.shift_status === 'Open'
+                    let is_open = (row.shift_status === 'Open');
+
+                    let statusBadge = is_open
                         ? '<span class="badge" style="background-color: #dcfce7; color: #166534; font-weight: 600; padding: 3px 8px; border-radius: 6px;">Live Open</span>'
                         : '<span class="badge" style="background-color: #f1f5f9; color: #475569; font-weight: 600; padding: 3px 8px; border-radius: 6px;">Closed</span>';
+
+                    let actionsDisplay = is_open 
+                        ? `
+                            <button class="btn btn-xs btn-secondary btn-edit-dip" data-id="${row.name}" data-shift="${row.shift}" data-tank="${row.fuel_tank}" data-opening="${openDip || 0}" data-closing="${closeDip !== null ? closeDip : ''}" data-status="${row.shift_status || ''}" style="margin-right: 4px; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px;">Edit</button>
+                            <button class="btn btn-xs btn-secondary btn-delete-dip" data-id="${row.name}" data-shift="${row.shift}" data-tank="${row.fuel_tank}" data-status="${row.shift_status || ''}" style="color: #dc2626; border-color: #fca5a5; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px;">Clear</button>
+                          `
+                        : `<span style="color: #94a3b8; font-size: 0.85rem; font-weight: 500;">-</span>`;
 
                     let varDisplay = '-';
                     if (variance !== null) {
@@ -952,8 +1278,7 @@ function fetch_dips_history($wrapper) {
                             <td style="text-align: right;">${varDisplay}</td>
                             <td style="text-align: center;">${statusBadge}</td>
                             <td style="text-align: center; white-space: nowrap;">
-                                <button class="btn btn-xs btn-secondary btn-edit-dip" data-id="${row.name}" data-shift="${row.shift}" data-tank="${row.fuel_tank}" data-opening="${openDip || 0}" data-closing="${closeDip !== null ? closeDip : ''}" style="margin-right: 4px; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px;">Edit</button>
-                                <button class="btn btn-xs btn-secondary btn-delete-dip" data-id="${row.name}" data-shift="${row.shift}" data-tank="${row.fuel_tank}" style="color: #dc2626; border-color: #fca5a5; padding: 2px 8px; font-size: 0.75rem; border-radius: 4px;">Clear</button>
+                                ${actionsDisplay}
                             </td>
                         </tr>
                     `;
@@ -968,8 +1293,14 @@ function fetch_dips_history($wrapper) {
                 let readingId = $(this).attr('data-id');
                 let shiftName = $(this).attr('data-shift');
                 let tankName = $(this).attr('data-tank');
+                let shiftStatus = $(this).attr('data-status');
                 let openVal = parseFloat($(this).attr('data-opening')) || 0;
                 let closeVal = $(this).attr('data-closing');
+
+                if (shiftStatus && shiftStatus !== 'Open') {
+                    frappe.show_alert({message: "This shift is closed. Only open shifts can be edited.", indicator: "red"});
+                    return;
+                }
 
                 if (window.ACTIVE_SHIFT && shiftName === window.ACTIVE_SHIFT.name) {
                     // Switch to entry view
@@ -1051,6 +1382,12 @@ function fetch_dips_history($wrapper) {
                 let readingId = $(this).attr('data-id');
                 let shiftName = $(this).attr('data-shift');
                 let tankName = $(this).attr('data-tank');
+                let shiftStatus = $(this).attr('data-status');
+
+                if (shiftStatus && shiftStatus !== 'Open') {
+                    frappe.show_alert({message: "This shift is closed. Only open shifts can be cleared.", indicator: "red"});
+                    return;
+                }
 
                 frappe.confirm(`Are you sure you want to clear the closing dip reading for <b>${tankName}</b> (${shiftName})?`, function() {
                     frappe.dom.freeze("Clearing Dip Reading...");
@@ -1119,7 +1456,14 @@ function render_mpesa($wrapper) {
 
     let html = '';
     let posted_html = '';
-    (window.SHIFT_DOC.mpesa_payments || []).forEach(row => {
+    let payments = (window.SHIFT_DOC.mpesa_payments || []).slice();
+    payments.sort((a, b) => {
+        let nameA = (a.mpesa_till || a.name || '').toString();
+        let nameB = (b.mpesa_till || b.name || '').toString();
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    payments.forEach(row => {
         let csa_names = window.TILL_CSA_MAPPING[row.mpesa_till] || [];
         let unique_csas = [...new Set(csa_names)];
         let csa_text = unique_csas.length > 0 ? `<div style="font-size: 0.85em; color: var(--primary); margin-top: 5px;">Assigned CSA: <strong>${unique_csas.join(', ')}</strong></div>` : "";
@@ -1161,7 +1505,47 @@ function render_mpesa($wrapper) {
         }
     });
     $wrapper.find('#mpesa-tills-container').html(html || '<tr><td colspan="5" class="text-center">No pending tills to input.</td></tr>');
-    $wrapper.find('#posted-mpesa-container').html(posted_html || '<tr><td colspan="6" class="text-center">No posted tills yet.</td></tr>');
+
+    // Populate M-Pesa Till Filter
+    let curTillFilter = $wrapper.find('#mpesa-filter-till').val();
+    let tillOpts = '<option value="">All Tills</option>';
+    let uniqueTills = [];
+    payments.forEach(row => {
+        if (row.mpesa_till && !uniqueTills.includes(row.mpesa_till)) {
+            uniqueTills.push(row.mpesa_till);
+        }
+    });
+    uniqueTills.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach(t => {
+        tillOpts += `<option value="${t}">${t}</option>`;
+    });
+    $wrapper.find('#mpesa-filter-till').html(tillOpts);
+    if (curTillFilter) {
+        $wrapper.find('#mpesa-filter-till').val(curTillFilter);
+    }
+
+    // Segmented control and filter listeners
+    $wrapper.find('#tab-mpesa .seg-btn').off('click').on('click', function() {
+        let targetView = $(this).attr('data-view');
+        $wrapper.find('#tab-mpesa .seg-btn').removeClass('active');
+        $(this).addClass('active');
+        
+        $wrapper.find('#tab-mpesa .view-pane').removeClass('active');
+        $wrapper.find(`#mpesa-${targetView}-view`).addClass('active');
+
+        if (targetView === 'history') {
+            fetch_mpesa_history($wrapper);
+        }
+    });
+
+    $wrapper.find('#btn-filter-mpesa-history').off('click').on('click', function() {
+        fetch_mpesa_history($wrapper);
+    });
+    $wrapper.find('#mpesa-filter-till, #mpesa-filter-shift-type, #mpesa-filter-date-from, #mpesa-filter-date-to').off('change').on('change', function() {
+        fetch_mpesa_history($wrapper);
+    });
+
+    // Always fetch history
+    fetch_mpesa_history($wrapper);
 
     // Add Live Math
     function calc_mpesa() {
@@ -1186,6 +1570,106 @@ function render_mpesa($wrapper) {
     // Trigger initial
     $wrapper.find('.mpesa-closing').trigger('input');
 }
+
+function fetch_mpesa_history($wrapper) {
+    let station = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : (window.SHIFT_DOC ? window.SHIFT_DOC.station : null);
+    let from_date = $wrapper.find('#mpesa-filter-date-from').val();
+    let to_date = $wrapper.find('#mpesa-filter-date-to').val();
+    let till = $wrapper.find('#mpesa-filter-till').val();
+    let shift_type = $wrapper.find('#mpesa-filter-shift-type').val();
+
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_mpesa_tills_history",
+        args: {
+            station: station,
+            from_date: from_date || null,
+            to_date: to_date || null,
+            till: till || null,
+            shift_type: shift_type || null
+        },
+        callback: function(r) {
+            let count = r.message ? r.message.length : 0;
+            if (!from_date && !to_date && !till && !shift_type) {
+                $wrapper.find('#mpesa-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 50 entries &bull; Use date filter for more)</span>`);
+            } else {
+                $wrapper.find('#mpesa-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
+            }
+
+            let html = '';
+            let total_transfers = 0;
+            let total_amount = 0;
+
+            if (r.message && r.message.length > 0) {
+                r.message.sort((a, b) => {
+                    let dA = (a.shift_date || '') + (a.creation || '');
+                    let dB = (b.shift_date || '') + (b.creation || '');
+                    if (dA !== dB) return dB.localeCompare(dA);
+                    let nameA = (a.mpesa_till || '').toString();
+                    let nameB = (b.mpesa_till || '').toString();
+                    return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+                });
+                r.message.forEach(row => {
+                    let amount = parseFloat(row.amount || 0);
+                    let transfers = parseFloat(row.transfers_made || 0);
+                    total_amount += amount;
+                    total_transfers += transfers;
+
+                    let csa_names = window.TILL_CSA_MAPPING ? (window.TILL_CSA_MAPPING[row.mpesa_till] || []) : [];
+                    let unique_csas = [...new Set(csa_names)];
+                    let csa_text = unique_csas.length > 0 ? `<div style="font-size: 0.8em; color: var(--primary); margin-top: 3px;">Assigned CSA: <strong>${unique_csas.join(', ')}</strong></div>` : "";
+
+                    let shift_label = row.shift_template || row.shift;
+                    let date_str = row.shift_date ? frappe.datetime.str_to_user(row.shift_date) : '';
+
+                    let is_active_shift = window.ACTIVE_SHIFT && row.shift === window.ACTIVE_SHIFT.name && window.ACTIVE_SHIFT.status === 'Open';
+                    let action_html = is_active_shift ? `
+                        <button class="btn-clear-mpesa btn-secondary btn-sm" style="color: #dc2626; border-color: #fca5a5; padding: 2px 8px; font-size: 0.8rem;">Edit/Clear</button>
+                    ` : `
+                        <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px;">Posted</span>
+                    `;
+
+                    html += `
+                        <tr data-name="${row.name}">
+                            <td>
+                                <div style="font-weight: 600; color: #1e293b;">${date_str}</div>
+                                <small style="color: #64748b;">${shift_label}</small>
+                            </td>
+                            <td style="font-weight: 600; color: var(--text-primary);">
+                                ${row.mpesa_till}
+                                ${csa_text}
+                            </td>
+                            <td>
+                                <span style="font-size: 0.85em; color: #475569;">${row.bank_name || '-'}</span>
+                            </td>
+                            <td style="text-align: right;"><span class="read-only-cell">${Number(row.opening_balance || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
+                            <td style="text-align: right;"><span class="read-only-cell">${Number(transfers).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
+                            <td style="text-align: right;"><span class="read-only-cell">${Number(row.closing_balance || 0).toLocaleString('en-US', {maximumFractionDigits: 0})}</span></td>
+                            <td style="text-align: right; font-weight: 700; color: #047857; font-size: 1.05em;">${Number(amount).toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
+                            <td style="text-align: center;">
+                                ${action_html}
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `
+                    <tr style="background-color: #f8fafc; font-weight: 700; border-top: 2px solid #e2e8f0;">
+                        <td colspan="4" style="text-align: right; color: #475569;">TOTAL</td>
+                        <td style="text-align: right; color: #1e293b;">${Number(total_transfers).toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
+                        <td></td>
+                        <td style="text-align: right; color: #047857; font-size: 1.1em;">${Number(total_amount).toLocaleString('en-US', {maximumFractionDigits: 0})}</td>
+                        <td></td>
+                    </tr>
+                `;
+            } else {
+                html = '<tr><td colspan="8" class="text-center" style="padding: 2rem; color: #64748b;">No posted M-Pesa till readings found matching the filters.</td></tr>';
+            }
+
+            $wrapper.find('#posted-mpesa-container').html(html);
+        }
+    });
+}
+window.fetch_mpesa_history = fetch_mpesa_history;
 
 
 function render_drystock($wrapper) {
@@ -1244,43 +1728,109 @@ function render_drystock($wrapper) {
         $shiftFilter.val(curShiftFilterVal);
     }
 
-    // Calculate Liability CSA
-    let lubes_assignment = (window.SHIFT_DOC.assigned_csas || []).find(a => (a.pump_group || '').toLowerCase().includes('lube'));
-    if (lubes_assignment) {
+    // Calculate Liability CSA & Lubes Assignment Detection
+    let lubes_assignment = (window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas || []).find(a => {
+        let pg = (a.pump_group || '').toLowerCase();
+        return pg.includes('lube') || pg.includes('accessor') || pg.includes('drystock') || pg.includes('store');
+    });
+    let has_lubes_group = !!lubes_assignment;
+
+    if (has_lubes_group) {
         let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === lubes_assignment.csa) : null;
         let name = u ? (u.employee_name || u.full_name) : lubes_assignment.csa;
-        $wrapper.find('#drystock-liability-csa').text(name + " (Assigned)");
+        $wrapper.find('#drystock-liability-csa').text(name + " (Assigned)").css('color', '#0284c7');
+        $wrapper.find('#drystock-csa-label-title').html('👤 Performance Tracking (Sold By)');
+        $wrapper.find('#drystock-csa-badge')
+            .text('Optional Pitch Attribution')
+            .css({ background: '#e2e8f0', color: '#64748b', fontWeight: '600' });
+        $wrapper.find('#drystock-csa-help')
+            .text(`Lubes CSA (${name}) is assigned. You can optionally select another CSA who pitched or sold this item.`);
     } else {
-        $wrapper.find('#drystock-liability-csa').text("Select Sold By (Fallback)");
+        $wrapper.find('#drystock-liability-csa').text("Select Sold By (Required)").css('color', '#dc2626');
+        $wrapper.find('#drystock-csa-label-title').html('👤 Sold By <span style="color:#ef4444;">*</span>');
+        $wrapper.find('#drystock-csa-badge')
+            .text('Required for Cash Liability')
+            .css({ background: '#fee2e2', color: '#dc2626', fontWeight: '700' });
+        $wrapper.find('#drystock-csa-help')
+            .text('No designated Lubes CSA on this shift. You must select the active CSA who sold this item to attribute cash liability.');
     }
 
-    // Populate CSA dropdown
-    let csaOptions = '<option value="">Select CSA (Optional Pitch Attribution)...</option>';
-    if (window.USERS_LIST) {
-        window.USERS_LIST.forEach(u => { 
-            let uName = u.employee_name || u.full_name || u.name;
-            csaOptions += `<option value="${u.name}">${uName}</option>`; 
+    // Populate CSA dropdown - STRICTLY ONLY ACTIVE CSAs ON THIS SHIFT
+    let active_csas = [];
+    if (window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas && window.SHIFT_DOC.assigned_csas.length > 0) {
+        window.SHIFT_DOC.assigned_csas.forEach(row => {
+            if (row.csa && !active_csas.some(c => c.name === row.csa)) {
+                let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === row.csa) : null;
+                let empName = u ? (u.employee_name || u.full_name) : row.csa;
+                let groupLabel = row.pump_group ? ` (${row.pump_group})` : '';
+                active_csas.push({ name: row.csa, label: empName + groupLabel });
+            }
         });
     }
+
+    // Fallback if no assigned CSAs in shift yet
+    if (active_csas.length === 0 && window.USERS_LIST) {
+        window.USERS_LIST.forEach(u => {
+            let uName = u.employee_name || u.full_name || u.name;
+            active_csas.push({ name: u.name, label: uName });
+        });
+    }
+
+    let defaultPrompt = has_lubes_group 
+        ? '<option value="">Select CSA (Defaults to Lubes CSA)...</option>'
+        : '<option value="">-- Select Active CSA (Required) --</option>';
+
+    let csaOptions = defaultPrompt;
+    active_csas.forEach(c => {
+        let isSelected = (has_lubes_group && lubes_assignment.csa && c.name === lubes_assignment.csa) ? 'selected' : '';
+        csaOptions += `<option value="${c.name}" ${isSelected}>${c.label}</option>`;
+    });
+
     $wrapper.find('#drystock-csa').html(csaOptions).off('change').on('change', function() {
-        if (!lubes_assignment) {
-            let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === $(this).val()) : null;
-            let name = u ? (u.employee_name || u.full_name) : "Whoever sells it";
-            $wrapper.find('#drystock-liability-csa').text(name + " (Fallback)");
+        let selVal = $(this).val();
+        if (!has_lubes_group) {
+            if (selVal) {
+                let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === selVal) : null;
+                let name = u ? (u.employee_name || u.full_name) : selVal;
+                $wrapper.find('#drystock-liability-csa').text(name + " (Selected)").css('color', '#16a34a');
+                $wrapper.find('#drystock-csa').css({ 'border-color': '#cbd5e1', 'box-shadow': 'none' });
+            } else {
+                $wrapper.find('#drystock-liability-csa').text("Select Sold By (Required)").css('color', '#dc2626');
+            }
+        } else {
+            if (selVal) {
+                let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === selVal) : null;
+                let name = u ? (u.employee_name || u.full_name) : selVal;
+                $wrapper.find('#drystock-liability-csa').text(name + " (Override)").css('color', '#16a34a');
+            } else {
+                let u = window.USERS_LIST ? window.USERS_LIST.find(u => u.name === lubes_assignment.csa) : null;
+                let name = u ? (u.employee_name || u.full_name) : lubes_assignment.csa;
+                $wrapper.find('#drystock-liability-csa').text(name + " (Assigned)").css('color', '#0284c7');
+            }
         }
     });
 
+    if (has_lubes_group && lubes_assignment && lubes_assignment.csa) {
+        $wrapper.find('#drystock-csa').val(lubes_assignment.csa);
+    }
+
     // Ensure items are loaded
     if (!window.DRYSTOCK_ITEMS || window.DRYSTOCK_ITEMS.length === 0) {
-        frappe.call({
-            method: "fuel_management.fuel_management.api.get_active_item_prices",
-            callback: function(r) {
-                if (r.message) {
-                    window.DRYSTOCK_ITEMS = r.message;
-                    window.INVOICE_ITEMS = r.message;
+        if (typeof window.load_station_items === 'function') {
+            window.load_station_items(null, $wrapper);
+        } else {
+            let curStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || $wrapper.find('#select-station').val() || frappe.defaults.get_user_default("Fuel Station") || frappe.defaults.get_user_default("station");
+            frappe.call({
+                method: "fuel_management.fuel_management.api.get_active_item_prices",
+                args: { station: curStation },
+                callback: function(r) {
+                    if (r.message) {
+                        window.DRYSTOCK_ITEMS = r.message;
+                        window.INVOICE_ITEMS = r.message;
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     // -------------------------------------------------------------
@@ -1327,10 +1877,11 @@ function render_drystock($wrapper) {
                 let g_html = `<div class="combobox-group-header">${label}</div>`;
                 list.forEach(i => {
                     let displayName = i.item_name || i.item_code;
+                    let codeSuffix = (i.item_code && i.item_code !== displayName) ? ` <span style="font-size: 0.75rem; color: #64748b; font-weight: normal; font-family: monospace;">(${i.item_code})</span>` : '';
                     let rate_str = i.price_list_rate ? `KES ${parseFloat(i.price_list_rate).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '';
                     g_html += `
                         <div class="combobox-item drystock-item-opt" data-id="${i.item_code}" data-name="${frappe.utils.escape_html(displayName)}" data-rate="${i.price_list_rate || 0}" data-group="${frappe.utils.escape_html(i.item_group || '')}">
-                            <div style="font-weight: 700; color: #0f172a; font-size: 0.9rem;">${frappe.utils.escape_html(displayName)}</div>
+                            <div style="font-weight: 700; color: #0f172a; font-size: 0.9rem;">${frappe.utils.escape_html(displayName)}${codeSuffix}</div>
                             <span style="font-size: 0.8rem; font-weight: 800; color: ${badgeColor}; background: ${badgeBg}; padding: 2px 8px; border-radius: 4px; font-family: monospace;">${rate_str}</span>
                         </div>
                     `;
@@ -1349,7 +1900,8 @@ function render_drystock($wrapper) {
 
     function select_drystock_item(item_code, item_name, rate, item_group) {
         $wrapper.find('#drystock-item-hidden').val(item_code);
-        $wrapper.find('#drystock-item-input').val(item_name);
+        let inputLabel = (item_code && item_code !== item_name) ? `${item_name} (${item_code})` : item_name;
+        $wrapper.find('#drystock-item-input').val(inputLabel);
         $wrapper.find('#drystock-item-dropdown').hide();
 
         let item = (window.DRYSTOCK_ITEMS || []).find(i => i.item_code === item_code || i.item_name === item_name);
@@ -1382,12 +1934,13 @@ function render_drystock($wrapper) {
             callback: function(r) {
                 let bal = r.message !== undefined ? r.message : 0;
                 if (item) item.fc_balance = bal;
+                let codeTag = (item_code && item_code !== item_name) ? ` (${item_code})` : '';
                 if (bal > 10) {
-                    $wrapper.find('#drystock-fc-stock-pill').html(`🟢 In Stock: <strong>${bal} Units</strong>`).css({ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' });
+                    $wrapper.find('#drystock-fc-stock-pill').html(`🟢 In Stock: <strong>${bal} Units</strong>${codeTag}`).css({ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' });
                 } else if (bal > 0) {
-                    $wrapper.find('#drystock-fc-stock-pill').html(`🟡 Low Stock: <strong>${bal} Units</strong>`).css({ background: '#fffbeb', color: '#b45309', borderColor: '#fde68a' });
+                    $wrapper.find('#drystock-fc-stock-pill').html(`🟡 Low Stock: <strong>${bal} Units</strong>${codeTag}`).css({ background: '#fffbeb', color: '#b45309', borderColor: '#fde68a' });
                 } else {
-                    $wrapper.find('#drystock-fc-stock-pill').html(`🔴 Out of Stock: <strong>0 Units</strong>`).css({ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' });
+                    $wrapper.find('#drystock-fc-stock-pill').html(`🔴 Out of Stock: <strong>0 Units</strong>${codeTag}`).css({ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' });
                 }
             }
         });
@@ -1464,6 +2017,22 @@ function render_drystock($wrapper) {
         let item_code = ($wrapper.find('#drystock-item-hidden').val() || '').trim();
         let item_name_input = ($wrapper.find('#drystock-item-input').val() || '').trim();
         
+        // Validation: If no designated lubes attendant on shift, 'Sold By' is compulsory
+        if (!has_lubes_group && !csa) {
+            frappe.msgprint({
+                title: __('CSA Selection Required'),
+                indicator: 'red',
+                message: __('There is no dedicated Lubes CSA assigned to this shift.<br><br><b>Please select the Active CSA who sold this item.</b> This is required to properly attribute cash liability on their reconciliation.')
+            });
+            $wrapper.find('#drystock-csa').focus();
+            return;
+        }
+
+        // If station has dedicated lubes attendant and no specific seller selected, default to lubes attendant
+        if (has_lubes_group && !csa && lubes_assignment && lubes_assignment.csa) {
+            csa = lubes_assignment.csa;
+        }
+
         let item = null;
         if (item_code) {
             item = (window.DRYSTOCK_ITEMS || []).find(i => i.item_code === item_code);
@@ -1539,6 +2108,12 @@ function render_drystock($wrapper) {
         $wrapper.find('#drystock-total').val('0.00');
         $wrapper.find('#drystock-total-display').text('0.00');
         $wrapper.find('#drystock-fc-stock-pill').html('Select item to view stock').css({ background: '#f1f5f9', color: '#64748b', borderColor: '#e2e8f0' });
+        
+        if (!has_lubes_group) {
+            $wrapper.find('#drystock-csa').val('').trigger('change');
+        } else if (lubes_assignment && lubes_assignment.csa) {
+            $wrapper.find('#drystock-csa').val(lubes_assignment.csa).trigger('change');
+        }
         
         // Refresh entry number badge
         frappe.call({
@@ -1746,7 +2321,7 @@ function fetch_drystock_history($wrapper) {
                                         }
 
                                         // Load into form
-                                        $wrapper.find('#drystock-csa').val(row.sold_by || row_sold_by);
+                                        $wrapper.find('#drystock-csa').val(row.sold_by || row_sold_by).trigger('change');
                                         
                                         let item_obj = (window.DRYSTOCK_ITEMS || []).find(i => i.item_code === (row.item || row_item) || i.item_name === (row.item || row_item));
                                         let display_name = item_obj ? (item_obj.item_name || item_obj.item_code) : (row.item_name || row_item);
@@ -1879,6 +2454,7 @@ function refresh_drystock_cart($wrapper) {
 
 function setup_tabs(wrapper) {
     const $wrapper = $(wrapper);
+    window.SPA_WRAPPER = $wrapper;
     
     // Mobile Drawer Handlers
     function open_mobile_sidebar() {
@@ -1896,6 +2472,20 @@ function setup_tabs(wrapper) {
         $overlay.addClass('hidden');
         $('body').removeClass('overflow-hidden');
     }
+
+    window.switch_tab = function(tabName) {
+        let $w = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('#spa-layout-container');
+        if (!$w.length) $w = $('body');
+        $w.find('.nav-item').removeClass('active');
+        $w.find('.tab-pane').removeClass('active');
+        $w.find(`.nav-item[data-target="${tabName}"]`).addClass('active');
+        $w.find('#' + tabName).addClass('active');
+        if (tabName === 'tab-home' && window.render_homepage) {
+            window.render_homepage($w, false);
+        }
+        close_mobile_sidebar();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
     // Hamburger Button Click (Mobile + Desktop)
     $wrapper.on('click', '#hamburger-btn', function(e) {
@@ -1938,6 +2528,12 @@ function setup_tabs(wrapper) {
         $tab.find('.view-pane').removeClass('active');
         $tab.find('.view-pane[id$="-' + view + '-view"]').addClass('active');
 
+        if ($tab.attr('id') === 'tab-fuel' && view === 'history' && typeof fetch_meter_history === 'function') {
+            fetch_meter_history($wrapper);
+        }
+        if ($tab.attr('id') === 'tab-mpesa' && view === 'history' && typeof fetch_mpesa_history === 'function') {
+            fetch_mpesa_history($wrapper);
+        }
         if ($tab.attr('id') === 'tab-drystock' && view === 'history' && typeof fetch_drystock_history === 'function') {
             fetch_drystock_history($wrapper);
         }
@@ -1967,7 +2563,11 @@ function setup_tabs(wrapper) {
         $wrapper.find('#' + target).addClass('active');
         
         // Check for specific tab renders
-        if (target === 'tab-inventory') {
+        if (target === 'tab-home') {
+            if (window.render_homepage) {
+                window.render_homepage($wrapper, false);
+            }
+        } else if (target === 'tab-inventory') {
             render_inventory_status($wrapper);
         } else if (target === 'tab-drystock') {
             render_drystock($wrapper);
@@ -2013,9 +2613,13 @@ function setup_tabs(wrapper) {
             if (typeof render_shorts_report === 'function') {
                 render_shorts_report($wrapper);
             }
-        } else if (target === 'tab-shortage-mgmt') {
-            if (typeof render_shortage_mgmt === 'function') {
-                render_shortage_mgmt($wrapper);
+        } else if (target === 'tab-shortage-payment' || target === 'tab-shortage-mgmt') {
+            if (typeof render_shortage_payment === 'function') {
+                render_shortage_payment($wrapper);
+            }
+        } else if (target === 'tab-shortage-transfer') {
+            if (typeof render_shortage_transfer === 'function') {
+                render_shortage_transfer($wrapper);
             }
         } else if (target === 'tab-purchases') {
             if (typeof render_purchases === 'function') {
@@ -2024,6 +2628,14 @@ function setup_tabs(wrapper) {
         } else if (target === 'tab-dips') {
             if (typeof render_dips === 'function') {
                 render_dips($wrapper);
+            }
+        } else if (target === 'tab-fuel') {
+            if (typeof render_meters === 'function') {
+                render_meters($wrapper);
+            }
+        } else if (target === 'tab-mpesa') {
+            if (typeof render_mpesa === 'function') {
+                render_mpesa($wrapper);
             }
         } else if (target === 'tab-debtors') {
             let subview = $(this).attr('data-debtors-subview') || 'balances';
@@ -2055,10 +2667,16 @@ function setup_tabs(wrapper) {
 
 window.DRYSTOCK_ITEMS = [];
 window.PENDING_DRYSTOCK = (typeof window.FM_CartStorage !== 'undefined') ? window.FM_CartStorage.load('DRYSTOCK') : [];
-function load_dropdowns(wrapper) {
-    // Fetch Active Items for Dry Stock
+
+window.load_station_items = function(station, $w) {
+    let curStation = station || (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                     ($('#select-station').length ? $('#select-station').val() : null) || 
+                     null;
+    if (!curStation) return;
+
     frappe.call({
         method: "fuel_management.fuel_management.api.get_active_item_prices",
+        args: { station: curStation },
         callback: function(r) {
             if(r.message) {
                 window.DRYSTOCK_ITEMS = r.message;
@@ -2068,10 +2686,24 @@ function load_dropdowns(wrapper) {
                     let displayName = item.item_name || item.item_code;
                     st_options += `<option data-value="${item.item_code}" value="${displayName}"></option>`;
                 });
-                $(wrapper).find('#stock-transfer-item-list').html(st_options);
+                if ($w) {
+                    $w.find('#stock-transfer-item-list').html(st_options);
+                } else {
+                    $('#stock-transfer-item-list').html(st_options);
+                }
             }
         }
     });
+};
+
+function load_dropdowns(wrapper) {
+    // Fetch Active Items for current station if already set
+    let initStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                      $(wrapper).find('#select-station').val() || 
+                      null;
+    if (initStation) {
+        window.load_station_items(initStation, $(wrapper));
+    }
 
     // Fetch Stations
     frappe.call({
@@ -2087,53 +2719,136 @@ function load_dropdowns(wrapper) {
                     options += `<option value="${st.name}">${st.name}</option>`;
                 });
                 $(wrapper).find('#select-station').html(options);
+                $(wrapper).find('#navbar-select-station').html(options);
                 
-                let default_station = frappe.defaults.get_user_default("Fuel Station") || frappe.defaults.get_user_default("station");
-                if (default_station) {
-                    $(wrapper).find('#select-station').val(default_station);
-                }
+                // Always land on 'Select Station...' on initial entry
+                let default_station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || "";
+                $(wrapper).find('#select-station').val(default_station);
+                $(wrapper).find('#navbar-select-station').val(default_station);
+
+                $(wrapper).find('#navbar-select-station').off('change').on('change', function() {
+                    let st = $(this).val();
+                    $(wrapper).find('#select-station').val(st).trigger('change');
+                });
                 
-                $(wrapper).find('#select-station').on('change', function() {
+                $(wrapper).find('#select-station').off('change').on('change', function() {
                     let station = $(this).val();
+                    $(wrapper).find('#navbar-select-station').val(station);
                     if(station) {
-                        frappe.db.get_list('Shift', {
-                            filters: { station: station },
-                            fields: ['name', 'shift_template', 'shift_date'],
-                            limit: 1,
-                            order_by: 'creation desc'
-                        }).then(r => {
-                            if (r && r.length > 0) {
-                                let last_shift = r[0];
-                                $(wrapper).find('#previous-shift-badge').text(`Last Shift: ${last_shift.shift_template} (${frappe.datetime.str_to_user(last_shift.shift_date)})`).removeClass('hidden');
-                                
-                                // Smart Prediction Logic
-                                if (window.SHIFT_TEMPLATES) {
-                                    let last_template = window.SHIFT_TEMPLATES.find(t => t.name === last_shift.shift_template);
-                                    if (last_template && last_template.next_shift_template) {
-                                        let next_date_obj = frappe.datetime.str_to_obj(last_shift.shift_date);
-                                        if (last_template.rolls_over_date) {
-                                            next_date_obj.setDate(next_date_obj.getDate() + 1);
-                                        }
-                                        let next_date_str = frappe.datetime.obj_to_str(next_date_obj);
-                                        
-                                        // Update UI
-                                        $(wrapper).find('#input-shift-date').val(next_date_str);
-                                        $(wrapper).find('#select-shift-template').val(last_template.next_shift_template);
-                                    }
+                        window.load_station_items(station, $(wrapper));
+                        if (typeof load_station_pumps_and_csas === 'function') {
+                            load_station_pumps_and_csas(station);
+                        }
+
+                        // Check active shift for the selected station
+                        frappe.call({
+                            method: "fuel_management.fuel_management.api.get_active_shift",
+                            args: { station: station },
+                            callback: function(r) {
+                                if(r.message) {
+                                    window.ACTIVE_SHIFT = r.message;
+                                    lock_ui_for_active_shift($(wrapper));
+                                } else {
+                                    window.ACTIVE_SHIFT = null;
+                                    lock_ui_for_no_shift($(wrapper));
+                                    predict_next_shift_for_station(station, $(wrapper));
                                 }
-                            } else {
-                                $(wrapper).find('#previous-shift-badge').addClass('hidden');
+                                if (window.render_homepage) {
+                                    window.render_homepage($(wrapper), true);
+                                }
                             }
                         });
                     } else {
-                        $(wrapper).find('#previous-shift-badge').addClass('hidden');
+                        window.ACTIVE_SHIFT = null;
+                        lock_ui_for_no_station($(wrapper));
                     }
                 });
-                // Trigger change immediately to load for default station
-                $(wrapper).find('#select-station').trigger('change');
+
+                if (default_station) {
+                    $(wrapper).find('#select-station').trigger('change');
+                } else {
+                    lock_ui_for_no_station($(wrapper));
+                }
             }
         }
     });
+
+    // Predictive Next Shift Logic Driven by Fuel Shift Template & Previous Shift
+    function predict_next_shift_for_station(station, $w) {
+        if (!station || window.ACTIVE_SHIFT) return;
+
+        function apply_prediction(templates) {
+            frappe.db.get_list('Shift', {
+                filters: { station: station, status: 'Closed', docstatus: ['!=', 2] },
+                fields: ['name', 'shift_template', 'shift_date'],
+                limit: 1,
+                order_by: 'creation desc'
+            }).then(r => {
+                if (r && r.length > 0) {
+                    let last_shift = r[0];
+                    $w.find('#previous-shift-badge')
+                        .text(`Last Closed Shift: ${last_shift.shift_template} (${frappe.datetime.str_to_user(last_shift.shift_date)})`)
+                        .removeClass('hidden')
+                        .css({'background': '#f1f5f9', 'color': '#475569', 'border': '1px solid #e2e8f0', 'font-weight': '600'});
+
+                    // Look up previous shift template configuration
+                    let tpl = (templates || []).find(t => t.name === last_shift.shift_template);
+                    let nextTemplate = tpl && tpl.next_shift_template ? tpl.next_shift_template : null;
+                    let rollsOver = tpl ? cint(tpl.rolls_over_date) : 0;
+
+                    // Fallback heuristics if next_shift_template not configured on template doc
+                    if (!nextTemplate) {
+                        let lastLower = (last_shift.shift_template || '').toLowerCase();
+                        if (lastLower.includes('day')) {
+                            nextTemplate = 'Night Shift';
+                            rollsOver = 0;
+                        } else if (lastLower.includes('night')) {
+                            nextTemplate = 'Day Shift';
+                            rollsOver = 1;
+                        } else {
+                            nextTemplate = 'Day Shift';
+                            rollsOver = 0;
+                        }
+                    }
+
+                    // Calculate next shift date
+                    let nextDate = last_shift.shift_date;
+                    if (rollsOver) {
+                        nextDate = frappe.datetime.add_days(last_shift.shift_date, 1);
+                    }
+
+                    // Directly populate the predicted Next Date and Template
+                    $w.find('#input-shift-date').val(nextDate);
+                    $w.find('#select-shift-template').val(nextTemplate);
+                } else {
+                    // No closed shifts exist for this station: default to today
+                    $w.find('#previous-shift-badge').addClass('hidden');
+                    $w.find('#input-shift-date').val(frappe.datetime.get_today());
+                    if (templates && templates.length > 0) {
+                        $w.find('#select-shift-template').val(templates[0].name);
+                    }
+                }
+            });
+        }
+
+        if (window.SHIFT_TEMPLATES && window.SHIFT_TEMPLATES.length > 0) {
+            apply_prediction(window.SHIFT_TEMPLATES);
+        } else {
+            frappe.call({
+                method: "frappe.client.get_list",
+                args: {
+                    doctype: "Fuel Shift Template",
+                    fields: ["name", "start_time", "end_time", "next_shift_template", "rolls_over_date"]
+                },
+                callback: function(res) {
+                    if (res.message) {
+                        window.SHIFT_TEMPLATES = res.message;
+                        apply_prediction(window.SHIFT_TEMPLATES);
+                    }
+                }
+            });
+        }
+    }
 
     // Fetch Fuel Shift Templates
     frappe.call({
@@ -2145,118 +2860,101 @@ function load_dropdowns(wrapper) {
         callback: function(r) {
             if(r.message) {
                 window.SHIFT_TEMPLATES = r.message;
+                let currentVal = $(wrapper).find('#select-shift-template').val();
                 let options = '<option value="">Select Template...</option>';
                 r.message.forEach(t => {
                     options += `<option value="${t.name}">${t.name} (${t.start_time} - ${t.end_time})</option>`;
                 });
                 $(wrapper).find('#select-shift-template').html(options);
-                auto_suggest_shift($(wrapper));
-            }
-        }
-    });
 
-    function auto_suggest_shift($w) {
-        if (!window.SHIFT_TEMPLATES || window.SHIFT_TEMPLATES.length === 0) return;
-        
-        let now = frappe.datetime.now_datetime(); // e.g. "2024-07-17 08:30:00"
-        let timeParts = now.split(' ')[1].split(':');
-        let currentHour = parseInt(timeParts[0]);
-        
-        // Find suitable template
-        // Simple logic: if current time is between start and end, select it.
-        // For night shifts (e.g. 18:00 to 06:00), if current time >= 18 or < 6, select it.
-        let selectedTemplate = null;
-        let isPastMidnight = false;
-        
-        for (let t of window.SHIFT_TEMPLATES) {
-            let startH = parseInt(t.start_time.split(':')[0]);
-            let endH = parseInt(t.end_time.split(':')[0]);
-            
-            if (startH < endH) {
-                // Day shift e.g. 06 to 18
-                if (currentHour >= startH && currentHour < endH) {
-                    selectedTemplate = t.name;
-                    break;
-                }
-            } else {
-                // Night shift e.g. 18 to 06
-                if (currentHour >= startH || currentHour < endH) {
-                    selectedTemplate = t.name;
-                    if (currentHour < endH) {
-                        isPastMidnight = true;
+                if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_template) {
+                    $(wrapper).find('#select-shift-template').val(window.ACTIVE_SHIFT.shift_template);
+                } else if (currentVal) {
+                    $(wrapper).find('#select-shift-template').val(currentVal);
+                } else {
+                    let curStation = $(wrapper).find('#navbar-select-station').val() || $(wrapper).find('#select-station').val();
+                    if (curStation) {
+                        predict_next_shift_for_station(curStation, $(wrapper));
                     }
-                    break;
                 }
             }
         }
-        
-        if (!selectedTemplate) selectedTemplate = window.SHIFT_TEMPLATES[0].name;
-        
-        let suggestedDate = frappe.datetime.get_today();
-        if (isPastMidnight) {
-            // Subtract one day logically
-            suggestedDate = frappe.datetime.add_days(suggestedDate, -1);
-        }
-        
-        $w.find('#input-shift-date').val(suggestedDate);
-        $w.find('#input-shift-date').attr('max', frappe.datetime.get_today());
-        $w.find('#select-shift-template').val(selectedTemplate);
+    });
+
+    function load_station_pumps_and_csas(station) {
+        if (!station) return;
+
+        // 1. Fetch Pump Groups specifically for this station
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Pump Group",
+                filters: { station: station },
+                fields: ["name", "station"],
+                limit_page_length: 0
+            },
+            callback: function(r) {
+                if(r.message && r.message.length > 0) {
+                    window.PUMP_GROUPS_LIST = sort_pump_groups(r.message);
+                    render_pump_group_rows($(wrapper));
+                } else {
+                    // Fallback to all if station has no pump groups defined yet
+                    frappe.call({
+                        method: "frappe.client.get_list",
+                        args: { doctype: "Pump Group", fields: ["name"], limit_page_length: 0 },
+                        callback: function(r2) {
+                            if(r2.message) {
+                                window.PUMP_GROUPS_LIST = sort_pump_groups(r2.message);
+                                render_pump_group_rows($(wrapper));
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        // 2. Fetch Employees specifically for this station
+        frappe.call({
+            method: "frappe.client.get_list",
+            args: {
+                doctype: "Employee",
+                filters: { status: "Active" },
+                fields: ["name", "employee_name", "user_id", "station"],
+                limit_page_length: 0
+            },
+            callback: function(r) {
+                if(r.message) {
+                    let list = r.message;
+                    let station_csas = list.filter(e => e.station === station);
+                    // Use station CSAs if available, otherwise fallback to unassigned/all
+                    window.USERS_LIST = station_csas.length > 0 ? station_csas : list;
+                    window.USERS_LIST.sort((a,b) => (a.employee_name || a.full_name || a.name || "").localeCompare(b.employee_name || b.full_name || b.name || ""));
+                    render_pump_group_rows($(wrapper));
+                }
+            }
+        });
     }
+    window.load_station_pumps_and_csas = load_station_pumps_and_csas;
 
-    // Fetch Pump Groups
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "Pump Group",
-            fields: ["name"],
-            limit_page_length: 0
-        },
-        callback: function(r) {
-            if(r.message) {
-                window.PUMP_GROUPS_LIST = sort_pump_groups(r.message);
-                render_pump_group_rows($(wrapper));
-            }
-        }
-    });
+    // Auto-populate logged-in user as Head CSA
+    let logged_in_user = frappe.session.user || "Administrator";
+    let logged_in_name = (frappe.boot && frappe.boot.user_info && frappe.boot.user_info[logged_in_user] && frappe.boot.user_info[logged_in_user].fullname) || frappe.session.user_fullname || logged_in_user;
+    $(wrapper).find('#display-head-csa').val(logged_in_name);
+    $(wrapper).find('#select-head-csa').val(logged_in_user);
 
-    // Fetch Head CSAs (Users)
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "User",
-            filters: { enabled: 1 },
-            fields: ["name", "full_name"]
-        },
-        callback: function(r) {
-            if(r.message) {
-                r.message.sort((a,b) => (a.full_name || "").localeCompare(b.full_name || ""));
-                let options = '<option value="">Select Head CSA...</option>';
-                r.message.forEach(u => {
-                    let selected = (u.name === frappe.session.user) ? 'selected' : '';
-                    options += `<option value="${u.name}" ${selected}>${u.full_name}</option>`;
-                });
-                $(wrapper).find('#select-head-csa').html(options).prop('disabled', true).css({'background-color': '#f1f5f9', 'cursor': 'not-allowed'});
-            }
-        }
-    });
-
-    // Fetch Employees (for pump attendants, using legacy USERS_LIST variable)
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: {
-            doctype: "Employee",
-            filters: { status: "Active" },
-            fields: ["name", "employee_name", "user_id"],
-            limit_page_length: 0
-        },
-        callback: function(r) {
-            if(r.message) {
-                window.USERS_LIST = r.message;
-                window.USERS_LIST.sort((a,b) => (a.employee_name || a.full_name || a.name || "").localeCompare(b.employee_name || b.full_name || b.name || ""));
-                render_pump_group_rows($(wrapper));
-            }
-        }
-    });
+    // Initial load for current station
+    let curStation = $(wrapper).find('#select-station').val() || (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || null;
+    if (curStation) {
+        load_station_pumps_and_csas(curStation);
+    } else {
+        $(wrapper).find('#csa-assignment-body').html(`
+            <div style="grid-column: 1 / -1; padding: 2.5rem 1.5rem; text-align: center; color: #475569; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px;">
+                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">⛽</div>
+                <div style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-bottom: 0.35rem;">Please Select a Station</div>
+                <div style="font-size: 0.875rem; color: #64748b; max-width: 480px; margin: 0 auto;">Select your station from the dropdown above to view active shift operations or configure a new shift.</div>
+            </div>
+        `);
+    }
 
     function render_pump_group_rows($w) {
         if(!window.USERS_LIST || window.USERS_LIST.length === 0) return;
@@ -2588,6 +3286,15 @@ function setup_actions(wrapper) {
     // Start Shift Logic
     $wrapper.find('#btn-start-shift').on('click', function() {
         const station = $wrapper.find('#select-station').val();
+        if (!station) {
+            frappe.msgprint({
+                title: __('Station Selection Required'),
+                indicator: 'orange',
+                message: __('Please select a station from the dropdown first before starting a shift.')
+            });
+            $wrapper.find('#select-station').focus();
+            return;
+        }
         const head_csa = $wrapper.find('#select-head-csa').val();
         const shift_date = $wrapper.find('#input-shift-date').val();
         const shift_template = $wrapper.find('#select-shift-template').val();
@@ -2799,7 +3506,11 @@ function setup_actions(wrapper) {
                                 window.SHIFT_DOC = r2.message; 
                                 window.PENDING_DRYSTOCK = [];
                                 if (window.FM_CartStorage) window.FM_CartStorage.clear('DRYSTOCK');
-                                $wrapper.find('#drystock-csa').val('');
+                                let lubes_assign = (window.SHIFT_DOC && window.SHIFT_DOC.assigned_csas || []).find(a => {
+                                    let pg = (a.pump_group || '').toLowerCase();
+                                    return pg.includes('lube') || pg.includes('accessor') || pg.includes('drystock') || pg.includes('store');
+                                });
+                                $wrapper.find('#drystock-csa').val(lubes_assign ? (lubes_assign.csa || '') : '').trigger('change');
                                 refresh_drystock_cart($wrapper);
                                 // Automatically jump back to history view on success
                                 $wrapper.find('#tab-drystock .seg-btn[data-view="history"]').click();
@@ -3092,15 +3803,21 @@ function render_invoices($wrapper) {
     if (!window.INVOICE_ITEMS || window.INVOICE_ITEMS.length === 0) {
         window.INVOICE_ITEMS = window.DRYSTOCK_ITEMS || [];
         if (!window.INVOICE_ITEMS || window.INVOICE_ITEMS.length === 0) {
-            frappe.call({
-                method: "fuel_management.fuel_management.api.get_active_item_prices",
-                callback: function(r) {
-                    if (r.message) {
-                        window.DRYSTOCK_ITEMS = r.message;
-                        window.INVOICE_ITEMS = r.message;
+            if (typeof window.load_station_items === 'function') {
+                window.load_station_items(null, $wrapper);
+            } else {
+                let curStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || $wrapper.find('#select-station').val() || frappe.defaults.get_user_default("Fuel Station") || frappe.defaults.get_user_default("station");
+                frappe.call({
+                    method: "fuel_management.fuel_management.api.get_active_item_prices",
+                    args: { station: curStation },
+                    callback: function(r) {
+                        if (r.message) {
+                            window.DRYSTOCK_ITEMS = r.message;
+                            window.INVOICE_ITEMS = r.message;
+                        }
                     }
-                }
-            });
+                });
+            }
         }
     }
 
@@ -3137,23 +3854,24 @@ function render_invoices($wrapper) {
         $wrapper.find('#invoice-customer-input').val(name);
         $wrapper.find('#invoice-customer-dropdown').hide();
 
-        // Update Vehicles
+        // Update Vehicles from Customer Vehicle registry and history
         $wrapper.find('#invoice-vehicles-list').empty();
         if (id) {
-            let unique_v = [];
-            if (window.SHIFT_DOC && window.SHIFT_DOC.invoices) {
-                window.SHIFT_DOC.invoices.forEach(row => {
-                    if (row.customer === id && row.vehicle_registration) {
-                        unique_v.push(row.vehicle_registration);
+            frappe.call({
+                method: "fuel_management.fuel_management.api.get_customer_vehicles",
+                args: { customer: id },
+                callback: function(r) {
+                    if (r.message && r.message.length > 0) {
+                        let vOpts = '';
+                        r.message.forEach(v => {
+                            let val = v.plate || v;
+                            let label = v.label || val;
+                            vOpts += `<option value="${val}">${label !== val ? label : ''}</option>`;
+                        });
+                        $wrapper.find('#invoice-vehicles-list').html(vOpts);
                     }
-                });
-            }
-            unique_v = [...new Set(unique_v)];
-            let vOpts = '';
-            unique_v.forEach(v => {
-                if (v) vOpts += `<option value="${v}">`;
+                }
             });
-            $wrapper.find('#invoice-vehicles-list').html(vOpts);
         }
     }
 
@@ -3177,6 +3895,49 @@ function render_invoices($wrapper) {
         let id = $(this).attr('data-id');
         let name = $(this).attr('data-name');
         select_customer(id, name);
+    });
+
+    // Auto-register entered vehicle into customer vehicle registry
+    window._REGISTERING_VEHICLES = window._REGISTERING_VEHICLES || {};
+    $wrapper.find('#invoice-vehicle').off('change').on('change', function() {
+        let plate = ($(this).val() || '').trim().toUpperCase();
+        $(this).val(plate);
+        let customer = $wrapper.find('#invoice-customer-hidden').val();
+        if (plate && customer) {
+            let key = customer + '::' + plate;
+            if (window._REGISTERING_VEHICLES[key]) return;
+            window._REGISTERING_VEHICLES[key] = true;
+
+            let existsInDatalist = false;
+            $wrapper.find('#invoice-vehicles-list option').each(function() {
+                if ($(this).val().toUpperCase() === plate) existsInDatalist = true;
+            });
+            if (!existsInDatalist) {
+                $wrapper.find('#invoice-vehicles-list').append(`<option value="${plate}">${plate}</option>`);
+            }
+            frappe.call({
+                method: "fuel_management.fuel_management.api.register_customer_vehicle",
+                args: {
+                    customer: customer,
+                    vehicle_registration: plate
+                },
+                callback: function(r) {
+                    delete window._REGISTERING_VEHICLES[key];
+                    if (r.message && r.message.vehicles) {
+                        let vOpts = '';
+                        r.message.vehicles.forEach(v => {
+                            let val = v.plate || v;
+                            let label = v.label || val;
+                            vOpts += `<option value="${val}">${label !== val ? label : ''}</option>`;
+                        });
+                        $wrapper.find('#invoice-vehicles-list').html(vOpts);
+                    }
+                },
+                error: function() {
+                    delete window._REGISTERING_VEHICLES[key];
+                }
+            });
+        }
     });
 
     // -------------------------------------------------------------
@@ -3428,13 +4189,12 @@ function render_invoices($wrapper) {
         }
     }
 
-    // 4. Fetch Customers
+    // 4. Fetch Customers (filtered by active station, including shared fleet)
+    let current_st = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || $wrapper.find('#navbar-select-station').val() || $wrapper.find('#select-station').val() || frappe.defaults.get_user_default("station") || "";
     frappe.call({
-        method: "frappe.client.get_list",
+        method: "fuel_management.fuel_management.api.get_station_customers",
         args: {
-            doctype: "Customer",
-            fields: ["name", "customer_name"],
-            limit_page_length: 5000
+            station: current_st
         },
         callback: function(r) {
             if(r.message) {
@@ -3444,7 +4204,8 @@ function render_invoices($wrapper) {
                 let sorted = [...r.message].sort((a,b) => (a.customer_name || a.name).localeCompare(b.customer_name || b.name));
                 sorted.forEach(c => {
                     let cName = c.customer_name || c.name;
-                    filterOpts += `<option value="${c.name}">${cName}</option>`;
+                    let sharedBadge = c.is_shared_customer ? ' 🌐' : '';
+                    filterOpts += `<option value="${c.name}">${cName}${sharedBadge}</option>`;
                 });
                 $wrapper.find('#inv-filter-customer').html(filterOpts);
                 $wrapper.find('#disc-filter-customer').html(filterOpts);
@@ -3609,6 +4370,21 @@ function render_invoices($wrapper) {
             entry_number: entry_no
         });
         if (window.FM_CartStorage) window.FM_CartStorage.save('INVOICES', window.PENDING_INVOICES);
+
+        // Ensure entered vehicle is registered for customer
+        if (customer_id && vehicle) {
+            let key = customer_id + '::' + vehicle;
+            if (!window._REGISTERING_VEHICLES || !window._REGISTERING_VEHICLES[key]) {
+                frappe.call({
+                    method: "fuel_management.fuel_management.api.register_customer_vehicle",
+                    args: {
+                        customer: customer_id,
+                        vehicle_registration: vehicle,
+                        fuel_product: item ? item.item_code : null
+                    }
+                });
+            }
+        }
 
         // clear item fields
         $wrapper.find('#invoice-item-input').val('');
@@ -3863,35 +4639,53 @@ function render_customer_payments($wrapper) {
             $wrapper.find('#cp-customers-list').html(custOpts);
         }
     };
-    if(window.CUSTOMERS_LIST) {
-        pop_cust();
-    } else {
-        frappe.call({
-            method: "frappe.client.get_list",
-            args: { doctype: "Customer", fields: ["name", "customer_name"], limit_page_length: 5000 },
-            callback: function(r) {
-                if(r.message) {
-                    window.CUSTOMERS_LIST = r.message;
-                    pop_cust();
-                }
-            }
-        });
-    }
-
-    // 4. Populate Mode of Payment
+    let current_cp_st = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || $wrapper.find('#navbar-select-station').val() || $wrapper.find('#select-station').val() || frappe.defaults.get_user_default("station") || "";
     frappe.call({
-        method: "frappe.client.get_list",
-        args: { doctype: "Mode of Payment", filters: { enabled: 1 }, fields: ["name"], limit_page_length: 100 },
+        method: "fuel_management.fuel_management.api.get_station_customers",
+        args: { station: current_cp_st },
         callback: function(r) {
             if(r.message) {
-                let mopOpts = '<option value="">Select Mode...</option>';
-                r.message.forEach(m => {
-                    mopOpts += `<option value="${m.name}">${m.name}</option>`;
-                });
-                $wrapper.find('#cp-mode').html(mopOpts);
+                window.CUSTOMERS_LIST = r.message;
+                pop_cust();
             }
         }
     });
+
+    // 4. Populate Mode of Payment (strictly filtered for active station)
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_station_payment_modes",
+        args: { station: current_cp_st },
+        callback: function(r) {
+            let modes = r.message || [];
+            let mopOpts = '<option value="">Select Mode...</option>';
+            modes.forEach(m => {
+                let val = typeof m === 'object' ? m.name : m;
+                mopOpts += `<option value="${val}">${val}</option>`;
+            });
+            $wrapper.find('#cp-mode').html(mopOpts);
+        }
+    });
+
+    // 4.5 Live Payment Summary + Clear Form
+    let update_cp_summary = function() {
+        let amt = parseFloat($wrapper.find('#cp-amount').val()) || 0;
+        $wrapper.find('#cp-sum-amount').text('KES ' + amt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        let cust = ($wrapper.find('#cp-customer-input').val() || '').trim();
+        $wrapper.find('#cp-sum-customer').text(cust || '\u2014');
+        let csa_txt = $wrapper.find('#cp-csa').val() ? $wrapper.find('#cp-csa option:selected').text() : '';
+        $wrapper.find('#cp-sum-csa').text(csa_txt || '\u2014');
+        $wrapper.find('#cp-sum-mode').text($wrapper.find('#cp-mode').val() || '\u2014');
+        $wrapper.find('#cp-sum-trans').text(($wrapper.find('#cp-trans-no').val() || '').trim().toUpperCase() || '\u2014');
+    };
+    $wrapper.find('#cp-amount, #cp-customer-input, #cp-csa, #cp-mode, #cp-trans-no')
+        .off('input.cpsum change.cpsum').on('input.cpsum change.cpsum', update_cp_summary);
+    $wrapper.find('#btn-clear-customer-payment').off('click').on('click', function() {
+        $wrapper.find('#cp-customer-input, #cp-amount, #cp-trans-no, #cp-memo').val('');
+        $wrapper.find('#cp-csa, #cp-mode').val('');
+        update_cp_summary();
+        $wrapper.find('#cp-customer-input').focus();
+    });
+    update_cp_summary();
 
     // 5. Fetch and Render History
 
@@ -3992,6 +4786,7 @@ function render_customer_payments($wrapper) {
                     $wrapper.find('#cp-csa').val($btn.attr('data-csa'));
                     $wrapper.find('#cp-mode').val($btn.attr('data-mode'));
                     $wrapper.find('#cp-amount').val($btn.attr('data-amount'));
+                    update_cp_summary();
                     
                     frappe.call({
                         method: "frappe.client.delete",
@@ -4083,6 +4878,7 @@ function render_customer_payments($wrapper) {
                     $wrapper.find('#cp-trans-no').val('');
                     $wrapper.find('#cp-amount').val('');
                     $wrapper.find('#cp-memo').val('');
+                    update_cp_summary();
                     
                     // Switch to history view and refresh
                     $wrapper.find('#tab-customer-payments .seg-btn[data-view="history"]').click();
@@ -4146,10 +4942,10 @@ function render_fleet_cards($wrapper) {
 
     $wrapper.find('#sc-csa').html(csaOptions);
 
-    // 3. Populate Cards (from Station Card Type DocType)
+    // 3. Populate Cards (from Station Card Type DocType, filtered by station)
     frappe.call({
-        method: "frappe.client.get_list",
-        args: { doctype: "Station Card Type", fields: ["name", "card_name", "status"], limit_page_length: 500, filters: { status: "Active" } },
+        method: "fuel_management.fuel_management.api.get_station_card_types",
+        args: { station: (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || '' },
         callback: function(r) {
             if(r.message) {
                 let cardOpts = '<option value="">Select Card...</option>';
@@ -4548,7 +5344,7 @@ function render_rtt($wrapper) {
             args: {
                 doctype: "Station Return To Tank",
                 filters: { shift: window.ACTIVE_SHIFT.name },
-                fields: ["name", "date", "shift", "creation", "pump_nozzle", "csa", "item", "volume_returned", "amount"],
+                fields: ["name", "date", "shift", "creation", "pump_nozzle", "csa", "item", "volume_returned", "amount", "memo"],
                 order_by: "name desc"
             },
             callback: function(r) {
@@ -4563,6 +5359,34 @@ function render_rtt($wrapper) {
                             let u = window.USERS_LIST.find(u => u.name === row.csa);
                             if(u) csa_name = u.employee_name;
                         }
+
+                        let editBtn = `
+                            <button type="button" class="btn btn-xs btn-edit-rtt" 
+                                data-name="${row.name}" 
+                                data-nozzle="${frappe.utils.escape_html(row.pump_nozzle || '')}" 
+                                data-csa="${frappe.utils.escape_html(row.csa || '')}" 
+                                data-item="${frappe.utils.escape_html(row.item || '')}" 
+                                data-amount="${row.amount || 0}"
+                                data-volume="${row.volume_returned || 0}"
+                                data-memo="${frappe.utils.escape_html(row.memo || '')}"
+                                style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; cursor: pointer; margin-right: 6px; display: inline-flex; align-items: center; gap: 3px;" 
+                                title="Edit RTT">
+                                <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                Edit
+                            </button>
+                        `;
+
+                        let deleteBtn = `
+                            <button type="button" class="btn btn-xs btn-delete-rtt" 
+                                data-name="${row.name}" 
+                                data-amount="${row.amount || 0}" 
+                                data-volume="${row.volume_returned || 0}" 
+                                style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" 
+                                title="Delete RTT">
+                                <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                Delete
+                            </button>
+                        `;
                         
                         html += `
                             <tr>
@@ -4575,16 +5399,205 @@ function render_rtt($wrapper) {
                                 <td>${row.item}</td>
                                 <td>${row.volume_returned} L</td>
                                 <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                                <td style="text-align: center; white-space: nowrap;">
+                                    ${editBtn}
+                                    ${deleteBtn}
+                                </td>
                             </tr>
                         `;
                     });
                 }
-                if(html === '') html = '<tr><td colspan="9" class="text-center" style="color: #94a3b8; padding: 2rem;">No RTT recorded yet.</td></tr>';
+                if(html === '') html = '<tr><td colspan="10" class="text-center" style="color: #94a3b8; padding: 2rem;">No RTT recorded yet.</td></tr>';
                 $wrapper.find('#list-station-rtt-saved').html(html);
+
+                // Wire Edit RTT
+                $wrapper.find('.btn-edit-rtt').off('click').on('click', function(e) {
+                    e.preventDefault();
+                    if (is_locked) {
+                        frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+                        return;
+                    }
+                    let name = $(this).attr('data-name');
+                    let nozzle = $(this).attr('data-nozzle');
+                    let csa = $(this).attr('data-csa');
+                    let item = $(this).attr('data-item');
+                    let amount = $(this).attr('data-amount');
+                    let volume = $(this).attr('data-volume');
+                    let memo = $(this).attr('data-memo');
+
+                    let $modal = $wrapper.find('#modal-edit-rtt');
+                    if ($modal.find('#edit-rtt-nozzle').children().length === 0) {
+                        $modal.find('#edit-rtt-nozzle').html($wrapper.find('#rtt-nozzle').html());
+                    }
+                    if ($modal.find('#edit-rtt-item').children().length === 0) {
+                        $modal.find('#edit-rtt-item').html($wrapper.find('#rtt-item').html());
+                    }
+
+                    $modal.find('#edit-rtt-name').val(name);
+                    $modal.find('#edit-rtt-badge').text(name);
+                    $modal.find('#edit-rtt-nozzle').val(nozzle);
+                    $modal.find('#edit-rtt-csa').val(csa);
+                    let u = window.USERS_LIST ? window.USERS_LIST.find(user => user.name === csa) : null;
+                    $modal.find('#edit-rtt-csa-display').val(u ? u.employee_name : (csa || ''));
+                    $modal.find('#edit-rtt-item').val(item);
+                    $modal.find('#edit-rtt-amount').val(amount);
+                    $modal.find('#edit-rtt-volume').val(volume);
+                    $modal.find('#edit-rtt-memo').val(memo);
+
+                    let price = parseFloat($modal.find('#edit-rtt-item').find(':selected').data('price')) || 0;
+                    if(price > 0) {
+                        $modal.find('#edit-rtt-price-indicator').text(`(@ ${price}/L)`);
+                    } else {
+                        $modal.find('#edit-rtt-price-indicator').text('');
+                    }
+
+                    $modal.css('display', 'flex');
+                });
+
+                // Wire Delete RTT
+                $wrapper.find('.btn-delete-rtt').off('click').on('click', function(e) {
+                    e.preventDefault();
+                    if (is_locked) {
+                        frappe.show_alert({message: "Shift is closed/locked.", indicator: "red"});
+                        return;
+                    }
+                    let name = $(this).attr('data-name');
+                    let amount = parseFloat($(this).attr('data-amount') || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+                    let volume = parseFloat($(this).attr('data-volume') || 0);
+
+                    frappe.confirm(
+                        `Are you sure you want to delete Return To Tank <b>${frappe.utils.escape_html(name)}</b> (${volume} L, KES ${amount})? This action cannot be undone.`,
+                        function() {
+                            frappe.call({
+                                method: "fuel_management.fuel_management.api.delete_station_rtt",
+                                args: { name: name },
+                                callback: function(r) {
+                                    if (r.message && r.message.status === "success") {
+                                        frappe.show_alert({message: "Return To Tank deleted successfully!", indicator: "green"});
+                                        fetch_history();
+                                    } else {
+                                        frappe.show_alert({message: "Failed to delete Return To Tank.", indicator: "red"});
+                                    }
+                                },
+                                error: function(err) {
+                                    frappe.msgprint({
+                                        title: "Error Deleting Return To Tank",
+                                        message: err.message || "Failed to delete RTT record.",
+                                        indicator: "red"
+                                    });
+                                }
+                            });
+                        }
+                    );
+                });
             }
         });
     };
     fetch_history();
+
+    // Modal Events for Edit RTT
+    $wrapper.find('#edit-rtt-nozzle').off('change').on('change', function() {
+        let nozzle = $(this).val();
+        if(!nozzle) {
+            $wrapper.find('#edit-rtt-csa, #edit-rtt-csa-display').val('');
+            return;
+        }
+
+        frappe.db.get_value('Pump Nozzle', nozzle, 'pump_group', function(r) {
+            if(r && r.pump_group) {
+                let head_emp = window.USERS_LIST ? window.USERS_LIST.find(u => u.user_id === window.SHIFT_DOC.head_csa) : null;
+                let csa = head_emp ? head_emp.name : null;
+                let assigned = (window.SHIFT_DOC.assigned_csas || []).find(a => a.pump_group === r.pump_group);
+                if(assigned && assigned.csa) csa = assigned.csa;
+
+                if(csa) {
+                    $wrapper.find('#edit-rtt-csa').val(csa);
+                    let u = window.USERS_LIST ? window.USERS_LIST.find(user => user.name === csa) : null;
+                    $wrapper.find('#edit-rtt-csa-display').val(u ? u.employee_name : csa);
+                }
+            }
+        });
+
+        if(nozzlePrices[nozzle] && nozzlePrices[nozzle].item) {
+            $wrapper.find('#edit-rtt-item').val(nozzlePrices[nozzle].item).trigger('change');
+        }
+    });
+
+    $wrapper.find('#edit-rtt-item').off('change').on('change', function() {
+        let price = parseFloat($(this).find(':selected').data('price')) || 0;
+        if(price > 0) {
+            $wrapper.find('#edit-rtt-price-indicator').text(`(@ ${price}/L)`);
+            let amount = parseFloat($wrapper.find('#edit-rtt-amount').val()) || 0;
+            $wrapper.find('#edit-rtt-volume').val((amount / price).toFixed(4));
+        } else {
+            $wrapper.find('#edit-rtt-price-indicator').text('');
+            $wrapper.find('#edit-rtt-volume').val('');
+        }
+    });
+
+    $wrapper.find('#edit-rtt-amount').off('input').on('input', function() {
+        let amount = parseFloat($(this).val()) || 0;
+        let price = parseFloat($wrapper.find('#edit-rtt-item').find(':selected').data('price')) || 0;
+        if(price > 0) {
+            $wrapper.find('#edit-rtt-volume').val((amount / price).toFixed(4));
+        }
+    });
+
+    $wrapper.find('#btn-close-edit-rtt, #btn-cancel-edit-rtt').off('click').on('click', function() {
+        $wrapper.find('#modal-edit-rtt').hide();
+    });
+
+    $wrapper.find('#btn-save-edit-rtt').off('click').on('click', function() {
+        let $btn = $(this);
+        let $modal = $wrapper.find('#modal-edit-rtt');
+        let name = $modal.find('#edit-rtt-name').val();
+        let nozzle = $modal.find('#edit-rtt-nozzle').val();
+        let csa = $modal.find('#edit-rtt-csa').val();
+        let item = $modal.find('#edit-rtt-item').val();
+        let amount = parseFloat($modal.find('#edit-rtt-amount').val()) || 0;
+        let volume = parseFloat($modal.find('#edit-rtt-volume').val()) || 0;
+        let memo = $modal.find('#edit-rtt-memo').val();
+
+        if (!name || !nozzle || !csa || !item || amount <= 0 || volume <= 0) {
+            frappe.show_alert({message: "Please fill all required fields properly.", indicator: "red"});
+            return;
+        }
+
+        let orig_html = $btn.html();
+        $btn.html('<span class="spinner-border spinner-border-sm"></span> Saving...').prop('disabled', true);
+
+        frappe.call({
+            method: "fuel_management.fuel_management.api.update_station_rtt",
+            args: {
+                name: name,
+                pump_nozzle: nozzle,
+                csa: csa,
+                item: item,
+                amount: amount,
+                volume_returned: volume,
+                memo: memo
+            },
+            callback: function(r) {
+                if (r.message && r.message.status === "success") {
+                    frappe.show_alert({message: "Return To Tank updated successfully!", indicator: "green"});
+                    $modal.hide();
+                    fetch_history();
+                } else {
+                    frappe.show_alert({message: "Failed to update Return To Tank.", indicator: "red"});
+                }
+            },
+            error: function(err) {
+                frappe.msgprint({
+                    title: "Error Updating Return To Tank",
+                    message: err.message || "Failed to update RTT record.",
+                    indicator: "red"
+                });
+            },
+            always: function() {
+                $btn.html(orig_html).prop('disabled', false);
+            }
+        });
+    });
 
     // 7. Save RTT
     $wrapper.find('#btn-save-station-rtt').off('click').on('click', function() {
@@ -4766,9 +5779,35 @@ function render_topups($wrapper) {
                     let sDate = row.shift_date || row.date || "";
                     let shiftName = row.shift_template || row.shift || "";
                     
+                    let editBtn = `
+                        <button type="button" class="btn btn-xs btn-edit-topup" 
+                            data-name="${row.name}" 
+                            data-card="${frappe.utils.escape_html(row.card || '')}" 
+                            data-csa="${frappe.utils.escape_html(row.csa || '')}" 
+                            data-rrn="${frappe.utils.escape_html(row.rrn_number || '')}" 
+                            data-mop="${frappe.utils.escape_html(row.mode_of_payment || '')}" 
+                            data-amount="${row.amount || 0}"
+                            style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; cursor: pointer; margin-right: 6px; display: inline-flex; align-items: center; gap: 3px;" 
+                            title="Edit Top-Up">
+                            <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                            Edit
+                        </button>
+                    `;
+
+                    let deleteBtn = `
+                        <button type="button" class="btn btn-xs btn-delete-topup" 
+                            data-name="${row.name}" 
+                            data-amount="${row.amount || 0}" 
+                            style="padding: 4px 10px; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" 
+                            title="Delete Top-Up">
+                            <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Delete
+                        </button>
+                    `;
+
                     html += `
                         <tr>
-                            <td style="font-family: monospace; color: #64748b;">${row.name}</td>
+                            <td style="font-family: monospace; color: #64748b; font-weight: 700;">${row.name}</td>
                             <td>${sDate ? frappe.datetime.str_to_user(sDate) : ''} (${shiftName})</td>
                             <td><span class="badge" style="background-color: #f8fafc; color: #64748b;">${shiftName}</span></td>
                             <td style="color: #64748b;">${time_val}</td>
@@ -4776,16 +5815,137 @@ function render_topups($wrapper) {
                             <td>${csa_name}</td>
                             <td>${row.rrn_number || "-"}</td>
                             <td><span class="badge">${row.mode_of_payment || ""}</span></td>
-                            <td style="font-weight: 600;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td style="font-weight: 700; color: #0f172a;">${parseFloat(row.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td style="text-align: center; white-space: nowrap;">
+                                ${editBtn}
+                                ${deleteBtn}
+                            </td>
                         </tr>
                     `;
                 });
             }
-            if(html === '') html = '<tr><td colspan="9" class="text-center" style="color: #94a3b8; padding: 2rem;">No Top-Ups recorded yet.</td></tr>';
+            if(html === '') html = '<tr><td colspan="10" class="text-center" style="color: #94a3b8; padding: 2rem;">No Top-Ups recorded yet.</td></tr>';
             $wrapper.find('#list-station-topups-saved').html(html);
+
+            // Wire Edit Top-Up
+            $wrapper.find('.btn-edit-topup').off('click').on('click', function(e) {
+                e.preventDefault();
+                let name = $(this).attr('data-name');
+                let card = $(this).attr('data-card');
+                let csa = $(this).attr('data-csa');
+                let rrn = $(this).attr('data-rrn');
+                let mop = $(this).attr('data-mop');
+                let amount = $(this).attr('data-amount');
+
+                let $modal = $wrapper.find('#modal-edit-topup');
+                if ($modal.find('#edit-topup-card').children().length === 0) {
+                    $modal.find('#edit-topup-card').html($wrapper.find('#topup-card').html());
+                }
+                if ($modal.find('#edit-topup-csa').children().length === 0) {
+                    $modal.find('#edit-topup-csa').html($wrapper.find('#topup-csa').html());
+                }
+                if ($modal.find('#edit-topup-mop').children().length === 0) {
+                    $modal.find('#edit-topup-mop').html($wrapper.find('#topup-mop').html());
+                }
+
+                $modal.find('#edit-topup-name').val(name);
+                $modal.find('#edit-topup-badge').text(name);
+                $modal.find('#edit-topup-card').val(card);
+                $modal.find('#edit-topup-csa').val(csa);
+                $modal.find('#edit-topup-rrn').val(rrn);
+                $modal.find('#edit-topup-mop').val(mop);
+                $modal.find('#edit-topup-amount').val(amount);
+
+                $modal.css('display', 'flex');
+            });
+
+            // Wire Delete Top-Up
+            $wrapper.find('.btn-delete-topup').off('click').on('click', function(e) {
+                e.preventDefault();
+                let name = $(this).attr('data-name');
+                let amount = parseFloat($(this).attr('data-amount') || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+
+                frappe.confirm(
+                    `Are you sure you want to delete Top-Up <b>${frappe.utils.escape_html(name)}</b> of amount <b>KES ${amount}</b>? This action cannot be undone.`,
+                    function() {
+                        frappe.call({
+                            method: "fuel_management.fuel_management.api.delete_supplier_topup",
+                            args: { name: name },
+                            callback: function(r) {
+                                if (r.message && r.message.status === "success") {
+                                    frappe.show_alert({message: "Supplier Top-Up deleted successfully!", indicator: "green"});
+                                    fetch_history();
+                                } else {
+                                    frappe.show_alert({message: "Failed to delete Top-Up.", indicator: "red"});
+                                }
+                            },
+                            error: function(err) {
+                                frappe.msgprint({
+                                    title: "Error Deleting Top-Up",
+                                    message: err.message || "Failed to delete top-up record.",
+                                    indicator: "red"
+                                });
+                            }
+                        });
+                    }
+                );
+            });
         };
 
-        $wrapper.find('#list-station-topups-saved').html('<tr><td colspan="9" class="text-center"><div class="spinner"></div> Fetching history...</td></tr>');
+        // Wire Modal Close and Save Changes
+        $wrapper.find('#btn-close-edit-topup, #btn-cancel-edit-topup').off('click').on('click', function() {
+            $wrapper.find('#modal-edit-topup').hide();
+        });
+
+        $wrapper.find('#btn-save-edit-topup').off('click').on('click', function() {
+            let $btn = $(this);
+            let $modal = $wrapper.find('#modal-edit-topup');
+            let name = $modal.find('#edit-topup-name').val();
+            let card = $modal.find('#edit-topup-card').val();
+            let csa = $modal.find('#edit-topup-csa').val();
+            let rrn = $modal.find('#edit-topup-rrn').val();
+            let mop = $modal.find('#edit-topup-mop').val();
+            let amount = parseFloat($modal.find('#edit-topup-amount').val()) || 0;
+
+            if (!name || !card || !csa || !rrn || !mop || amount <= 0) {
+                frappe.show_alert({message: "Please fill all required fields with a valid amount.", indicator: "red"});
+                return;
+            }
+
+            $btn.prop('disabled', true).find('.spinner').removeClass('hidden');
+
+            frappe.call({
+                method: "fuel_management.fuel_management.api.update_supplier_topup",
+                args: {
+                    name: name,
+                    card: card,
+                    csa: csa,
+                    rrn_number: rrn,
+                    mode_of_payment: mop,
+                    amount: amount
+                },
+                callback: function(r) {
+                    $btn.prop('disabled', false).find('.spinner').addClass('hidden');
+                    if (r.message && r.message.status === "success") {
+                        frappe.show_alert({message: "Top-Up updated successfully!", indicator: "green"});
+                        $modal.hide();
+                        fetch_history();
+                    } else {
+                        frappe.show_alert({message: "Failed to update Top-Up.", indicator: "red"});
+                    }
+                },
+                error: function(err) {
+                    $btn.prop('disabled', false).find('.spinner').addClass('hidden');
+                    frappe.msgprint({
+                        title: "Error Updating Top-Up",
+                        message: err.message || "Failed to update top-up record.",
+                        indicator: "red"
+                    });
+                }
+            });
+        });
+
+        $wrapper.find('#list-station-topups-saved').html('<tr><td colspan="10" class="text-center"><div class="spinner"></div> Fetching history...</td></tr>');
         frappe.call({
             method: "fuel_management.fuel_management.api.get_topups_history",
             args: {
@@ -4941,14 +6101,15 @@ function render_inventory_status($wrapper) {
         let target = $(this).data('target');
         let table = $wrapper.find('.inventory-report-table');
         let isCollapsed = table.hasClass('collapsed-' + target);
+        let $btn = $(this);
         
         if (isCollapsed) {
             table.removeClass('collapsed-' + target);
-            $(this).text('[-]');
+            $btn.html('<span class="pill-sym">&minus;</span> Hide');
             $wrapper.find('#th-' + target + '-group').attr('colspan', 3);
         } else {
             table.addClass('collapsed-' + target);
-            $(this).text('[+]');
+            $btn.html('<span class="pill-sym">&#43;</span> Breakdown');
             $wrapper.find('#th-' + target + '-group').attr('colspan', 1);
         }
     });
@@ -4975,6 +6136,26 @@ function sort_stock_groups(groupList) {
     });
 }
 
+function get_item_sort_key(item) {
+    let name = String((item && (item.item_name || item.item_code || item.name)) || '').toUpperCase().trim();
+    let match = name.match(/(\d+(?:\.\d+)?)\s*KG/);
+    if (match) {
+        let weight = parseFloat(match[1]) || 0;
+        return { has_kg: 0, weight: weight, name: name };
+    }
+    return { has_kg: 1, weight: 0, name: name };
+}
+
+function sort_stock_items(itemList) {
+    return (itemList || []).slice().sort((a, b) => {
+        let kA = get_item_sort_key(a);
+        let kB = get_item_sort_key(b);
+        if (kA.has_kg !== kB.has_kg) return kA.has_kg - kB.has_kg;
+        if (kA.weight !== kB.weight) return kA.weight - kB.weight;
+        return kA.name.localeCompare(kB.name);
+    });
+}
+
 function fetch_inventory_report($wrapper) {
     let fromInput = $wrapper.find('#inventory-date-from');
     let toInput = $wrapper.find('#inventory-date-to');
@@ -4987,7 +6168,7 @@ function fetch_inventory_report($wrapper) {
     let toDate = toInput.val();
     
     $wrapper.find('#btn-refresh-inventory-report .spinner').removeClass('hidden');
-    $wrapper.find('#list-inventory-status').html('<tr><td colspan="10" class="text-center">Loading inventory report...</td></tr>');
+    $wrapper.find('#list-inventory-status').html('<tr><td colspan="12" class="text-center" style="padding: 2.5rem; color: #94a3b8;"><div class="spinner" style="margin: 0 auto 0.5rem;"></div>Loading inventory status report...</td></tr>');
     
     frappe.call({
         method: "fuel_management.fuel_management.api.get_inventory_status_report",
@@ -5002,60 +6183,104 @@ function fetch_inventory_report($wrapper) {
             
             if(r.message && r.message.data && Object.keys(r.message.data).length > 0) {
                 // Update Company Name
-                $wrapper.find('#inventory-report-company').text(r.message.company);
+                $wrapper.find('#inventory-report-company').text(r.message.company || 'Kilibet Investment Ltd');
                 
                 let data = r.message.data;
                 let no = 1;
                 
                 let unique_items = [];
                 let item_opts = '';
+
+                let total_skus = 0;
+                let total_opening = 0;
+                let total_sales = 0;
+                let total_closing = 0;
+                let total_negatives = 0;
+
+                function fmt_qty(val, type) {
+                    let n = parseFloat(val) || 0;
+                    if (n === 0) return '<span class="cell-zero">0</span>';
+                    if (n < 0) return `<span class="cell-negative">${n.toLocaleString('en-US')}</span>`;
+                    if (type === 'sale') return `<span class="cell-sale">${n.toLocaleString('en-US')}</span>`;
+                    if (type === 'purchase') return `<span class="cell-purchase">+${n.toLocaleString('en-US')}</span>`;
+                    if (type === 'closing') return `<span class="cell-positive-stock">${n.toLocaleString('en-US')}</span>`;
+                    return `<span style="font-family: monospace; font-weight: 600; color: #334155;">${n.toLocaleString('en-US')}</span>`;
+                }
                 
                 sort_stock_groups(Object.keys(data)).forEach(group => {
+                    let itemsInGroup = data[group] || [];
                     // Group Header
                     html += `
                         <tr class="row-group-header">
-                            <td colspan="10">${group.toUpperCase()}</td>
+                            <td colspan="12">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="color: #2563eb;">📦</span>
+                                        <span style="font-weight: 800; font-size: 0.82rem; letter-spacing: 0.05em; color: #0f172a;">${group.toUpperCase()}</span>
+                                    </div>
+                                    <span style="font-size: 0.72rem; font-weight: 700; background: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 999px;">${itemsInGroup.length} items</span>
+                                </div>
+                            </td>
                         </tr>
                     `;
                     
-                    data[group].forEach(row => {
+                    sort_stock_items(itemsInGroup).forEach(row => {
+                        total_skus++;
+                        total_opening += parseFloat(row.op_total || 0);
+                        total_sales += parseFloat(row.sales || 0);
+                        total_closing += parseFloat(row.cl_total || 0);
+                        if (parseFloat(row.cl_total || 0) < 0) total_negatives++;
+
                         if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
                             unique_items.push(row.item_code);
                             item_opts += `<option data-value="${row.item_code}" value="${row.item_name} (${row.item_code})"></option>`;
                         }
                         
-                        let cl_store_cls = (row.cl_store < 0) ? 'negative-val' : '';
-                        let cl_fc_cls = (row.cl_forecourt < 0) ? 'negative-val' : '';
-                        let cl_tot_cls = (row.cl_total < 0) ? 'negative-val' : '';
-                        
                         html += `
                             <tr class="data-row">
                                 <td class="sticky-col th-no">${no++}</td>
-                                <td class="sticky-col th-product">${row.item_name}</td>
+                                <td class="sticky-col th-product">${row.item_name} ${row.item_code !== row.item_name ? `<span style="font-size: 0.72rem; color: #64748b; font-weight: normal; font-family: monospace;">(${row.item_code})</span>` : ''}</td>
                                 
-                                <td class="col-op text-center">${row.op_store || 0}</td>
-                                <td class="col-op text-center">${row.op_forecourt || 0}</td>
-                                <td class="text-center" style="font-weight:bold;">${row.op_total || 0}</td>
+                                <td class="col-op text-center" style="text-align: center;">${fmt_qty(row.op_store)}</td>
+                                <td class="col-op text-center" style="text-align: center;">${fmt_qty(row.op_forecourt)}</td>
+                                <td class="col-op-total" style="text-align: center;">${fmt_qty(row.op_total)}</td>
                                 
-                                <td class="text-center">${row.purchases || 0}</td>
-                                <td class="text-center">${row.sales || 0}</td>
-                                <td class="text-center">${row.borrowed_in || 0}</td>
-                                <td class="text-center">${row.borrowed_out || 0}</td>
+                                <td class="text-center" style="text-align: center;">${fmt_qty(row.purchases, 'purchase')}</td>
+                                <td class="text-center" style="text-align: center;">${fmt_qty(row.sales, 'sale')}</td>
+                                <td class="text-center" style="text-align: center;">${fmt_qty(row.borrowed_in)}</td>
+                                <td class="text-center col-trans-last" style="text-align: center;">${fmt_qty(row.borrowed_out)}</td>
                                 
-                                <td class="col-cl text-center ${cl_store_cls}">${row.cl_store || 0}</td>
-                                <td class="col-cl text-center ${cl_fc_cls}">${row.cl_forecourt || 0}</td>
-                                <td class="text-center ${cl_tot_cls}" style="font-weight:bold;">${row.cl_total || 0}</td>
+                                <td class="col-cl text-center" style="text-align: center;">${fmt_qty(row.cl_store)}</td>
+                                <td class="col-cl text-center" style="text-align: center;">${fmt_qty(row.cl_forecourt)}</td>
+                                <td class="col-cl-total" style="text-align: center;">${fmt_qty(row.cl_total, 'closing')}</td>
                             </tr>
                         `;
                     });
                 });
+
+                // Update Metric Chips
+                $wrapper.find('#metric-inv-skus').text(total_skus.toLocaleString('en-US'));
+                $wrapper.find('#metric-inv-opening').text(total_opening.toLocaleString('en-US'));
+                $wrapper.find('#metric-inv-sales').text(total_sales.toLocaleString('en-US'));
+                $wrapper.find('#metric-inv-closing').text(total_closing.toLocaleString('en-US'));
+                if (total_negatives > 0) {
+                    $wrapper.find('#chip-inv-negatives').show();
+                    $wrapper.find('#metric-inv-negatives').text(total_negatives + ' Items');
+                } else {
+                    $wrapper.find('#chip-inv-negatives').hide();
+                }
                 
                 if ($wrapper.find('#stock-transfer-item-list').children().length === 0) {
                     $wrapper.find('#stock-transfer-item-list').html(item_opts);
                 }
                 
             } else {
-                html = '<tr><td colspan="10" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>';
+                html = '<tr><td colspan="12" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>';
+                $wrapper.find('#metric-inv-skus').text('0');
+                $wrapper.find('#metric-inv-opening').text('0');
+                $wrapper.find('#metric-inv-sales').text('0');
+                $wrapper.find('#metric-inv-closing').text('0');
+                $wrapper.find('#chip-inv-negatives').hide();
             }
             
             $wrapper.find('#list-inventory-status').html(html);
@@ -5150,7 +6375,7 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
                         </tr>
                     `;
                     
-                    data[group].forEach(row => {
+                    sort_stock_items(data[group]).forEach(row => {
                         if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
                             unique_items.push(row.item_code);
                             item_opts += `<option data-value="${row.item_code}" value="${row.item_name} (${row.item_code})"></option>`;
@@ -5163,7 +6388,7 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
                         html += `
                             <tr class="data-row">
                                 <td style="text-align: center;">${no++}</td>
-                                <td style="font-weight: 600; color: #1e293b;">${row.item_name}</td>
+                                <td style="font-weight: 600; color: #1e293b;">${row.item_name} ${row.item_code !== row.item_name ? `<span style="font-size: 0.75rem; color: #64748b; font-weight: normal; font-family: monospace;">(${row.item_code})</span>` : ''}</td>
                                 <td class="text-center">${op_val}</td>
                                 <td class="text-center">${row.purchases || 0}</td>
                                 <td class="text-center">${row.sales || 0}</td>
@@ -6527,6 +7752,26 @@ function print_stock_sheet(warehouse_type, data, company) {
             });
         }
 
+        function getItemSortKey(item) {
+            let name = String((item && (item.item_name || item.item_code || item.name)) || '').toUpperCase().trim();
+            let match = name.match(/(\d+(?:\.\d+)?)\s*KG/);
+            if (match) {
+                let weight = parseFloat(match[1]) || 0;
+                return { has_kg: 0, weight: weight, name: name };
+            }
+            return { has_kg: 1, weight: 0, name: name };
+        }
+
+        function sortStockItems(itemList) {
+            return (itemList || []).slice().sort((a, b) => {
+                let kA = getItemSortKey(a);
+                let kB = getItemSortKey(b);
+                if (kA.has_kg !== kB.has_kg) return kA.has_kg - kB.has_kg;
+                if (kA.weight !== kB.weight) return kA.weight - kB.weight;
+                return kA.name.localeCompare(kB.name);
+            });
+        }
+
         function getItems() {
             let list = [];
             let groups = sortGroups(Object.keys(RAW_DATA));
@@ -6542,7 +7787,7 @@ function print_stock_sheet(warehouse_type, data, company) {
                         return o_stock > 0;
                     });
                 }
-                groupItems = groupItems.slice().sort((a, b) => (a.item_name || a.item_code || "").localeCompare(b.item_name || b.item_code || ""));
+                groupItems = sortStockItems(groupItems);
                 if (groupItems.length > 0) {
                     list.push({ is_group: true, group_name: group });
                     groupItems.forEach(row => {
@@ -6551,10 +7796,11 @@ function print_stock_sheet(warehouse_type, data, company) {
                             ? ((META.warehouse_type === "forecourt" ? row.cl_forecourt : row.cl_store) || 0)
                             : ((META.warehouse_type === "forecourt" ? row.op_forecourt : row.op_store) || 0);
                         let price = row.unit_price || 0;
+                        let itName = (row.item_code && row.item_code !== row.item_name) ? (row.item_name + " (" + row.item_code + ")") : (row.item_name || row.item_code || "");
                         list.push({
                             is_group: false,
                             group_name: group,
-                            item_name: row.item_name || row.item_code || "",
+                            item_name: itName,
                             o_stock: o_stock,
                             price: price
                         });
@@ -6786,7 +8032,7 @@ function render_purchases($wrapper) {
     $wrapper.find('#pur-rec-date').attr('max', today);
     $wrapper.find('#pur-doc-date').attr('max', today);
 
-    // 4. Supplier Dropdown
+    // 4. Supplier Dropdown (Filtered by Station)
     frappe.call({
         method: "frappe.client.get_list",
         args: { doctype: "Supplier", fields: ["name", "supplier_name", "supplier_group"], limit_page_length: 500 },
@@ -6794,43 +8040,102 @@ function render_purchases($wrapper) {
             let opts = '<option value="">Select Supplier...</option>';
             if(r.message) {
                 window.PURCHASE_SUPPLIERS = r.message;
-                r.message.forEach(s => {
+                let is_galana = (station_name || '').toLowerCase().includes("galana");
+                let is_rubis = (station_name || '').toLowerCase().includes("rubis") || (station_name || '').toLowerCase().includes("poa");
+
+                let filtered_suppliers = r.message.filter(s => {
+                    let s_txt = ((s.supplier_name || '') + " " + (s.name || '')).toLowerCase();
+                    if (is_galana) {
+                        return !s_txt.includes("rubis");
+                    } else if (is_rubis) {
+                        return !s_txt.includes("galana");
+                    }
+                    return true;
+                });
+
+                let default_supplier = "";
+                filtered_suppliers.forEach(s => {
                     let label = s.supplier_name && s.supplier_name !== s.name ? `${s.supplier_name} (${s.name})` : s.name;
                     opts += `<option value="${s.name}">${label}</option>`;
-                });
-            }
-            $wrapper.find('#pur-supplier').html(opts);
-        }
-    });
-
-    // 5. Target Location Dropdown
-    frappe.call({
-        method: "frappe.client.get_list",
-        args: { doctype: "Warehouse", fields: ["name", "warehouse_name"], filters: {is_group: 0, disabled: 0}, limit_page_length: 500 },
-        callback: function(r) {
-            let opts = '<option value="">Select Target...</option>';
-            let forecourt_wh = "";
-            if(r.message) {
-                window.PURCHASE_WAREHOUSES = r.message;
-                r.message.forEach(w => {
-                    opts += `<option value="${w.name}">${w.warehouse_name}</option>`;
-                    let lower = (w.warehouse_name || w.name || '').toLowerCase();
-                    if (lower.includes("forecourt")) {
-                        forecourt_wh = w.name;
+                    if (is_galana && s.name.toLowerCase().includes("galana") && !default_supplier) {
+                        default_supplier = s.name;
+                    } else if (is_rubis && s.name.toLowerCase().includes("rubis") && !default_supplier) {
+                        default_supplier = s.name;
                     }
                 });
-            }
-            $wrapper.find('#pur-target').html(opts);
-            if (forecourt_wh) {
-                $wrapper.find('#pur-target').val(forecourt_wh);
+                $wrapper.find('#pur-supplier').html(opts);
+                if (default_supplier) {
+                    $wrapper.find('#pur-supplier').val(default_supplier);
+                }
             }
         }
     });
 
-    // 6. Searchable Item Combobox & Categorized Dropdown
+    // 5. Target Location Dropdown (Filtered strictly by Station)
     frappe.call({
-        method: "frappe.client.get_list",
-        args: { doctype: "Item", fields: ["name", "item_name", "item_group", "stock_uom"], filters: {disabled: 0}, limit_page_length: 5000 },
+        method: "frappe.client.get_value",
+        args: {
+            doctype: "Fuel Station",
+            filters: { name: station_name },
+            fieldname: ["default_forecourt_warehouse", "default_store_warehouse"]
+        },
+        callback: function(st_res) {
+            let station_forecourt = (st_res.message && st_res.message.default_forecourt_warehouse) || "";
+            let station_store = (st_res.message && st_res.message.default_store_warehouse) || "";
+
+            frappe.call({
+                method: "frappe.client.get_list",
+                args: { doctype: "Warehouse", fields: ["name", "warehouse_name"], filters: {is_group: 0, disabled: 0}, limit_page_length: 500 },
+                callback: function(r) {
+                    let opts = '<option value="">Select Target...</option>';
+                    let forecourt_wh = station_forecourt;
+                    let store_wh = station_store;
+                    let is_galana = (station_name || '').toLowerCase().includes("galana");
+                    let is_rubis = (station_name || '').toLowerCase().includes("rubis") || (station_name || '').toLowerCase().includes("poa");
+
+                    if(r.message) {
+                        let station_whs = r.message.filter(w => {
+                            if (w.name === station_forecourt || w.name === station_store) return true;
+                            let lower = (w.warehouse_name || w.name || '').toLowerCase();
+                            if (is_galana) {
+                                return lower.includes("galana");
+                            } else if (is_rubis) {
+                                return (lower.includes("rubis") || lower.includes("poa")) && !lower.includes("galana");
+                            }
+                            return true;
+                        });
+
+                        window.PURCHASE_WAREHOUSES = station_whs;
+
+                        station_whs.forEach(w => {
+                            let lower = (w.warehouse_name || w.name || '').toLowerCase();
+                            opts += `<option value="${w.name}">${w.warehouse_name || w.name}</option>`;
+                            if (!forecourt_wh && lower.includes("forecourt")) {
+                                forecourt_wh = w.name;
+                            }
+                            if (!store_wh && lower.includes("store")) {
+                                store_wh = w.name;
+                            }
+                        });
+                    }
+
+                    window.PURCHASE_FORECOURT_WH = forecourt_wh;
+                    window.PURCHASE_STORE_WH = store_wh;
+
+                    $wrapper.find('#pur-target').html(opts);
+                    if (forecourt_wh) {
+                        $wrapper.find('#pur-target').val(forecourt_wh);
+                    }
+                }
+            });
+        }
+    });
+
+    // 6. Searchable Item Combobox & Categorized Dropdown (Filtered strictly by Station)
+    let curStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || (window.SHIFT_DOC && window.SHIFT_DOC.station) || $wrapper.find('#select-station').val() || station_name;
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_station_purchase_items",
+        args: { station: curStation },
         callback: function(r) {
             if(r.message) {
                 window.PURCHASE_ITEMS = r.message;
@@ -6841,8 +8146,12 @@ function render_purchases($wrapper) {
     function render_pur_item_dropdown(filter_text) {
         let items = window.PURCHASE_ITEMS || [];
         let q = (filter_text || '').toLowerCase().trim();
+        let active_st = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || (window.SHIFT_DOC && window.SHIFT_DOC.station) || station_name;
         
         let matched = items.filter(i => {
+            if (active_st && i.station && i.station !== active_st) {
+                return false;
+            }
             if (!q) return true;
             let n = (i.name || '').toLowerCase();
             let iname = (i.item_name || '').toLowerCase();
@@ -6944,16 +8253,18 @@ function render_purchases($wrapper) {
         let is_gas = group.includes("GAS") || group.includes("CYLINDER") || name.includes("GAS") || name.includes("CYLINDER") || name.includes("LPG") || name.includes("6KG") || name.includes("13KG") || name.includes("35KG") || name.includes("50KG");
         let is_lube = group.includes("LUBE") || group.includes("OIL") || group.includes("GREASE") || name.includes("LUBE") || name.includes("OIL") || name.includes("GREASE") || name.includes("LUBRICANT");
         
-        let forecourt_wh = "";
-        let store_wh = "";
-        $wrapper.find('#pur-target option').each(function() {
-            let txt = $(this).text().toLowerCase();
-            let v = $(this).val();
-            if (v) {
-                if (txt.includes("forecourt")) forecourt_wh = v;
-                else if (txt.includes("store")) store_wh = v;
-            }
-        });
+        let forecourt_wh = window.PURCHASE_FORECOURT_WH || "";
+        let store_wh = window.PURCHASE_STORE_WH || "";
+        if (!forecourt_wh || !store_wh) {
+            $wrapper.find('#pur-target option').each(function() {
+                let txt = $(this).text().toLowerCase();
+                let v = $(this).val();
+                if (v) {
+                    if (txt.includes("forecourt") && !forecourt_wh) forecourt_wh = v;
+                    else if (txt.includes("store") && !store_wh) store_wh = v;
+                }
+            });
+        }
         
         let $badge = $wrapper.find('#pur-item-category-badge');
         if (is_fuel) {
@@ -7077,7 +8388,7 @@ function render_purchases($wrapper) {
                     </td>
                     <td style="padding: 10px 12px; text-align: center;">
                         <span style="font-weight: 800; font-size: 0.95rem; font-family: monospace; color: #0f172a; background: #f1f5f9; padding: 3px 10px; border-radius: 6px;">
-                            ${frappe.format(qty, {fieldtype: 'Float'})}
+                            ${Number(qty || 0).toLocaleString()}
                         </span>
                     </td>
                     <td style="padding: 10px 12px; text-align: right; font-weight: 700; font-family: monospace; color: #334155;">
@@ -7114,7 +8425,7 @@ function render_purchases($wrapper) {
         } else {
             $wrapper.find('#btn-clear-pur-cart').show();
             $wrapper.find('#pur-cart-count-pill').show().text(window.PURCHASE_CART.length);
-            $wrapper.find('#pur-cart-summary-text').text(`${window.PURCHASE_CART.length} line item(s) in delivery manifest &bull; ${frappe.format(total_units, {fieldtype: 'Float'})} units total`);
+            $wrapper.find('#pur-cart-summary-text').html(`${window.PURCHASE_CART.length} line item(s) in delivery manifest &bull; <strong>${Number(total_units || 0).toLocaleString()}</strong> units total`);
         }
         
         $wrapper.find('#list-purchase-cart').html(html);
@@ -7305,21 +8616,24 @@ function render_purchases($wrapper) {
     let fetch_history = function() {
         let date_from = $wrapper.find('#pur-filter-date-from').val();
         let date_to = $wrapper.find('#pur-filter-date-to').val();
+        let active_st = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || (window.SHIFT_DOC && window.SHIFT_DOC.station) || $wrapper.find('#navbar-select-station').val() || $wrapper.find('#select-station').val() || '';
         $wrapper.find('#list-station-purchases-saved').html('<tr><td colspan="8" class="text-center" style="padding: 2.5rem; color: #64748b;"><i class="fa fa-spinner fa-spin"></i> Loading purchases history...</td></tr>');
 
         frappe.call({
             method: "fuel_management.fuel_management.doctype.station_purchase.station_purchase.get_purchases_history",
             args: {
                 date_from: date_from,
-                date_to: date_to
+                date_to: date_to,
+                station: active_st
             },
             callback: function(r) {
                 window.PURCHASE_HISTORY_CACHE = r.message || [];
                 let count = window.PURCHASE_HISTORY_CACHE.length;
+                let station_badge = active_st ? ` &bull; <b>${frappe.utils.escape_html(active_st)}</b>` : '';
                 if (!date_from && !date_to) {
-                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#64748b; font-size:0.825rem;">(Showing latest ${count} entries &bull; Use date filter for custom ranges)</span>`);
+                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#64748b; font-size:0.825rem;">(Showing latest ${count} entries${station_badge} &bull; Use date filter for custom ranges)</span>`);
                 } else {
-                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#047857; font-size:0.825rem; font-weight:700;">(Found ${count} delivery records for selected dates)</span>`);
+                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#047857; font-size:0.825rem; font-weight:700;">(Found ${count} delivery records${station_badge} for selected dates)</span>`);
                 }
                 render_history_rows(window.PURCHASE_HISTORY_CACHE);
             }
@@ -8421,10 +9735,55 @@ function render_station_cards($wrapper) {
 
     $wrapper.find('#sc-csa').html(csaOptions);
 
-    // 3. Populate Cards (from Station Card Type DocType)
+    // Populate History CSA Filter Dropdown with all active CSAs / employees
+    let populate_sc_filter_csa = function() {
+        let all_csas = [];
+        if (window.USERS_LIST && window.USERS_LIST.length > 0) {
+            all_csas = window.USERS_LIST;
+        } else if (window.SHORTAGE_EMPLOYEES && window.SHORTAGE_EMPLOYEES.length > 0) {
+            all_csas = window.SHORTAGE_EMPLOYEES;
+        }
+
+        let set_options = function(list) {
+            let filter_csa_opts = '<option value="">All CSAs</option>';
+            let sorted = [...list].sort((a, b) => 
+                (a.employee_name || a.full_name || a.name || "").localeCompare(b.employee_name || b.full_name || b.name || "")
+            );
+            sorted.forEach(u => {
+                let label = u.employee_name || u.full_name || u.name;
+                filter_csa_opts += `<option value="${u.name}">${label}</option>`;
+            });
+            $wrapper.find('#sc-filter-csa').html(filter_csa_opts);
+        };
+
+        if (all_csas.length > 0) {
+            set_options(all_csas);
+        } else {
+            frappe.call({
+                method: "frappe.client.get_list",
+                args: {
+                    doctype: "Employee",
+                    filters: { status: "Active" },
+                    fields: ["name", "employee_name", "user_id"],
+                    limit_page_length: 500
+                },
+                callback: function(r) {
+                    if (r.message && r.message.length > 0) {
+                        window.USERS_LIST = r.message;
+                        set_options(r.message);
+                    } else if (sorted_csas.length > 0) {
+                        set_options(sorted_csas.map(s => ({ name: s.csa, employee_name: s.name })));
+                    }
+                }
+            });
+        }
+    };
+    populate_sc_filter_csa();
+
+    // 3. Populate Cards (from Station Card Type DocType, filtered by station)
     frappe.call({
-        method: "frappe.client.get_list",
-        args: { doctype: "Station Card Type", fields: ["name", "card_name", "status"], limit_page_length: 500, filters: { status: "Active" } },
+        method: "fuel_management.fuel_management.api.get_station_card_types",
+        args: { station: (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || '' },
         callback: function(r) {
             if(r.message) {
                 let cardOpts = '<option value="">Select Card...</option>';
@@ -8445,6 +9804,7 @@ function render_station_cards($wrapper) {
         let date_to = $wrapper.find('#sc-filter-date-to').val();
         let card_filter = $wrapper.find('#sc-filter-card').val();
         let csa_filter = $wrapper.find('#sc-filter-csa').val();
+        let shift_type_filter = $wrapper.find('#sc-filter-shift-type').val();
 
         frappe.call({
             method: "fuel_management.fuel_management.api.get_station_cards_history",
@@ -8453,10 +9813,11 @@ function render_station_cards($wrapper) {
                 from_date: date_from,
                 to_date: date_to,
                 card: card_filter,
-                csa: csa_filter
+                csa: csa_filter,
+                shift_type: shift_type_filter
             },
             callback: function(r) {
-                if (!date_from && !date_to) {
+                if (!date_from && !date_to && !card_filter && !csa_filter && !shift_type_filter) {
                     $wrapper.find('#sc-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 20 entries &bull; Use date filter for more)</span>`);
                 } else {
                     $wrapper.find('#sc-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${r.message ? r.message.length : 0} filtered entries)</span>`);
@@ -8540,7 +9901,7 @@ function render_station_cards($wrapper) {
     };
     fetch_history();
 
-    $wrapper.find('#sc-filter-date-from, #sc-filter-date-to, #sc-filter-card, #sc-filter-csa').on('change', fetch_history);
+    $wrapper.find('#sc-filter-date-from, #sc-filter-date-to, #sc-filter-card, #sc-filter-csa, #sc-filter-shift-type').on('change', fetch_history);
 
     // 5. Save Station Card Payment
     $wrapper.find('#btn-save-station-card').off('click').on('click', function() {
@@ -9724,7 +11085,9 @@ function render_greasing(wrapper) {
           ];
       } else if(type === 'mpesa') {
           title = "M-Pesa Tills Breakdown";
-          data = window.CURRENT_RECON.mpesa_breakdown || [];
+          data = (window.CURRENT_RECON.mpesa_breakdown || []).slice().sort((a, b) => {
+              return (a.mpesa_till || '').localeCompare(b.mpesa_till || '', undefined, { numeric: true, sensitivity: 'base' });
+          });
           columns = [
               {label: 'M-Pesa Till Name', key: 'mpesa_till'},
               {label: 'Amount (KES)', key: 'amount', format: 'currency'}
@@ -10400,10 +11763,9 @@ window.open_bp_return_modal = function(docname, counterparty) {
     
     // Fetch items for this borrow record to show what's being returned
     frappe.call({
-        method: 'frappe.client.get',
+        method: 'fuel_management.fuel_management.api.get_borrowed_product_details',
         args: {
-            doctype: 'Borrowed Product',
-            name: docname
+            docname: docname
         },
         callback: function(r) {
             if (r.message) {
@@ -10417,7 +11779,7 @@ window.open_bp_return_modal = function(docname, counterparty) {
                             </thead>
                             <tbody>`;
                 
-                r.message.items.forEach(i => {
+                (r.message.items || []).forEach(i => {
                     html += `<tr>
                                 <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem;">${i.item_code}</td>
                                 <td style="padding: 8px; text-align: center; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; font-weight: 600;">${i.qty}</td>
@@ -10431,12 +11793,21 @@ window.open_bp_return_modal = function(docname, counterparty) {
                 
                 $wrapper.find('#bp-return-modal-body').html(html);
             }
+        },
+        error: function(err) {
+            console.error("Failed to fetch borrow record details:", err);
+            $wrapper.find('#bp-return-modal-body').html(`
+                <div style="padding: 1.5rem; text-align: center; color: #ef4444; font-size: 0.85rem;">
+                    Failed to load borrowed product details. Please retry.
+                </div>
+            `);
         }
     });
 };
 
 function submit_bp_return($wrapper) {
     let docname = $wrapper.find('#bp-return-docname').val();
+    let return_date = $wrapper.find('#bp-return-date').val() || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.shift_date : '') || frappe.datetime.get_today();
     
     let $btn = $wrapper.find('#btn-bp-return-submit');
     $btn.find('.spinner').removeClass('hidden');
@@ -10444,7 +11815,10 @@ function submit_bp_return($wrapper) {
     
     frappe.call({
         method: 'fuel_management.fuel_management.api.return_borrowed_product',
-        args: { docname: docname },
+        args: { 
+            docname: docname,
+            return_date: return_date
+        },
         callback: function(r) {
             $btn.find('.spinner').addClass('hidden');
             $btn.prop('disabled', false);
@@ -10454,6 +11828,16 @@ function submit_bp_return($wrapper) {
                 $wrapper.find('#bp-return-modal').hide();
                 fetch_bp_history($wrapper);
             }
+        },
+        error: function(err) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            console.error("Return failed:", err);
+            frappe.msgprint({
+                title: __('Return Failed'),
+                indicator: 'red',
+                message: err.message || __('Failed to process return. Please check error logs.')
+            });
         }
     });
 }
@@ -10463,7 +11847,14 @@ function submit_bp_return($wrapper) {
 // END SHIFT REPORT MODULE
 // =========================================================
 function ensure_nozzles_and_prices(doc, callback) {
-    if (window.PUMP_NOZZLES && window.NOZZLE_ITEMS && Object.keys(window.NOZZLE_ITEMS).length > 0 && window.FUEL_PRICES && Object.keys(window.FUEL_PRICES).length > 0) {
+    let reqDate = (doc && doc.shift_date) || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.shift_date : "");
+    let reqStation = (doc && doc.station) || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : "");
+
+    if (window.PUMP_NOZZLES && window.PUMP_NOZZLES.length > 0 &&
+        window.NOZZLE_ITEMS && Object.keys(window.NOZZLE_ITEMS).length > 0 &&
+        window.FUEL_PRICES && Object.keys(window.FUEL_PRICES).length > 0 &&
+        window._PRICES_LOADED_DATE === reqDate &&
+        window._PRICES_LOADED_STATION === reqStation) {
         callback();
         return;
     }
@@ -10481,8 +11872,8 @@ function ensure_nozzles_and_prices(doc, callback) {
             frappe.call({
                 method: "fuel_management.fuel_management.doctype.shift.shift.get_nozzle_prices",
                 args: {
-                    station: (doc && doc.station) || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : ""),
-                    shift_date: (doc && doc.shift_date) || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.shift_date : "")
+                    station: reqStation,
+                    shift_date: reqDate
                 },
                 callback: function(r2) {
                     let nozzle_prices = r2.message || {};
@@ -10492,20 +11883,29 @@ function ensure_nozzles_and_prices(doc, callback) {
                         window.NOZZLE_ITEMS[noz] = nozzle_prices[noz].item;
                         window.FUEL_PRICES[nozzle_prices[noz].item] = nozzle_prices[noz].price;
                     });
+                    window._PRICES_LOADED_DATE = reqDate;
+                    window._PRICES_LOADED_STATION = reqStation;
                     callback();
                 },
-                error: function() {
+                error: function(err) {
+                    console.error("Error loading nozzle prices:", err);
                     callback();
                 }
             });
         },
-        error: function() {
+        error: function(err) {
+            console.error("Error loading pump nozzles:", err);
             callback();
         }
     });
 }
 
 window.generate_end_shift_report = function($wrapper, targetShiftName = null) {
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('#spa-layout-container');
+    }
+    if (!$wrapper.length) $wrapper = $('body');
+
     let shift_name = targetShiftName || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.name : (window.SHIFT_DOC ? window.SHIFT_DOC.name : null));
     if (!shift_name) {
         $wrapper.find('#shift-report-container').html('<div style="text-align:center; padding:3rem; color:#94a3b8;">No shift selected. Please start a shift or pick a past shift from the Past Shift Reports tab.</div>');
@@ -10621,11 +12021,11 @@ window.generate_end_shift_report = function($wrapper, targetShiftName = null) {
                                         html += `<tr style="border-bottom: 1px solid #f1f5f9;">
                                             ${idx === 0 ? `<td rowspan="${pump_rows.length}" style="padding:8px 10px; font-weight:700; color:#0f172a; vertical-align:top; background:#fafafa; border-right:1px solid #f1f5f9;">${frappe.utils.escape_html(pump)}</td>` : ''}
                                             <td style="padding:8px 10px; font-weight:600; color:#334155;">${frappe.utils.escape_html(row.pump_nozzle)} ${item ? `<span style="font-size:0.75rem; color:#64748b;">(${frappe.utils.escape_html(item)})</span>` : ''}</td>
-                                            <td style="padding:8px 10px; text-align:right; font-family:monospace;">${frappe.format(row.opening_electronic_meter || 0, {fieldtype: 'Float'})}</td>
-                                            <td style="padding:8px 10px; text-align:right; font-family:monospace;">${frappe.format(row.closing_electronic_meter || 0, {fieldtype: 'Float'})}</td>
-                                            <td style="padding:8px 10px; text-align:right; font-family:monospace; color:#64748b;">${frappe.format(row.opening_manual_meter || 0, {fieldtype: 'Float'})}</td>
-                                            <td style="padding:8px 10px; text-align:right; font-family:monospace; color:#64748b;">${frappe.format(row.closing_manual_meter || 0, {fieldtype: 'Float'})}</td>
-                                            <td style="padding:8px 10px; text-align:right; font-weight:700; font-family:monospace; color:#0f172a;">${frappe.format(sales_lts, {fieldtype: 'Float'})}</td>
+                                            <td style="padding:8px 10px; text-align:right; font-family:monospace;">${Number(row.opening_electronic_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                                            <td style="padding:8px 10px; text-align:right; font-family:monospace;">${Number(row.closing_electronic_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                                            <td style="padding:8px 10px; text-align:right; font-family:monospace; color:#64748b;">${Number(row.opening_manual_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                                            <td style="padding:8px 10px; text-align:right; font-family:monospace; color:#64748b;">${Number(row.closing_manual_meter || 0).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
+                                            <td style="padding:8px 10px; text-align:right; font-weight:700; font-family:monospace; color:#0f172a;">${Number(sales_lts).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3})}</td>
                                             <td style="padding:8px 10px; text-align:right; font-family:monospace;">${frappe.format(price, {fieldtype: 'Currency'})}</td>
                                             <td style="padding:8px 10px; text-align:right; font-weight:800; font-family:monospace; color:#047857;">${frappe.format(cash, {fieldtype: 'Currency'})}</td>
                                         </tr>`;
@@ -10812,7 +12212,38 @@ window.generate_end_shift_report = function($wrapper, targetShiftName = null) {
                                     </button>
                                 </div>`;
                                 
-                                $wrapper.find('#shift-report-container').html(h);
+                                let isPastShift = Boolean(targetShiftName && (!window.ACTIVE_SHIFT || targetShiftName !== window.ACTIVE_SHIFT.name));
+                                let bannerHtml = '';
+                                if (isPastShift) {
+                                    bannerHtml = `
+                                        <div class="past-shift-banner no-print" style="display: flex; justify-content: space-between; align-items: center; background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px 18px; border-radius: 8px; margin-bottom: 20px;">
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                <span style="font-size: 1.4rem;">📋</span>
+                                                <div>
+                                                    <div style="font-weight: 800; color: #1e40af; font-size: 0.95rem;">
+                                                        Historical Shift Report: ${frappe.utils.escape_html(doc.shift_name_display || doc.shift_template || doc.name)}
+                                                    </div>
+                                                    <div style="font-size: 0.8rem; color: #475569; margin-top: 2px;">
+                                                        Shift: <strong style="color: #0f172a;">${frappe.utils.escape_html(doc.shift_template || '')}</strong> &bull;
+                                                        Ref: <span style="font-family: monospace; font-weight: 700; color: #0f172a;">${frappe.utils.escape_html(doc.name)}</span> &bull; 
+                                                        Date: <span style="font-weight: 600;">${frappe.datetime.str_to_user(doc.shift_date || '')}</span> &bull; 
+                                                        Status: <span class="badge" style="background:${doc.status === 'Open' ? '#dcfce7; color:#166534;' : '#f1f5f9; color:#475569;'} font-weight:700;">${doc.status || 'Closed'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div style="display: flex; gap: 8px;">
+                                                <button id="btn-back-to-past-shifts" class="btn btn-sm" style="background: #2563eb; color: #ffffff; font-weight: 700; border: none; padding: 7px 16px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                                                    ← Back to Past Shift Reports
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                                
+                                $wrapper.find('#shift-report-container').html(bannerHtml + h);
+                                $wrapper.find('#btn-back-to-past-shifts').off('click').on('click', function() {
+                                    window.switch_tab('tab-past-reports');
+                                });
                                 
                                 // Wire print button
                                 $wrapper.find('#btn-print-report').off('click').on('click', function() {
@@ -10957,23 +12388,27 @@ window.generate_end_shift_report = function($wrapper, targetShiftName = null) {
 
 // Past Shift Reports Logic
 window.load_past_shifts = function() {
-    let $wrapper = $('#shift-operation-spa-app');
-    let start = $('#past-reports-start').val();
-    let end = $('#past-reports-end').val();
+    let $wrapper = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('#spa-layout-container');
+    if (!$wrapper.length) $wrapper = $('body');
+
+    let start = $wrapper.find('#past-reports-start').val();
+    let end = $wrapper.find('#past-reports-end').val();
+    let shiftTemplate = $wrapper.find('#past-reports-shift').val();
     let station = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : (frappe.defaults.get_user_default("station") || "RUBIS POA PLACE");
     
     let filters = [["station", "=", station]];
     if (start) filters.push(["shift_date", ">=", start]);
     if (end) filters.push(["shift_date", "<=", end]);
+    if (shiftTemplate) filters.push(["shift_template", "=", shiftTemplate]);
 
-    $('#past-shifts-body').html('<tr><td colspan="4" class="text-center py-8 text-gray-500"><div class="spinner"></div> Loading past shifts...</td></tr>');
+    $wrapper.find('#past-shifts-body').html('<tr><td colspan="6" class="text-center py-8 text-gray-500" style="padding:2rem; text-align:center;"><div class="spinner" style="display:inline-block; margin-right:8px;"></div> Loading past shifts...</td></tr>');
 
     frappe.call({
         method: "frappe.client.get_list",
         args: {
             doctype: "Shift",
             filters: filters,
-            fields: ["name", "shift_date", "shift_template", "head_csa", "status", "modified"],
+            fields: ["name", "shift_date", "shift_template", "shift_name_display", "head_csa", "status", "modified"],
             order_by: "shift_date desc, modified desc",
             limit_page_length: 50
         },
@@ -10984,38 +12419,72 @@ window.load_past_shifts = function() {
                     let sDate = s.shift_date ? frappe.datetime.str_to_user(s.shift_date) : '';
                     let cashier = s.head_csa || 'N/A';
                     if (window.USERS_LIST) {
-                        let u = window.USERS_LIST.find(u => u.name === s.head_csa);
-                        if (u) cashier = u.employee_name || u.full_name;
+                        let u = window.USERS_LIST.find(u => u.name === s.head_csa || u.user_id === s.head_csa);
+                        if (u) cashier = u.employee_name || u.full_name || u.name;
                     }
+
+                    let isDay = (s.shift_template || '').toLowerCase().includes('day');
+                    let shiftIcon = isDay ? '☀️' : '🌙';
+                    let shiftBadgeBg = isDay ? '#fef3c7' : '#e0e7ff';
+                    let shiftBadgeColor = isDay ? '#92400e' : '#3730a3';
+                    let shiftBadgeBorder = isDay ? '#fde68a' : '#c7d2fe';
+                    let shiftDisplayName = s.shift_name_display || s.shift_template || 'Shift';
+
+                    let statusBadge = (s.status === 'Open')
+                        ? `<span class="badge" style="background:#dcfce7; color:#166534; font-weight:700; padding:3px 8px; border-radius:4px; font-size:0.75rem; border:1px solid #bbf7d0;">Open</span>`
+                        : `<span class="badge" style="background:#f1f5f9; color:#475569; font-weight:700; padding:3px 8px; border-radius:4px; font-size:0.75rem; border:1px solid #e2e8f0;">Closed</span>`;
+
                     html += `
                         <tr class="hover:bg-gray-50 border-b border-gray-100" style="border-bottom: 1px solid #f1f5f9;">
-                            <td class="px-6 py-4 font-mono font-bold text-gray-900" style="padding:12px 16px;">
-                                ${s.name} <span class="badge" style="background:#e2e8f0; color:#334155; font-size:0.75rem; font-weight:600; padding:2px 6px; border-radius:4px;">${s.shift_template || ''}</span>
+                            <td class="px-6 py-4" style="padding:12px 16px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="display:inline-flex; align-items:center; gap:5px; background:${shiftBadgeBg}; color:${shiftBadgeColor}; border:1px solid ${shiftBadgeBorder}; font-weight:800; font-size:0.85rem; padding:4px 10px; border-radius:6px;">
+                                        ${shiftIcon} ${s.shift_template || shiftDisplayName}
+                                    </span>
+                                </div>
+                                ${s.shift_name_display && s.shift_name_display !== s.shift_template ? `<div style="font-size:0.78rem; font-weight:600; color:#64748b; margin-top:4px;">${s.shift_name_display}</div>` : ''}
                             </td>
-                            <td class="px-6 py-4 text-gray-600" style="padding:12px 16px; color:#475569;">${sDate}</td>
-                            <td class="px-6 py-4 font-medium text-gray-800" style="padding:12px 16px; font-weight:600;">${cashier}</td>
+                            <td class="px-6 py-4 font-mono font-bold text-gray-900" style="padding:12px 16px;">
+                                <span style="background:#f8fafc; border:1px solid #e2e8f0; padding:3px 8px; border-radius:4px; font-size:0.82rem; color:#1e293b;">
+                                    ${s.name}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-gray-700" style="padding:12px 16px; font-weight:600; color:#334155;">${sDate}</td>
+                            <td class="px-6 py-4 font-medium text-gray-800" style="padding:12px 16px;">${cashier}</td>
+                            <td class="px-6 py-4" style="padding:12px 16px;">${statusBadge}</td>
                             <td class="px-6 py-4 text-right" style="padding:12px 16px; text-align:right;">
-                                <button class="btn btn-xs btn-primary btn-view-past-shift" data-shift="${s.name}" style="padding: 5px 12px; font-weight:700; border-radius:5px; background:#2563eb; color:#fff; border:none; cursor:pointer;">View Report</button>
+                                <button class="btn btn-xs btn-primary btn-view-past-shift" data-shift="${s.name}" style="padding: 6px 14px; font-weight:700; border-radius:6px; background:#2563eb; color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
+                                    <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                    View Report
+                                </button>
                             </td>
                         </tr>
                     `;
                 });
-                $('#past-shifts-body').html(html);
+                $wrapper.find('#past-shifts-body').html(html);
 
-                $('#past-shifts-body').find('.btn-view-past-shift').off('click').on('click', function() {
+                $wrapper.find('#past-shifts-body .btn-view-past-shift').off('click').on('click', function(e) {
+                    e.preventDefault();
                     let shiftName = $(this).attr('data-shift');
-                    // Switch to End Shift Report tab
-                    $wrapper.find('.nav-item[data-target="tab-report"]').click();
-                    window.generate_end_shift_report($wrapper, shiftName);
+                    let $w = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('#spa-layout-container');
+                    if (!$w.length) $w = $('body');
+
+                    // Switch cleanly to End Shift Report tab
+                    window.switch_tab('tab-report');
+                    // Generate report specifically for this past shift
+                    window.generate_end_shift_report($w, shiftName);
                 });
             } else {
-                $('#past-shifts-body').html('<tr><td colspan="4" class="text-center py-8 text-gray-500" style="padding:2rem; text-align:center; color:#94a3b8;">No past shifts found for the selected dates.</td></tr>');
+                $wrapper.find('#past-shifts-body').html('<tr><td colspan="6" class="text-center py-8 text-gray-500" style="padding:2rem; text-align:center; color:#94a3b8;">No past shifts found for the selected dates and filters.</td></tr>');
             }
         }
     });
 };
 
 function render_past_reports($wrapper) {
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('#spa-layout-container');
+    }
     let today = frappe.datetime.get_today();
     if (!$wrapper.find('#past-reports-start').val()) {
         $wrapper.find('#past-reports-start').val(frappe.datetime.add_days(today, -7));
@@ -11023,6 +12492,12 @@ function render_past_reports($wrapper) {
     if (!$wrapper.find('#past-reports-end').val()) {
         $wrapper.find('#past-reports-end').val(today);
     }
+    $wrapper.find('#past-reports-shift').off('change').on('change', function() {
+        window.load_past_shifts();
+    });
+    $wrapper.find('#past-reports-start, #past-reports-end').off('change').on('change', function() {
+        window.load_past_shifts();
+    });
     window.load_past_shifts();
 }
 /* =========================================================================
@@ -11102,6 +12577,8 @@ window.init_debtors_module = function(wrapper) {
         let custId = $(this).val();
         window.DEBTORS_STATE.selected_customer_id = custId;
         window.DEBTORS_STATE.selected_vehicle = '';
+        window.DEBTORS_STATE.selected_station = '';
+        $wrapper.find('#stmt-station-select').val('');
         window.update_statement_customer_card();
         if (custId) {
             window.load_customer_statement();
@@ -11111,6 +12588,13 @@ window.init_debtors_module = function(wrapper) {
     $wrapper.on('change', '#stmt-vehicle-select', function() {
         let veh = $(this).val();
         window.filter_customer_statement_by_vehicle(veh);
+    });
+
+    $wrapper.on('change', '#stmt-station-select', function() {
+        let st = $(this).val() || '';
+        if (typeof window.filter_customer_statement_by_station === 'function') {
+            window.filter_customer_statement_by_station(st);
+        }
     });
 
     $wrapper.on('click', '.stmt-veh-chip', function(e) {
@@ -11469,7 +12953,7 @@ window.load_customer_statement = function() {
     $w.find('#btn-load-statement .spinner').removeClass('hidden');
     $w.find('#debtors-statement-body').html(`
         <tr>
-            <td colspan="7" style="padding: 2rem; text-align: center; color: #64748b;">
+            <td colspan="10" style="padding: 2rem; text-align: center; color: #64748b;">
                 <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
                     <div style="width: 22px; height: 22px; border: 2.5px solid #cbd5e1; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
                     <span style="font-size: 0.82rem;">Loading customer transaction statement...</span>
@@ -11497,7 +12981,7 @@ window.load_customer_statement = function() {
             console.error("Failed to load customer statement:", err);
             $w.find('#debtors-statement-body').html(`
                 <tr>
-                    <td colspan="7" style="padding: 1.5rem; text-align: center; color: #ef4444; font-size: 0.82rem;">
+                    <td colspan="10" style="padding: 1.5rem; text-align: center; color: #ef4444; font-size: 0.82rem;">
                         Error loading statement. Please check connection and retry.
                     </td>
                 </tr>
@@ -11577,6 +13061,11 @@ window.render_customer_statement = function(data) {
     window.filter_customer_statement_by_vehicle(currentVeh);
 };
 
+window.filter_customer_statement_by_station = function(selected_st) {
+    window.DEBTORS_STATE.selected_station = selected_st || '';
+    window.filter_customer_statement_by_vehicle(window.DEBTORS_STATE.selected_vehicle || '');
+};
+
 window.filter_customer_statement_by_vehicle = function(selected_veh) {
     const $w = $(window.DEBTORS_STATE.wrapper || document);
     let data = window.DEBTORS_STATE.statement_data;
@@ -11584,9 +13073,11 @@ window.filter_customer_statement_by_vehicle = function(selected_veh) {
 
     let veh = (selected_veh || '').trim().toUpperCase();
     window.DEBTORS_STATE.selected_vehicle = veh;
+    let st = (window.DEBTORS_STATE.selected_station || '').trim();
 
-    // Update select dropdown
+    // Update select dropdowns
     $w.find('#stmt-vehicle-select').val(veh);
+    $w.find('#stmt-station-select').val(st);
 
     // Update chip active styles
     $w.find('.stmt-veh-chip').each(function() {
@@ -11609,19 +13100,29 @@ window.filter_customer_statement_by_vehicle = function(selected_veh) {
     });
 
     let allTxns = data.transactions || [];
-    let txns = veh ? allTxns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh) : allTxns;
+    let txns = allTxns;
+    if (veh) {
+        txns = txns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh);
+    }
+    if (st) {
+        txns = txns.filter(t => (t.station || 'RUBIS POA PLACE').toLowerCase().includes(st.toLowerCase()));
+    }
 
+    let isFiltered = Boolean(veh || st);
     let openBal = Number(data.opening_balance || 0);
     let totalLitres = txns.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
-    let periodInvoices = veh ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
-    let periodPayments = veh ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
+    let periodInvoices = isFiltered ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
+    let periodPayments = isFiltered ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
     let clBal = Number(data.closing_balance != null ? data.closing_balance : (openBal + periodInvoices - periodPayments));
 
     // Update KPI summary cards
     $w.find('#stmt-kpi-opening').text(format_kes(openBal));
     $w.find('#stmt-kpi-litres').text(`${totalLitres.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L`);
-    if (veh) {
-        $w.find('#stmt-kpi-litres-sub').text(`Filtered: ${veh}`);
+    let filterLabels = [];
+    if (veh) filterLabels.push(veh);
+    if (st) filterLabels.push(st.includes('Galana') ? 'Galana' : 'Poa Place');
+    if (filterLabels.length > 0) {
+        $w.find('#stmt-kpi-litres-sub').text(`Filtered: ${filterLabels.join(' • ')}`);
         $w.find('#stmt-kpi-invoices').text(format_kes(periodInvoices));
     } else {
         $w.find('#stmt-kpi-litres-sub').text('Total Fuel Volume');
@@ -11632,10 +13133,13 @@ window.filter_customer_statement_by_vehicle = function(selected_veh) {
 
     let rowsHtml = '';
 
-    // 1. Opening Balance Row (9 columns)
+    // 1. Opening Balance Row (10 columns)
     rowsHtml += `
         <tr style="background: #f8fafc; font-weight: 700; border-bottom: 1px solid #e2e8f0;">
             <td style="padding: 5px 8px; color: #475569; white-space: nowrap; font-size: 0.75rem; vertical-align: middle;">${data.start_date ? frappe.datetime.str_to_user(data.start_date) : '--'}</td>
+            <td style="padding: 5px 8px; vertical-align: middle;">
+                <span style="background: #e2e8f0; color: #475569; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px;">ALL</span>
+            </td>
             <td style="padding: 5px 8px; vertical-align: middle;">
                 <span style="background: #e2e8f0; color: #334155; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase;">OPENING B/F</span>
             </td>
@@ -11649,14 +13153,14 @@ window.filter_customer_statement_by_vehicle = function(selected_veh) {
         </tr>
     `;
 
-    // 2. Transaction Rows (9 columns)
+    // 2. Transaction Rows (10 columns)
     if (txns.length === 0) {
-        let msg = veh 
-            ? `No transactions found for vehicle ${veh} during this period (${frappe.datetime.str_to_user(data.start_date)} to ${frappe.datetime.str_to_user(data.end_date)}).`
+        let msg = isFiltered 
+            ? `No transactions found matching filters during this period (${frappe.datetime.str_to_user(data.start_date)} to ${frappe.datetime.str_to_user(data.end_date)}).`
             : `No new invoices or payments recorded during this period (${frappe.datetime.str_to_user(data.start_date)} to ${frappe.datetime.str_to_user(data.end_date)}).`;
         rowsHtml += `
             <tr>
-                <td colspan="9" style="padding: 1.25rem; text-align: center; color: #64748b; font-style: italic; font-size: 0.82rem; background: #ffffff;">
+                <td colspan="10" style="padding: 1.25rem; text-align: center; color: #64748b; font-style: italic; font-size: 0.82rem; background: #ffffff;">
                     ${escape_debtor_html(msg)}
                 </td>
             </tr>
@@ -11723,11 +13227,18 @@ window.filter_customer_statement_by_vehicle = function(selected_veh) {
                 detailsHtml = `<span style="color: #334155; font-size: 0.78rem;">${escape_debtor_html(t.description || '--').replace(/\s*\|\s*/g, ' <span style="color:#cbd5e1;">•</span> ')}</span>`;
             }
 
+            let stName = t.station || 'RUBIS POA PLACE';
+            let isGalana = stName.toLowerCase().includes('galana');
+            let stBadge = isGalana
+                ? `<span style="background: #fef3c7; color: #92400e; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; border: 1px solid #fde68a; white-space: nowrap;">⛽ Galana</span>`
+                : `<span style="background: #e0f2fe; color: #0369a1; font-size: 0.68rem; font-weight: 700; padding: 1px 5px; border-radius: 3px; border: 1px solid #bae6fd; white-space: nowrap;">⛽ Poa Place</span>`;
+
             let litresDisplay = qty > 0 ? `<span style="color: #0284c7; font-family: monospace; font-weight: 700;">${qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L</span>` : `<span style="color: #94a3b8; font-family: monospace;">--</span>`;
 
             rowsHtml += `
                 <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                     <td style="padding: 5px 8px; color: #334155; white-space: nowrap; font-size: 0.75rem; vertical-align: middle;">${t.date ? frappe.datetime.str_to_user(t.date) : '--'}</td>
+                    <td style="padding: 5px 8px; vertical-align: middle;">${stBadge}</td>
                     <td style="padding: 5px 8px; vertical-align: middle;">${badgeHtml}</td>
                     <td style="padding: 5px 8px; vertical-align: middle;">${refHtml}</td>
                     <td style="padding: 5px 8px; vertical-align: middle;">${vehHtml}</td>
@@ -11746,6 +13257,8 @@ window.filter_customer_statement_by_vehicle = function(selected_veh) {
     // Update Foot
     $w.find('#debtors-statement-foot').show();
     $w.find('#stmt-foot-date').text(data.end_date ? frappe.datetime.str_to_user(data.end_date) : '--');
+    let footStLabel = st ? (st.includes('Galana') ? 'Galana' : 'Poa Place') : 'All';
+    $w.find('#stmt-foot-station').text(footStLabel);
     $w.find('#stmt-foot-vehicle-label').text(veh ? veh : 'All Fleet');
     $w.find('#stmt-foot-litres').text(`${totalLitres.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L`);
     $w.find('#stmt-foot-invoices').text(format_num_only(periodInvoices));
@@ -11771,10 +13284,13 @@ window.load_debtors_aging = function() {
         </tr>
     `);
 
+    let station = frappe.defaults.get_user_default("station") || '';
+
     frappe.call({
         method: "fuel_management.fuel_management.page.shift_operation_spa.shift_operation_spa.get_debtors_aging_analysis",
         args: {
-            as_of_date: asOfDate
+            as_of_date: asOfDate,
+            station: station
         },
         callback: function(r) {
             $w.find('#btn-load-aging .spinner').addClass('hidden');
@@ -11892,8 +13408,10 @@ window.render_debtors_aging = function() {
                 <td style="padding: 5px 8px; text-align: center; color: #94a3b8; font-size: 0.75rem; vertical-align: middle;">${idx + 1}</td>
                 <td style="padding: 5px 8px; vertical-align: middle;">
                     <div style="font-weight: 700; color: #0f172a; font-size: 0.82rem; line-height: 1.2;">${escape_debtor_html(c.name)}</div>
-                    <div style="font-size: 0.7rem; color: #64748b; line-height: 1.2; margin-top: 1px;">
+                    <div style="font-size: 0.7rem; color: #64748b; line-height: 1.2; margin-top: 1px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
                         <span>Fleet ID: <b>${escape_debtor_html(c.fleet_id || c.id || 'N/A')}</b></span>
+                        ${c.last_clean_bill_date ? `<span style="background: #f0fdf4; color: #166534; padding: 1px 4px; border-radius: 3px; border: 1px solid #bbf7d0;">Clean Bill: <b>${c.last_clean_bill_date}</b></span>` : ''}
+                        ${c.credit_days ? `<span style="background: #eff6ff; color: #1e40af; padding: 1px 4px; border-radius: 3px; border: 1px solid #bfdbfe;">Terms: <b>${c.credit_days}d</b></span>` : ''}
                     </div>
                 </td>
                 <td style="padding: 5px 8px; text-align: right; font-family: monospace; color: #64748b; font-size: 0.78rem; vertical-align: middle;">${format_num_only(c.credit_limit)}</td>
@@ -12048,17 +13566,20 @@ window.save_debtors_statement_pdf = function() {
     let end_date = data.end_date || '';
     let station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || '';
     let veh = window.DEBTORS_STATE.selected_vehicle || '';
+    let st = window.DEBTORS_STATE.selected_station || '';
     
     frappe.show_alert({ message: "Generating PDF Statement...", indicator: "blue" });
     
     let vehParam = veh ? `&vehicle=${encodeURIComponent(veh)}` : '';
-    let url = `/api/method/fuel_management.fuel_management.api.download_debtors_statement_pdf?customer=${encodeURIComponent(cust_id)}&start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}&station=${encodeURIComponent(station)}${vehParam}`;
+    let stParam = st ? `&selected_station=${encodeURIComponent(st)}` : '';
+    let url = `/api/method/fuel_management.fuel_management.api.download_debtors_statement_pdf?customer=${encodeURIComponent(cust_id)}&start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}&station=${encodeURIComponent(station)}${vehParam}${stParam}`;
     
     let link = document.createElement('a');
     link.href = url;
     link.target = '_blank';
     let vehSlug = veh ? `_${veh.replace(/\s+/g, '_')}` : '';
-    link.download = `Statement_${(data.customer.name || cust_id).replace(/\s+/g, '_')}${vehSlug}_${start_date}_${end_date}.pdf`;
+    let stSlug = st ? `_${st.replace(/\s+/g, '_')}` : '';
+    link.download = `Statement_${(data.customer.name || cust_id).replace(/\s+/g, '_')}${stSlug}${vehSlug}_${start_date}_${end_date}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -12074,11 +13595,15 @@ window.print_debtors_statement = function() {
     let cust = data.customer || {};
     let allTxns = data.transactions || [];
     let veh = (window.DEBTORS_STATE.selected_vehicle || '').trim().toUpperCase();
-    let txns = veh ? allTxns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh) : allTxns;
+    let st = (window.DEBTORS_STATE.selected_station || '').trim();
+    let txns = allTxns;
+    if (veh) txns = txns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh);
+    if (st) txns = txns.filter(t => (t.station || 'RUBIS POA PLACE').toLowerCase().includes(st.toLowerCase()));
 
+    let isFiltered = Boolean(veh || st);
     let totalLitres = txns.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
-    let periodInvoices = veh ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
-    let periodPayments = veh ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
+    let periodInvoices = isFiltered ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
+    let periodPayments = isFiltered ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
     let stationName = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || "RUBIS ENERGY - KILIBET SERVICE STATION";
 
     let rowsHtml = '';
@@ -12086,6 +13611,7 @@ window.print_debtors_statement = function() {
     rowsHtml += `
         <tr style="background: #f8fafc; font-weight: bold;">
             <td>${frappe.datetime.str_to_user(data.start_date)}</td>
+            <td style="text-align: center; color: #64748b; font-size: 8px;">ALL</td>
             <td>OPENING B/F</td>
             <td>--</td>
             <td>--</td>
@@ -12124,9 +13650,17 @@ window.print_debtors_statement = function() {
 
         let qtyStr = qty > 0 ? `${qty.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} L` : '--';
 
+        let stName = t.station || 'RUBIS POA PLACE';
+        let isGalana = stName.toLowerCase().includes('galana');
+        let stShort = isGalana ? 'Galana' : 'Poa Place';
+        let stColor = isGalana ? '#92400e' : '#0369a1';
+        let stBg = isGalana ? '#fef3c7' : '#e0f2fe';
+        let stDisplay = `<span style="background: ${stBg}; color: ${stColor}; padding: 1px 4px; border-radius: 3px; font-weight: bold; font-size: 8px;">${stShort}</span>`;
+
         rowsHtml += `
             <tr>
                 <td>${frappe.datetime.str_to_user(t.date)}</td>
+                <td style="text-align: center;">${stDisplay}</td>
                 <td>${escape_debtor_html(t.voucher_type || t.ref_type || 'TXN')}</td>
                 <td><b>${escape_debtor_html(refStr)}</b></td>
                 <td style="font-family: monospace; font-weight: bold;">${escape_debtor_html(vehStr)}</td>
@@ -12143,6 +13677,7 @@ window.print_debtors_statement = function() {
     rowsHtml += `
         <tr style="background: #eef2ff; font-weight: bold; border-top: 2px solid #0f172a;">
             <td>${frappe.datetime.str_to_user(data.end_date)}</td>
+            <td style="text-align: center; font-size: 8px; color: #475569;">${st ? escape_debtor_html(st) : 'All'}</td>
             <td>CLOSING C/F</td>
             <td>--</td>
             <td style="font-family: monospace; font-weight: bold;">${veh ? escape_debtor_html(veh) : 'All Fleet'}</td>
@@ -12155,6 +13690,7 @@ window.print_debtors_statement = function() {
     `;
 
     let vehSubHeader = veh ? `<div style="font-size: 11px; color: #0284c7; margin-top: 3px;"><b>Filtered Vehicle:</b> ${escape_debtor_html(veh)}</div>` : '';
+    let stSubHeader = st ? `<div style="font-size: 11px; color: #059669; margin-top: 3px;"><b>Filtered Station:</b> ${escape_debtor_html(st)}</div>` : '';
 
     let html = `
         <!DOCTYPE html>
@@ -12192,6 +13728,7 @@ window.print_debtors_statement = function() {
                             <b>Period:</b> ${frappe.datetime.str_to_user(data.start_date)} &mdash; ${frappe.datetime.str_to_user(data.end_date)}<br>
                             <b>Date Printed:</b> ${new Date().toLocaleDateString()}
                         </div>
+                        ${stSubHeader}
                         ${vehSubHeader}
                         <div style="margin-top: 4px; font-size: 12px; font-weight: bold; color: #1e3a8a;">
                             Closing Due: ${format_kes(data.closing_balance)}
@@ -12233,6 +13770,7 @@ window.print_debtors_statement = function() {
                 <thead>
                     <tr>
                         <th style="width: 65px;">Date</th>
+                        <th style="width: 65px; text-align: center;">Station</th>
                         <th style="width: 75px;">Type</th>
                         <th style="width: 80px;">Reference #</th>
                         <th style="width: 85px;">Vehicle Plate</th>
@@ -12418,19 +13956,24 @@ window.export_statement_csv = function() {
     let cust = data.customer || {};
     let allTxns = data.transactions || [];
     let veh = (window.DEBTORS_STATE.selected_vehicle || '').trim().toUpperCase();
-    let txns = veh ? allTxns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh) : allTxns;
+    let st = (window.DEBTORS_STATE.selected_station || '').trim();
+    let txns = allTxns;
+    if (veh) txns = txns.filter(t => (t.vehicle_registration || '').trim().toUpperCase() === veh);
+    if (st) txns = txns.filter(t => (t.station || 'RUBIS POA PLACE').toLowerCase().includes(st.toLowerCase()));
 
+    let isFiltered = Boolean(veh || st);
     let totalLitres = txns.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
-    let periodInvoices = veh ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
-    let periodPayments = veh ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
+    let periodInvoices = isFiltered ? txns.reduce((sum, t) => sum + (Number(t.debit) || 0), 0) : Number(data.period_invoices != null ? data.period_invoices : (data.period_debits || 0));
+    let periodPayments = isFiltered ? txns.reduce((sum, t) => sum + (Number(t.credit) || 0), 0) : Number(data.period_payments != null ? data.period_payments : (data.period_credits || 0));
 
     let csv = `Statement of Account: ${cust.name || ''} (${cust.fleet_id || cust.id || ''})\n`;
     csv += `Period: ${data.start_date} to ${data.end_date}\n`;
+    if (st) csv += `Station Filter: ${st}\n`;
     if (veh) csv += `Vehicle Filter: ${veh}\n`;
     csv += `Total Fuel Volume: ${totalLitres.toFixed(2)} L\n\n`;
 
-    csv += "Date,Voucher Type,Reference No,Vehicle Plate,Description,Litres (L),Debit,Credit,Running Balance\n";
-    csv += `${data.start_date},Opening Balance,--,--,Balance brought forward,0.00,0.00,0.00,${data.opening_balance}\n`;
+    csv += "Date,Station,Voucher Type,Reference No,Vehicle Plate,Description,Litres (L),Debit,Credit,Running Balance\n";
+    csv += `${data.start_date},All Stations,Opening Balance,--,--,Balance brought forward,0.00,0.00,0.00,${data.opening_balance}\n`;
 
     txns.forEach(t => {
         let refStr = t.entry_number ? `#${t.entry_number}` : (t.trans_no || t.reference_no || '');
@@ -12449,22 +13992,24 @@ window.export_statement_csv = function() {
             descStr = `${t.mode_of_payment}${csa_name ? ' - Recv: ' + csa_name : ''}${t.memo ? ' - ' + t.memo : ''}`;
         }
 
+        let stStr = `"${(t.station || 'RUBIS POA PLACE').replace(/"/g, '""')}"`;
         let desc = `"${descStr.replace(/"/g, '""')}"`;
         let ref = `"${refStr.replace(/"/g, '""')}"`;
         let vehPlate = `"${(t.vehicle_registration || '').replace(/"/g, '""')}"`;
         let qty = Number(t.quantity || 0).toFixed(2);
         let bal = t.running_balance != null ? t.running_balance : (t.balance || 0);
-        csv += `${t.date},"${t.voucher_type || t.ref_type || 'TXN'}",${ref},${vehPlate},${desc},${qty},${t.debit || 0},${t.credit || 0},${bal}\n`;
+        csv += `${t.date},${stStr},"${t.voucher_type || t.ref_type || 'TXN'}",${ref},${vehPlate},${desc},${qty},${t.debit || 0},${t.credit || 0},${bal}\n`;
     });
 
-    csv += `${data.end_date},Closing Balance,--,${veh || 'All Fleet'},Total amount due / Volume,${totalLitres.toFixed(2)},${periodInvoices},${periodPayments},${data.closing_balance}\n`;
+    csv += `${data.end_date},${st || 'All Stations'},Closing Balance,--,${veh || 'All Fleet'},Total amount due / Volume,${totalLitres.toFixed(2)},${periodInvoices},${periodPayments},${data.closing_balance}\n`;
 
     let blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     let link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     let custSlug = (cust.name || 'Debtor').replace(/[^a-zA-Z0-9]/g, '_');
+    let stSlug = st ? `_${st.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
     let vehSlug = veh ? `_${veh.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
-    link.download = `Statement_${custSlug}${vehSlug}_${data.start_date}_${data.end_date}.csv`;
+    link.download = `Statement_${custSlug}${stSlug}${vehSlug}_${data.start_date}_${data.end_date}.csv`;
     link.click();
 };
 
@@ -12536,12 +14081,16 @@ window.render_homepage_dom = function($wrapper, data, from_date, to_date) {
     
     // --- B. MONTHLY SALES VOLUME SNAPSHOT (Volumes: Litres & KGs, NOT KSh) ---
     $wrapper.find('#home-month-label').text(data.month_label || "This Month");
-    $wrapper.find('#mon-kpi-total-litres').text(fmtNum(Math.round(mon.total_litres || 0), 0));
-    $wrapper.find('#mon-kpi-petrol-litres').text(fmtNum(Math.round(mon.petrol_litres || 0), 0));
-    $wrapper.find('#mon-kpi-diesel-litres').text(fmtNum(Math.round(mon.diesel_litres || 0), 0));
-    $wrapper.find('#mon-kpi-lubes-litres').text(fmtNum(Math.round(mon.lubes_litres || 0), 0));
-    $wrapper.find('#mon-kpi-gas-kgs').text(fmtNum(Math.round(mon.gas_kgs || 0), 0));
+    $wrapper.find('#mon-kpi-total-litres').text(fmtNum(mon.total_litres || 0, 2));
+    $wrapper.find('#mon-kpi-petrol-litres').text(fmtNum(mon.petrol_litres || 0, 2));
+    $wrapper.find('#mon-kpi-diesel-litres').text(fmtNum(mon.diesel_litres || 0, 2));
+    $wrapper.find('#mon-kpi-lubes-litres').text(fmtNum(mon.lubes_litres || 0, 2));
+    $wrapper.find('#mon-kpi-gas-kgs').text(fmtNum(mon.gas_kgs || 0, 1));
     $wrapper.find('#mon-kpi-gas-cylinders').text((mon.gas_cylinders || 0) + ' cylinders');
+    $wrapper.find('#mon-kpi-filters-qty').text(fmtNum(Math.round(mon.filters_qty || 0), 0));
+    $wrapper.find('#mon-kpi-filters-amount').text('KES ' + fmtNum(mon.filters_amount || 0, 2));
+    $wrapper.find('#mon-kpi-greasing-amount').text(fmtNum(mon.greasing_amount || 0, 0));
+    $wrapper.find('#mon-kpi-greasing-vehicles').text((mon.greasing_vehicles || 0) + ' vehicles');
     
     let mTot = mon.total_litres || 1;
     let petrolPct = (( (mon.petrol_litres || 0) / mTot ) * 100).toFixed(1);
@@ -12615,6 +14164,40 @@ window.render_homepage_dom = function($wrapper, data, from_date, to_date) {
         </div>
         <div style="font-size: 0.75rem; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 0.4rem;">
             ${cylCount > 0 ? cylCount + ' cylinders sold' : 'No gas sales'}
+        </div>
+    </div>`;
+
+    // Filters card
+    let filtersQty = kpis.filters_qty || 0;
+    let filtersAmt = kpis.filters_amount || 0;
+    cards_html += `
+    <div style="background: white; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; width: 220px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+            <div style="font-size: 0.75rem; color: #475569; font-weight: 700; text-transform: uppercase;">Filters Sold</div>
+            <span style="background: #cffafe; color: #0891b2; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.68rem; font-weight: 700;">Filters</span>
+        </div>
+        <div style="font-size: 1.5rem; font-weight: 800; color: #0891b2; margin-bottom: 0.5rem; font-family: 'JetBrains Mono', monospace;">
+            ${fmtNum(filtersQty, 0)} <span style="font-size: 0.9rem; font-weight: 600; color: #94a3b8;">PCS</span>
+        </div>
+        <div style="font-size: 0.75rem; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 0.4rem;">
+            ${filtersQty > 0 ? 'KES ' + fmtNum(filtersAmt, 2) + ' sold' : 'No filters sales'}
+        </div>
+    </div>`;
+
+    // Greasing card
+    let greasingAmt = kpis.greasing_amount || 0;
+    let greasingVeh = kpis.greasing_vehicles || 0;
+    cards_html += `
+    <div style="background: white; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; width: 220px; display: flex; flex-direction: column; justify-content: space-between;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+            <div style="font-size: 0.75rem; color: #475569; font-weight: 700; text-transform: uppercase;">Greasing Sales</div>
+            <span style="background: #ffedd5; color: #c2410c; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.68rem; font-weight: 700;">Grease</span>
+        </div>
+        <div style="font-size: 1.5rem; font-weight: 800; color: #ea580c; margin-bottom: 0.5rem; font-family: 'JetBrains Mono', monospace;">
+            <span style="font-size: 0.95rem; font-weight: 600; color: #94a3b8;">KES</span> ${fmtNum(greasingAmt, 0)}
+        </div>
+        <div style="font-size: 0.75rem; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 0.4rem;">
+            ${greasingVeh > 0 ? greasingVeh + ' vehicles' : (greasingAmt > 0 ? 'KES ' + fmtNum(greasingAmt, 2) : 'No greasing sales')}
         </div>
     </div>`;
     
@@ -12763,7 +14346,29 @@ window.render_homepage_dom = function($wrapper, data, from_date, to_date) {
 };
 
 window.render_homepage = function($wrapper, force_refresh=false) {
-    let station = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.station : (frappe.defaults.get_user_default("station") || "RUBIS POA PLACE");
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('.dashboard-wrapper');
+    }
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = $('#spa-layout-container');
+    }
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = $('body');
+    }
+
+    let station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) 
+        || $wrapper.find('#navbar-select-station').val() 
+        || $wrapper.find('#select-station').val() 
+        || (window.HOMEPAGE_CACHE && window.HOMEPAGE_CACHE.station)
+        || null;
+
+    if (!station) {
+        $wrapper.find('#home-station-name').text('Select Station');
+        $wrapper.find('#home-activity-container').html(`<div style="text-align: center; color: #94a3b8; padding: 2.5rem 0; font-size: 0.9rem;">Please select a station from the top dropdown to view live metrics.</div>`);
+        return;
+    }
+    
+    $wrapper.find('#home-station-name').text(station);
     
     // Attach event listeners for date filter
     $wrapper.find('#btn-apply-date-filter').off('click').on('click', function() {
@@ -12856,8 +14461,10 @@ window.close_daily_sales_breakdown = function() {
 
 window.load_daily_sales_breakdown = function(monthVal, fromDate, toDate) {
     let station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                  $('#navbar-select-station').val() ||
+                  $('#select-station').val() ||
                   (window.HOMEPAGE_CACHE && window.HOMEPAGE_CACHE.station) || 
-                  "RUBIS POA PLACE";
+                  null;
     
     let args = { station: station };
     if (fromDate && toDate) {
@@ -13286,152 +14893,623 @@ $(document).on('input', '#dsb-search-input', function() {
 // SHORTAGE MANAGEMENT MODULE
 // ---------------------------------------------------------------------------
 
+window.SHORTAGE_EMPLOYEES = [];
+window.SHORTAGE_HISTORY_CACHE = [];
+
 window.toggle_shortage_cash_account = function() {
     // Disabled cash account dropdown display as requested
     $('#shortage-pay-cash-account-wrapper').hide();
 };
 
+window.SHORTAGE_PAY_CACHE = [];
+window.SHORTAGE_COR_CACHE = [];
+
+window.switch_shortage_subtab = function(targetTab) {
+    let $item = $(`.nav-item[data-target="${targetTab}"]`);
+    if ($item.length) {
+        $item.click();
+    } else {
+        $('.tab-pane').removeClass('active');
+        $(`#${targetTab}`).addClass('active');
+        if (targetTab === 'tab-shortage-payment') window.render_shortage_payment();
+        else if (targetTab === 'tab-shortage-transfer') window.render_shortage_transfer();
+    }
+};
+
+window.switch_to_shortage_payment = function() {
+    window.switch_shortage_subtab('tab-shortage-payment');
+};
+
+window.switch_to_shortage_transfer = function() {
+    window.switch_shortage_subtab('tab-shortage-transfer');
+};
+
+window.switch_to_shorts_report = function() {
+    window.switch_shortage_subtab('tab-shorts-report');
+};
+
+window.render_shortage_payment = function() {
+    if (!$('#shortage-pay-date').val()) {
+        $('#shortage-pay-date').val(frappe.datetime.get_today());
+    }
+    window.load_shortage_form_data();
+    window.load_shortage_pay_history();
+};
+
+window.render_shortage_transfer = function() {
+    if (!$('#shortage-cor-date').val()) {
+        $('#shortage-cor-date').val(frappe.datetime.get_today());
+    }
+    window.load_shortage_form_data();
+    window.load_shortage_cor_history();
+};
+
+window.render_shortage_mgmt = function() {
+    window.render_shortage_payment();
+};
+
 window.load_shortage_form_data = function() {
+    let current_station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                          (window.SHIFT_DOC && window.SHIFT_DOC.station) || 
+                          (frappe.defaults.get_user_default("station") || null);
     frappe.call({
         method: "fuel_management.fuel_management.api.get_shortage_form_data",
+        args: { station: current_station },
         callback: function(r) {
             if (r.message) {
-                // Populate Employees
+                window.SHORTAGE_EMPLOYEES = r.message.employees || [];
+                
+                // Populate Employees dropdowns
                 let empOptions = '<option value="">Select Staff...</option>';
-                r.message.employees.forEach(e => {
-                    empOptions += `<option value="${e.name}">${e.employee_name}</option>`;
+                let filterStaffOptions = '<option value="">All Staff</option>';
+                
+                window.SHORTAGE_EMPLOYEES.forEach(e => {
+                    let balText = e.current_shortage > 0 ? ` (Shortage: ${format_currency(e.current_shortage)})` : '';
+                    let opt = `<option value="${e.name}">${e.employee_name}${balText}</option>`;
+                    empOptions += opt;
+                    filterStaffOptions += `<option value="${e.name}">${e.employee_name}</option>`;
                 });
+                
                 $('#shortage-pay-employee').html(empOptions);
                 $('#shortage-cor-from').html(empOptions);
                 $('#shortage-cor-to').html(empOptions);
+                $('#shortage-pay-filter-staff').html(filterStaffOptions);
+                $('#shortage-cor-filter-staff').html(filterStaffOptions);
+                
+                // Modal dropdowns
+                $('#edit-pay-employee').html(empOptions);
+                $('#edit-cor-from').html(empOptions);
+                $('#edit-cor-to').html(empOptions);
                 
                 // Populate Cash Accounts
-                let cashOptions = '<option value="">Select Account...</option>';
-                r.message.cash_accounts.forEach(c => {
-                    cashOptions += `<option value="${c.name}">${c.account_name} (Bal: ${format_currency(c.current_balance)})</option>`;
-                });
-                $('#shortage-pay-cash-account').html(cashOptions);
+                if (r.message.cash_accounts) {
+                    let cashOptions = '<option value="">Default Cash Account</option>';
+                    r.message.cash_accounts.forEach(c => {
+                        cashOptions += `<option value="${c.name}">${c.account_name}</option>`;
+                    });
+                    $('#shortage-pay-cash-account').html(cashOptions);
+                }
+
+                // Refresh any live balance boxes if staff currently selected
+                $('#shortage-pay-employee').trigger('change');
+                $('#shortage-cor-from').trigger('change');
+                $('#shortage-cor-to').trigger('change');
             }
         }
     });
 };
 
-
-window.cancel_shortage_doc = function(doctype, docname) {
-    frappe.confirm(`Are you sure you want to cancel this ${doctype}? This will reverse the accounting and ledger entries.`, function() {
-        frappe.call({
-            method: "frappe.client.cancel",
-            args: {
-                doctype: doctype,
-                name: docname
-            },
-            callback: function(r) {
-                if(!r.exc) {
-                    frappe.show_alert({message: "Document Cancelled Successfully", indicator: "green"});
-                    window.load_shortage_history();
-                    window.load_shortage_balances();
-                }
-            }
-        });
-    });
-};
-
-window.cancel_shortage_doc = function(doctype, docname) {
-    frappe.confirm(`Are you sure you want to cancel this ${doctype}? This will reverse the accounting and ledger entries.`, function() {
-        frappe.call({
-            method: "frappe.client.cancel",
-            args: {
-                doctype: doctype,
-                name: docname
-            },
-            callback: function(r) {
-                if(!r.exc) {
-                    frappe.show_alert({message: "Document Cancelled Successfully", indicator: "green"});
-                    window.load_shortage_history();
-                    window.load_shortage_balances();
-                }
-            }
-        });
-    });
-};
-
-window.load_shortage_history = function() {
-    $('#shortage-history-body').html('<tr><td colspan="5" class="text-center py-4 text-gray-500">Loading...</td></tr>');
+// ---------------------------------------------------------------------------
+// SHORTAGE PAYMENTS HISTORY
+// ---------------------------------------------------------------------------
+window.load_shortage_pay_history = function() {
+    $('#shortage-pay-table-body').html('<tr><td colspan="7" class="text-center py-6 text-gray-500"><span class="spinner-border spinner-border-sm mr-2" role="status"></span>Loading shortage payments...</td></tr>');
     
-    let s = $('#shortage-history-start').val();
-    let e = $('#shortage-history-end').val();
-    let args = {};
-    if (s && e) { args.start_date = s; args.end_date = e; }
+    let s = $('#shortage-pay-filter-start').val();
+    let e = $('#shortage-pay-filter-end').val();
+    let staff = $('#shortage-pay-filter-staff').val();
+    
+    let current_station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                          (window.SHIFT_DOC && window.SHIFT_DOC.station) || 
+                          (frappe.defaults.get_user_default("station") || null);
+    let args = { record_type: 'Payment' };
+    if (current_station) args.station = current_station;
+    if (s) args.start_date = s;
+    if (e) args.end_date = e;
+    if (staff) args.employee = staff;
     
     frappe.call({
         method: "fuel_management.fuel_management.api.get_recent_shortage_records",
         args: args,
         callback: function(r) {
-            let count = r.message ? r.message.length : 0;
-            if (!s && !e) {
-                $('#shortage-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 20 entries &bull; Use date filter for more)</span>`);
-            } else {
-                $('#shortage-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
-            }
+            let records = [];
+            let totalPay = 0;
+            
             if (r.message) {
-                let html = '';
-                if (r.message.length === 0) {
-                    html = '<tr><td colspan="5" class="text-center py-4 text-gray-500">No recent activity</td></tr>';
-                } else {
-                    r.message.forEach(row => {
-                        let isPay = row.type === 'Payment';
-                        let typeBadge = isPay 
-                            ? `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded border border-blue-200">Payment</span>`
-                            : `<span class="bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded border border-orange-200">Correction</span>`;
-                        let staff = isPay ? row.employee_name : `${row.from_employee_name} -> ${row.to_employee_name}`;
-                        
-                        let doctype_url = isPay ? 'staff-shortage-payment' : 'staff-shortage-correction';
-                        let dt_str = isPay ? 'Staff Shortage Payment' : 'Staff Shortage Correction';
-                        
-                        let actions = `
-                            <div class="flex items-center justify-end gap-2">
-                                <a href="/app/${doctype_url}/${row.name}" target="_blank" class="text-blue-600 hover:text-blue-800" title="View / Edit">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                </a>
-                                <button onclick="window.cancel_shortage_doc('${dt_str}', '${row.name}')" class="text-red-600 hover:text-red-800" title="Delete / Cancel">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                                </button>
-                            </div>
-                        `;
-                        
-                        html += `
-                            <tr class="border-b border-gray-100 hover:bg-gray-50">
-                                <td class="px-4 py-3">${frappe.datetime.str_to_user(row.date)}</td>
-                                <td class="px-4 py-3">${typeBadge}</td>
-                                <td class="px-4 py-3">${staff}</td>
-                                <td class="px-4 py-3 text-right font-medium text-gray-900">${format_currency(row.amount)}</td>
-                                <td class="px-4 py-3 text-right">${actions}</td>
-                            </tr>
-                        `;
-                    });
+                if (Array.isArray(r.message)) {
+                    records = r.message;
+                } else if (r.message.records) {
+                    records = r.message.records;
+                    if (r.message.summary) {
+                        totalPay = r.message.summary.total_payments_amount || 0;
+                    }
                 }
-                $('#shortage-history-body').html(html);
             }
+            
+            window.SHORTAGE_PAY_CACHE = records || [];
+            if (!totalPay) {
+                window.SHORTAGE_PAY_CACHE.forEach(row => {
+                    totalPay += (parseFloat(row.amount) || 0);
+                });
+            }
+            
+            $('#kpi-pay-total-count').text(`${window.SHORTAGE_PAY_CACHE.length} Records`);
+            $('#kpi-pay-total-amount').text(`Payments: ${format_currency(totalPay)}`);
+            
+            let isFiltered = s || e || staff;
+            if (!isFiltered) {
+                $('#shortage-pay-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">Showing ${window.SHORTAGE_PAY_CACHE.length} recent records &bull; Use filters above for more</span>`);
+            } else {
+                $('#shortage-pay-history-subtitle').html(`<span style="color:#1d4ed8; font-size:0.85rem; font-weight:600;">Filtered: ${window.SHORTAGE_PAY_CACHE.length} records found</span>`);
+            }
+            
+            window.filter_shortage_pay_table();
         }
     });
 };
 
+window.filter_shortage_pay_table = function() {
+    let q = ($('#shortage-pay-filter-search').val() || '').trim().toLowerCase();
+    let records = window.SHORTAGE_PAY_CACHE || [];
+    
+    if (q) {
+        records = records.filter(row => {
+            let nameMatch = (row.name || '').toLowerCase().includes(q);
+            let empMatch = (row.employee_name || row.employee || '').toLowerCase().includes(q);
+            let refMatch = (row.reference_no || '').toLowerCase().includes(q);
+            let remarksMatch = (row.remarks || '').toLowerCase().includes(q);
+            let modeMatch = (row.payment_mode || '').toLowerCase().includes(q);
+            return nameMatch || empMatch || refMatch || remarksMatch || modeMatch;
+        });
+    }
+    
+    window.render_shortage_pay_table(records);
+};
+
+window.reset_shortage_pay_filters = function() {
+    $('#shortage-pay-filter-start').val('');
+    $('#shortage-pay-filter-end').val('');
+    $('#shortage-pay-filter-staff').val('');
+    $('#shortage-pay-filter-search').val('');
+    window.load_shortage_pay_history();
+};
+
+window.render_shortage_pay_table = function(rows) {
+    if (!rows || rows.length === 0) {
+        $('#shortage-pay-table-body').html('<tr><td colspan="7" class="text-center py-8 text-gray-500 font-medium">No shortage payments found matching the criteria.</td></tr>');
+        return;
+    }
+    
+    let html = '';
+    rows.forEach(row => {
+        let staffDisplay = `<span class="font-semibold text-gray-900">${row.employee_name || row.employee}</span>`;
+        
+        let modeRefDisplay = `<span class="text-gray-800 font-medium">${row.payment_mode || 'Cash'}</span>`;
+        if (row.reference_no) {
+            modeRefDisplay += ` <div class="text-xs text-blue-700 font-mono mt-0.5">${frappe.utils.escape_html(row.reference_no)}</div>`;
+        }
+        
+        let remarksDisplay = row.remarks ? `<span class="text-xs text-gray-600 line-clamp-1" title="${frappe.utils.escape_html(row.remarks)}">${frappe.utils.escape_html(row.remarks)}</span>` : `<span class="text-gray-400 text-xs">—</span>`;
+        
+        let actions = `
+            <div class="flex items-center justify-center gap-1">
+                <button type="button" class="btn-edit-shortage p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors" data-doctype="Staff Shortage Payment" data-name="${row.name}" title="Edit Record">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button type="button" class="btn-delete-shortage p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors" data-doctype="Staff Shortage Payment" data-name="${row.name}" data-amount="${row.amount}" data-type="Payment" title="Delete Record">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+            </div>
+        `;
+        
+        html += `
+            <tr class="hover:bg-blue-50/40 transition-colors">
+                <td class="px-4 py-3 whitespace-nowrap text-gray-800 font-medium">${frappe.datetime.str_to_user(row.date)}</td>
+                <td class="px-4 py-3 whitespace-nowrap font-mono text-xs text-gray-600 font-semibold">${row.name}</td>
+                <td class="px-4 py-3">${staffDisplay}</td>
+                <td class="px-4 py-3 whitespace-nowrap">${modeRefDisplay}</td>
+                <td class="px-4 py-3">${remarksDisplay}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-right font-bold text-blue-900">${format_currency(row.amount)}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-center">${actions}</td>
+            </tr>
+        `;
+    });
+    
+    $('#shortage-pay-table-body').html(html);
+};
+
+// ---------------------------------------------------------------------------
+// SHORTAGE TRANSFERS HISTORY
+// ---------------------------------------------------------------------------
+window.load_shortage_cor_history = function() {
+    $('#shortage-cor-table-body').html('<tr><td colspan="7" class="text-center py-6 text-gray-500"><span class="spinner-border spinner-border-sm mr-2" role="status"></span>Loading shortage transfers...</td></tr>');
+    
+    let s = $('#shortage-cor-filter-start').val();
+    let e = $('#shortage-cor-filter-end').val();
+    let staff = $('#shortage-cor-filter-staff').val();
+    
+    let current_station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                          (window.SHIFT_DOC && window.SHIFT_DOC.station) || 
+                          (frappe.defaults.get_user_default("station") || null);
+    let args = { record_type: 'Correction' };
+    if (current_station) args.station = current_station;
+    if (s) args.start_date = s;
+    if (e) args.end_date = e;
+    if (staff) args.employee = staff;
+    
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_recent_shortage_records",
+        args: args,
+        callback: function(r) {
+            let records = [];
+            let totalCor = 0;
+            
+            if (r.message) {
+                if (Array.isArray(r.message)) {
+                    records = r.message;
+                } else if (r.message.records) {
+                    records = r.message.records;
+                    if (r.message.summary) {
+                        totalCor = r.message.summary.total_corrections_amount || 0;
+                    }
+                }
+            }
+            
+            window.SHORTAGE_COR_CACHE = records || [];
+            if (!totalCor) {
+                window.SHORTAGE_COR_CACHE.forEach(row => {
+                    totalCor += (parseFloat(row.amount) || 0);
+                });
+            }
+            
+            $('#kpi-cor-total-count').text(`${window.SHORTAGE_COR_CACHE.length} Records`);
+            $('#kpi-cor-total-amount').text(`Transfers: ${format_currency(totalCor)}`);
+            
+            let isFiltered = s || e || staff;
+            if (!isFiltered) {
+                $('#shortage-cor-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">Showing ${window.SHORTAGE_COR_CACHE.length} recent records &bull; Use filters above for more</span>`);
+            } else {
+                $('#shortage-cor-history-subtitle').html(`<span style="color:#c2410c; font-size:0.85rem; font-weight:600;">Filtered: ${window.SHORTAGE_COR_CACHE.length} records found</span>`);
+            }
+            
+            window.filter_shortage_cor_table();
+        }
+    });
+};
+
+window.filter_shortage_cor_table = function() {
+    let q = ($('#shortage-cor-filter-search').val() || '').trim().toLowerCase();
+    let records = window.SHORTAGE_COR_CACHE || [];
+    
+    if (q) {
+        records = records.filter(row => {
+            let nameMatch = (row.name || '').toLowerCase().includes(q);
+            let fromMatch = (row.from_employee_name || row.from_employee || '').toLowerCase().includes(q);
+            let toMatch = (row.to_employee_name || row.to_employee || '').toLowerCase().includes(q);
+            let remarksMatch = (row.remarks || '').toLowerCase().includes(q);
+            return nameMatch || fromMatch || toMatch || remarksMatch;
+        });
+    }
+    
+    window.render_shortage_cor_table(records);
+};
+
+window.reset_shortage_cor_filters = function() {
+    $('#shortage-cor-filter-start').val('');
+    $('#shortage-cor-filter-end').val('');
+    $('#shortage-cor-filter-staff').val('');
+    $('#shortage-cor-filter-search').val('');
+    window.load_shortage_cor_history();
+};
+
+window.render_shortage_cor_table = function(rows) {
+    if (!rows || rows.length === 0) {
+        $('#shortage-cor-table-body').html('<tr><td colspan="7" class="text-center py-8 text-gray-500 font-medium">No shortage transfers found matching the criteria.</td></tr>');
+        return;
+    }
+    
+    let html = '';
+    rows.forEach(row => {
+        let fromDisplay = `<span class="font-semibold text-green-800">${row.from_employee_name || row.from_employee}</span>`;
+        let toDisplay = `<span class="font-semibold text-orange-800">${row.to_employee_name || row.to_employee}</span>`;
+        let remarksDisplay = row.remarks ? `<span class="text-xs text-gray-700" title="${frappe.utils.escape_html(row.remarks)}">${frappe.utils.escape_html(row.remarks)}</span>` : `<span class="text-gray-400 text-xs">—</span>`;
+        
+        let actions = `
+            <div class="flex items-center justify-center gap-1">
+                <button type="button" class="btn-edit-shortage p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors" data-doctype="Staff Shortage Correction" data-name="${row.name}" title="Edit Record">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button type="button" class="btn-delete-shortage p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors" data-doctype="Staff Shortage Correction" data-name="${row.name}" data-amount="${row.amount}" data-type="Correction" title="Delete Record">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+            </div>
+        `;
+        
+        html += `
+            <tr class="hover:bg-orange-50/40 transition-colors">
+                <td class="px-4 py-3 whitespace-nowrap text-gray-800 font-medium">${frappe.datetime.str_to_user(row.date)}</td>
+                <td class="px-4 py-3 whitespace-nowrap font-mono text-xs text-gray-600 font-semibold">${row.name}</td>
+                <td class="px-4 py-3">${fromDisplay}</td>
+                <td class="px-4 py-3">${toDisplay}</td>
+                <td class="px-4 py-3">${remarksDisplay}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-right font-bold text-orange-900">${format_currency(row.amount)}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-center">${actions}</td>
+            </tr>
+        `;
+    });
+    
+    $('#shortage-cor-table-body').html(html);
+};
+
+window.load_shortage_history = function() {
+    window.load_shortage_pay_history();
+    window.load_shortage_cor_history();
+};
+
+// ---------------------------------------------------------------------------
+// SHORTAGE LIVE BALANCE LISTENERS
+// ---------------------------------------------------------------------------
+$(document).on('change', '#shortage-pay-employee', function() {
+    let empId = $(this).val();
+    let emp = (window.SHORTAGE_EMPLOYEES || []).find(e => e.name === empId);
+    if (emp) {
+        let bal = parseFloat(emp.current_shortage) || 0;
+        $('#shortage-pay-emp-balance').text(format_currency(bal));
+        if (bal > 0) {
+            $('#shortage-pay-emp-balance').removeClass('text-green-600').addClass('text-red-600');
+            $('#btn-pay-full-shortage').show();
+        } else {
+            $('#shortage-pay-emp-balance').removeClass('text-red-600').addClass('text-green-600');
+            $('#btn-pay-full-shortage').hide();
+        }
+        $('#shortage-pay-emp-balance-box').removeClass('hidden');
+    } else {
+        $('#shortage-pay-emp-balance-box').addClass('hidden');
+    }
+});
+
+$(document).on('click', '#btn-pay-full-shortage', function() {
+    let empId = $('#shortage-pay-employee').val();
+    let emp = (window.SHORTAGE_EMPLOYEES || []).find(e => e.name === empId);
+    if (emp) {
+        let bal = parseFloat(emp.current_shortage) || 0;
+        if (bal > 0) {
+            $('#shortage-pay-amount').val(bal.toFixed(2));
+        }
+    }
+});
+
+$(document).on('change', '#shortage-cor-from', function() {
+    let empId = $(this).val();
+    let emp = (window.SHORTAGE_EMPLOYEES || []).find(e => e.name === empId);
+    if (emp) {
+        let bal = parseFloat(emp.current_shortage) || 0;
+        $('#shortage-cor-from-balance').text(format_currency(bal));
+        if (bal > 0) {
+            $('#btn-transfer-full-shortage').show();
+        } else {
+            $('#btn-transfer-full-shortage').hide();
+        }
+        $('#shortage-cor-from-balance-box').removeClass('hidden');
+    } else {
+        $('#shortage-cor-from-balance-box').addClass('hidden');
+    }
+});
+
+$(document).on('click', '#btn-transfer-full-shortage', function() {
+    let empId = $('#shortage-cor-from').val();
+    let emp = (window.SHORTAGE_EMPLOYEES || []).find(e => e.name === empId);
+    if (emp) {
+        let bal = parseFloat(emp.current_shortage) || 0;
+        if (bal > 0) {
+            $('#shortage-cor-amount').val(bal.toFixed(2));
+        }
+    }
+});
+
+$(document).on('change', '#shortage-cor-to', function() {
+    let empId = $(this).val();
+    let emp = (window.SHORTAGE_EMPLOYEES || []).find(e => e.name === empId);
+    if (emp) {
+        let bal = parseFloat(emp.current_shortage) || 0;
+        $('#shortage-cor-to-balance').text(format_currency(bal));
+        $('#shortage-cor-to-balance-box').removeClass('hidden');
+    } else {
+        $('#shortage-cor-to-balance-box').addClass('hidden');
+    }
+});
+
+// ---------------------------------------------------------------------------
+// SHORTAGE EDIT MODAL LOGIC
+// ---------------------------------------------------------------------------
+window.open_edit_shortage_modal = function(doctype, name) {
+    let row = (window.SHORTAGE_PAY_CACHE || []).find(r => r.name === name) ||
+              (window.SHORTAGE_COR_CACHE || []).find(r => r.name === name) ||
+              (window.SHORTAGE_HISTORY_CACHE || []).find(r => r.name === name);
+              
+    if (!row) {
+        frappe.msgprint("Record details not found. Please refresh the page.");
+        return;
+    }
+    
+    $('#edit-shortage-doctype').val(doctype);
+    $('#edit-shortage-name').val(name);
+    $('#edit-shortage-badge').text(name);
+    
+    let isPay = doctype === 'Staff Shortage Payment' || row.type === 'Payment';
+    if (isPay) {
+        $('#edit-shortage-title-text').text('Edit Shortage Payment');
+        $('#edit-shortage-payment-fields').show();
+        $('#edit-shortage-correction-fields').hide();
+        
+        $('#edit-pay-employee').val(row.employee);
+        $('#edit-pay-mode').val(row.payment_mode || 'Cash');
+        $('#edit-pay-date').val(row.date);
+        $('#edit-pay-amount').val(row.amount);
+        $('#edit-pay-reference').val(row.reference_no || '');
+        $('#edit-pay-remarks').val(row.remarks || '');
+    } else {
+        $('#edit-shortage-title-text').text('Edit Shortage Transfer');
+        $('#edit-shortage-payment-fields').hide();
+        $('#edit-shortage-correction-fields').show();
+        
+        $('#edit-cor-from').val(row.from_employee);
+        $('#edit-cor-to').val(row.to_employee);
+        $('#edit-cor-date').val(row.date);
+        $('#edit-cor-amount').val(row.amount);
+        $('#edit-cor-remarks').val(row.remarks || '');
+    }
+    
+    $('#modal-edit-shortage').css('display', 'flex');
+};
+
+window.close_edit_shortage_modal = function() {
+    $('#modal-edit-shortage').hide();
+};
+
+window.save_edit_shortage_modal = function() {
+    let doctype = $('#edit-shortage-doctype').val();
+    let name = $('#edit-shortage-name').val();
+    let isPay = doctype === 'Staff Shortage Payment';
+    
+    let args = { doctype: doctype, name: name };
+    
+    if (isPay) {
+        let emp = $('#edit-pay-employee').val();
+        let mode = $('#edit-pay-mode').val();
+        let date = $('#edit-pay-date').val();
+        let amt = parseFloat($('#edit-pay-amount').val());
+        let ref = $('#edit-pay-reference').val();
+        let remarks = $('#edit-pay-remarks').val();
+        
+        if (!emp) { frappe.msgprint("Please select a staff member"); return; }
+        if (!date) { frappe.msgprint("Please enter a valid date"); return; }
+        if (!amt || amt <= 0) { frappe.msgprint("Please enter a valid positive amount"); return; }
+        
+        args.employee = emp;
+        args.payment_mode = mode;
+        args.date = date;
+        args.amount = amt;
+        args.reference_no = ref;
+        args.remarks = remarks;
+    } else {
+        let from_emp = $('#edit-cor-from').val();
+        let to_emp = $('#edit-cor-to').val();
+        let date = $('#edit-cor-date').val();
+        let amt = parseFloat($('#edit-cor-amount').val());
+        let remarks = $('#edit-cor-remarks').val();
+        
+        if (!from_emp || !to_emp) { frappe.msgprint("Please select both staff members"); return; }
+        if (from_emp === to_emp) { frappe.msgprint("Cannot transfer to the same staff member"); return; }
+        if (!date) { frappe.msgprint("Please enter a valid date"); return; }
+        if (!amt || amt <= 0) { frappe.msgprint("Please enter a valid positive amount"); return; }
+        
+        args.from_employee = from_emp;
+        args.to_employee = to_emp;
+        args.date = date;
+        args.amount = amt;
+        args.remarks = remarks;
+    }
+    
+    let $btn = $('#btn-save-edit-shortage');
+    let originalHtml = $btn.html();
+    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm mr-1" role="status"></span> Saving...');
+    
+    frappe.call({
+        method: "fuel_management.fuel_management.api.update_shortage_record",
+        args: args,
+        callback: function(r) {
+            $btn.prop('disabled', false).html(originalHtml);
+            if (!r.exc) {
+                frappe.show_alert({message: "Record Updated Successfully", indicator: "green"});
+                window.close_edit_shortage_modal();
+                window.load_shortage_form_data();
+                window.load_shortage_pay_history();
+                window.load_shortage_cor_history();
+                if (typeof window.load_shortage_balances === 'function') {
+                    window.load_shortage_balances();
+                }
+            }
+        },
+        error: function() {
+            $btn.prop('disabled', false).html(originalHtml);
+        }
+    });
+};
+
+// ---------------------------------------------------------------------------
+// SHORTAGE DELETE ACTION
+// ---------------------------------------------------------------------------
+window.delete_shortage_row = function(doctype, name, amount, type) {
+    let typeLabel = type === 'Payment' ? 'payment' : 'transfer / correction';
+    frappe.confirm(
+        `Are you sure you want to permanently delete this shortage ${typeLabel} (<b>${name}</b>) of <b>${format_currency(amount)}</b>?<br><br><span style="color:#dc2626; font-size:0.85rem;">This will reverse all associated liability ledgers and accounting entries.</span>`,
+        function() {
+            frappe.call({
+                method: "fuel_management.fuel_management.api.delete_shortage_record",
+                args: { doctype: doctype, name: name },
+                callback: function(r) {
+                    if (!r.exc) {
+                        frappe.show_alert({message: "Shortage Record Deleted Successfully", indicator: "green"});
+                        window.load_shortage_form_data();
+                        window.load_shortage_pay_history();
+                        window.load_shortage_cor_history();
+                        if (typeof window.load_shortage_balances === 'function') {
+                            window.load_shortage_balances();
+                        }
+                    }
+                }
+            });
+        }
+    );
+};
+
+// Event delegation for Edit and Delete buttons
+$(document).on('click', '.btn-edit-shortage', function() {
+    let dt = $(this).attr('data-doctype');
+    let name = $(this).attr('data-name');
+    window.open_edit_shortage_modal(dt, name);
+});
+
+$(document).on('click', '.btn-delete-shortage', function() {
+    let dt = $(this).attr('data-doctype');
+    let name = $(this).attr('data-name');
+    let amt = parseFloat($(this).attr('data-amount')) || 0;
+    let type = $(this).attr('data-type');
+    window.delete_shortage_row(dt, name, amt, type);
+});
+
+// ---------------------------------------------------------------------------
+// SUBMIT PAYMENT ACTION (Supports Back-Dating)
+// ---------------------------------------------------------------------------
 window.submit_shortage_payment = function() {
     let employee = $('#shortage-pay-employee').val();
     let mode = $('#shortage-pay-mode').val();
     let account = $('#shortage-pay-cash-account').val();
     let amount = parseFloat($('#shortage-pay-amount').val());
+    let date = $('#shortage-pay-date').val() || frappe.datetime.get_today();
     let ref = $('#shortage-pay-reference').val();
     let remarks = $('#shortage-pay-remarks').val();
     
     if (!employee) { frappe.msgprint("Please select a staff member"); return; }
     if (!amount || amount <= 0) { frappe.msgprint("Enter a valid amount"); return; }
+    if (!date) { frappe.msgprint("Please enter a valid payment date"); return; }
     
     let shift_ref = window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.name : null;
     
     let $btn = $('#btn-submit-shortage-pay');
     let original_html = $btn.html();
-    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="margin-right: 5px;"></span> Processing...');
+    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span> Processing...');
     
     frappe.call({
         method: "fuel_management.fuel_management.api.submit_shortage_payment",
@@ -13439,7 +15517,7 @@ window.submit_shortage_payment = function() {
             employee: employee,
             payment_mode: mode,
             amount: amount,
-            date: frappe.datetime.get_today(),
+            date: date,
             shift_reference: shift_ref,
             cash_account: account,
             reference_no: ref,
@@ -13448,11 +15526,15 @@ window.submit_shortage_payment = function() {
         callback: function(r) {
             $btn.prop('disabled', false).html(original_html);
             if (!r.exc) {
-                frappe.show_alert({message: "Payment Recorded Successfully", indicator: "green"});
+                frappe.show_alert({message: `Payment of ${format_currency(amount)} Recorded Successfully (Date: ${date})`, indicator: "green"});
                 $('#shortage-pay-amount').val('');
                 $('#shortage-pay-reference').val('');
                 $('#shortage-pay-remarks').val('');
-                window.load_shortage_history();
+                window.load_shortage_form_data();
+                window.load_shortage_pay_history();
+                if (typeof window.load_shortage_balances === 'function') {
+                    window.load_shortage_balances();
+                }
             }
         },
         error: function() {
@@ -13461,19 +15543,25 @@ window.submit_shortage_payment = function() {
     });
 };
 
+// ---------------------------------------------------------------------------
+// SUBMIT CORRECTION / TRANSFER ACTION (Supports Back-Dating)
+// ---------------------------------------------------------------------------
 window.submit_shortage_correction = function() {
     let from_emp = $('#shortage-cor-from').val();
     let to_emp = $('#shortage-cor-to').val();
     let amount = parseFloat($('#shortage-cor-amount').val());
+    let date = $('#shortage-cor-date').val() || frappe.datetime.get_today();
     let remarks = $('#shortage-cor-remarks').val();
     
     if (!from_emp || !to_emp) { frappe.msgprint("Please select both staff members"); return; }
     if (from_emp === to_emp) { frappe.msgprint("Cannot transfer to the same staff member"); return; }
     if (!amount || amount <= 0) { frappe.msgprint("Enter a valid amount"); return; }
+    if (!date) { frappe.msgprint("Please enter a valid transfer date"); return; }
+    if (!remarks || !remarks.trim()) { frappe.msgprint("Please enter the reason for transfer"); return; }
     
     let $btn = $('#btn-submit-shortage-cor');
     let original_html = $btn.html();
-    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="margin-right: 5px;"></span> Processing...');
+    $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span> Processing...');
     
     frappe.call({
         method: "fuel_management.fuel_management.api.submit_shortage_correction",
@@ -13481,16 +15569,20 @@ window.submit_shortage_correction = function() {
             from_employee: from_emp,
             to_employee: to_emp,
             amount: amount,
-            date: frappe.datetime.get_today(),
+            date: date,
             remarks: remarks
         },
         callback: function(r) {
             $btn.prop('disabled', false).html(original_html);
             if (!r.exc) {
-                frappe.show_alert({message: "Correction Recorded Successfully", indicator: "green"});
+                frappe.show_alert({message: `Transfer of ${format_currency(amount)} Recorded Successfully (Date: ${date})`, indicator: "green"});
                 $('#shortage-cor-amount').val('');
                 $('#shortage-cor-remarks').val('');
-                window.load_shortage_history();
+                window.load_shortage_form_data();
+                window.load_shortage_cor_history();
+                if (typeof window.load_shortage_balances === 'function') {
+                    window.load_shortage_balances();
+                }
             }
         },
         error: function() {
@@ -13500,9 +15592,16 @@ window.submit_shortage_correction = function() {
 };
 
 // Hook into tab switching to load data
+$(document).on('click', '.nav-item[data-target="tab-shortage-payment"]', function() {
+    window.render_shortage_payment();
+});
+
+$(document).on('click', '.nav-item[data-target="tab-shortage-transfer"]', function() {
+    window.render_shortage_transfer();
+});
+
 $(document).on('click', '.nav-item[data-target="tab-shortage-mgmt"]', function() {
-    window.load_shortage_form_data();
-    window.load_shortage_history();
+    window.switch_shortage_subtab('tab-shortage-payment');
 });
 
 $(document).on('click', '.nav-item[data-target="tab-shorts-report"]', function() {
@@ -13605,10 +15704,13 @@ window.load_shortage_balances = function() {
     
     let start_date = $('#shorts-report-start').val();
     let end_date = $('#shorts-report-end').val();
+    let current_station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) || 
+                          (window.SHIFT_DOC && window.SHIFT_DOC.station) || 
+                          (frappe.defaults.get_user_default("station") || null);
     
     frappe.call({
         method: "fuel_management.fuel_management.api.get_csa_shorts_balances",
-        args: { start_date: start_date, end_date: end_date },
+        args: { start_date: start_date, end_date: end_date, station: current_station },
         callback: function(r) {
             $btn.prop('disabled', false);
             $btn.find('.spinner').addClass('hidden');
@@ -14474,20 +16576,21 @@ function bind_invoice_history_actions($wrapper) {
             // Update Vehicles list for this customer
             $wrapper.find('#invoice-vehicles-list').empty();
             if (row.customer) {
-                let unique_v = [];
-                if (window.SHIFT_DOC && window.SHIFT_DOC.invoices) {
-                    window.SHIFT_DOC.invoices.forEach(r_inv => {
-                        if (r_inv.customer === row.customer && r_inv.vehicle_registration) {
-                            unique_v.push(r_inv.vehicle_registration);
+                frappe.call({
+                    method: "fuel_management.fuel_management.api.get_customer_vehicles",
+                    args: { customer: row.customer },
+                    callback: function(r) {
+                        if (r.message && r.message.length > 0) {
+                            let vOpts = '';
+                            r.message.forEach(v => {
+                                let val = v.plate || v;
+                                let label = v.label || val;
+                                vOpts += `<option value="${val}">${label !== val ? label : ''}</option>`;
+                            });
+                            $wrapper.find('#invoice-vehicles-list').html(vOpts);
                         }
-                    });
-                }
-                unique_v = [...new Set(unique_v)];
-                let vOpts = '';
-                unique_v.forEach(v => {
-                    if (v) vOpts += `<option value="${v}">`;
+                    }
                 });
-                $wrapper.find('#invoice-vehicles-list').html(vOpts);
             }
 
             $wrapper.find('#invoice-csa').val(row.csa);
@@ -14756,6 +16859,8 @@ window.load_monthly_volume_analysis = function() {
 
     const station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) ||
                     (window.SHIFT_DOC && window.SHIFT_DOC.station) ||
+                    $('#navbar-select-station').val() ||
+                    $('#select-station').val() ||
                     (frappe.defaults.get_user_default("station") || null);
 
     $wrapper.find('.mvr-spinner').removeClass('hidden');

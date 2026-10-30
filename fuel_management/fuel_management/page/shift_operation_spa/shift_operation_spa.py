@@ -2,8 +2,9 @@ import frappe
 from frappe.utils import getdate, nowdate, flt
 
 @frappe.whitelist()
-def get_debtors_data():
-    from frappe.utils import flt
+def get_debtors_data(station=None):
+    from fuel_management.fuel_management.api import get_debtors_data as api_get_debtors_data
+    return api_get_debtors_data(station=station)
     
     # 1. Fetch ALL registered customers from tabCustomer
     all_customers = frappe.db.get_all('Customer', 
@@ -338,122 +339,9 @@ def get_detailed_customer_statement(customer_id=None, customer=None, start_date=
     }
 
 @frappe.whitelist()
-def get_debtors_aging_analysis(as_of_date=None, **kwargs):
-    date_val = as_of_date or kwargs.get('date') or kwargs.get('as_of_date')
-    if not date_val:
-        as_of_date = getdate(nowdate())
-    else:
-        as_of_date = getdate(date_val)
-        
-    debtors = get_debtors_data()
-    aging_results = []
-    
-    tot_current = 0.0
-    tot_30_60 = 0.0
-    tot_60_90 = 0.0
-    tot_90_120 = 0.0
-    tot_over_120 = 0.0
-    tot_balance = 0.0
-    
-    for d in debtors:
-        cust_id = d['id']
-        cust_name = d['name']
-        balance = flt(d['balance'])
-        credit_limit = flt(d.get('credit_limit', 0.0))
-        
-        txns = get_customer_transactions(cust_id)
-        
-        b_0_30 = 0.0
-        b_31_60 = 0.0
-        b_61_90 = 0.0
-        b_91_120 = 0.0
-        b_120_plus = 0.0
-        
-        if balance > 0:
-            debits = [t for t in txns if flt(t.get('debit', 0)) > 0]
-            debits.sort(key=lambda x: str(x.get('date', '')), reverse=True)
-            
-            rem_balance = balance
-            for deb in debits:
-                if rem_balance <= 0:
-                    break
-                deb_amt = flt(deb.get('debit', 0))
-                deb_date = getdate(deb.get('date') or nowdate())
-                days_old = (as_of_date - deb_date).days
-                
-                alloc_amt = min(deb_amt, rem_balance)
-                rem_balance -= alloc_amt
-                
-                if days_old <= 30:
-                    b_0_30 += alloc_amt
-                elif days_old <= 60:
-                    b_31_60 += alloc_amt
-                elif days_old <= 90:
-                    b_61_90 += alloc_amt
-                elif days_old <= 120:
-                    b_91_120 += alloc_amt
-                else:
-                    b_120_plus += alloc_amt
-                    
-            if rem_balance > 0:
-                b_120_plus += rem_balance
-        elif balance < 0:
-            b_0_30 = balance
-            
-        tot_current += b_0_30
-        tot_30_60 += b_31_60
-        tot_60_90 += b_61_90
-        tot_90_120 += b_91_120
-        tot_over_120 += b_120_plus
-        tot_balance += balance
-        
-        risk = "Current"
-        risk_color = "green"
-        if b_120_plus > 0 or b_91_120 > 0:
-            risk = "Critical (90+ Days)"
-            risk_color = "red"
-        elif b_61_90 > 0:
-            risk = "Overdue (61-90 Days)"
-            risk_color = "orange"
-        elif b_31_60 > 0:
-            risk = "Watchlist (31-60 Days)"
-            risk_color = "amber"
-        elif balance <= 0:
-            risk = "Settled"
-            risk_color = "emerald"
-            
-        aging_results.append({
-            'id': cust_id,
-            'name': cust_name,
-            'fleet_id': d.get('fleet_id', cust_id),
-            'credit_limit': credit_limit,
-            'last_payment_date': d.get('last_payment_date', ''),
-            'total_balance': round(balance, 2),
-            'current_0_30': round(b_0_30, 2),
-            'aging_31_60': round(b_31_60, 2),
-            'aging_61_90': round(b_61_90, 2),
-            'aging_91_120': round(b_91_120, 2),
-            'aging_120_plus': round(b_120_plus, 2),
-            'risk_status': risk,
-            'risk_color': risk_color
-        })
-        
-    aging_results.sort(key=lambda x: x['total_balance'], reverse=True)
-    
-    return {
-        'as_of_date': str(as_of_date),
-        'summary': {
-            'total_balance': round(tot_balance, 2),
-            'current_0_30': round(tot_current, 2),
-            'aging_31_60': round(tot_30_60, 2),
-            'aging_61_90': round(tot_60_90, 2),
-            'aging_91_120': round(tot_90_120, 2),
-            'aging_120_plus': round(tot_over_120, 2),
-            'total_debtors_count': len(debtors),
-            'overdue_debtors_count': len([r for r in aging_results if (r['aging_31_60'] + r['aging_61_90'] + r['aging_91_120'] + r['aging_120_plus']) > 0.01])
-        },
-        'rows': aging_results
-    }
+def get_debtors_aging_analysis(as_of_date=None, station=None, **kwargs):
+    from fuel_management.fuel_management.api import get_debtors_aging_analysis as api_aging
+    return api_aging(as_of_date=as_of_date, station=station, **kwargs)
 
 @frappe.whitelist()
 def get_daily_sales_breakdown(station=None, from_date=None, to_date=None, month=None, year=None):

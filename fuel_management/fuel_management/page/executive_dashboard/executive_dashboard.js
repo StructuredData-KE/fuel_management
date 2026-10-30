@@ -90,12 +90,63 @@ function init_spa_ui(wrapper) {
                 if (typeof window.switch_debtors_subview === 'function') {
                     window.switch_debtors_subview(subview);
                 }
+            } else if (target === 'tab-financials') {
+                load_pnl_data(wrapper);
+            } else if (target === 'tab-balance-sheet') {
+                init_exec_balance_sheet(wrapper);
+            } else if (target === 'tab-cash-accounts') {
+                init_exec_cash_accounts(wrapper);
+            } else if (target === 'tab-expenses') {
+                init_exec_expenses(wrapper);
+            } else if (target === 'tab-inventory') {
+                let station = $(wrapper).find('#inventory-station-select').val();
+                load_tank_levels(wrapper, station);
+                fetch_inventory_report($(wrapper));
+            } else if (target === 'tab-reconciliations') {
+                init_reconciliation_module(wrapper);
+                load_reconciliation_data(wrapper);
+            } else if (target === 'tab-shorts-report') {
+                init_exec_shorts_report(wrapper);
+            } else if (target === 'tab-topups') {
+                load_topups_statement(wrapper);
+            } else if (target === 'tab-cards-holding') {
+                init_cards_holding(wrapper);
             }
 
             // Close sidebar on mobile
             if ($(window).width() < 768) {
                 $(wrapper).find('.exec-sidebar').hide();
             }
+        }
+    });
+
+    // Top Financial Report Switcher (P&L vs Balance Sheet)
+    $(wrapper).find('.exec-fin-top-switch').off('click').on('click', function(e) {
+        e.preventDefault();
+        let targetTab = $(this).data('target-tab');
+        $(wrapper).find('.exec-nav-item').removeClass('active');
+        $(wrapper).find(`.exec-nav-item[data-tab="${targetTab}"]`).addClass('active');
+        $(wrapper).find('.exec-main').hide();
+        $(wrapper).find('#' + targetTab).show();
+        if (targetTab === 'tab-financials') {
+            load_pnl_data(wrapper);
+        } else if (targetTab === 'tab-balance-sheet') {
+            init_exec_balance_sheet(wrapper);
+        }
+    });
+
+    // Top Holding Accounts Switcher (Top Ups Holding vs Cards Holding)
+    $(wrapper).find('.exec-holding-top-switch').off('click').on('click', function(e) {
+        e.preventDefault();
+        let targetTab = $(this).data('target-tab');
+        $(wrapper).find('.exec-nav-item').removeClass('active');
+        $(wrapper).find(`.exec-nav-item[data-tab="${targetTab}"]`).addClass('active');
+        $(wrapper).find('.exec-main').hide();
+        $(wrapper).find('#' + targetTab).show();
+        if (targetTab === 'tab-topups') {
+            load_topups_statement(wrapper);
+        } else if (targetTab === 'tab-cards-holding') {
+            init_cards_holding(wrapper);
         }
     });
 
@@ -128,10 +179,10 @@ function init_spa_ui(wrapper) {
         load_topups_statement(wrapper);
     }
 
-    // Date Preset Buttons
-    $(wrapper).find('.exec-preset-btn').off('click').on('click', function(e) {
+    // Dashboard Date Preset Buttons
+    $(wrapper).find('#tab-dashboard .exec-preset-btn').off('click').on('click', function(e) {
         e.preventDefault();
-        $(wrapper).find('.exec-preset-btn').removeClass('active');
+        $(wrapper).find('#tab-dashboard .exec-preset-btn').removeClass('active');
         $(this).addClass('active');
 
         let range = $(this).data('range');
@@ -155,9 +206,110 @@ function init_spa_ui(wrapper) {
 
     $(wrapper).find('#exec-global-apply').off('click').on('click', function(e) {
         e.preventDefault();
-        $(wrapper).find('.exec-preset-btn').removeClass('active');
+        $(wrapper).find('#tab-dashboard .exec-preset-btn').removeClass('active');
         trigger_all_loads();
     });
+
+    // --- Station Switcher Dropdown Initialization & Synchronization ---
+    frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Fuel Station",
+            fields: ["name", "station_name"],
+            order_by: "station_name asc",
+            limit_page_length: 50
+        },
+        callback: function(r) {
+            if (r.message && r.message.length > 0) {
+                let optionsHtml = '<option value="">All Stations (Consolidated)</option>';
+                r.message.forEach(st => {
+                    let val = st.name;
+                    let label = st.station_name || st.name;
+                    optionsHtml += `<option value="${val}">${label}</option>`;
+                });
+                
+                $(wrapper).find('#exec-global-station-select').html(optionsHtml);
+                $(wrapper).find('#exec-header-station-select').html(optionsHtml);
+                $(wrapper).find('#inventory-station-select').html(optionsHtml);
+            }
+        }
+    });
+
+    function handle_exec_station_change(selectedStation) {
+        selectedStation = selectedStation || "";
+        $(wrapper).find('#exec-global-station-select').val(selectedStation);
+        $(wrapper).find('#exec-header-station-select').val(selectedStation);
+        $(wrapper).find('#inventory-station-select').val(selectedStation);
+
+        // Synchronize P&L station pills
+        $(wrapper).find('#exec-pnl-station-tabs .exec-pnl-station-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
+        let $pnlPill = $(wrapper).find(`#exec-pnl-station-tabs .exec-pnl-station-btn[data-station="${selectedStation}"]`);
+        if (!$pnlPill.length && !selectedStation) {
+            $pnlPill = $(wrapper).find('#exec-pnl-station-tabs .exec-pnl-station-btn[data-station=""]');
+        }
+        $pnlPill.addClass('active').css({'background': '#fff', 'color': '#0284c7', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.06)'});
+        let labelText = selectedStation ? (selectedStation === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : selectedStation) : 'Consolidated';
+        $(wrapper).find('#exec-pnl-station-badge').text(labelText);
+
+        // Synchronize Balance Sheet station pills
+        $(wrapper).find('#exec-bs-station-tabs .exec-bs-station-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
+        let $bsPill = $(wrapper).find(`#exec-bs-station-tabs .exec-bs-station-btn[data-station="${selectedStation}"]`);
+        if (!$bsPill.length && !selectedStation) {
+            $bsPill = $(wrapper).find('#exec-bs-station-tabs .exec-bs-station-btn[data-station=""]');
+        }
+        $bsPill.addClass('active').css({'background': '#fff', 'color': '#0284c7', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.06)'});
+        $(wrapper).find('#exec-bs-station-badge').text(labelText);
+
+        load_tank_levels(wrapper, selectedStation);
+        if (typeof fetch_inventory_report === 'function') {
+            fetch_inventory_report($(wrapper));
+        }
+
+        let activeTab = $(wrapper).find('.exec-nav-item.active').data('tab') || 'tab-dashboard';
+        if (activeTab === 'tab-dashboard') {
+            load_dashboard_data(wrapper);
+            load_analytics_data(wrapper);
+            load_hr_data(wrapper);
+        } else if (activeTab === 'tab-financials') {
+            load_pnl_data(wrapper);
+        } else if (activeTab === 'tab-balance-sheet') {
+            if (typeof load_exec_balance_sheet === 'function') {
+                load_exec_balance_sheet(wrapper);
+            }
+        } else if (activeTab === 'tab-inventory') {
+            load_tank_levels(wrapper, selectedStation);
+            if (typeof fetch_inventory_report === 'function') {
+                fetch_inventory_report($(wrapper));
+            }
+        } else if (activeTab === 'tab-reconciliations') {
+            if (window.RECON_STATE) window.RECON_STATE.page = 1;
+            load_reconciliation_data(wrapper, true);
+        } else if (activeTab === 'tab-topups') {
+            load_topups_statement(wrapper);
+        } else if (activeTab === 'tab-cards-holding') {
+            if (window.CARDS_HOLDING_STATE) window.CARDS_HOLDING_STATE.page = 1;
+            load_cards_holding_data(wrapper);
+        } else if (activeTab === 'tab-customers') {
+            if (typeof window.load_debtors_data === 'function') {
+                window.load_debtors_data();
+            }
+        }
+    }
+
+    $(wrapper).find('#exec-global-station-select').off('change').on('change', function() {
+        handle_exec_station_change($(this).val());
+    });
+
+    $(wrapper).find('#exec-header-station-select').off('change').on('change', function() {
+        handle_exec_station_change($(this).val());
+    });
+
+    $(wrapper).find('#inventory-station-select').off('change').on('change', function() {
+        handle_exec_station_change($(this).val());
+    });
+
+    // Initialize Supplier Transfer / Invoices Reconciliation Modal
+    init_supplier_payment_modal(wrapper);
 
     $(wrapper).find('#btn-reconcile-topups').off('click').on('click', function() {
         let d = new frappe.ui.Dialog({
@@ -249,8 +401,14 @@ function init_spa_ui(wrapper) {
         window.init_debtors_module(wrapper);
     }
 
+    // Initialize Financials Tab
+    if (typeof init_financials_tab === 'function') {
+        init_financials_tab(wrapper);
+    }
+
     // Fetch and render data
     load_dashboard_data(wrapper);
+    load_tank_levels(wrapper);
     load_pnl_data(wrapper);
     load_hr_data(wrapper);
     load_analytics_data(wrapper);
@@ -276,7 +434,15 @@ function init_spa_ui(wrapper) {
     });
 
     $(wrapper).find('#inventory-station-select').off('change').on('change', function() {
+        let station = $(this).val();
+        load_tank_levels(wrapper, station);
         fetch_inventory_report($(wrapper));
+    });
+
+    $(wrapper).find('#btn-refresh-tanks').off('click').on('click', function(e) {
+        e.preventDefault();
+        let station = $(wrapper).find('#inventory-station-select').val();
+        load_tank_levels(wrapper, station);
     });
 
     // Inventory Report initialization
@@ -347,10 +513,15 @@ function init_spa_ui(wrapper) {
 }
 
 function get_date_filters(wrapper) {
-    return {
+    let station = $(wrapper).find('#exec-global-station-select').val() || $(wrapper).find('#exec-header-station-select').val() || '';
+    let obj = {
         from_date: $(wrapper).find('#exec-global-from').val(),
         to_date: $(wrapper).find('#exec-global-to').val()
     };
+    if (station && station !== "ALL" && station !== "All Stations") {
+        obj.station = station;
+    }
+    return obj;
 }
 
 function load_dashboard_data(wrapper) {
@@ -418,88 +589,801 @@ function load_dashboard_data(wrapper) {
                 }
 
                 // 4. Update Inventory
-                let tanks = data.inventory.tank_levels;
-                let tanks_html = "";
-                tanks.forEach(t => {
-                    tanks_html += `
-                        <div style="background:#f8fafc; padding:12px; border-radius:8px; border:1px solid #e2e8f0; width:150px;">
-                            <div style="font-size:11px; font-weight:700; color:#64748b;">${t.tank_name}</div>
-                            <div style="font-size:18px; font-weight:600; color:#0f172a; margin:4px 0;">${t.current_volume} L</div>
-                            <div style="height:4px; background:#e2e8f0; border-radius:4px; margin-top:8px;">
-                                <div style="height:100%; width:${t.percentage}%; background:${t.percentage < 20 ? '#dc2626' : '#059669'}; border-radius:4px;"></div>
-                            </div>
-                            <div style="font-size:10px; color:#64748b; margin-top:4px; text-align:right;">${t.percentage}%</div>
-                        </div>
-                    `;
-                });
-                if(tanks_html) {
-                    $(wrapper).find('#exec-tank-levels').html(tanks_html);
+                if (data.inventory) {
+                    render_tank_gauges(wrapper, data.inventory);
                 }
             }
         }
     });
 }
 
+function load_tank_levels(wrapper, station) {
+    let $levels = $(wrapper).find('#exec-tank-levels');
+    $levels.html(`
+        <div style="grid-column: 1 / -1; text-align:center; padding:35px; color:#64748b;">
+            <div class="spinner-border text-primary" role="status" style="width:2rem; height:2rem; margin-bottom:10px;"></div>
+            <div style="font-size:13px; font-weight:600;">Fetching latest physical dip readings...</div>
+        </div>
+    `);
+
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_tank_levels",
+        args: { station: station || "" },
+        callback: function(r) {
+            if (r.message && r.message.tanks) {
+                render_tank_gauges(wrapper, r.message);
+            } else {
+                $levels.html(`
+                    <div style="grid-column: 1 / -1; color:#dc2626; padding:20px; text-align:center;">
+                        Failed to retrieve tank dip readings.
+                    </div>
+                `);
+            }
+        }
+    });
+}
+
+function render_tank_gauges(wrapper, invData) {
+    let tanks = invData.tanks || invData.tank_levels || [];
+    let summary = invData.summary || {};
+
+    // 1. Update summary strip if elements exist
+    if (summary.total_volume !== undefined) {
+        $(wrapper).find('#tank-sum-volume').text(format_currency(summary.total_volume, '').trim() + ' L');
+        $(wrapper).find('#tank-sum-capacity').text(format_currency(summary.total_capacity, '').trim() + ' L');
+        $(wrapper).find('#tank-sum-pct').text(summary.overall_pct + ' %');
+        $(wrapper).find('#tank-sum-ullage').text(format_currency(summary.overall_ullage, '').trim() + ' L');
+    } else if (tanks.length > 0) {
+        let totVol = 0, totCap = 0;
+        tanks.forEach(t => {
+            totVol += flt(t.last_dip_volume !== undefined ? t.last_dip_volume : t.current_volume || 0);
+            totCap += flt(t.capacity !== undefined ? t.capacity : t.max_capacity || 0);
+        });
+        let pct = totCap > 0 ? ((totVol / totCap) * 100).toFixed(1) : '0';
+        let ullage = Math.max(0, totCap - totVol);
+        $(wrapper).find('#tank-sum-volume').text(format_currency(totVol, '').trim() + ' L');
+        $(wrapper).find('#tank-sum-capacity').text(format_currency(totCap, '').trim() + ' L');
+        $(wrapper).find('#tank-sum-pct').text(pct + ' %');
+        $(wrapper).find('#tank-sum-ullage').text(format_currency(ullage, '').trim() + ' L');
+    }
+
+    let $container = $(wrapper).find('#exec-tank-levels');
+    if (!$container.length) return;
+
+    if (tanks.length === 0) {
+        $container.html(`
+            <div style="grid-column: 1 / -1; padding:30px; text-align:center; color:#94a3b8; font-size:13px;">
+                No fuel tanks found for the selected station.
+            </div>
+        `);
+        return;
+    }
+
+    let html = '';
+    tanks.forEach((t, i) => {
+        let cap = flt(t.capacity || t.max_capacity || 10000);
+        let vol = flt(t.last_dip_volume !== undefined ? t.last_dip_volume : t.current_volume || 0);
+        let pct = flt(t.percentage !== undefined ? t.percentage : (cap > 0 ? (vol / cap * 100) : 0));
+        let ullage = flt(t.ullage !== undefined ? t.ullage : Math.max(0, cap - vol));
+        let threshold = flt(t.reorder_threshold || 15);
+
+        // Styling based on fuel level
+        let status = t.status;
+        let statusLabel = t.status_label;
+        let badgeBg, badgeColor, badgeBorder, badgeDot, accentColor, gradStart, gradEnd, pulse = '';
+
+        if (pct <= threshold) {
+            status = 'critical';
+            statusLabel = statusLabel || 'CRITICAL REORDER';
+            badgeBg = '#fef2f2';
+            badgeColor = '#dc2626';
+            badgeBorder = '#fca5a5';
+            badgeDot = '#dc2626';
+            accentColor = '#dc2626';
+            gradStart = '#ef4444';
+            gradEnd = '#b91c1c';
+            pulse = 'animation: pulse-red 1.5s infinite;';
+        } else if (pct <= 35) {
+            status = 'low';
+            statusLabel = statusLabel || 'LOW STOCK';
+            badgeBg = '#fffbeb';
+            badgeColor = '#d97706';
+            badgeBorder = '#fde68a';
+            badgeDot = '#f59e0b';
+            accentColor = '#f59e0b';
+            gradStart = '#fbbf24';
+            gradEnd = '#d97706';
+        } else if (pct < 75) {
+            status = 'normal';
+            statusLabel = statusLabel || 'NORMAL LEVEL';
+            badgeBg = '#f0fdf4';
+            badgeColor = '#16a34a';
+            badgeBorder = '#bbf7d0';
+            badgeDot = '#22c55e';
+            accentColor = '#10b981';
+            gradStart = '#34d399';
+            gradEnd = '#059669';
+        } else {
+            status = 'optimal';
+            statusLabel = statusLabel || 'OPTIMAL / FULL';
+            badgeBg = '#ecfdf5';
+            badgeColor = '#059669';
+            badgeBorder = '#a7f3d0';
+            badgeDot = '#10b981';
+            accentColor = '#059669';
+            gradStart = '#10b981';
+            gradEnd = '#047857';
+        }
+
+        // SVG Dial Math (240-deg arc)
+        let arcLength = 272.27;
+        let circ = 408.41;
+        let fillRatio = Math.min(100, Math.max(0, pct)) / 100;
+        let dashOffset = (arcLength * (1 - fillRatio)).toFixed(2);
+
+        // Fuel Type details
+        let fuelLabel = t.fuel_label || t.fuel_product || 'Fuel';
+        let fuelColor = t.fuel_color || '#0284c7';
+        let fuelBadgeBg = t.fuel_badge_bg || '#e0f2fe';
+        let fuelBadgeText = t.fuel_badge_text || '#0369a1';
+        let stationName = t.station || '';
+        let dipType = t.dip_type || 'Physical Dip';
+        let shiftTitle = t.shift_title || t.shift_name_display || t.shift_id || 'Latest Shift';
+        let timeStr = t.formatted_time || 'Recorded recently';
+
+        let capK = Math.round(cap / 1000);
+
+        html += `
+            <div class="exec-tank-gauge-card" style="background:#fff; border-radius:14px; border:1px solid ${status === 'critical' ? '#fca5a5' : '#e2e8f0'}; box-shadow:0 2px 8px rgba(0,0,0,0.04); padding:18px; display:flex; flex-direction:column; position:relative; overflow:hidden;">
+                <!-- Top Accent Strip -->
+                <div style="position:absolute; top:0; left:0; right:0; height:4px; background:${accentColor};"></div>
+
+                <!-- Header -->
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                    <div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span class="material-symbols-outlined" style="font-size:18px; color:${fuelColor};">local_gas_station</span>
+                            <span style="font-size:15px; font-weight:800; color:#0f172a;">${t.tank_name}</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:6px; margin-top:3px;">
+                            <span style="font-size:11px; font-weight:700; background:${fuelBadgeBg}; color:${fuelBadgeText}; padding:2px 8px; border-radius:6px; text-transform:uppercase; letter-spacing:0.5px;">
+                                ${fuelLabel}
+                            </span>
+                            ${stationName ? `<span style="font-size:11px; color:#64748b;">${stationName}</span>` : ''}
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:800; padding:3px 9px; border-radius:9999px; background:${badgeBg}; color:${badgeColor}; border:1px solid ${badgeBorder};">
+                            <span style="width:6px; height:6px; border-radius:50%; background:${badgeDot}; display:inline-block; ${pulse}"></span>
+                            ${statusLabel}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- SVG Radial Arc Gauge -->
+                <div style="display:flex; justify-content:center; align-items:center; padding:6px 0; position:relative;">
+                    <svg viewBox="0 0 180 150" style="width:100%; max-width:215px; height:auto; overflow:visible;">
+                        <defs>
+                            <linearGradient id="tank-grad-${i}" x1="0%" y1="100%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="${gradStart}" />
+                                <stop offset="100%" stop-color="${gradEnd}" />
+                            </linearGradient>
+                            <filter id="glow-${i}" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="2" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                        </defs>
+
+                        <!-- Background Track (240 deg arc from 150 to 390 deg) -->
+                        <circle cx="90" cy="85" r="65" fill="none" stroke="#e2e8f0" stroke-width="12"
+                                stroke-dasharray="${arcLength} ${circ}" stroke-linecap="round"
+                                transform="rotate(150 90 85)" />
+
+                        <!-- Active Arc Stroke -->
+                        <circle cx="90" cy="85" r="65" fill="none" stroke="url(#tank-grad-${i})" stroke-width="12"
+                                stroke-dasharray="${arcLength} ${circ}" stroke-dashoffset="${dashOffset}" stroke-linecap="round"
+                                transform="rotate(150 90 85)" filter="url(#glow-${i})"
+                                style="transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);" />
+
+                        <!-- Min / Max scale markers -->
+                        <text x="24" y="132" font-size="10" font-weight="700" fill="#94a3b8" text-anchor="middle">0L</text>
+                        <text x="156" y="132" font-size="10" font-weight="700" fill="#94a3b8" text-anchor="middle">${capK}k L</text>
+
+                        <!-- Center Readouts -->
+                        <text x="90" y="70" text-anchor="middle" font-size="22" font-weight="800" fill="#0f172a" class="exec-mono-text" font-family="monospace">
+                            ${Math.round(vol).toLocaleString()}
+                        </text>
+                        <text x="90" y="85" text-anchor="middle" font-size="10.5" font-weight="700" fill="#64748b" letter-spacing="1">
+                            LITRES
+                        </text>
+                        <text x="90" y="106" text-anchor="middle" font-size="14" font-weight="800" fill="${badgeColor}">
+                            ${pct}% Full
+                        </text>
+                    </svg>
+                </div>
+
+                <!-- Capsule Level Bar -->
+                <div style="background:#f1f5f9; border-radius:9999px; height:8px; overflow:hidden; margin:4px 0 12px 0; border:1px solid #e2e8f0;">
+                    <div style="height:100%; width:${Math.min(100, Math.max(0, pct))}%; background:${accentColor}; border-radius:9999px; transition:width 1s ease;"></div>
+                </div>
+
+                <!-- Stats Grid: Capacity & Space Available (Ullage) -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; background:#f8fafc; padding:10px 12px; border-radius:10px; border:1px solid #f1f5f9;">
+                    <div>
+                        <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Tank Capacity</div>
+                        <div style="font-size:13px; font-weight:700; color:#1e293b; font-family:ui-monospace, monospace; margin-top:2px;">
+                            ${Math.round(cap).toLocaleString()} L
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase;">Space Available (Ullage)</div>
+                        <div style="font-size:13px; font-weight:700; color:#059669; font-family:ui-monospace, monospace; margin-top:2px;">
+                            ${Math.round(ullage).toLocaleString()} L
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dip Audit Details Footer -->
+                <div style="margin-top:auto; padding-top:10px; border-top:1px solid #f1f5f9; font-size:11px; color:#64748b; display:flex; flex-direction:column; gap:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="display:flex; align-items:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:13px; color:#0284c7;">straighten</span>
+                            <strong>Reading:</strong>
+                        </span>
+                        <span style="font-weight:700; color:#1e293b; background:#e2e8f0; padding:1px 6px; border-radius:4px; font-size:10px;">
+                            ${dipType}
+                        </span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="display:flex; align-items:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:13px; color:#64748b;">badge</span>
+                            <span>Shift:</span>
+                        </span>
+                        <span style="font-weight:600; color:#334155; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${shiftTitle}">
+                            ${shiftTitle}
+                        </span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="display:flex; align-items:center; gap:4px;">
+                            <span class="material-symbols-outlined" style="font-size:13px; color:#64748b;">schedule</span>
+                            <span>Recorded:</span>
+                        </span>
+                        <span style="font-weight:600; color:#334155;">
+                            ${timeStr}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    $container.html(html);
+}
+
+function get_pnl_filters(wrapper) {
+    let from_date = $(wrapper).find('#exec-pnl-from').val();
+    let to_date = $(wrapper).find('#exec-pnl-to').val();
+    if (!from_date || !to_date) {
+        let today = frappe.datetime.get_today();
+        from_date = from_date || frappe.datetime.month_start();
+        to_date = to_date || today;
+        $(wrapper).find('#exec-pnl-from').val(from_date);
+        $(wrapper).find('#exec-pnl-to').val(to_date);
+    }
+    let station = $(wrapper).find('#exec-pnl-station-tabs .exec-pnl-station-btn.active').data('station');
+    if (station === undefined) {
+        station = $(wrapper).find('#exec-global-station-select').val() || '';
+    }
+    return { from_date: from_date, to_date: to_date, station: station };
+}
+
+function init_financials_tab(wrapper) {
+    // Default dates to current month if empty
+    if (!$(wrapper).find('#exec-pnl-from').val()) {
+        $(wrapper).find('#exec-pnl-from').val(frappe.datetime.month_start());
+        $(wrapper).find('#exec-pnl-to').val(frappe.datetime.get_today());
+    }
+
+    // Station Segmented Tabs (All Consolidated / Rubis / Galana)
+    $(wrapper).find('#exec-pnl-station-tabs .exec-pnl-station-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        let targetStation = $(this).data('station');
+        handle_exec_station_change(targetStation);
+    });
+
+    // P&L Date Presets
+    $(wrapper).find('#exec-pnl-presets .exec-preset-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        $(wrapper).find('#exec-pnl-presets .exec-preset-btn').removeClass('active');
+        $(this).addClass('active');
+
+        let range = $(this).data('pnl-range');
+        let today = frappe.datetime.get_today();
+        let start = today;
+        let end = today;
+
+        if (range === 'month') {
+            start = frappe.datetime.month_start();
+            end = today;
+        } else if (range === 'last_month') {
+            let now = new Date();
+            let y = now.getFullYear();
+            let m = now.getMonth();
+            if (m === 0) {
+                y -= 1;
+                m = 12;
+            }
+            let firstDay = new Date(y, m - 1, 1);
+            let lastDay = new Date(y, m, 0);
+            start = frappe.datetime.obj_to_str(firstDay);
+            end = frappe.datetime.obj_to_str(lastDay);
+        } else if (range === 'quarter') {
+            let now = new Date();
+            let qMonth = Math.floor(now.getMonth() / 3) * 3;
+            let qStart = new Date(now.getFullYear(), qMonth, 1);
+            start = frappe.datetime.obj_to_str(qStart);
+            end = today;
+        } else if (range === 'year') {
+            start = frappe.datetime.year_start();
+            end = today;
+        } else if (range === '30') {
+            start = frappe.datetime.add_days(today, -29);
+            end = today;
+        }
+
+        $(wrapper).find('#exec-pnl-from').val(start);
+        $(wrapper).find('#exec-pnl-to').val(end);
+        load_pnl_data(wrapper);
+    });
+
+    // P&L Custom Date Apply Button
+    $(wrapper).find('#exec-pnl-apply').off('click').on('click', function(e) {
+        e.preventDefault();
+        $(wrapper).find('#exec-pnl-presets .exec-preset-btn').removeClass('active');
+        load_pnl_data(wrapper);
+    });
+
+    // View Switcher (Statement View vs Category Breakdown)
+    $(wrapper).find('#exec-pnl-view-switcher .exec-preset-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        $(wrapper).find('#exec-pnl-view-switcher .exec-preset-btn').removeClass('active');
+        $(this).addClass('active');
+
+        let view = $(this).data('view');
+        if (view === 'breakdown') {
+            $(wrapper).find('#exec-pnl-statement-view').hide();
+            $(wrapper).find('#exec-pnl-breakdown-view').show();
+        } else {
+            $(wrapper).find('#exec-pnl-breakdown-view').hide();
+            $(wrapper).find('#exec-pnl-statement-view').show();
+        }
+    });
+
+    // Print P&L Button
+    $(wrapper).find('#exec-pnl-print-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        print_pnl_statement(wrapper);
+    });
+}
+
+function print_pnl_statement(wrapper) {
+    let company = $(wrapper).find('#exec-statement-company').text() || 'KILIBET INVESTMENT LTD';
+    let period = $(wrapper).find('#exec-statement-period-dates').text() || $(wrapper).find('#exec-pnl-period').text() || '';
+    let statementHtml = $(wrapper).find('#exec-pnl-formal-table').html();
+
+    let printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+        frappe.msgprint(__('Pop-up blocked. Please allow pop-ups to print the statement.'));
+        return;
+    }
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Profit and Loss Statement - ${company}</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    color: #0f172a;
+                    padding: 32px;
+                    margin: 0;
+                    background: #fff;
+                }
+                .header {
+                    border-bottom: 2px solid #0f172a;
+                    padding-bottom: 16px;
+                    margin-bottom: 20px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-end;
+                }
+                h1 { margin: 0 0 4px 0; font-size: 24px; font-weight: 800; color: #0f172a; }
+                .sub { font-size: 14px; font-weight: 600; color: #475569; }
+                .meta { text-align: right; font-size: 12px; color: #64748b; }
+                table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+                th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #cbd5e1; font-weight: 700; color: #475569; }
+                td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+                @media print {
+                    body { padding: 10px; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div>
+                    <div style="font-size:11px; font-weight:700; color:#0284c7; text-transform:uppercase; letter-spacing:1px;">Fuel & Retail Station Operations</div>
+                    <h1>${company}</h1>
+                    <div class="sub">Statement of Profit and Loss</div>
+                </div>
+                <div class="meta">
+                    <div style="font-weight:700; color:#1e293b; font-size:13px;">${period}</div>
+                    <div>Currency: Kenya Shillings (KES)</div>
+                    <div>Generated: ${new Date().toLocaleString()}</div>
+                </div>
+            </div>
+            <div>
+                ${statementHtml}
+            </div>
+            <script>
+                window.onload = function() {
+                    window.print();
+                };
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
 function load_pnl_data(wrapper) {
-    let filters = get_date_filters(wrapper);
+    let filters = get_pnl_filters(wrapper);
+    
+    // Show loading state in formal table
+    $(wrapper).find('#exec-pnl-formal-table').html(`
+        <div style="text-align:center; padding:40px; color:#64748b;">
+            <div class="spinner-border text-primary" role="status" style="width:2rem; height:2rem; margin-bottom:12px;"></div>
+            <div style="font-size:13px; font-weight:600;">Calculating Profit & Loss Statement...</div>
+        </div>
+    `);
+
     frappe.call({
         method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_pnl_summary",
         args: filters,
         callback: function(r) {
             if(r.message && !r.message.error) {
                 let pnl = r.message;
+                window.CURRENT_PNL_DATA = pnl;
+
+                // Update Header Labels
                 $(wrapper).find('#exec-pnl-period').text("Period: " + pnl.period);
+                $(wrapper).find('#exec-statement-period-dates').text(pnl.period);
+                if (pnl.company) {
+                    $(wrapper).find('#exec-statement-company').text(pnl.company);
+                    $(wrapper).find('#exec-pnl-company-name').text(pnl.company);
+                }
+
+                // Update Station Labels
+                let shortStName = pnl.station ? (pnl.station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : pnl.station) : 'Consolidated';
+                $(wrapper).find('#exec-pnl-station-badge').text(shortStName);
+                $(wrapper).find('#exec-statement-station-name').text(shortStName);
+
+                // Update 5 KPI Cards
                 $(wrapper).find('#exec-pnl-income').text(format_currency(pnl.total_income, "KES"));
-                $(wrapper).find('#exec-pnl-expense').text(format_currency(pnl.total_expense, "KES"));
-                $(wrapper).find('#exec-pnl-profit').text(format_currency(pnl.net_profit, "KES"));
-                if(pnl.net_profit < 0) {
-                    $(wrapper).find('#exec-pnl-profit').css('color', '#dc2626');
+                $(wrapper).find('#exec-pnl-cogs').text(format_currency(pnl.total_cogs, "KES"));
+                let cogsPct = pnl.total_income > 0 ? ((pnl.total_cogs / pnl.total_income) * 100).toFixed(1) : 0;
+                $(wrapper).find('#exec-pnl-cogs-pct').text(`${cogsPct}% of Revenue`);
+
+                // Gross Profit
+                let gp = pnl.gross_profit;
+                let gpEl = $(wrapper).find('#exec-pnl-gross-profit');
+                let gpMarginEl = $(wrapper).find('#exec-pnl-gross-margin');
+                let gpCard = $(wrapper).find('#exec-pnl-gp-card');
+                gpEl.text(format_currency(gp, "KES"));
+                gpMarginEl.text(`Gross Margin: ${pnl.gross_margin}%`);
+                if (gp >= 0) {
+                    gpEl.css('color', '#059669');
+                    gpMarginEl.css('color', '#059669');
+                    gpCard.css('border-left-color', '#10b981');
+                } else {
+                    gpEl.css('color', '#dc2626');
+                    gpMarginEl.css('color', '#dc2626');
+                    gpCard.css('border-left-color', '#dc2626');
                 }
 
-                // Render Income Table
-                let income_html = `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">`;
-                income_html += `<tr style="border-bottom:1px solid #e2e8f0; color:#64748b;">
-                                    <th style="padding:8px;">Account</th>
-                                    <th style="padding:8px; text-align:right;">Amount (KES)</th>
-                                </tr>`;
-                if(pnl.income_accounts.length === 0) {
-                    income_html += `<tr><td colspan="2" style="padding:12px; text-align:center; color:#94a3b8;">No income data found.</td></tr>`;
-                } else {
-                    pnl.income_accounts.forEach(a => {
-                        income_html += `<tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:10px 8px; color:#334155;">${a.account_name}</td>
-                            <td style="padding:10px 8px; text-align:right; font-weight:600; color:#059669;">${format_currency(a.balance, "")}</td>
-                        </tr>`;
-                    });
-                }
-                income_html += `</table>`;
-                $(wrapper).find('#exec-pnl-income-table').html(income_html);
+                // Operating Expenses
+                $(wrapper).find('#exec-pnl-opex').text(format_currency(pnl.total_opex, "KES"));
+                let opexPct = pnl.total_income > 0 ? ((pnl.total_opex / pnl.total_income) * 100).toFixed(1) : 0;
+                $(wrapper).find('#exec-pnl-opex-pct').text(`${opexPct}% of Revenue`);
 
-                // Render Expense Table
-                let expense_html = `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">`;
-                expense_html += `<tr style="border-bottom:1px solid #e2e8f0; color:#64748b;">
-                                    <th style="padding:8px;">Account</th>
-                                    <th style="padding:8px; text-align:right;">Amount (KES)</th>
-                                </tr>`;
-                if(pnl.expense_accounts.length === 0) {
-                    expense_html += `<tr><td colspan="2" style="padding:12px; text-align:center; color:#94a3b8;">No expense data found.</td></tr>`;
+                // Net Profit
+                let np = pnl.net_profit;
+                let npEl = $(wrapper).find('#exec-pnl-profit');
+                let npMarginEl = $(wrapper).find('#exec-pnl-net-margin');
+                let npCard = $(wrapper).find('#exec-pnl-np-card');
+                let npIcon = $(wrapper).find('#exec-pnl-np-icon');
+                npEl.text(format_currency(np, "KES"));
+                npMarginEl.text(`Net Margin: ${pnl.net_margin}%`);
+                if (np >= 0) {
+                    npEl.css('color', '#059669');
+                    npMarginEl.css('color', '#059669');
+                    npCard.css('border-left-color', '#10b981');
+                    npIcon.css('color', '#059669');
                 } else {
-                    pnl.expense_accounts.forEach(a => {
-                        expense_html += `<tr style="border-bottom:1px solid #f1f5f9;">
-                            <td style="padding:10px 8px; color:#334155;">${a.account_name}</td>
-                            <td style="padding:10px 8px; text-align:right; font-weight:600; color:#dc2626;">${format_currency(a.balance, "")}</td>
-                        </tr>`;
-                    });
+                    npEl.css('color', '#dc2626');
+                    npMarginEl.css('color', '#dc2626');
+                    npCard.css('border-left-color', '#dc2626');
+                    npIcon.css('color', '#dc2626');
                 }
-                expense_html += `</table>`;
-                $(wrapper).find('#exec-pnl-expense-table').html(expense_html);
+
+                // Render Multi-Tier Formal Statement Table
+                render_formal_pnl_statement(wrapper, pnl);
+
+                // Render Category Breakdown Cards
+                render_pnl_breakdown_tables(wrapper, pnl);
+
             } else {
-                $(wrapper).find('#exec-pnl-period').text("Error loading accounting data.");
-                $(wrapper).find('#exec-pnl-income-table').html("<div style='color:#dc2626; font-size:13px;'>Error connecting to GL Entry.</div>");
-                $(wrapper).find('#exec-pnl-expense-table').html("<div style='color:#dc2626; font-size:13px;'>Error connecting to GL Entry.</div>");
+                let errMsg = (r.message && r.message.error) ? r.message.error : "Error loading accounting data.";
+                $(wrapper).find('#exec-pnl-period').text(errMsg);
+                $(wrapper).find('#exec-pnl-formal-table').html(`<div style="color:#dc2626; padding:20px; text-align:center;">${errMsg}</div>`);
+                $(wrapper).find('#exec-pnl-income-table').html("<div style='color:#dc2626; font-size:13px;'>Error loading data.</div>");
+                $(wrapper).find('#exec-pnl-cogs-table').html("<div style='color:#dc2626; font-size:13px;'>Error loading data.</div>");
+                $(wrapper).find('#exec-pnl-expense-table').html("<div style='color:#dc2626; font-size:13px;'>Error loading data.</div>");
             }
         }
     });
+}
+
+function render_formal_pnl_statement(wrapper, pnl) {
+    let html = `
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #cbd5e1; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    <th style="padding:10px 12px; text-align:left;">Financial Line Item</th>
+                    <th style="padding:10px 12px; text-align:right; width:180px;">Amount (KES)</th>
+                    <th style="padding:10px 12px; text-align:right; width:120px;">% of Revenue</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    // 1. REVENUE SECTION
+    html += `
+        <tr style="background:#f8fafc; font-weight:700; color:#0f172a; border-top:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#0284c7;">
+                1. REVENUE / TURNOVER
+            </td>
+        </tr>
+    `;
+    if (!pnl.income_accounts || pnl.income_accounts.length === 0) {
+        html += `<tr><td colspan="3" style="padding:10px 24px; color:#94a3b8; font-style:italic;">No revenue entries recorded for this period.</td></tr>`;
+    } else {
+        pnl.income_accounts.forEach(acc => {
+            html += `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 12px 8px 24px; color:#334155;">${acc.account_name}</td>
+                    <td style="padding:8px 12px; text-align:right; font-family:ui-monospace, monospace; font-weight:500; color:#059669;">${format_currency(acc.amount, '')}</td>
+                    <td style="padding:8px 12px; text-align:right; color:#64748b; font-size:12px;">${acc.pct}%</td>
+                </tr>
+            `;
+        });
+    }
+    // Revenue Subtotal
+    html += `
+        <tr style="background:#f1f5f9; font-weight:700; border-top:1px solid #cbd5e1; border-bottom:2px solid #cbd5e1;">
+            <td style="padding:10px 12px; color:#0f172a;">TOTAL REVENUE (TURNOVER)</td>
+            <td style="padding:10px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:14px; font-weight:700; color:#059669;">${format_currency(pnl.total_income, 'KES')}</td>
+            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#059669;">100.0%</td>
+        </tr>
+    `;
+
+    // Spacer
+    html += `<tr><td colspan="3" style="height:12px;"></td></tr>`;
+
+    // 2. COST OF GOODS SOLD SECTION
+    html += `
+        <tr style="background:#f8fafc; font-weight:700; color:#0f172a; border-top:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#475569;">
+                2. COST OF GOODS SOLD (COGS)
+            </td>
+        </tr>
+    `;
+    if (!pnl.cogs_accounts || pnl.cogs_accounts.length === 0) {
+        html += `<tr><td colspan="3" style="padding:10px 24px; color:#94a3b8; font-style:italic;">No cost of sales recorded for this period.</td></tr>`;
+    } else {
+        pnl.cogs_accounts.forEach(acc => {
+            html += `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 12px 8px 24px; color:#334155;">${acc.account_name}</td>
+                    <td style="padding:8px 12px; text-align:right; font-family:ui-monospace, monospace; font-weight:500; color:#334155;">${format_currency(acc.amount, '')}</td>
+                    <td style="padding:8px 12px; text-align:right; color:#64748b; font-size:12px;">${acc.pct}%</td>
+                </tr>
+            `;
+        });
+    }
+    // COGS Subtotal
+    let cogsPct = pnl.total_income > 0 ? ((pnl.total_cogs / pnl.total_income) * 100).toFixed(1) : '0.0';
+    html += `
+        <tr style="background:#f1f5f9; font-weight:700; border-top:1px solid #cbd5e1; border-bottom:2px solid #cbd5e1;">
+            <td style="padding:10px 12px; color:#0f172a;">TOTAL COST OF GOODS SOLD</td>
+            <td style="padding:10px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:14px; font-weight:700; color:#334155;">${format_currency(pnl.total_cogs, 'KES')}</td>
+            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#64748b;">${cogsPct}%</td>
+        </tr>
+    `;
+
+    // Spacer
+    html += `<tr><td colspan="3" style="height:12px;"></td></tr>`;
+
+    // 3. GROSS PROFIT ROW
+    let gpColor = pnl.gross_profit >= 0 ? '#059669' : '#dc2626';
+    let gpBg = pnl.gross_profit >= 0 ? '#ecfdf5' : '#fef2f2';
+    html += `
+        <tr style="background:${gpBg}; font-weight:800; border-top:2px solid ${gpColor}; border-bottom:2px solid ${gpColor};">
+            <td style="padding:12px 12px; color:#0f172a; font-size:14px;">
+                GROSS PROFIT / (LOSS)
+                <span style="font-size:11px; font-weight:600; color:#64748b; display:block;">(Revenue minus COGS)</span>
+            </td>
+            <td style="padding:12px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:16px; font-weight:800; color:${gpColor};">
+                ${format_currency(pnl.gross_profit, 'KES')}
+            </td>
+            <td style="padding:12px 12px; text-align:right; font-weight:800; font-size:14px; color:${gpColor};">
+                ${pnl.gross_margin}%
+            </td>
+        </tr>
+    `;
+
+    // Spacer
+    html += `<tr><td colspan="3" style="height:12px;"></td></tr>`;
+
+    // 4. OPERATING EXPENSES (OPEX)
+    html += `
+        <tr style="background:#f8fafc; font-weight:700; color:#0f172a; border-top:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#b45309;">
+                3. OPERATING & ADMINISTRATIVE EXPENSES (OPEX)
+            </td>
+        </tr>
+    `;
+    if (!pnl.opex_accounts || pnl.opex_accounts.length === 0) {
+        html += `<tr><td colspan="3" style="padding:10px 24px; color:#94a3b8; font-style:italic;">No operating overheads recorded for this period.</td></tr>`;
+    } else {
+        pnl.opex_accounts.forEach(acc => {
+            html += `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:8px 12px 8px 24px; color:#334155;">${acc.account_name}</td>
+                    <td style="padding:8px 12px; text-align:right; font-family:ui-monospace, monospace; font-weight:500; color:#dc2626;">${format_currency(acc.amount, '')}</td>
+                    <td style="padding:8px 12px; text-align:right; color:#64748b; font-size:12px;">${acc.pct}%</td>
+                </tr>
+            `;
+        });
+    }
+    // OPEX Subtotal
+    let opexPct = pnl.total_income > 0 ? ((pnl.total_opex / pnl.total_income) * 100).toFixed(1) : '0.0';
+    html += `
+        <tr style="background:#f1f5f9; font-weight:700; border-top:1px solid #cbd5e1; border-bottom:2px solid #cbd5e1;">
+            <td style="padding:10px 12px; color:#0f172a;">TOTAL OPERATING EXPENSES</td>
+            <td style="padding:10px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:14px; font-weight:700; color:#dc2626;">${format_currency(pnl.total_opex, 'KES')}</td>
+            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#64748b;">${opexPct}%</td>
+        </tr>
+    `;
+
+    // Spacer
+    html += `<tr><td colspan="3" style="height:14px;"></td></tr>`;
+
+    // 5. NET PROFIT / (LOSS) ROW
+    let npColor = pnl.net_profit >= 0 ? '#059669' : '#dc2626';
+    let npBg = pnl.net_profit >= 0 ? '#d1fae5' : '#fee2e2';
+    html += `
+        <tr style="background:${npBg}; font-weight:800; border-top:3px solid ${npColor}; border-bottom:3px double ${npColor};">
+            <td style="padding:14px 12px; color:#0f172a; font-size:15px;">
+                NET PROFIT / (LOSS)
+                <span style="font-size:11px; font-weight:600; color:#64748b; display:block;">(Gross Profit minus Operating Expenses)</span>
+            </td>
+            <td style="padding:14px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:18px; font-weight:800; color:${npColor};">
+                ${format_currency(pnl.net_profit, 'KES')}
+            </td>
+            <td style="padding:14px 12px; text-align:right; font-weight:800; font-size:15px; color:${npColor};">
+                ${pnl.net_margin}%
+            </td>
+        </tr>
+    `;
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+    $(wrapper).find('#exec-pnl-formal-table').html(html);
+}
+
+function render_pnl_breakdown_tables(wrapper, pnl) {
+    // 1. Income Card Table
+    let incomeHtml = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="border-bottom:1px solid #e2e8f0; color:#64748b;">
+                <th style="padding:8px; text-align:left;">Revenue Stream</th>
+                <th style="padding:8px; text-align:right;">Amount (KES)</th>
+                <th style="padding:8px; text-align:right; width:60px;">Share</th>
+            </tr>
+        </thead>
+        <tbody>`;
+    if (!pnl.income_accounts || pnl.income_accounts.length === 0) {
+        incomeHtml += `<tr><td colspan="3" style="padding:12px; text-align:center; color:#94a3b8;">No income recorded.</td></tr>`;
+    } else {
+        pnl.income_accounts.forEach(a => {
+            incomeHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:8px; color:#334155;">${a.account_name}</td>
+                <td style="padding:8px; text-align:right; font-weight:600; color:#059669; font-family:ui-monospace, monospace;">${format_currency(a.amount, '')}</td>
+                <td style="padding:8px; text-align:right; color:#64748b; font-size:11px;">${a.pct}%</td>
+            </tr>`;
+        });
+        incomeHtml += `<tr style="font-weight:700; background:#f8fafc; border-top:1px solid #cbd5e1;">
+            <td style="padding:8px; color:#0f172a;">Total Income</td>
+            <td style="padding:8px; text-align:right; color:#059669; font-family:ui-monospace, monospace;">${format_currency(pnl.total_income, 'KES')}</td>
+            <td style="padding:8px; text-align:right; color:#059669;">100%</td>
+        </tr>`;
+    }
+    incomeHtml += `</tbody></table>`;
+    $(wrapper).find('#exec-pnl-income-table').html(incomeHtml);
+
+    // 2. Cost of Sales Card Table
+    let cogsHtml = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="border-bottom:1px solid #e2e8f0; color:#64748b;">
+                <th style="padding:8px; text-align:left;">Direct Cost Account</th>
+                <th style="padding:8px; text-align:right;">Amount (KES)</th>
+                <th style="padding:8px; text-align:right; width:60px;">% Rev</th>
+            </tr>
+        </thead>
+        <tbody>`;
+    if (!pnl.cogs_accounts || pnl.cogs_accounts.length === 0) {
+        cogsHtml += `<tr><td colspan="3" style="padding:12px; text-align:center; color:#94a3b8;">No COGS recorded.</td></tr>`;
+    } else {
+        pnl.cogs_accounts.forEach(a => {
+            cogsHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:8px; color:#334155;">${a.account_name}</td>
+                <td style="padding:8px; text-align:right; font-weight:600; color:#475569; font-family:ui-monospace, monospace;">${format_currency(a.amount, '')}</td>
+                <td style="padding:8px; text-align:right; color:#64748b; font-size:11px;">${a.pct}%</td>
+            </tr>`;
+        });
+        let cogsPct = pnl.total_income > 0 ? ((pnl.total_cogs / pnl.total_income) * 100).toFixed(1) : 0;
+        cogsHtml += `<tr style="font-weight:700; background:#f8fafc; border-top:1px solid #cbd5e1;">
+            <td style="padding:8px; color:#0f172a;">Total COGS</td>
+            <td style="padding:8px; text-align:right; color:#334155; font-family:ui-monospace, monospace;">${format_currency(pnl.total_cogs, 'KES')}</td>
+            <td style="padding:8px; text-align:right; color:#64748b;">${cogsPct}%</td>
+        </tr>`;
+    }
+    cogsHtml += `</tbody></table>`;
+    $(wrapper).find('#exec-pnl-cogs-table').html(cogsHtml);
+
+    // 3. Operating Expenses Card Table
+    let opexHtml = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="border-bottom:1px solid #e2e8f0; color:#64748b;">
+                <th style="padding:8px; text-align:left;">Overhead Account</th>
+                <th style="padding:8px; text-align:right;">Amount (KES)</th>
+                <th style="padding:8px; text-align:right; width:60px;">% Rev</th>
+            </tr>
+        </thead>
+        <tbody>`;
+    if (!pnl.opex_accounts || pnl.opex_accounts.length === 0) {
+        opexHtml += `<tr><td colspan="3" style="padding:12px; text-align:center; color:#94a3b8;">No OPEX recorded.</td></tr>`;
+    } else {
+        pnl.opex_accounts.forEach(a => {
+            opexHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:8px; color:#334155;">${a.account_name}</td>
+                <td style="padding:8px; text-align:right; font-weight:600; color:#dc2626; font-family:ui-monospace, monospace;">${format_currency(a.amount, '')}</td>
+                <td style="padding:8px; text-align:right; color:#64748b; font-size:11px;">${a.pct}%</td>
+            </tr>`;
+        });
+        let opexPct = pnl.total_income > 0 ? ((pnl.total_opex / pnl.total_income) * 100).toFixed(1) : 0;
+        opexHtml += `<tr style="font-weight:700; background:#f8fafc; border-top:1px solid #cbd5e1;">
+            <td style="padding:8px; color:#0f172a;">Total OPEX</td>
+            <td style="padding:8px; text-align:right; color:#dc2626; font-family:ui-monospace, monospace;">${format_currency(pnl.total_opex, 'KES')}</td>
+            <td style="padding:8px; text-align:right; color:#64748b;">${opexPct}%</td>
+        </tr>`;
+    }
+    opexHtml += `</tbody></table>`;
+    $(wrapper).find('#exec-pnl-expense-table').html(opexHtml);
 }
 
 function load_hr_data(wrapper) {
@@ -585,8 +1469,10 @@ function load_analytics_data(wrapper) {
                 });
 
                 // Update Fuel Summary Totals
-                $(wrapper).find('#exec-fuel-total-liters').text(format_currency(data.fuel.total_liters, '').trim() + ' L');
-                $(wrapper).find('#exec-fuel-total-revenue').text(format_currency(data.fuel.total_revenue, 'KES'));
+                let totalFuelLiters = flt(data.fuel.total_liters || 0);
+                let totalFuelRevenue = flt(data.fuel.total_revenue || 0);
+                $(wrapper).find('#exec-fuel-total-liters').text(totalFuelLiters.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' L');
+                $(wrapper).find('#exec-fuel-total-revenue').text(format_currency(totalFuelRevenue, 'KES'));
 
                 // Render Fuel Table Summary
                 let fuelHtml = `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
@@ -602,27 +1488,86 @@ function load_analytics_data(wrapper) {
                     <tbody>`;
                 
                 let prodColors = {'DIESEL': '#f59e0b', 'PETROL 001': '#0f172a', 'SUPER': '#0f172a', 'KEROSENE': '#10b981'};
-                
+                let sumFuelDay = 0, sumFuelNight = 0, sumFuelVolume = 0, sumFuelRevenue = 0;
+
                 Object.values(data.fuel.summary || {}).forEach(fs => {
+                    let dayL = flt(fs.day_liters || 0);
+                    let nightL = flt(fs.night_liters || 0);
+                    let totL = flt(fs.total_liters || 0);
+                    let rev = flt(fs.revenue || 0);
+                    sumFuelDay += dayL;
+                    sumFuelNight += nightL;
+                    sumFuelVolume += totL;
+                    sumFuelRevenue += rev;
                     let dotColor = prodColors[fs.item_code.toUpperCase()] || '#6366f1';
                     fuelHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
                         <td style="padding:10px 8px; font-weight:700; color:#0f172a;">
                             <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${dotColor}; margin-right:6px;"></span>
                             ${fs.item_code}
                         </td>
-                        <td style="padding:10px 8px; text-align:right; font-family: monospace;">${(fs.day_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        <td style="padding:10px 8px; text-align:right; font-family: monospace;">${(fs.night_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        <td style="padding:10px 8px; text-align:right; font-weight:700; color:#0f172a; font-family: monospace;">${(fs.total_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        <td style="padding:10px 8px; text-align:right; color:#059669; font-weight:700; font-family: monospace;">${format_currency(fs.revenue, 'KES')}</td>
+                        <td style="padding:10px 8px; text-align:right; font-family: monospace;">${dayL.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td style="padding:10px 8px; text-align:right; font-family: monospace;">${nightL.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td style="padding:10px 8px; text-align:right; font-weight:700; color:#0f172a; font-family: monospace;">${totL.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                        <td style="padding:10px 8px; text-align:right; color:#059669; font-weight:700; font-family: monospace;">${format_currency(rev, 'KES')}</td>
                     </tr>`;
                 });
-                fuelHtml += `</tbody></table>`;
+                fuelHtml += `</tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #cbd5e1; background:#f8fafc;">
+                            <td style="padding:11px 8px; font-weight:800; color:#0f172a; text-transform:uppercase; font-size:12px;">Total (Combined)</td>
+                            <td style="padding:11px 8px; text-align:right; font-family: monospace; font-weight:700; color:#334155;">${sumFuelDay.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td style="padding:11px 8px; text-align:right; font-family: monospace; font-weight:700; color:#334155;">${sumFuelNight.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td style="padding:11px 8px; text-align:right; font-weight:800; color:#0f172a; font-family: monospace; font-size:14px;">${sumFuelVolume.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td style="padding:11px 8px; text-align:right; color:#059669; font-weight:800; font-family: monospace; font-size:14px;">${format_currency(sumFuelRevenue, 'KES')}</td>
+                        </tr>
+                    </tfoot>
+                </table>`;
                 $(wrapper).find('#exec-fuel-table').html(fuelHtml);
 
+                // Extract Non-Fuel Category Totals
+                let lubesLitres = flt(data.lubes ? data.lubes.total_liters : 0);
+                let lubesRev = flt(data.lubes ? data.lubes.total_revenue : 0);
+                let lubesQty = flt(data.lubes ? (data.lubes.total_qty || (data.lubes.items || []).reduce((acc, x) => acc + flt(x.qty), 0)) : 0);
+
+                let gasKgs = flt(data.gas ? data.gas.total_kgs : 0);
+                let gasRev = flt(data.gas ? (data.gas.total_gas_revenue || data.gas.total_revenue || 0) : 0);
+                let gasQty = flt(data.gas ? (data.gas.total_qty || (data.gas.gas_items || []).reduce((acc, x) => acc + flt(x.qty), 0)) : 0);
+
+                let cylUnits = flt(data.cylinders ? data.cylinders.total_units : (data.gas ? data.gas.total_cylinders : 0));
+                let cylRev = flt(data.cylinders ? data.cylinders.total_revenue : (data.gas ? data.gas.total_cylinder_revenue : 0));
+
+                let filtersUnits = flt(data.accessories ? data.accessories.total_qty : 0);
+                let filtersRev = flt(data.accessories ? data.accessories.total_revenue : 0);
+
+                let greasingVehicles = flt(data.greasing ? data.greasing.total_vehicles : 0);
+                let greasingRev = flt(data.greasing ? data.greasing.total_revenue : 0);
+
+                let totalNonFuelRev = (data.non_fuel && data.non_fuel.total_revenue != null) ? 
+                    flt(data.non_fuel.total_revenue) : 
+                    (lubesRev + gasRev + cylRev + filtersRev + greasingRev);
+
+                // Update Non-Fuel Summary Overview Banner
+                $(wrapper).find('#exec-nonfuel-total-revenue').text(format_currency(totalNonFuelRev, 'KES'));
+                $(wrapper).find('#exec-kpi-lubes-vol').text(lubesLitres.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' L');
+                $(wrapper).find('#exec-kpi-lubes-rev').text(format_currency(lubesRev, 'KES'));
+
+                $(wrapper).find('#exec-kpi-gas-vol').text(gasKgs.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 1}) + ' Kg');
+                $(wrapper).find('#exec-kpi-gas-rev').text(format_currency(gasRev, 'KES'));
+
+                $(wrapper).find('#exec-kpi-cyl-count').text(cylUnits.toLocaleString() + ' Cyl');
+                $(wrapper).find('#exec-kpi-cyl-rev').text(format_currency(cylRev, 'KES'));
+
+                $(wrapper).find('#exec-kpi-filters-count').text(filtersUnits.toLocaleString() + ' Units');
+                $(wrapper).find('#exec-kpi-filters-rev').text(format_currency(filtersRev, 'KES'));
+
+                $(wrapper).find('#exec-kpi-greasing-count').text(greasingVehicles.toLocaleString() + ' Vehicles');
+                $(wrapper).find('#exec-kpi-greasing-rev').text(format_currency(greasingRev, 'KES'));
+
                 // 2. Render Lubes (in Litres)
-                $(wrapper).find('#exec-lubes-total-badge').text((data.lubes.total_liters || 0).toLocaleString(undefined, {minimumFractionDigits: 1}) + ' L');
+                $(wrapper).find('#exec-lubes-total-badge').text(lubesLitres.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' L');
+                $(wrapper).find('#exec-lubes-rev-badge').text(format_currency(lubesRev, 'KES'));
                 $(wrapper).find('#exec-lubes-chart').empty();
-                if (data.lubes.timeline_liters && data.lubes.timeline_liters.some(v => v > 0)) {
+                if (data.lubes && data.lubes.timeline_liters && data.lubes.timeline_liters.some(v => v > 0)) {
                     new frappe.Chart($(wrapper).find('#exec-lubes-chart')[0], {
                         data: {
                             labels: data.date_labels,
@@ -646,7 +1591,7 @@ function load_analytics_data(wrapper) {
                         </tr>
                     </thead>
                     <tbody>`;
-                if (!data.lubes.items || data.lubes.items.length === 0) {
+                if (!data.lubes || !data.lubes.items || data.lubes.items.length === 0) {
                     lubesHtml += `<tr><td colspan="5" style="padding:16px; text-align:center; color:#94a3b8;">No lubes sales recorded.</td></tr>`;
                 } else {
                     data.lubes.items.forEach(item => {
@@ -654,75 +1599,134 @@ function load_analytics_data(wrapper) {
                             <td style="padding:6px 4px; font-weight:600; color:#1e293b;">${item.item_code}</td>
                             <td style="padding:6px 4px; text-align:right; color:#64748b; font-family: monospace;">${item.pack_size}L</td>
                             <td style="padding:6px 4px; text-align:right; font-family: monospace;">${item.qty}</td>
-                            <td style="padding:6px 4px; text-align:right; font-weight:700; color:#0284c7; font-family: monospace;">${item.total_liters.toFixed(1)} L</td>
+                            <td style="padding:6px 4px; text-align:right; font-weight:700; color:#0284c7; font-family: monospace;">${flt(item.total_liters).toFixed(1)} L</td>
                             <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(item.revenue, '')}</td>
                         </tr>`;
                     });
                 }
-                lubesHtml += `</tbody></table>`;
+                lubesHtml += `</tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e2e8f0; background:#f8fafc; font-weight:700;">
+                            <td colspan="2" style="padding:8px 4px; color:#0f172a; text-transform:uppercase; font-size:11px;">Total</td>
+                            <td style="padding:8px 4px; text-align:right; font-family: monospace;">${lubesQty.toLocaleString()}</td>
+                            <td style="padding:8px 4px; text-align:right; color:#0284c7; font-family: monospace;">${lubesLitres.toFixed(1)} L</td>
+                            <td style="padding:8px 4px; text-align:right; color:#059669; font-family: monospace;">${format_currency(lubesRev, 'KES')}</td>
+                        </tr>
+                    </tfoot>
+                </table>`;
                 $(wrapper).find('#exec-analytics-lubes').html(lubesHtml);
 
-                // 3. Render Gas (Kgs) & Cylinders
-                $(wrapper).find('#exec-gas-total-badge').text((data.gas.total_kgs || 0).toLocaleString() + ' Kg');
-                $(wrapper).find('#exec-cyl-total-badge').text((data.gas.total_cylinders || 0) + ' Cyl');
+                // 3. Render Gas Refill (in Kgs)
+                $(wrapper).find('#exec-gas-total-badge').text(gasKgs.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 1}) + ' Kg');
+                $(wrapper).find('#exec-gas-rev-badge').text(format_currency(gasRev, 'KES'));
                 $(wrapper).find('#exec-gas-chart').empty();
-                if ((data.gas.timeline_kgs && data.gas.timeline_kgs.some(v => v > 0)) || (data.gas.timeline_cylinders && data.gas.timeline_cylinders.some(v => v > 0))) {
+                if (data.gas && data.gas.timeline_kgs && data.gas.timeline_kgs.some(v => v > 0)) {
                     new frappe.Chart($(wrapper).find('#exec-gas-chart')[0], {
                         data: {
                             labels: data.date_labels,
-                            datasets: [
-                                { name: "Gas (Kgs)", values: data.gas.timeline_kgs, chartType: 'bar' },
-                                { name: "Cylinders (Units)", values: data.gas.timeline_cylinders, chartType: 'line' }
-                            ]
+                            datasets: [{ name: "Gas (Kgs)", values: data.gas.timeline_kgs, chartType: 'bar' }]
                         },
-                        type: 'axis-mixed',
+                        type: 'bar',
                         height: 180,
-                        colors: ['#f97316', '#475569'],
-                        tooltipOptions: { formatTooltipY: d => d }
+                        colors: ['#f97316'],
+                        tooltipOptions: { formatTooltipY: d => (d || 0) + ' Kg' }
                     });
                 }
 
+                let gasItems = (data.gas && data.gas.gas_items) ? data.gas.gas_items : [];
                 let gasHtml = `<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
                     <thead>
                         <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; font-size:10px; text-transform:uppercase;">
-                            <th style="padding:6px 4px;">Product</th>
-                            <th style="padding:6px 4px; text-align:right;">Type</th>
-                            <th style="padding:6px 4px; text-align:right;">Units</th>
-                            <th style="padding:6px 4px; text-align:right;">Weight</th>
+                            <th style="padding:6px 4px;">Gas Product</th>
+                            <th style="padding:6px 4px; text-align:right;">Refill (Kg)</th>
+                            <th style="padding:6px 4px; text-align:right;">Qty</th>
+                            <th style="padding:6px 4px; text-align:right;">Total Weight</th>
                             <th style="padding:6px 4px; text-align:right;">Revenue</th>
                         </tr>
                     </thead>
                     <tbody>`;
-                let hasGas = (data.gas.gas_items && data.gas.gas_items.length > 0) || (data.gas.cylinder_items && data.gas.cylinder_items.length > 0);
-                if (!hasGas) {
-                    gasHtml += `<tr><td colspan="5" style="padding:16px; text-align:center; color:#94a3b8;">No gas or cylinder sales recorded.</td></tr>`;
+                if (!gasItems || gasItems.length === 0) {
+                    gasHtml += `<tr><td colspan="5" style="padding:16px; text-align:center; color:#94a3b8;">No gas refill sales recorded.</td></tr>`;
                 } else {
-                    (data.gas.gas_items || []).forEach(g => {
+                    gasItems.forEach(g => {
                         gasHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
                             <td style="padding:6px 4px; font-weight:600; color:#1e293b;">${g.item_code}</td>
-                            <td style="padding:6px 4px; text-align:right; color:#ea580c; font-size:10px; font-weight:600;">Gas Refill</td>
+                            <td style="padding:6px 4px; text-align:right; color:#64748b; font-family: monospace;">${g.kg_rating || '--'} Kg</td>
                             <td style="padding:6px 4px; text-align:right; font-family: monospace;">${g.qty}</td>
-                            <td style="padding:6px 4px; text-align:right; font-weight:700; color:#ea580c; font-family: monospace;">${g.total_kg.toFixed(0)} Kg</td>
+                            <td style="padding:6px 4px; text-align:right; font-weight:700; color:#ea580c; font-family: monospace;">${flt(g.total_kg).toFixed(0)} Kg</td>
                             <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(g.revenue, '')}</td>
                         </tr>`;
                     });
-                    (data.gas.cylinder_items || []).forEach(c => {
-                        gasHtml += `<tr style="border-bottom:1px solid #f1f5f9; background:#fcfcfc;">
+                }
+                gasHtml += `</tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e2e8f0; background:#f8fafc; font-weight:700;">
+                            <td colspan="2" style="padding:8px 4px; color:#0f172a; text-transform:uppercase; font-size:11px;">Total</td>
+                            <td style="padding:8px 4px; text-align:right; font-family: monospace;">${gasQty.toLocaleString()}</td>
+                            <td style="padding:8px 4px; text-align:right; color:#ea580c; font-family: monospace;">${gasKgs.toFixed(0)} Kg</td>
+                            <td style="padding:8px 4px; text-align:right; color:#059669; font-family: monospace;">${format_currency(gasRev, 'KES')}</td>
+                        </tr>
+                    </tfoot>
+                </table>`;
+                $(wrapper).find('#exec-analytics-gas').html(gasHtml);
+
+                // 4. Render Cylinders
+                $(wrapper).find('#exec-cyl-total-badge').text(cylUnits.toLocaleString() + ' Cyl');
+                $(wrapper).find('#exec-cyl-rev-badge').text(format_currency(cylRev, 'KES'));
+                $(wrapper).find('#exec-cylinders-chart').empty();
+                let cylTimeline = (data.cylinders && data.cylinders.timeline_units) ? data.cylinders.timeline_units : ((data.gas && data.gas.timeline_cylinders) ? data.gas.timeline_cylinders : []);
+                if (cylTimeline && cylTimeline.some(v => v > 0)) {
+                    new frappe.Chart($(wrapper).find('#exec-cylinders-chart')[0], {
+                        data: {
+                            labels: data.date_labels,
+                            datasets: [{ name: "Cylinders (Units)", values: cylTimeline, chartType: 'bar' }]
+                        },
+                        type: 'bar',
+                        height: 180,
+                        colors: ['#475569'],
+                        tooltipOptions: { formatTooltipY: d => (d || 0) + ' Cyl' }
+                    });
+                }
+
+                let cylItems = (data.cylinders && data.cylinders.items) ? data.cylinders.items : ((data.gas && data.gas.cylinder_items) ? data.gas.cylinder_items : []);
+                let cylHtml = `<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; font-size:10px; text-transform:uppercase;">
+                            <th style="padding:6px 4px;">Cylinder Item</th>
+                            <th style="padding:6px 4px; text-align:right;">Type</th>
+                            <th style="padding:6px 4px; text-align:right;">Units Sold</th>
+                            <th style="padding:6px 4px; text-align:right;">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                if (!cylItems || cylItems.length === 0) {
+                    cylHtml += `<tr><td colspan="4" style="padding:16px; text-align:center; color:#94a3b8;">No cylinder sales recorded.</td></tr>`;
+                } else {
+                    cylItems.forEach(c => {
+                        cylHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
                             <td style="padding:6px 4px; font-weight:600; color:#334155;">${c.item_code}</td>
-                            <td style="padding:6px 4px; text-align:right; color:#475569; font-size:10px; font-weight:600;">Cylinder</td>
-                            <td style="padding:6px 4px; text-align:right; font-family: monospace;">${c.qty}</td>
-                            <td style="padding:6px 4px; text-align:right; color:#64748b; font-family: monospace;">--</td>
+                            <td style="padding:6px 4px; text-align:right; color:#64748b; font-size:10px;">Cylinder</td>
+                            <td style="padding:6px 4px; text-align:right; font-family: monospace; font-weight:600;">${c.qty}</td>
                             <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(c.revenue, '')}</td>
                         </tr>`;
                     });
                 }
-                gasHtml += `</tbody></table>`;
-                $(wrapper).find('#exec-analytics-gas').html(gasHtml);
+                cylHtml += `</tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e2e8f0; background:#f8fafc; font-weight:700;">
+                            <td colspan="2" style="padding:8px 4px; color:#0f172a; text-transform:uppercase; font-size:11px;">Total</td>
+                            <td style="padding:8px 4px; text-align:right; font-family: monospace; color:#334155;">${cylUnits.toLocaleString()}</td>
+                            <td style="padding:8px 4px; text-align:right; color:#059669; font-family: monospace;">${format_currency(cylRev, 'KES')}</td>
+                        </tr>
+                    </tfoot>
+                </table>`;
+                $(wrapper).find('#exec-analytics-cylinders').html(cylHtml);
 
-                // 4. Render Filters & Accessories
-                $(wrapper).find('#exec-filters-total-badge').text((data.accessories.total_qty || 0) + ' Units');
+                // 5. Render Filters & Accessories
+                $(wrapper).find('#exec-filters-total-badge').text(filtersUnits.toLocaleString() + ' Units');
+                $(wrapper).find('#exec-filters-rev-badge').text(format_currency(filtersRev, 'KES'));
                 $(wrapper).find('#exec-filters-chart').empty();
-                if (data.accessories.timeline_qty && data.accessories.timeline_qty.some(v => v > 0)) {
+                if (data.accessories && data.accessories.timeline_qty && data.accessories.timeline_qty.some(v => v > 0)) {
                     new frappe.Chart($(wrapper).find('#exec-filters-chart')[0], {
                         data: {
                             labels: data.date_labels,
@@ -745,7 +1749,7 @@ function load_analytics_data(wrapper) {
                         </tr>
                     </thead>
                     <tbody>`;
-                if (!data.accessories.items || data.accessories.items.length === 0) {
+                if (!data.accessories || !data.accessories.items || data.accessories.items.length === 0) {
                     filtersHtml += `<tr><td colspan="4" style="padding:16px; text-align:center; color:#94a3b8;">No filter or accessory sales recorded.</td></tr>`;
                 } else {
                     data.accessories.items.forEach(acc => {
@@ -757,8 +1761,69 @@ function load_analytics_data(wrapper) {
                         </tr>`;
                     });
                 }
-                filtersHtml += `</tbody></table>`;
+                filtersHtml += `</tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e2e8f0; background:#f8fafc; font-weight:700;">
+                            <td colspan="2" style="padding:8px 4px; color:#0f172a; text-transform:uppercase; font-size:11px;">Total</td>
+                            <td style="padding:8px 4px; text-align:right; font-family: monospace;">${filtersUnits.toLocaleString()}</td>
+                            <td style="padding:8px 4px; text-align:right; color:#059669; font-family: monospace;">${format_currency(filtersRev, 'KES')}</td>
+                        </tr>
+                    </tfoot>
+                </table>`;
                 $(wrapper).find('#exec-analytics-accessories').html(filtersHtml);
+
+                // 6. Render Greasing Services
+                $(wrapper).find('#exec-greasing-total-badge').text(greasingVehicles.toLocaleString() + ' Vehicles');
+                $(wrapper).find('#exec-greasing-rev-badge').text(format_currency(greasingRev, 'KES'));
+                $(wrapper).find('#exec-greasing-chart').empty();
+                let greasingTimeline = (data.greasing && data.greasing.timeline_vehicles) ? data.greasing.timeline_vehicles : [];
+                if (greasingTimeline && greasingTimeline.some(v => v > 0)) {
+                    new frappe.Chart($(wrapper).find('#exec-greasing-chart')[0], {
+                        data: {
+                            labels: data.date_labels,
+                            datasets: [{ name: "Vehicles Serviced", values: greasingTimeline, chartType: 'bar' }]
+                        },
+                        type: 'bar',
+                        height: 180,
+                        colors: ['#16a34a'],
+                        tooltipOptions: { formatTooltipY: d => (d || 0) + ' Vehicles' }
+                    });
+                }
+
+                let greasingItems = (data.greasing && data.greasing.items) ? data.greasing.items : [];
+                let greasingHtml = `<table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:1px solid #e2e8f0; color:#64748b; font-size:10px; text-transform:uppercase;">
+                            <th style="padding:6px 4px;">Vehicle Type</th>
+                            <th style="padding:6px 4px; text-align:right;">Vehicles Serviced</th>
+                            <th style="padding:6px 4px; text-align:right;">Avg Rate</th>
+                            <th style="padding:6px 4px; text-align:right;">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                if (!greasingItems || greasingItems.length === 0) {
+                    greasingHtml += `<tr><td colspan="4" style="padding:16px; text-align:center; color:#94a3b8;">No greasing sales recorded.</td></tr>`;
+                } else {
+                    greasingItems.forEach(g => {
+                        greasingHtml += `<tr style="border-bottom:1px solid #f1f5f9;">
+                            <td style="padding:6px 4px; font-weight:600; color:#1e293b;">${g.vehicle_type}</td>
+                            <td style="padding:6px 4px; text-align:right; font-family: monospace; font-weight:600;">${g.vehicles_count}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#64748b; font-family: monospace;">${format_currency(g.avg_rate, '')}</td>
+                            <td style="padding:6px 4px; text-align:right; color:#059669; font-weight:600; font-family: monospace;">${format_currency(g.revenue, '')}</td>
+                        </tr>`;
+                    });
+                }
+                greasingHtml += `</tbody>
+                    <tfoot>
+                        <tr style="border-top:2px solid #e2e8f0; background:#f8fafc; font-weight:700;">
+                            <td style="padding:8px 4px; color:#0f172a; text-transform:uppercase; font-size:11px;">Total</td>
+                            <td style="padding:8px 4px; text-align:right; font-family: monospace; color:#15803d;">${greasingVehicles.toLocaleString()}</td>
+                            <td style="padding:8px 4px; text-align:right; color:#64748b;">--</td>
+                            <td style="padding:8px 4px; text-align:right; color:#059669; font-family: monospace;">${format_currency(greasingRev, 'KES')}</td>
+                        </tr>
+                    </tfoot>
+                </table>`;
+                $(wrapper).find('#exec-analytics-greasing').html(greasingHtml);
             }
         }
     });
@@ -1025,6 +2090,8 @@ window.view_customer_statement = function(customerId) {
 
 window.load_debtors_data = function(callback) {
     const $w = $(window.DEBTORS_STATE.wrapper || document);
+    let station = $w.find('#exec-global-station-select').val() || $w.find('#exec-header-station-select').val() || '';
+
     $w.find('#debtors-balances-body').html(`
         <tr>
             <td colspan="9" style="padding: 2.5rem; text-align: center; color: #64748b;">
@@ -1037,7 +2104,8 @@ window.load_debtors_data = function(callback) {
     `);
 
     frappe.call({
-        method: "fuel_management.fuel_management.page.shift_operation_spa.shift_operation_spa.get_debtors_data",
+        method: "fuel_management.fuel_management.api.get_debtors_data",
+        args: { station: station },
         callback: function(r) {
             let data = r.message || [];
             window.DEBTORS_STATE.debtors = data;
@@ -1506,10 +2574,13 @@ window.load_debtors_aging = function() {
         </tr>
     `);
 
+    let station = $w.find('#exec-global-station-select').val() || $w.find('#exec-header-station-select').val() || '';
+
     frappe.call({
         method: "fuel_management.fuel_management.page.shift_operation_spa.shift_operation_spa.get_debtors_aging_analysis",
         args: {
-            as_of_date: asOfDate
+            as_of_date: asOfDate,
+            station: station
         },
         callback: function(r) {
             $w.find('#btn-load-aging .spinner').addClass('hidden');
@@ -1627,8 +2698,10 @@ window.render_debtors_aging = function() {
                 <td style="padding: 5px 8px; text-align: center; color: #94a3b8; font-size: 0.75rem; vertical-align: middle;">${idx + 1}</td>
                 <td style="padding: 5px 8px; vertical-align: middle;">
                     <div style="font-weight: 700; color: #0f172a; font-size: 0.82rem; line-height: 1.2;">${escape_debtor_html(c.name)}</div>
-                    <div style="font-size: 0.7rem; color: #64748b; line-height: 1.2; margin-top: 1px;">
+                    <div style="font-size: 0.7rem; color: #64748b; line-height: 1.2; margin-top: 1px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
                         <span>Fleet ID: <b>${escape_debtor_html(c.fleet_id || c.id || 'N/A')}</b></span>
+                        ${c.last_clean_bill_date ? `<span style="background: #f0fdf4; color: #166534; padding: 1px 4px; border-radius: 3px; border: 1px solid #bbf7d0;">Clean Bill: <b>${c.last_clean_bill_date}</b></span>` : ''}
+                        ${c.credit_days ? `<span style="background: #eff6ff; color: #1e40af; padding: 1px 4px; border-radius: 3px; border: 1px solid #bfdbfe;">Terms: <b>${c.credit_days}d</b></span>` : ''}
                     </div>
                 </td>
                 <td style="padding: 5px 8px; text-align: right; font-family: monospace; color: #64748b; font-size: 0.78rem; vertical-align: middle;">${format_num_only(c.credit_limit)}</td>
@@ -2244,6 +3317,45 @@ function apply_inventory_zoom(wrapper, level) {
 }
 
 
+function get_stock_group_priority(groupName) {
+    let g = (groupName || "").toUpperCase().trim();
+    if (g.includes("LUBE") || g.includes("LUBRICANT") || g.includes("OIL")) return 1;
+    if (g === "GAS" || (g.includes("GAS") && !g.includes("CYLINDER"))) return 2;
+    if (g.includes("CYLINDER")) return 3;
+    if (g.includes("ACCESSOR")) return 4;
+    if (g.includes("FILTER")) return 5;
+    return 6;
+}
+
+function sort_stock_groups(groupList) {
+    return (groupList || []).slice().sort((a, b) => {
+        let pA = get_stock_group_priority(a);
+        let pB = get_stock_group_priority(b);
+        if (pA !== pB) return pA - pB;
+        return a.localeCompare(b);
+    });
+}
+
+function get_item_sort_key(item) {
+    let name = String((item && (item.item_name || item.item_code || item.name)) || '').toUpperCase().trim();
+    let match = name.match(/(\d+(?:\.\d+)?)\s*KG/);
+    if (match) {
+        let weight = parseFloat(match[1]) || 0;
+        return { has_kg: 0, weight: weight, name: name };
+    }
+    return { has_kg: 1, weight: 0, name: name };
+}
+
+function sort_stock_items(itemList) {
+    return (itemList || []).slice().sort((a, b) => {
+        let kA = get_item_sort_key(a);
+        let kB = get_item_sort_key(b);
+        if (kA.has_kg !== kB.has_kg) return kA.has_kg - kB.has_kg;
+        if (kA.weight !== kB.weight) return kA.weight - kB.weight;
+        return kA.name.localeCompare(kB.name);
+    });
+}
+
 function fetch_inventory_report($wrapper) {
     let fromInput = $wrapper.find('#inventory-date-from');
     let toInput = $wrapper.find('#inventory-date-to');
@@ -2284,7 +3396,7 @@ function fetch_inventory_report($wrapper) {
                 let unique_items = [];
                 let item_opts = '';
                 
-                Object.keys(data).forEach(group => {
+                sort_stock_groups(Object.keys(data)).forEach(group => {
                     // Group Header
                     html += `
                         <tr class="row-group-header">
@@ -2292,7 +3404,7 @@ function fetch_inventory_report($wrapper) {
                         </tr>
                     `;
                     
-                    data[group].forEach(row => {
+                    sort_stock_items(data[group]).forEach(row => {
                         if(!unique_items.includes(row.item_code) && row.item_group !== 'FUEL') {
                             unique_items.push(row.item_code);
                             item_opts += `<option data-value="${row.item_code}" value="${row.item_name} (${row.item_code})"></option>`;
@@ -2381,7 +3493,3525 @@ function load_topups_statement(wrapper) {
             }
             
             $(wrapper).find('#exec-topups-table tbody').html(html);
-            $(wrapper).find('#exec-topups-total').text(format_currency(total, "KES"));
+            $(wrapper).find('#exec-topups-total, #exec-holding-balance').text(format_currency(total, "KES"));
         }
     });
 }
+
+/* =========================================================================
+   RECONCILIATIONS MODULE (Customer Payments & Station Cards)
+   ========================================================================= */
+
+window.RECON_STATE = {
+    initialized: false,
+    reconciliation_type: "customer_payments", // "customer_payments" or "station_cards"
+    from_date: "",
+    to_date: "",
+    status: "pending", // "all", "pending", "reconciled"
+    party_or_card: "ALL",
+    search: "",
+    page: 1,
+    page_length: 50,
+    total_pages: 1,
+    selected_items: new Set(),
+    search_timer: null,
+    loading: false
+};
+
+function init_reconciliation_module(wrapper) {
+    let $w = $(wrapper);
+    if (window.RECON_STATE.initialized) return;
+    window.RECON_STATE.initialized = true;
+
+    // Set default dates: first day of current month to today
+    let today = frappe.datetime.get_today();
+    let parts = today.split("-");
+    let firstOfMonth = parts[0] + "-" + parts[1] + "-01";
+    
+    window.RECON_STATE.from_date = firstOfMonth;
+    window.RECON_STATE.to_date = today;
+
+    $w.find("#recon-from-date").val(firstOfMonth);
+    $w.find("#recon-to-date").val(today);
+    $w.find("#recon-status-filter").val("pending");
+
+    // 1. Tab Switch (Customer Payments <-> Station Cards)
+    $w.off("click", "#recon-segmented-control .seg-btn").on("click", "#recon-segmented-control .seg-btn", function(e) {
+        e.preventDefault();
+        let reconType = $(this).attr("data-recon-type");
+        if (reconType === window.RECON_STATE.reconciliation_type) return;
+
+        $w.find("#recon-segmented-control .seg-btn").removeClass("active");
+        $(this).addClass("active");
+
+        window.RECON_STATE.reconciliation_type = reconType;
+        window.RECON_STATE.party_or_card = "ALL";
+        window.RECON_STATE.page = 1;
+        window.RECON_STATE.selected_items.clear();
+        update_recon_bulk_ui($w);
+
+        // Update party label
+        if (reconType === "customer_payments") {
+            $w.find("#recon-party-label").text("Customer:");
+        } else {
+            $w.find("#recon-party-label").text("Card Type:");
+        }
+
+        load_reconciliation_data(wrapper, true);
+    });
+
+    // 2. Date Inputs Change
+    $w.off("change", "#recon-from-date, #recon-to-date").on("change", "#recon-from-date, #recon-to-date", function() {
+        window.RECON_STATE.from_date = $w.find("#recon-from-date").val();
+        window.RECON_STATE.to_date = $w.find("#recon-to-date").val();
+        $w.find(".recon-preset-btn").removeClass("active");
+        window.RECON_STATE.page = 1;
+        load_reconciliation_data(wrapper);
+    });
+
+    // 3. Date Presets
+    $w.off("click", ".recon-preset-btn").on("click", ".recon-preset-btn", function(e) {
+        e.preventDefault();
+        $w.find(".recon-preset-btn").removeClass("active");
+        $(this).addClass("active");
+        let preset = $(this).attr("data-preset");
+        let today = frappe.datetime.get_today();
+
+        if (preset === "today") {
+            window.RECON_STATE.from_date = today;
+            window.RECON_STATE.to_date = today;
+        } else if (preset === "yesterday") {
+            let yest = frappe.datetime.add_days(today, -1);
+            window.RECON_STATE.from_date = yest;
+            window.RECON_STATE.to_date = yest;
+        } else if (preset === "week") {
+            window.RECON_STATE.from_date = frappe.datetime.add_days(today, -7);
+            window.RECON_STATE.to_date = today;
+        } else if (preset === "month") {
+            let p = today.split("-");
+            window.RECON_STATE.from_date = p[0] + "-" + p[1] + "-01";
+            window.RECON_STATE.to_date = today;
+        } else if (preset === "all") {
+            window.RECON_STATE.from_date = "";
+            window.RECON_STATE.to_date = today;
+        }
+
+        $w.find("#recon-from-date").val(window.RECON_STATE.from_date);
+        $w.find("#recon-to-date").val(window.RECON_STATE.to_date);
+        window.RECON_STATE.page = 1;
+        load_reconciliation_data(wrapper);
+    });
+
+    // 4. Status Filter Change
+    $w.off("change", "#recon-status-filter").on("change", "#recon-status-filter", function() {
+        window.RECON_STATE.status = $(this).val();
+        window.RECON_STATE.page = 1;
+        load_reconciliation_data(wrapper);
+    });
+
+    // 5. Party/Card Dropdown Change
+    $w.off("change", "#recon-party-filter").on("change", "#recon-party-filter", function() {
+        window.RECON_STATE.party_or_card = $(this).val();
+        window.RECON_STATE.page = 1;
+        load_reconciliation_data(wrapper);
+    });
+
+    // 6. Search Input Debounce
+    $w.off("input", "#recon-search-input").on("input", "#recon-search-input", function() {
+        let val = $(this).val();
+        clearTimeout(window.RECON_STATE.search_timer);
+        window.RECON_STATE.search_timer = setTimeout(function() {
+            window.RECON_STATE.search = val;
+            window.RECON_STATE.page = 1;
+            load_reconciliation_data(wrapper);
+        }, 300);
+    });
+
+    // 7. Refresh Button
+    $w.off("click", "#btn-recon-refresh").on("click", "#btn-recon-refresh", function(e) {
+        e.preventDefault();
+        load_reconciliation_data(wrapper, true);
+    });
+
+    // 8. Pagination Controls
+    $w.off("click", "#btn-recon-prev-page").on("click", "#btn-recon-prev-page", function(e) {
+        e.preventDefault();
+        if (window.RECON_STATE.page > 1) {
+            window.RECON_STATE.page--;
+            load_reconciliation_data(wrapper);
+        }
+    });
+
+    $w.off("click", "#btn-recon-next-page").on("click", "#btn-recon-next-page", function(e) {
+        e.preventDefault();
+        if (window.RECON_STATE.page < window.RECON_STATE.total_pages) {
+            window.RECON_STATE.page++;
+            load_reconciliation_data(wrapper);
+        }
+    });
+
+    // 9. Master Select Checkbox
+    $w.off("change", "#recon-master-checkbox").on("change", "#recon-master-checkbox", function() {
+        let checked = $(this).is(":checked");
+        $w.find(".recon-row-select").each(function() {
+            let name = $(this).attr("data-name");
+            $(this).prop("checked", checked);
+            if (checked) {
+                window.RECON_STATE.selected_items.add(name);
+            } else {
+                window.RECON_STATE.selected_items.delete(name);
+            }
+        });
+        update_recon_bulk_ui($w);
+    });
+
+    // 10. Row Select Checkbox
+    $w.off("change", ".recon-row-select").on("change", ".recon-row-select", function() {
+        let name = $(this).attr("data-name");
+        if ($(this).is(":checked")) {
+            window.RECON_STATE.selected_items.add(name);
+        } else {
+            window.RECON_STATE.selected_items.delete(name);
+        }
+        update_recon_bulk_ui($w);
+    });
+
+    // 11. Row Reconcile Action Button (Single toggle)
+    $w.off("click", ".recon-row-toggle").on("click", ".recon-row-toggle", function(e) {
+        e.preventDefault();
+        let $btn = $(this);
+        let name = $btn.attr("data-name");
+        let currentStatus = parseInt($btn.attr("data-reconciled") || "0");
+        let newStatus = currentStatus === 1 ? 0 : 1;
+
+        $btn.prop("disabled", true).css("opacity", "0.6");
+
+        frappe.call({
+            method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.toggle_reconciliation_status",
+            args: {
+                doctype: window.RECON_STATE.reconciliation_type === "customer_payments" ? "Customer Payment" : "Station Cards",
+                names: JSON.stringify([name]),
+                is_reconciled: newStatus
+            },
+            callback: function(r) {
+                $btn.prop("disabled", false).css("opacity", "1");
+                if (r && r.message && r.message.success) {
+                    frappe.show_alert({
+                        message: newStatus === 1 ? __("Transaction marked as Reconciled") : __("Reconciliation reverted to Pending"),
+                        indicator: newStatus === 1 ? "green" : "orange"
+                    }, 3);
+                    load_reconciliation_data(wrapper);
+                } else {
+                    frappe.msgprint(__("Failed to update status."));
+                }
+            },
+            error: function() {
+                $btn.prop("disabled", false).css("opacity", "1");
+            }
+        });
+    });
+
+    // 12. Bulk Reconcile Selected Button
+    $w.off("click", "#btn-recon-bulk-check").on("click", "#btn-recon-bulk-check", function(e) {
+        e.preventDefault();
+        let names = Array.from(window.RECON_STATE.selected_items);
+        if (!names || names.length === 0) return;
+
+        frappe.confirm(
+            __("Mark {0} selected transactions as Reconciled?", [names.length]),
+            function() {
+                let $bulkBtn = $w.find("#btn-recon-bulk-check");
+                $bulkBtn.prop("disabled", true).text("Reconciling...");
+
+                frappe.call({
+                    method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.toggle_reconciliation_status",
+                    args: {
+                        doctype: window.RECON_STATE.reconciliation_type === "customer_payments" ? "Customer Payment" : "Station Cards",
+                        names: JSON.stringify(names),
+                        is_reconciled: 1
+                    },
+                    callback: function(r) {
+                        $bulkBtn.prop("disabled", false);
+                        if (r && r.message && r.message.success) {
+                            frappe.show_alert({
+                                message: __("{0} transactions marked as Reconciled", [names.length]),
+                                indicator: "green"
+                            }, 4);
+                            window.RECON_STATE.selected_items.clear();
+                            update_recon_bulk_ui($w);
+                            load_reconciliation_data(wrapper);
+                        }
+                    }
+                });
+            }
+        );
+    });
+}
+
+function update_recon_bulk_ui($w) {
+    let count = window.RECON_STATE.selected_items.size;
+    let $btn = $w.find("#btn-recon-bulk-check");
+    if (count > 0) {
+        $btn.css("display", "inline-flex");
+        $w.find("#recon-bulk-label").text("Reconcile Selected (" + count + ")");
+    } else {
+        $btn.hide();
+        $w.find("#recon-master-checkbox").prop("checked", false);
+    }
+}
+
+function load_reconciliation_data(wrapper, refresh_options) {
+    let $w = $(wrapper || document);
+    let state = window.RECON_STATE;
+    let station = $w.find('#exec-global-station-select').val() || $w.find('#exec-header-station-select').val() || '';
+
+    $w.find("#recon-transactions-table tbody").html(
+        '<tr><td colspan="10" style="text-align:center; padding:36px; color:#64748b;"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Loading transactions...</td></tr>'
+    );
+
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_reconciliation_data",
+        args: {
+            reconciliation_type: state.reconciliation_type,
+            from_date: state.from_date,
+            to_date: state.to_date,
+            status: state.status,
+            party_or_card: state.party_or_card,
+            search: state.search,
+            page: state.page,
+            page_length: state.page_length,
+            station: station
+        },
+        callback: function(r) {
+            if (r && r.message) {
+                let data = r.message;
+                render_reconciliation_kpis($w, data.summary);
+                render_reconciliation_table($w, data);
+                if (refresh_options || !state.cached_options_type || state.cached_options_type !== state.reconciliation_type) {
+                    populate_recon_dropdown($w, data.dropdown_options);
+                    state.cached_options_type = state.reconciliation_type;
+                }
+            } else {
+                $w.find("#recon-transactions-table tbody").html(
+                    '<tr><td colspan="10" style="text-align:center; padding:32px; color:#ef4444;">Failed to load data.</td></tr>'
+                );
+            }
+        }
+    });
+}
+
+function render_reconciliation_kpis($w, summary) {
+    if (!summary) return;
+    let totCount = summary.total_count || 0;
+    let totAmt = summary.total_amount || 0;
+    let recCount = summary.reconciled_count || 0;
+    let recAmt = summary.reconciled_amount || 0;
+    let penCount = summary.pending_count || 0;
+    let penAmt = summary.pending_amount || 0;
+
+    let matchRate = totAmt > 0 ? ((recAmt / totAmt) * 100).toFixed(1) : (totCount > 0 ? ((recCount / totCount) * 100).toFixed(1) : "0.0");
+
+    $w.find("#recon-kpi-total-val").text(totCount.toLocaleString() + " Txns");
+    $w.find("#recon-kpi-total-sub").text("KES " + totAmt.toLocaleString("en-KE", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " total value");
+
+    $w.find("#recon-kpi-reconciled-val").text(recCount.toLocaleString() + " Cleared");
+    $w.find("#recon-kpi-reconciled-sub").text("KES " + recAmt.toLocaleString("en-KE", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " cleared");
+
+    $w.find("#recon-kpi-pending-val").text(penCount.toLocaleString() + " Pending");
+    $w.find("#recon-kpi-pending-sub").text("KES " + penAmt.toLocaleString("en-KE", {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " unverified");
+
+    $w.find("#recon-kpi-rate-val").text(matchRate + "%");
+
+    // Update Tab Badges
+    if (window.RECON_STATE.reconciliation_type === "customer_payments") {
+        $w.find("#recon-cp-pending-pill").text(penCount.toLocaleString() + " pending");
+    } else {
+        $w.find("#recon-sc-pending-pill").text(penCount.toLocaleString() + " pending");
+    }
+}
+
+function populate_recon_dropdown($w, options) {
+    let $select = $w.find("#recon-party-filter");
+    let isCP = window.RECON_STATE.reconciliation_type === "customer_payments";
+    let defaultLabel = isCP ? "All Customers" : "All Cards";
+
+    let html = '<option value="ALL">' + defaultLabel + '</option>';
+    if (options && options.length) {
+        options.forEach(function(opt) {
+            html += `<option value="${opt.id}">${opt.label}</option>`;
+        });
+    }
+    $select.html(html);
+    $select.val(window.RECON_STATE.party_or_card || "ALL");
+}
+
+function render_reconciliation_table($w, data) {
+    let isCP = data.reconciliation_type === "customer_payments";
+    let records = data.records || [];
+    let state = window.RECON_STATE;
+    state.total_pages = data.total_pages || 1;
+
+    // 1. Render Header
+    let theadHtml = "";
+    if (isCP) {
+        theadHtml = `
+            <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:left; font-size:11.5px; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">
+                <th style="padding:10px 14px; width:36px; text-align:center;">
+                    <input type="checkbox" id="recon-master-checkbox" style="cursor:pointer;" />
+                </th>
+                <th style="padding:10px 12px; white-space:nowrap;">Date</th>
+                <th style="padding:10px 12px; white-space:nowrap;">Trans No / Ref</th>
+                <th style="padding:10px 12px; white-space:nowrap;">Shift</th>
+                <th style="padding:10px 12px;">Customer</th>
+                <th style="padding:10px 12px;">CSA / Attendant</th>
+                <th style="padding:10px 12px;">Payment Mode</th>
+                <th style="padding:10px 12px; text-align:right;">Amount (KES)</th>
+                <th style="padding:10px 12px; text-align:center;">Status</th>
+                <th style="padding:10px 14px; text-align:center; min-width:140px;">Reconcile Action</th>
+            </tr>
+        `;
+    } else {
+        theadHtml = `
+            <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; text-align:left; font-size:11.5px; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">
+                <th style="padding:10px 14px; width:36px; text-align:center;">
+                    <input type="checkbox" id="recon-master-checkbox" style="cursor:pointer;" />
+                </th>
+                <th style="padding:10px 12px; white-space:nowrap;">Date</th>
+                <th style="padding:10px 12px; white-space:nowrap;">Receipt No / RRN</th>
+                <th style="padding:10px 12px; white-space:nowrap;">Shift</th>
+                <th style="padding:10px 12px;">Card Type</th>
+                <th style="padding:10px 12px;">CSA / Attendant</th>
+                <th style="padding:10px 12px;">Memo / Ref</th>
+                <th style="padding:10px 12px; text-align:right;">Amount (KES)</th>
+                <th style="padding:10px 12px; text-align:center;">Status</th>
+                <th style="padding:10px 14px; text-align:center; min-width:140px;">Reconcile Action</th>
+            </tr>
+        `;
+    }
+    $w.find("#recon-table-head").html(theadHtml);
+
+    // 2. Render Body
+    if (!records || records.length === 0) {
+        $w.find("#recon-table-body").html(
+            '<tr><td colspan="10" style="text-align:center; padding:48px 16px; color:#64748b;">' +
+            '<div style="font-size:32px; margin-bottom:8px;">🔍</div>' +
+            '<div style="font-weight:700; color:#334155; font-size:14px;">No transactions found</div>' +
+            '<div style="font-size:12px; color:#94a3b8; margin-top:4px;">Try adjusting the date range or status filter.</div>' +
+            '</td></tr>'
+        );
+        $w.find("#recon-pagination-info").text("Showing 0 of 0 transactions");
+        $w.find("#btn-recon-prev-page").prop("disabled", true);
+        $w.find("#btn-recon-next-page").prop("disabled", true);
+        $w.find("#recon-current-page").text("Page 1 of 1");
+        return;
+    }
+
+    let tbodyHtml = "";
+    records.forEach(function(r) {
+        let isRecon = parseInt(r.is_reconciled || 0) === 1;
+        let isChecked = state.selected_items.has(r.name);
+        let rowBg = isRecon ? "background:#fcfdfd;" : "background:#ffffff;";
+
+        // Status Badge
+        let statusBadge = "";
+        if (isRecon) {
+            let tooltip = r.reconciled_by ? `Reconciled by ${r.reconciled_by} on ${r.reconciled_date_formatted}` : "Reconciled";
+            statusBadge = `<span title="${tooltip}" style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:999px; background:#dcfce7; color:#15803d; font-size:11px; font-weight:700;">
+                <span class="material-symbols-outlined" style="font-size:13px;">check</span> Reconciled
+            </span>`;
+        } else {
+            statusBadge = `<span style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:999px; background:#fef3c7; color:#b45309; font-size:11px; font-weight:700;">
+                <span class="material-symbols-outlined" style="font-size:13px;">schedule</span> Pending
+            </span>`;
+        }
+
+        // Action Check Button
+        let actionBtn = "";
+        if (isRecon) {
+            actionBtn = `
+                <button class="recon-row-toggle btn-recon-done" data-name="${r.name}" data-reconciled="1" title="Click to undo / revert to pending" style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; border:1px solid #86efac; background:#f0fdf4; color:#16a34a; font-weight:700; font-size:11.5px; cursor:pointer; transition:all 0.15s ease;">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#16a34a;">check_circle</span>
+                    <span>Reconciled</span>
+                </button>
+            `;
+        } else {
+            actionBtn = `
+                <button class="recon-row-toggle btn-recon-pending" data-name="${r.name}" data-reconciled="0" title="Click to verify and reconcile" style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; color:#334155; font-weight:600; font-size:11.5px; cursor:pointer; transition:all 0.15s ease;">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#94a3b8;">check_box_outline_blank</span>
+                    <span>Mark Reconciled</span>
+                </button>
+            `;
+        }
+
+        let amtFormatted = (r.amount || 0).toLocaleString("en-KE", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        if (isCP) {
+            let custDisplay = r.customer_name ? `<strong>${r.customer_name}</strong> <span style="font-size:11px; color:#64748b;">(${r.customer})</span>` : (r.customer || "-");
+            let modePill = r.mode_of_payment ? `<span style="display:inline-block; padding:2px 7px; background:#f1f5f9; border-radius:4px; font-size:11px; font-weight:600; color:#334155;">${r.mode_of_payment}</span>` : "-";
+
+            tbodyHtml += `
+                <tr style="border-bottom:1px solid #f1f5f9; ${rowBg} transition:background 0.1s ease;">
+                    <td style="padding:10px 14px; text-align:center;">
+                        <input type="checkbox" class="recon-row-select" data-name="${r.name}" ${isChecked ? "checked" : ""} style="cursor:pointer;" />
+                    </td>
+                    <td style="padding:10px 12px; font-size:12px; color:#334155; white-space:nowrap;">${r.date_formatted}</td>
+                    <td style="padding:10px 12px; font-family:monospace; font-size:12px; font-weight:700; color:#0f172a; white-space:nowrap;">
+                        <a href="/app/customer-payment/${r.name}" target="_blank" style="color:#2563eb; text-decoration:none;">${r.trans_no || r.name}</a>
+                    </td>
+                    <td style="padding:10px 12px; font-size:11.5px; color:#64748b; white-space:nowrap;">
+                        <a href="/app/shift/${r.shift}" target="_blank" style="color:#475569; text-decoration:none;">${r.shift || "-"}</a>
+                    </td>
+                    <td style="padding:10px 12px; font-size:12px; color:#1e293b;">${custDisplay}</td>
+                    <td style="padding:10px 12px; font-size:12px; color:#475569;">${r.csa_name || r.csa || "-"}</td>
+                    <td style="padding:10px 12px;">${modePill}</td>
+                    <td style="padding:10px 12px; text-align:right; font-family:monospace; font-size:13px; font-weight:700; color:#0f172a;">${amtFormatted}</td>
+                    <td style="padding:10px 12px; text-align:center;">${statusBadge}</td>
+                    <td style="padding:10px 14px; text-align:center;">${actionBtn}</td>
+                </tr>
+            `;
+        } else {
+            let cardBadge = r.card ? `<span style="display:inline-block; padding:2px 8px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:4px; font-size:11px; font-weight:700;">${r.card}</span>` : "-";
+
+            tbodyHtml += `
+                <tr style="border-bottom:1px solid #f1f5f9; ${rowBg} transition:background 0.1s ease;">
+                    <td style="padding:10px 14px; text-align:center;">
+                        <input type="checkbox" class="recon-row-select" data-name="${r.name}" ${isChecked ? "checked" : ""} style="cursor:pointer;" />
+                    </td>
+                    <td style="padding:10px 12px; font-size:12px; color:#334155; white-space:nowrap;">${r.date_formatted}</td>
+                    <td style="padding:10px 12px; font-family:monospace; font-size:12px; font-weight:700; color:#0f172a; white-space:nowrap;">
+                        <a href="/app/station-cards/${r.name}" target="_blank" style="color:#2563eb; text-decoration:none;">${r.receipt_no || r.name}</a>
+                    </td>
+                    <td style="padding:10px 12px; font-size:11.5px; color:#64748b; white-space:nowrap;">
+                        <a href="/app/shift/${r.shift}" target="_blank" style="color:#475569; text-decoration:none;">${r.shift || "-"}</a>
+                    </td>
+                    <td style="padding:10px 12px;">${cardBadge}</td>
+                    <td style="padding:10px 12px; font-size:12px; color:#475569;">${r.csa_name || r.csa || "-"}</td>
+                    <td style="padding:10px 12px; font-size:11.5px; color:#64748b; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.memo || "-"}</td>
+                    <td style="padding:10px 12px; text-align:right; font-family:monospace; font-size:13px; font-weight:700; color:#0f172a;">${amtFormatted}</td>
+                    <td style="padding:10px 12px; text-align:center;">${statusBadge}</td>
+                    <td style="padding:10px 14px; text-align:center;">${actionBtn}</td>
+                </tr>
+            `;
+        }
+    });
+
+    $w.find("#recon-table-body").html(tbodyHtml);
+
+    // Update pagination controls
+    let startIdx = ((state.page - 1) * state.page_length) + 1;
+    let endIdx = Math.min(startIdx + records.length - 1, data.summary.total_count || 0);
+    $w.find("#recon-pagination-info").text(`Showing ${startIdx.toLocaleString()} to ${endIdx.toLocaleString()} of ${(data.summary.total_count || 0).toLocaleString()} transactions`);
+
+    $w.find("#recon-current-page").text(`Page ${state.page} of ${state.total_pages}`);
+    $w.find("#btn-recon-prev-page").prop("disabled", state.page <= 1);
+    $w.find("#btn-recon-next-page").prop("disabled", state.page >= state.total_pages);
+}
+
+// =========================================================================
+// STAFF SHORTS REPORT MODULE FOR EXECUTIVE PANEL
+// =========================================================================
+
+window.EXEC_SHORTS_DATA = [];
+window.EXEC_SHORTS_SUMMARY = {};
+
+function init_exec_shorts_report(wrapper) {
+    let $w = $(wrapper);
+    
+    // Set default dates if empty (start of current month to today)
+    let $startInput = $w.find('#exec-shorts-report-start');
+    let $endInput = $w.find('#exec-shorts-report-end');
+    if (!$startInput.val()) {
+        let today = new Date();
+        let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        $startInput.val(firstDay.toISOString().split('T')[0]);
+        $endInput.val(today.toISOString().split('T')[0]);
+    }
+
+    setup_exec_shorts_events(wrapper);
+    load_exec_shortage_balances(wrapper);
+}
+
+function setup_exec_shorts_events(wrapper) {
+    let $w = $(wrapper);
+    if ($w.data('exec_shorts_events_bound')) return;
+    $w.data('exec_shorts_events_bound', true);
+
+    // Preset buttons
+    $w.on('click', '.exec-sr-preset', function(e) {
+        e.preventDefault();
+        $w.find('.exec-sr-preset').removeClass('active').css({
+            background: '#fff',
+            color: '#64748b',
+            borderColor: '#e2e8f0',
+            fontWeight: '600'
+        });
+        $(this).addClass('active').css({
+            background: '#e0e7ff',
+            color: '#3730a3',
+            borderColor: '#cbd5e1',
+            fontWeight: '700'
+        });
+
+        let preset = $(this).attr('data-preset');
+        let today = new Date();
+        let start = '', end = today.toISOString().split('T')[0];
+
+        if (preset === 'this_month') {
+            let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            start = firstDay.toISOString().split('T')[0];
+        } else if (preset === 'last_month') {
+            let firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            let lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+            start = firstDayLastMonth.toISOString().split('T')[0];
+            end = lastDayLastMonth.toISOString().split('T')[0];
+        } else if (preset === 'this_year') {
+            let firstDayYear = new Date(today.getFullYear(), 0, 1);
+            start = firstDayYear.toISOString().split('T')[0];
+        } else if (preset === 'all_time') {
+            start = '2020-01-01';
+        }
+
+        $w.find('#exec-shorts-report-start').val(start);
+        $w.find('#exec-shorts-report-end').val(end);
+        load_exec_shortage_balances(wrapper);
+    });
+
+    // Filter button
+    $w.on('click', '#btn-exec-filter-shorts', function(e) {
+        e.preventDefault();
+        load_exec_shortage_balances(wrapper);
+    });
+
+    // Search input
+    $w.on('input', '#exec-sr-search-input', function() {
+        render_exec_shortage_table(wrapper);
+    });
+
+    // Status filter
+    $w.on('click', '.exec-sr-status-filter', function(e) {
+        e.preventDefault();
+        $w.find('.exec-sr-status-filter').removeClass('active').css({
+            background: 'transparent',
+            color: '#64748b',
+            fontWeight: '600'
+        });
+        $(this).addClass('active').css({
+            background: '#fff',
+            color: '#0f172a',
+            fontWeight: '700'
+        });
+        render_exec_shortage_table(wrapper);
+    });
+
+    // Sort select
+    $w.on('change', '#exec-sr-sort-select', function() {
+        render_exec_shortage_table(wrapper);
+    });
+
+    // Print report
+    $w.on('click', '#btn-exec-print-shorts-report', function(e) {
+        e.preventDefault();
+        print_exec_shorts_report(wrapper);
+    });
+
+    // Export CSV
+    $w.on('click', '#btn-exec-export-shorts-csv', function(e) {
+        e.preventDefault();
+        export_exec_shorts_csv(wrapper);
+    });
+
+    // Statement modal close
+    $w.on('click', '#exec-breakdown-modal-close', function() {
+        $w.find('#exec-breakdown-modal').hide();
+    });
+    $w.on('click', '#exec-breakdown-modal', function(e) {
+        if (e.target === this) {
+            $(this).hide();
+        }
+    });
+
+    // Statement breakdown row click
+    $w.on('click', '.btn-exec-statement-breakdown', function(e) {
+        e.preventDefault();
+        let empId = $(this).attr('data-emp-id');
+        let empName = $(this).attr('data-emp-name');
+        show_exec_shortage_breakdown(wrapper, empId, empName);
+    });
+}
+
+function load_exec_shortage_balances(wrapper) {
+    let $w = $(wrapper);
+    let $btn = $w.find('#btn-exec-filter-shorts');
+    $btn.prop('disabled', true);
+
+    $w.find('#exec-shortage-balances-body').html('<tr><td colspan="9" style="text-align:center; padding:30px; color:#64748b;">Loading staff shortage balances...</td></tr>');
+
+    let start_date = $w.find('#exec-shorts-report-start').val();
+    let end_date = $w.find('#exec-shorts-report-end').val();
+
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_csa_shorts_balances",
+        args: { start_date: start_date, end_date: end_date },
+        callback: function(r) {
+            $btn.prop('disabled', false);
+
+            if (r.message) {
+                let data = r.message;
+                let rows = data.rows || (Array.isArray(data) ? data : []);
+                let summary = data.summary || {};
+
+                window.EXEC_SHORTS_DATA = rows;
+                window.EXEC_SHORTS_SUMMARY = summary;
+
+                let totalOpening = summary.total_opening != null ? summary.total_opening : rows.reduce((acc, x) => acc + (x.opening_balance || 0), 0);
+                let totalShorts = summary.total_shortage != null ? summary.total_shortage : rows.reduce((acc, x) => acc + (x.period_shortage || x.month_shortage || 0), 0);
+                let totalPaid = summary.total_paid != null ? summary.total_paid : rows.reduce((acc, x) => acc + (x.period_paid || x.month_paid || 0), 0);
+                let totalClosing = summary.total_closing != null ? summary.total_closing : (totalOpening + totalShorts - totalPaid);
+                let activeCount = summary.active_debtors_count != null ? summary.active_debtors_count : rows.filter(x => (x.closing_balance || x.outstanding_balance || 0) > 0.01).length;
+
+                $w.find('#exec-sr-kpi-opening').text(format_currency(totalOpening, 'KES'));
+                $w.find('#exec-sr-kpi-shorts').text(format_currency(totalShorts, 'KES'));
+                $w.find('#exec-sr-kpi-paid').text(format_currency(totalPaid, 'KES'));
+                $w.find('#exec-sr-kpi-closing').text(format_currency(totalClosing, 'KES'));
+                $w.find('#exec-sr-kpi-count').text(`${activeCount} / ${rows.length} Staff`);
+
+                render_exec_shortage_table(wrapper);
+            }
+        },
+        error: function() {
+            $btn.prop('disabled', false);
+            $w.find('#exec-shortage-balances-body').html('<tr><td colspan="9" style="text-align:center; padding:30px; color:#ef4444; font-weight:600;">Error loading shortage balances. Please retry.</td></tr>');
+        }
+    });
+}
+
+function render_exec_shortage_table(wrapper) {
+    let $w = $(wrapper);
+    let rows = window.EXEC_SHORTS_DATA || [];
+    let searchTerm = ($w.find('#exec-sr-search-input').val() || '').trim().toLowerCase();
+    let statusFilter = $w.find('.exec-sr-status-filter.active').attr('data-filter') || 'all';
+    let sortMode = $w.find('#exec-sr-sort-select').val() || 'balance_desc';
+
+    let filtered = rows.filter(r => {
+        let name = (r.employee_name || '').toLowerCase();
+        let id = (r.employee || '').toLowerCase();
+        return name.includes(searchTerm) || id.includes(searchTerm);
+    });
+
+    if (statusFilter === 'outstanding') {
+        filtered = filtered.filter(r => (r.closing_balance || r.outstanding_balance || 0) > 0.01);
+    } else if (statusFilter === 'cleared') {
+        filtered = filtered.filter(r => Math.abs(r.closing_balance || r.outstanding_balance || 0) <= 0.01);
+    }
+
+    filtered.sort((a, b) => {
+        let aBal = a.closing_balance != null ? a.closing_balance : (a.outstanding_balance || 0);
+        let bBal = b.closing_balance != null ? b.closing_balance : (b.outstanding_balance || 0);
+        let aShort = a.period_shortage != null ? a.period_shortage : (a.month_shortage || 0);
+        let bShort = b.period_shortage != null ? b.period_shortage : (b.month_shortage || 0);
+        let aPaid = a.period_paid != null ? a.period_paid : (a.month_paid || 0);
+        let bPaid = b.period_paid != null ? b.period_paid : (b.month_paid || 0);
+        let aOpen = a.opening_balance || 0;
+        let bOpen = b.opening_balance || 0;
+
+        if (sortMode === 'balance_desc') return bBal - aBal;
+        if (sortMode === 'shorts_desc') return bShort - aShort;
+        if (sortMode === 'paid_desc') return bPaid - aPaid;
+        if (sortMode === 'opening_desc') return bOpen - aOpen;
+        if (sortMode === 'name_asc') return (a.employee_name || a.employee || '').localeCompare(b.employee_name || b.employee || '');
+        return 0;
+    });
+
+    if (filtered.length === 0) {
+        $w.find('#exec-shortage-balances-body').html('<tr><td colspan="9" style="text-align:center; padding:30px; color:#94a3b8;">No matching attendant records found.</td></tr>');
+        $w.find('#exec-sr-foot-opening').text('KES 0.00');
+        $w.find('#exec-sr-foot-shorts').text('KES 0.00');
+        $w.find('#exec-sr-foot-paid').text('KES 0.00');
+        $w.find('#exec-sr-foot-net').text('KES 0.00');
+        $w.find('#exec-sr-foot-closing').text('KES 0.00');
+        return;
+    }
+
+    let html = '';
+    let footOpening = 0, footShorts = 0, footPaid = 0, footNet = 0, footClosing = 0;
+
+    filtered.forEach((row, idx) => {
+        let openBal = row.opening_balance || 0;
+        let pShort = row.period_shortage != null ? row.period_shortage : (row.month_shortage || 0);
+        let pPaid = row.period_paid != null ? row.period_paid : (row.month_paid || 0);
+        let pNet = row.period_net != null ? row.period_net : (pShort - pPaid);
+        let closeBal = row.closing_balance != null ? row.closing_balance : (row.outstanding_balance || 0);
+
+        footOpening += openBal;
+        footShorts += pShort;
+        footPaid += pPaid;
+        footNet += pNet;
+        footClosing += closeBal;
+
+        let statusBadge = '';
+        if (closeBal > 0.01) {
+            statusBadge = `<span style="background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 700;">Outstanding</span>`;
+        } else if (closeBal < -0.01) {
+            statusBadge = `<span style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 700;">Credit</span>`;
+        } else {
+            statusBadge = `<span style="background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 700;">Cleared</span>`;
+        }
+
+        let netColor = pNet > 0.01 ? '#dc2626' : (pNet < -0.01 ? '#16a34a' : '#64748b');
+        let netPrefix = pNet > 0.01 ? '+' : '';
+
+        html += `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="text-align: center; color: #94a3b8; font-weight: 600;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight: 700; color: #0f172a;">${row.employee_name || row.employee}</div>
+                    <div style="font-size: 11px; color: #64748b; font-family: monospace;">${row.employee}</div>
+                </td>
+                <td style="text-align: right; font-weight: 700; font-family: monospace;">${format_currency(openBal, '')}</td>
+                <td style="text-align: right; color: ${pShort > 0 ? '#dc2626' : '#94a3b8'}; font-weight: 700; font-family: monospace;">${format_currency(pShort, '')}</td>
+                <td style="text-align: right; color: ${pPaid > 0 ? '#16a34a' : '#94a3b8'}; font-weight: 700; font-family: monospace;">${format_currency(pPaid, '')}</td>
+                <td style="text-align: right; color: ${netColor}; font-weight: 600; font-family: monospace;">${netPrefix}${format_currency(pNet, '')}</td>
+                <td style="text-align: right; font-weight: 800; color: ${closeBal > 0 ? '#0f172a' : (closeBal < 0 ? '#2563eb' : '#059669')}; font-family: monospace; font-size: 13.5px;">${format_currency(closeBal, '')}</td>
+                <td style="text-align: center;">${statusBadge}</td>
+                <td style="text-align: center;">
+                    <button type="button" class="btn btn-xs btn-default btn-exec-statement-breakdown" data-emp-id="${row.employee}" data-emp-name="${frappe.utils.escape_html(row.employee_name || row.employee)}" style="padding: 3px 8px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                        <span class="material-symbols-outlined" style="font-size: 14px;">receipt_long</span> Statement
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+
+    $w.find('#exec-shortage-balances-body').html(html);
+
+    $w.find('#exec-sr-foot-opening').text(format_currency(footOpening, 'KES'));
+    $w.find('#exec-sr-foot-shorts').text(format_currency(footShorts, 'KES'));
+    $w.find('#exec-sr-foot-paid').text(format_currency(footPaid, 'KES'));
+    let netFootColor = footNet > 0.01 ? '#dc2626' : (footNet < -0.01 ? '#16a34a' : '#475569');
+    $w.find('#exec-sr-foot-net').css('color', netFootColor).text((footNet > 0.01 ? '+' : '') + format_currency(footNet, 'KES'));
+    $w.find('#exec-sr-foot-closing').text(format_currency(footClosing, 'KES'));
+}
+
+function show_exec_shortage_breakdown(wrapper, employee_id, employee_name) {
+    let $w = $(wrapper);
+    let start_date = $w.find('#exec-shorts-report-start').val();
+    let end_date = $w.find('#exec-shorts-report-end').val();
+
+    $w.find('#exec-breakdown-modal-title').html(`Statement: ${employee_name}`);
+    $w.find('#exec-breakdown-modal-subtitle').html(`Employee: <b>${employee_name}</b> &bull; Period: <b>${frappe.datetime.str_to_user(start_date)}</b> to <b>${frappe.datetime.str_to_user(end_date)}</b>`);
+
+    $w.find('#exec-breakdown-modal-kpis').html(`
+        <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; text-align:center;">
+            <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase;">Opening Balance (B/F)</div>
+            <div style="font-size:14px; font-weight:800; color:#1e293b; font-family:monospace; margin-top:2px;">...</div>
+        </div>
+        <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 10px; text-align:center;">
+            <div style="font-size:10px; color:#991b1b; font-weight:700; text-transform:uppercase;">Period Shorts</div>
+            <div style="font-size:14px; font-weight:800; color:#dc2626; font-family:monospace; margin-top:2px;">...</div>
+        </div>
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:8px 10px; text-align:center;">
+            <div style="font-size:10px; color:#166534; font-weight:700; text-transform:uppercase;">Period Paid</div>
+            <div style="font-size:14px; font-weight:800; color:#16a34a; font-family:monospace; margin-top:2px;">...</div>
+        </div>
+        <div style="background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px; padding:8px 10px; text-align:center;">
+            <div style="font-size:10px; color:#3730a3; font-weight:700; text-transform:uppercase;">Closing Balance (C/F)</div>
+            <div style="font-size:14px; font-weight:800; color:#4338ca; font-family:monospace; margin-top:2px;">...</div>
+        </div>
+    `);
+
+    $w.find('#exec-breakdown-modal-body').html('<div style="text-align:center; padding:30px; color:#64748b;">Loading statement transactions...</div>');
+    $w.find('#exec-breakdown-modal').css('display', 'flex');
+
+    frappe.call({
+        method: "fuel_management.fuel_management.api.get_csa_shorts_breakdown",
+        args: {
+            employee: employee_id,
+            start_date: start_date,
+            end_date: end_date
+        },
+        callback: function(r) {
+            if (r.message) {
+                let d = r.message;
+                window.EXEC_CURRENT_STATEMENT_DATA = d;
+
+                let finalName = d.employee_name || employee_name;
+                $w.find('#exec-breakdown-modal-title').html(`Statement: ${finalName}`);
+                $w.find('#exec-breakdown-modal-subtitle').html(`Employee: <b>${finalName}</b> &bull; Period: <b>${frappe.datetime.str_to_user(d.start_date || start_date)}</b> to <b>${frappe.datetime.str_to_user(d.end_date || end_date)}</b>`);
+
+                $w.find('#exec-breakdown-modal-kpis').html(`
+                    <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase;">Opening Balance (B/F)</div>
+                        <div style="font-size:14px; font-weight:800; color:#1e293b; font-family:monospace; margin-top:2px;">${format_currency(d.opening_balance || 0, 'KES')}</div>
+                    </div>
+                    <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:10px; color:#991b1b; font-weight:700; text-transform:uppercase;">Period Shorts</div>
+                        <div style="font-size:14px; font-weight:800; color:#dc2626; font-family:monospace; margin-top:2px;">${format_currency(d.period_shortage || 0, 'KES')}</div>
+                    </div>
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:10px; color:#166534; font-weight:700; text-transform:uppercase;">Period Paid</div>
+                        <div style="font-size:14px; font-weight:800; color:#16a34a; font-family:monospace; margin-top:2px;">${format_currency(d.period_paid || 0, 'KES')}</div>
+                    </div>
+                    <div style="background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:10px; color:#3730a3; font-weight:700; text-transform:uppercase;">Closing Balance (C/F)</div>
+                        <div style="font-size:14px; font-weight:800; color:#4338ca; font-family:monospace; margin-top:2px;">${format_currency(d.closing_balance || 0, 'KES')}</div>
+                    </div>
+                `);
+
+                $w.find('#btn-exec-print-csa-statement').off('click').on('click', function(e) {
+                    e.preventDefault();
+                    print_exec_csa_statement(d);
+                });
+
+                let html = `
+                    <table class="table table-bordered" style="width: 100%; margin: 0; font-size: 12px; background: #fff;">
+                        <thead>
+                            <tr style="background: #f8fafc; font-size: 11px; text-transform: uppercase;">
+                                <th style="padding: 6px 8px;">Date</th>
+                                <th style="padding: 6px 8px;">Type</th>
+                                <th style="padding: 6px 8px;">Shift / Ref</th>
+                                <th style="padding: 6px 8px;">Reason / Description</th>
+                                <th style="padding: 6px 8px; text-align: right; color: #dc2626;">Shortage (+)</th>
+                                <th style="padding: 6px 8px; text-align: right; color: #16a34a;">Paid (-)</th>
+                                <th style="padding: 6px 8px; text-align: right; font-weight: 800;">Running Bal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="background: #f8fafc; font-weight: 700;">
+                                <td style="padding: 6px 8px; font-family: monospace;">${frappe.datetime.str_to_user(d.start_date)}</td>
+                                <td colspan="3" style="padding: 6px 8px; color: #334155;">🏁 OPENING BALANCE (B/F from Prior Month)</td>
+                                <td style="padding: 6px 8px; text-align: right; color: #94a3b8;">-</td>
+                                <td style="padding: 6px 8px; text-align: right; color: #94a3b8;">-</td>
+                                <td style="padding: 6px 8px; text-align: right; font-weight: 800; font-family: monospace;">${format_currency(d.opening_balance || 0, '')}</td>
+                            </tr>
+                `;
+
+                if (!d.transactions || d.transactions.length === 0) {
+                    html += `
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 20px; color: #94a3b8;">
+                                No transactions recorded for this attendant in the selected period.
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    d.transactions.forEach(row => {
+                        let shiftName = row.shift || '-';
+                        if (row.shift_date && row.shift_template) {
+                            let parts = row.shift_date.split('-');
+                            if (parts.length === 3) shiftName = `(${parts[2]}/${parts[1]}) ${row.shift_template}`;
+                        }
+                        let reasonText = row.reason || '-';
+                        let typeBadge = row.amount > 0 
+                            ? `<span style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700;">Shortage</span>`
+                            : `<span style="background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; padding:1px 6px; border-radius:4px; font-size:10px; font-weight:700;">Payment</span>`;
+
+                        html += `
+                            <tr>
+                                <td style="padding: 6px 8px; font-family: monospace; white-space: nowrap;">${frappe.datetime.str_to_user(row.date)}</td>
+                                <td style="padding: 6px 8px;">${typeBadge}</td>
+                                <td style="padding: 6px 8px; color: #475569;">${shiftName}</td>
+                                <td style="padding: 6px 8px; color: #1e293b;">${reasonText}</td>
+                                <td style="padding: 6px 8px; text-align: right; color: #dc2626; font-weight: 700; font-family: monospace;">${row.shortage_amount > 0 ? format_currency(row.shortage_amount, '') : '-'}</td>
+                                <td style="padding: 6px 8px; text-align: right; color: #16a34a; font-weight: 700; font-family: monospace;">${row.paid_amount > 0 ? format_currency(row.paid_amount, '') : '-'}</td>
+                                <td style="padding: 6px 8px; text-align: right; font-weight: 800; font-family: monospace;">${format_currency(row.running_balance, '')}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                html += `
+                            <tr style="background: #eef2ff; font-weight: 800; border-top: 2px solid #c7d2fe;">
+                                <td style="padding: 6px 8px; font-family: monospace;">${frappe.datetime.str_to_user(d.end_date)}</td>
+                                <td colspan="3" style="padding: 6px 8px; color: #334155;">🏁 CLOSING BALANCE (Carried Forward)</td>
+                                <td style="padding: 6px 8px; text-align: right; color: #dc2626; font-family: monospace;">${format_currency(d.period_shortage || 0, '')}</td>
+                                <td style="padding: 6px 8px; text-align: right; color: #16a34a; font-family: monospace;">${format_currency(d.period_paid || 0, '')}</td>
+                                <td style="padding: 6px 8px; text-align: right; font-weight: 800; font-family: monospace; color: #312e81;">${format_currency(d.closing_balance || 0, '')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                `;
+                $w.find('#exec-breakdown-modal-body').html(html);
+            }
+        },
+        error: function() {
+            $w.find('#exec-breakdown-modal-body').html('<div style="text-align:center; padding:20px; color:#ef4444; font-weight:600;">Error loading CSA statement.</div>');
+        }
+    });
+}
+
+function print_exec_shorts_report(wrapper) {
+    let rows = window.EXEC_SHORTS_DATA || [];
+    let $w = $(wrapper);
+    let start_date = $w.find('#exec-shorts-report-start').val() || '';
+    let end_date = $w.find('#exec-shorts-report-end').val() || '';
+    let companyName = frappe.defaults.get_user_default("Company") || "KILIBET INVESTMENT LTD";
+
+    let totOpen = 0, totShort = 0, totPaid = 0, totClose = 0;
+    let tableRowsHtml = '';
+
+    rows.forEach((r, idx) => {
+        let op = r.opening_balance || 0;
+        let sh = r.period_shortage != null ? r.period_shortage : (r.month_shortage || 0);
+        let pd = r.period_paid != null ? r.period_paid : (r.month_paid || 0);
+        let cl = r.closing_balance != null ? r.closing_balance : (r.outstanding_balance || 0);
+        let net = sh - pd;
+
+        totOpen += op;
+        totShort += sh;
+        totPaid += pd;
+        totClose += cl;
+
+        let statusText = cl > 0.01 ? 'Outstanding' : (cl < -0.01 ? 'Credit' : 'Cleared');
+
+        tableRowsHtml += `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td><b>${r.employee_name || r.employee}</b><br><small style="color:#666;">${r.employee}</small></td>
+                <td style="text-align: right; font-family: monospace;">${Number(op).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td style="text-align: right; font-family: monospace; color: #b91c1c;">${Number(sh).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td style="text-align: right; font-family: monospace; color: #15803d;">${Number(pd).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td style="text-align: right; font-family: monospace;">${(net > 0 ? '+' : '') + Number(net).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: bold;">${Number(cl).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td style="text-align: center; font-size: 11px;">${statusText}</td>
+            </tr>
+        `;
+    });
+
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Staff Shorts & Liability Report</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; color: #1e293b; padding: 25px; margin: 0; }
+                .header { text-align: center; border-bottom: 2px solid #334155; padding-bottom: 12px; margin-bottom: 16px; }
+                .title { font-size: 18px; font-weight: 800; text-transform: uppercase; margin: 0; color: #0f172a; }
+                .subtitle { font-size: 12px; color: #475569; margin: 4px 0 0 0; }
+                .kpi-grid { display: flex; gap: 10px; margin-bottom: 16px; justify-content: space-between; }
+                .kpi-box { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px; background: #f8fafc; text-align: center; }
+                .kpi-label { font-size: 10px; font-weight: bold; color: #64748b; text-transform: uppercase; }
+                .kpi-val { font-size: 14px; font-weight: 800; font-family: monospace; margin-top: 3px; color: #0f172a; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 11px; }
+                th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; color: #334155; }
+                tfoot tr td { background: #f8fafc; font-weight: bold; }
+                @media print { body { padding: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">${companyName}</div>
+                <div class="subtitle">STAFF SHORTAGES & LIABILITY RECONCILIATION REPORT</div>
+                <div class="subtitle" style="font-weight: 600; margin-top: 3px;">Period: ${frappe.datetime.str_to_user(start_date)} to ${frappe.datetime.str_to_user(end_date)} &bull; Printed: ${new Date().toLocaleString()}</div>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-box">
+                    <div class="kpi-label">Opening Balance (B/F)</div>
+                    <div class="kpi-val">KES ${Number(totOpen).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-label">Period Shorts Incurred</div>
+                    <div class="kpi-val" style="color:#b91c1c;">KES ${Number(totShort).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-label">Period Paid / Recovered</div>
+                    <div class="kpi-val" style="color:#15803d;">KES ${Number(totPaid).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-label">Closing Balance (C/F)</div>
+                    <div class="kpi-val" style="color:#1e3a8a;">KES ${Number(totClose).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 30px;">#</th>
+                        <th>Attendant / Staff</th>
+                        <th style="text-align: right;">Opening Bal (KES)</th>
+                        <th style="text-align: right;">Period Shorts (KES)</th>
+                        <th style="text-align: right;">Period Paid (KES)</th>
+                        <th style="text-align: right;">Net Change (KES)</th>
+                        <th style="text-align: right;">Closing Bal (KES)</th>
+                        <th style="text-align: center;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>${tableRowsHtml}</tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="2" style="text-align: right; text-transform: uppercase;">GRAND TOTALS:</td>
+                        <td style="text-align: right; font-family: monospace;">KES ${Number(totOpen).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td style="text-align: right; font-family: monospace; color:#b91c1c;">KES ${Number(totShort).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td style="text-align: right; font-family: monospace; color:#15803d;">KES ${Number(totPaid).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td style="text-align: right; font-family: monospace;">${(totShort - totPaid > 0 ? '+' : '')}KES ${Number(totShort - totPaid).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td style="text-align: right; font-family: monospace; font-size: 12px; color:#0f172a;">KES ${Number(totClose).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+            <script>window.onload = function() { window.print(); };</script>
+        </body>
+        </html>
+    `;
+
+    let printWindow = window.open('', '_blank');
+    printWindow.document.write(printHtml);
+    printWindow.document.close();
+}
+
+function print_exec_csa_statement(data) {
+    if (!data) return;
+    let companyName = frappe.defaults.get_user_default("Company") || "KILIBET INVESTMENT LTD";
+
+    let txRowsHtml = '';
+    (data.transactions || []).forEach(tx => {
+        let shiftName = tx.shift || '-';
+        if (tx.shift_date && tx.shift_template) {
+            let parts = tx.shift_date.split('-');
+            if (parts.length === 3) shiftName = `(${parts[2]}/${parts[1]}) ${tx.shift_template}`;
+        }
+        let reason = tx.reason || '-';
+
+        txRowsHtml += `
+            <tr>
+                <td style="font-family: monospace;">${frappe.datetime.str_to_user(tx.date)}</td>
+                <td>${tx.entry_type || (tx.amount > 0 ? 'Shortage' : 'Payment')}</td>
+                <td>${shiftName}</td>
+                <td>${reason}</td>
+                <td style="text-align: right; font-family: monospace; color: #b91c1c;">${tx.shortage_amount > 0 ? Number(tx.shortage_amount).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-'}</td>
+                <td style="text-align: right; font-family: monospace; color: #15803d;">${tx.paid_amount > 0 ? Number(tx.paid_amount).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-'}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: bold;">${Number(tx.running_balance).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+            </tr>
+        `;
+    });
+
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Staff Statement - ${data.employee_name}</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; color: #1e293b; padding: 25px; margin: 0; }
+                .header { text-align: center; border-bottom: 2px solid #334155; padding-bottom: 12px; margin-bottom: 16px; }
+                .title { font-size: 18px; font-weight: 800; text-transform: uppercase; margin: 0; color: #0f172a; }
+                .subtitle { font-size: 12px; color: #475569; margin: 3px 0 0 0; }
+                .info-box { display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; margin-bottom: 15px; font-size: 12px; }
+                .kpi-grid { display: flex; gap: 10px; margin-bottom: 16px; }
+                .kpi-box { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; background: #f8fafc; text-align: center; }
+                .kpi-label { font-size: 10px; font-weight: bold; color: #64748b; text-transform: uppercase; }
+                .kpi-val { font-size: 14px; font-weight: 800; font-family: monospace; margin-top: 3px; color: #0f172a; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 11px; }
+                th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; color: #334155; }
+                @media print { body { padding: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">${companyName}</div>
+                <div class="subtitle">STAFF LIABILITY & SHORTAGE STATEMENT</div>
+            </div>
+
+            <div class="info-box">
+                <div>
+                    <div><b>Staff:</b> ${data.employee_name}</div>
+                    <div><b>ID:</b> ${data.employee}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div><b>Statement Period:</b> ${frappe.datetime.str_to_user(data.start_date)} to ${frappe.datetime.str_to_user(data.end_date)}</div>
+                    <div><b>Date Printed:</b> ${new Date().toLocaleString()}</div>
+                </div>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-box">
+                    <div class="kpi-label">Opening Balance (B/F)</div>
+                    <div class="kpi-val">KES ${Number(data.opening_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-label">Period Shorts Incurred</div>
+                    <div class="kpi-val" style="color:#b91c1c;">KES ${Number(data.period_shortage || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-label">Period Paid / Recovered</div>
+                    <div class="kpi-val" style="color:#15803d;">KES ${Number(data.period_paid || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="kpi-label">Closing Balance (C/F)</div>
+                    <div class="kpi-val" style="color:#1e3a8a;">KES ${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Shift / Ref</th>
+                        <th>Reason / Description</th>
+                        <th style="text-align: right;">Shortage (+)</th>
+                        <th style="text-align: right;">Paid (-)</th>
+                        <th style="text-align: right;">Running Bal (KES)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="background: #f8fafc; font-weight: bold;">
+                        <td style="font-family: monospace;">${frappe.datetime.str_to_user(data.start_date)}</td>
+                        <td colspan="3">🏁 OPENING BALANCE (B/F from Prior Month)</td>
+                        <td style="text-align: right; color:#94a3b8;">-</td>
+                        <td style="text-align: right; color:#94a3b8;">-</td>
+                        <td style="text-align: right; font-weight: bold; font-family: monospace;">${Number(data.opening_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                    ${txRowsHtml}
+                    <tr style="background: #eef2ff; font-weight: bold;">
+                        <td style="font-family: monospace;">${frappe.datetime.str_to_user(data.end_date)}</td>
+                        <td colspan="3">🏁 CLOSING BALANCE (Carried Forward)</td>
+                        <td style="text-align: right; font-family: monospace; color:#b91c1c;">${Number(data.period_shortage || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td style="text-align: right; font-family: monospace; color:#15803d;">${Number(data.period_paid || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td style="text-align: right; font-family: monospace; color:#1e3a8a;">${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                </tbody>
+            </table>
+            <script>window.onload = function() { window.print(); };</script>
+        </body>
+        </html>
+    `;
+
+    let printWindow = window.open('', '_blank');
+    printWindow.document.write(printHtml);
+    printWindow.document.close();
+}
+
+function export_exec_shorts_csv(wrapper) {
+    let rows = window.EXEC_SHORTS_DATA || [];
+    if (rows.length === 0) {
+        frappe.msgprint("No records available to export.");
+        return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Row,Staff Name,Employee ID,Status,Opening Balance (KES),Period Shorts (KES),Period Paid (KES),Period Net Change (KES),Closing Balance (KES)\n";
+
+    rows.forEach((r, idx) => {
+        let name = (r.employee_name || r.employee || '').replace(/"/g, '""');
+        let id = r.employee || '';
+        let st = r.closing_balance > 0.01 ? 'Outstanding' : (r.closing_balance < -0.01 ? 'Credit' : 'Cleared');
+        let op = (r.opening_balance || 0).toFixed(2);
+        let sh = (r.period_shortage != null ? r.period_shortage : (r.month_shortage || 0)).toFixed(2);
+        let pd = (r.period_paid != null ? r.period_paid : (r.month_paid || 0)).toFixed(2);
+        let net = (r.period_net != null ? r.period_net : (sh - pd)).toFixed(2);
+        let cl = (r.closing_balance != null ? r.closing_balance : (r.outstanding_balance || 0)).toFixed(2);
+
+        csvContent += `${idx + 1},"${name}","${id}","${st}",${op},${sh},${pd},${net},${cl}\n`;
+    });
+
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Staff_Shorts_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+
+// ========================================================
+// CASH & BANK ACCOUNTS MODULE
+// ========================================================
+function init_exec_cash_accounts(wrapper) {
+    if (!window.EXEC_CA_STATE) {
+        window.EXEC_CA_STATE = {
+            active_account: null,
+            from_date: null,
+            to_date: null,
+            type_filter: 'all',
+            search: '',
+            raw_data: null
+        };
+    }
+
+    let today = frappe.datetime.get_today();
+    if (!window.EXEC_CA_STATE.to_date) {
+        window.EXEC_CA_STATE.to_date = today;
+        window.EXEC_CA_STATE.from_date = frappe.datetime.add_days(today, -6);
+    }
+
+    $(wrapper).find('#exec-ca-from').val(window.EXEC_CA_STATE.from_date);
+    $(wrapper).find('#exec-ca-to').val(window.EXEC_CA_STATE.to_date);
+
+    // Date Presets
+    $(wrapper).find('.exec-ca-preset').off('click').on('click', function() {
+        $(wrapper).find('.exec-ca-preset').removeClass('active').css({'background': '#fff', 'color': '#64748b', 'font-weight': '600', 'border-color': '#e2e8f0'});
+        $(this).addClass('active').css({'background': '#e0e7ff', 'color': '#3730a3', 'font-weight': '700', 'border-color': '#cbd5e1'});
+
+        let preset = $(this).data('preset');
+        let end = frappe.datetime.get_today();
+        let start = end;
+
+        if (preset === 'today') {
+            start = end;
+        } else if (preset === 'last_7') {
+            start = frappe.datetime.add_days(end, -6);
+        } else if (preset === 'this_month') {
+            start = frappe.datetime.month_start();
+        } else if (preset === 'last_month') {
+            let parts = end.split('-');
+            let year = parseInt(parts[0]);
+            let month = parseInt(parts[1]) - 1;
+            if (month === 0) {
+                month = 12;
+                year -= 1;
+            }
+            let monthStr = month < 10 ? '0' + month : '' + month;
+            start = `${year}-${monthStr}-01`;
+            let lastDay = new Date(year, month, 0).getDate();
+            end = `${year}-${monthStr}-${lastDay}`;
+        } else if (preset === 'this_year') {
+            let year = end.split('-')[0];
+            start = `${year}-01-01`;
+        }
+
+        window.EXEC_CA_STATE.from_date = start;
+        window.EXEC_CA_STATE.to_date = end;
+        $(wrapper).find('#exec-ca-from').val(start);
+        $(wrapper).find('#exec-ca-to').val(end);
+        load_exec_cash_accounts(wrapper);
+    });
+
+    // Apply button
+    $(wrapper).find('#btn-exec-ca-apply').off('click').on('click', function() {
+        window.EXEC_CA_STATE.from_date = $(wrapper).find('#exec-ca-from').val();
+        window.EXEC_CA_STATE.to_date = $(wrapper).find('#exec-ca-to').val();
+        load_exec_cash_accounts(wrapper);
+    });
+
+    // Search input
+    $(wrapper).find('#exec-ca-search-input').off('input').on('input', function() {
+        window.EXEC_CA_STATE.search = $(this).val().trim().toLowerCase();
+        render_exec_ca_table(wrapper);
+    });
+
+    // Type filter buttons
+    $(wrapper).find('.exec-ca-type-filter').off('click').on('click', function() {
+        $(wrapper).find('.exec-ca-type-filter').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600'});
+        $(this).addClass('active').css({'background': '#fff', 'color': '#0f172a', 'font-weight': '700'});
+        window.EXEC_CA_STATE.type_filter = $(this).data('filter');
+        render_exec_ca_table(wrapper);
+    });
+
+    // Print & Export
+    $(wrapper).find('#btn-exec-ca-print').off('click').on('click', function() {
+        print_exec_ca_ledger(wrapper);
+    });
+    $(wrapper).find('#btn-exec-ca-export').off('click').on('click', function() {
+        export_exec_ca_csv(wrapper);
+    });
+    $(wrapper).find('#btn-exec-transfer-supplier').off('click').on('click', function() {
+        open_supplier_payment_modal(wrapper, 'bank_transfer');
+    });
+
+    load_exec_cash_accounts(wrapper);
+}
+
+function load_exec_cash_accounts(wrapper) {
+    $(wrapper).find('#exec-ca-table-body').html('<tr><td colspan="7" style="text-align: center; padding: 30px; color: #94a3b8;"><span class="spinner"></span> Loading ledger...</td></tr>');
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_cash_accounts_overview',
+        args: {
+            account: window.EXEC_CA_STATE.active_account,
+            from_date: window.EXEC_CA_STATE.from_date,
+            to_date: window.EXEC_CA_STATE.to_date
+        },
+        callback: function(r) {
+            if (r.message) {
+                let data = r.message;
+                window.EXEC_CA_STATE.raw_data = data;
+                window.EXEC_CA_STATE.active_account = data.account;
+
+                // Render account switcher pills
+                let pillsHtml = '';
+                (data.accounts_list || []).forEach(acc => {
+                    let isActive = acc.name === data.account;
+                    let bg = isActive ? '#2563eb' : '#f8fafc';
+                    let color = isActive ? '#ffffff' : '#1e293b';
+                    let border = isActive ? '#2563eb' : '#cbd5e1';
+                    let typeBadge = acc.account_type === 'Cash' 
+                        ? `<span style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: ${isActive ? 'rgba(255,255,255,0.25)' : '#e2e8f0'}; color: ${isActive ? '#fff' : '#475569'}; font-weight: 700;">CASH</span>` 
+                        : `<span style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: ${isActive ? 'rgba(255,255,255,0.25)' : '#dbeafe'}; color: ${isActive ? '#fff' : '#1d4ed8'}; font-weight: 700;">BANK</span>`;
+                    
+                    let shortName = acc.name.replace(' - KIL', '');
+                    pillsHtml += `
+                        <div class="exec-ca-pill" data-account="${acc.name}" style="flex-shrink: 0; min-width: 170px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 10px; padding: 8px 14px; cursor: pointer; transition: all 0.2s;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                <span style="font-size: 12px; font-weight: 700;">${shortName}</span>
+                                ${typeBadge}
+                            </div>
+                            <div style="font-size: 14px; font-weight: 800; font-family: monospace;">
+                                KES ${Number(acc.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            </div>
+                        </div>
+                    `;
+                });
+                $(wrapper).find('#exec-ca-accounts-pills').html(pillsHtml);
+
+                $(wrapper).find('.exec-ca-pill').off('click').on('click', function() {
+                    let targetAccount = $(this).data('account');
+                    window.EXEC_CA_STATE.active_account = targetAccount;
+                    load_exec_cash_accounts(wrapper);
+                });
+
+                // Update Total Liquid & Active Badge
+                $(wrapper).find('#exec-ca-total-liquid').text(`KES ${Number(data.total_liquid || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-ca-active-account-badge').text(data.account);
+
+                // Update 5 KPIs
+                $(wrapper).find('#exec-ca-kpi-opening').text(`KES ${Number(data.opening_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-ca-kpi-inflows').text(`KES ${Number(data.total_inflows || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-ca-kpi-outflows').text(`KES ${Number(data.total_outflows || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-ca-kpi-net').text(`KES ${Number(data.net_change || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                if (data.net_change >= 0) {
+                    $(wrapper).find('#exec-ca-kpi-net').css('color', '#16a34a');
+                } else {
+                    $(wrapper).find('#exec-ca-kpi-net').css('color', '#dc2626');
+                }
+                $(wrapper).find('#exec-ca-kpi-closing').text(`KES ${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                // Update Footers
+                $(wrapper).find('#exec-ca-foot-inflows').text(`KES ${Number(data.total_inflows || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-ca-foot-outflows').text(`KES ${Number(data.total_outflows || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-ca-foot-closing').text(`KES ${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                render_exec_ca_table(wrapper);
+            }
+        }
+    });
+}
+
+function render_exec_ca_table(wrapper) {
+    let data = window.EXEC_CA_STATE.raw_data;
+    if (!data || !data.transactions) return;
+
+    let txns = data.transactions;
+    let typeFilter = window.EXEC_CA_STATE.type_filter;
+    let search = (window.EXEC_CA_STATE.search || '').toLowerCase();
+
+    let filtered = txns.filter(t => {
+        if (typeFilter === 'inflows' && (t.debit <= 0)) return false;
+        if (typeFilter === 'outflows' && (t.credit <= 0)) return false;
+
+        if (search) {
+            let text = `${t.voucher_no || ''} ${t.voucher_type || ''} ${t.remarks || ''} ${t.against || ''}`.toLowerCase();
+            if (!text.includes(search)) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        $(wrapper).find('#exec-ca-table-body').html('<tr><td colspan="7" style="text-align: center; padding: 30px; color: #94a3b8;">No transactions found matching criteria.</td></tr>');
+        return;
+    }
+
+    let rowsHtml = '';
+    filtered.forEach(t => {
+        let debitStr = t.debit > 0 ? `KES ${Number(t.debit).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '-';
+        let creditStr = t.credit > 0 ? `KES ${Number(t.credit).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '-';
+        let runningStr = `KES ${Number(t.running_balance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+
+        let vLink = t.voucher_no;
+        if (t.voucher_type && t.voucher_no) {
+            vLink = `<a href="/app/${frappe.router.slug(t.voucher_type)}/${t.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 600; text-decoration: underline;">${t.voucher_no}</a>`;
+        }
+
+        let memo = (t.remarks || '').replace(/\n/g, ' · ');
+
+        rowsHtml += `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="font-size: 12px; color: #475569; white-space: nowrap;">${t.date_formatted}</td>
+                <td style="font-size: 12px; font-family: monospace;">
+                    <div style="font-weight: 700; color: #0f172a;">${vLink}</div>
+                    <div style="font-size: 10px; color: #94a3b8;">${t.voucher_type}</div>
+                </td>
+                <td style="font-size: 12px; color: #1e293b; max-width: 320px; word-break: break-word;">${memo}</td>
+                <td style="font-size: 11px; color: #64748b; max-width: 220px; word-break: break-word;">${t.against || '-'}</td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; color: ${t.debit > 0 ? '#16a34a' : '#94a3b8'}; font-weight: ${t.debit > 0 ? '700' : 'normal'};">${debitStr}</td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; color: ${t.credit > 0 ? '#dc2626' : '#94a3b8'}; font-weight: ${t.credit > 0 ? '700' : 'normal'};">${creditStr}</td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">${runningStr}</td>
+            </tr>
+        `;
+    });
+
+    $(wrapper).find('#exec-ca-table-body').html(rowsHtml);
+}
+
+function print_exec_ca_ledger(wrapper) {
+    let data = window.EXEC_CA_STATE.raw_data;
+    if (!data || !data.transactions) {
+        frappe.msgprint("No ledger records available to print.");
+        return;
+    }
+
+    let txns = data.transactions;
+    let rowsHtml = '';
+    txns.forEach(t => {
+        let debitStr = t.debit > 0 ? Number(t.debit).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-';
+        let creditStr = t.credit > 0 ? Number(t.credit).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-';
+        let runningStr = Number(t.running_balance).toLocaleString('en-US', {minimumFractionDigits: 2});
+        let memo = (t.remarks || '').replace(/\n/g, ' · ');
+
+        rowsHtml += `
+            <tr>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${t.date_formatted}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-family: monospace;">${t.voucher_no} (${t.voucher_type})</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${memo}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${t.against || '-'}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace;">${debitStr}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace;">${creditStr}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; font-weight: bold;">${runningStr}</td>
+            </tr>
+        `;
+    });
+
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Cash Account Ledger - ${data.account}</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 20px; color: #1e293b; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th { background: #f8fafc; text-align: left; padding: 8px; border-bottom: 2px solid #cbd5e1; font-size: 11px; }
+                @media print { body { padding: 0; } }
+            </style>
+        </head>
+        <body>
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 15px;">
+                <h2 style="margin: 0; color: #0f172a;">KILIBET INVESTMENT LTD</h2>
+                <h3 style="margin: 4px 0; color: #334155;">Cash & Bank Account Ledger: ${data.account}</h3>
+                <div style="font-size: 12px; color: #64748b;">Period: ${data.from_date} to ${data.to_date} | Generated: ${new Date().toLocaleString()}</div>
+            </div>
+
+            <div style="display: flex; gap: 20px; margin-bottom: 15px; font-size: 12px; background: #f8fafc; padding: 10px; border-radius: 6px;">
+                <div><strong>Opening (B/F):</strong> KES ${Number(data.opening_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Total Inflows:</strong> KES ${Number(data.total_inflows || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Total Outflows:</strong> KES ${Number(data.total_outflows || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Net Change:</strong> KES ${Number(data.net_change || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Closing (C/F):</strong> KES ${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Voucher #</th>
+                        <th>Description / Memo</th>
+                        <th>Against</th>
+                        <th style="text-align: right;">Inflow (Debit)</th>
+                        <th style="text-align: right;">Outflow (Credit)</th>
+                        <th style="text-align: right;">Running Bal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+            <script>window.onload = function() { window.print(); };</script>
+        </body>
+        </html>
+    `;
+
+    let w = window.open('', '_blank');
+    w.document.write(printHtml);
+    w.document.close();
+}
+
+function export_exec_ca_csv(wrapper) {
+    let data = window.EXEC_CA_STATE.raw_data;
+    if (!data || !data.transactions || data.transactions.length === 0) {
+        frappe.msgprint("No ledger records available to export.");
+        return;
+    }
+
+    let csv = "data:text/csv;charset=utf-8,";
+    csv += "Date,Voucher Type,Voucher No,Description,Against Account,Inflow Debit (KES),Outflow Credit (KES),Running Balance (KES)\n";
+
+    data.transactions.forEach(t => {
+        let memo = (t.remarks || '').replace(/"/g, '""').replace(/\n/g, ' ');
+        let against = (t.against || '').replace(/"/g, '""');
+        let d = (t.debit || 0).toFixed(2);
+        let c = (t.credit || 0).toFixed(2);
+        let b = (t.running_balance || 0).toFixed(2);
+
+        csv += `"${t.posting_date}","${t.voucher_type}","${t.voucher_no}","${memo}","${against}",${d},${c},${b}\n`;
+    });
+
+    let uri = encodeURI(csv);
+    let link = document.createElement("a");
+    link.setAttribute("href", uri);
+    let safeName = (data.account || 'Cash_Account').replace(/[^a-zA-Z0-9]/g, '_');
+    link.setAttribute("download", `Ledger_${safeName}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+
+// ========================================================
+// EXECUTIVE / DIRECTOR EXPENSES MODULE
+// ========================================================
+function init_exec_expenses(wrapper) {
+    if (!window.EXEC_EXP_STATE) {
+        window.EXEC_EXP_STATE = {
+            from_date: null,
+            to_date: null,
+            category_filter: '',
+            account_filter: '',
+            search: '',
+            raw_data: null,
+            form_options_loaded: false
+        };
+    }
+
+    let today = frappe.datetime.get_today();
+    if (!window.EXEC_EXP_STATE.to_date) {
+        window.EXEC_EXP_STATE.to_date = today;
+        window.EXEC_EXP_STATE.from_date = frappe.datetime.month_start();
+    }
+
+    $(wrapper).find('#exec-exp-from').val(window.EXEC_EXP_STATE.from_date);
+    $(wrapper).find('#exec-exp-to').val(window.EXEC_EXP_STATE.to_date);
+
+    // Presets
+    $(wrapper).find('.exec-exp-preset').off('click').on('click', function() {
+        $(wrapper).find('.exec-exp-preset').removeClass('active').css({'background': '#fff', 'color': '#64748b', 'font-weight': '600', 'border-color': '#e2e8f0'});
+        $(this).addClass('active').css({'background': '#e0e7ff', 'color': '#3730a3', 'font-weight': '700', 'border-color': '#cbd5e1'});
+
+        let preset = $(this).data('preset');
+        let end = frappe.datetime.get_today();
+        let start = end;
+
+        if (preset === 'today') {
+            start = end;
+        } else if (preset === 'this_month') {
+            start = frappe.datetime.month_start();
+        } else if (preset === 'last_month') {
+            let parts = end.split('-');
+            let year = parseInt(parts[0]);
+            let month = parseInt(parts[1]) - 1;
+            if (month === 0) {
+                month = 12;
+                year -= 1;
+            }
+            let monthStr = month < 10 ? '0' + month : '' + month;
+            start = `${year}-${monthStr}-01`;
+            let lastDay = new Date(year, month, 0).getDate();
+            end = `${year}-${monthStr}-${lastDay}`;
+        } else if (preset === 'last_30') {
+            start = frappe.datetime.add_days(end, -29);
+        } else if (preset === 'this_year') {
+            let year = end.split('-')[0];
+            start = `${year}-01-01`;
+        }
+
+        window.EXEC_EXP_STATE.from_date = start;
+        window.EXEC_EXP_STATE.to_date = end;
+        $(wrapper).find('#exec-exp-from').val(start);
+        $(wrapper).find('#exec-exp-to').val(end);
+        load_exec_expenses(wrapper);
+    });
+
+    // Apply
+    $(wrapper).find('#btn-exec-exp-apply').off('click').on('click', function() {
+        window.EXEC_EXP_STATE.from_date = $(wrapper).find('#exec-exp-from').val();
+        window.EXEC_EXP_STATE.to_date = $(wrapper).find('#exec-exp-to').val();
+        load_exec_expenses(wrapper);
+    });
+
+    // Search
+    $(wrapper).find('#exec-exp-search-input').off('input').on('input', function() {
+        window.EXEC_EXP_STATE.search = $(this).val().trim().toLowerCase();
+        render_exec_exp_table(wrapper);
+    });
+
+    // Filters
+    $(wrapper).find('#exec-exp-category-filter').off('change').on('change', function() {
+        window.EXEC_EXP_STATE.category_filter = $(this).val();
+        load_exec_expenses(wrapper);
+    });
+    $(wrapper).find('#exec-exp-account-filter').off('change').on('change', function() {
+        window.EXEC_EXP_STATE.account_filter = $(this).val();
+        load_exec_expenses(wrapper);
+    });
+
+    // Print & Export
+    $(wrapper).find('#btn-exec-exp-print').off('click').on('click', function() {
+        print_exec_exp_register(wrapper);
+    });
+    $(wrapper).find('#btn-exec-exp-export').off('click').on('click', function() {
+        export_exec_exp_csv(wrapper);
+    });
+
+    // Modal Events
+    $(wrapper).find('#btn-exec-open-add-expense').off('click').on('click', function() {
+        open_director_expense_modal(wrapper);
+    });
+    $(wrapper).find('#btn-exec-open-supplier-pay').off('click').on('click', function() {
+        open_supplier_payment_modal(wrapper, 'bank_transfer');
+    });
+    $(wrapper).find('#exec-expense-modal-close, #btn-exec-modal-exp-cancel').off('click').on('click', function() {
+        $(wrapper).find('#exec-expense-modal').hide();
+    });
+    $(wrapper).find('#btn-exec-modal-exp-submit').off('click').on('click', function() {
+        submit_director_expense_form(wrapper);
+    });
+
+    load_exec_exp_options(wrapper);
+    load_exec_expenses(wrapper);
+}
+
+function load_exec_exp_options(wrapper) {
+    if (window.EXEC_EXP_STATE && window.EXEC_EXP_STATE.form_options_loaded) return;
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_director_expense_form_options',
+        callback: function(r) {
+            if (r.message) {
+                let opts = r.message;
+                window.EXEC_EXP_STATE.options = opts;
+                window.EXEC_EXP_STATE.form_options_loaded = true;
+
+                // Populate Category Filter
+                let catFilterHtml = '<option value="">All Categories</option>';
+                (opts.expense_accounts || []).forEach(ea => {
+                    catFilterHtml += `<option value="${ea.name}">${ea.account_name}</option>`;
+                });
+                $(wrapper).find('#exec-exp-category-filter').html(catFilterHtml);
+
+                // Populate Account Filter
+                let accFilterHtml = '<option value="">All Payment Accounts</option>';
+                (opts.payment_accounts || []).forEach(pa => {
+                    accFilterHtml += `<option value="${pa.name}">${pa.name.replace(' - KIL', '')} (${pa.account_type})</option>`;
+                });
+                $(wrapper).find('#exec-exp-account-filter').html(accFilterHtml);
+
+                // Populate Modal Selects
+                let modalPaidFromHtml = '<option value="">Select Payment Account...</option>';
+                (opts.payment_accounts || []).forEach(pa => {
+                    let selected = pa.name.includes('Shift Main Cash') ? 'selected' : '';
+                    modalPaidFromHtml += `<option value="${pa.name}" ${selected}>${pa.name} (${pa.account_type})</option>`;
+                });
+                $(wrapper).find('#exec-modal-exp-paid-from').html(modalPaidFromHtml);
+
+                let modalCatHtml = '<option value="">Select Expense Category...</option>';
+                (opts.expense_accounts || []).forEach(ea => {
+                    modalCatHtml += `<option value="${ea.name}">${ea.account_name}</option>`;
+                });
+                $(wrapper).find('#exec-modal-exp-category').html(modalCatHtml);
+            }
+        }
+    });
+}
+
+function open_director_expense_modal(wrapper) {
+    // Reset Form
+    $(wrapper).find('#exec-expense-form')[0].reset();
+    $(wrapper).find('#exec-modal-exp-date').val(frappe.datetime.get_today());
+    $(wrapper).find('#exec-modal-exp-alert').hide().removeClass('alert-danger alert-success');
+    $(wrapper).find('#exec-modal-exp-spinner').addClass('hidden');
+    $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', false);
+
+    load_exec_exp_options(wrapper);
+    $(wrapper).find('#exec-expense-modal').css('display', 'flex');
+}
+
+function submit_director_expense_form(wrapper) {
+    let date = $(wrapper).find('#exec-modal-exp-date').val();
+    let amount = parseFloat($(wrapper).find('#exec-modal-exp-amount').val());
+    let paid_from = $(wrapper).find('#exec-modal-exp-paid-from').val();
+    let category = $(wrapper).find('#exec-modal-exp-category').val();
+    let payee = $(wrapper).find('#exec-modal-exp-payee').val().trim();
+    let ref_no = $(wrapper).find('#exec-modal-exp-ref').val().trim();
+    let desc = $(wrapper).find('#exec-modal-exp-desc').val().trim();
+
+    let alertBox = $(wrapper).find('#exec-modal-exp-alert');
+    alertBox.hide();
+
+    if (!date) {
+        alertBox.text("Please specify expense date.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (isNaN(amount) || amount <= 0) {
+        alertBox.text("Please enter a valid amount greater than 0.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (!paid_from) {
+        alertBox.text("Please select the payment account.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (!category) {
+        alertBox.text("Please select the expense category.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (!payee) {
+        alertBox.text("Please enter the Payee / Beneficiary.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (!desc) {
+        alertBox.text("Please provide a business purpose / description.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+
+    $(wrapper).find('#exec-modal-exp-spinner').removeClass('hidden');
+    $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', true);
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.submit_director_expense',
+        args: {
+            date: date,
+            amount: amount,
+            paid_from_account: paid_from,
+            expense_account: category,
+            payee: payee,
+            description: desc,
+            reference_no: ref_no
+        },
+        callback: function(r) {
+            $(wrapper).find('#exec-modal-exp-spinner').addClass('hidden');
+            $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', false);
+
+            if (r.message && r.message.success) {
+                frappe.show_alert({
+                    message: r.message.message,
+                    indicator: 'green'
+                }, 5);
+                $(wrapper).find('#exec-expense-modal').hide();
+                load_exec_expenses(wrapper);
+
+                // If Cash Accounts was loaded, refresh it too
+                if (window.EXEC_CA_STATE && window.EXEC_CA_STATE.raw_data) {
+                    load_exec_cash_accounts(wrapper);
+                }
+            }
+        },
+        error: function(err) {
+            $(wrapper).find('#exec-modal-exp-spinner').addClass('hidden');
+            $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', false);
+            alertBox.text("Failed to post expense: " + (err.message || err.toString())).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        }
+    });
+}
+
+function load_exec_expenses(wrapper) {
+    $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="9" style="text-align: center; padding: 30px; color: #94a3b8;"><span class="spinner"></span> Loading executive expenses...</td></tr>');
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_director_expenses_register',
+        args: {
+            from_date: window.EXEC_EXP_STATE.from_date,
+            to_date: window.EXEC_EXP_STATE.to_date,
+            expense_account: window.EXEC_EXP_STATE.category_filter,
+            paid_from_account: window.EXEC_EXP_STATE.account_filter
+        },
+        callback: function(r) {
+            if (r.message) {
+                let data = r.message;
+                window.EXEC_EXP_STATE.raw_data = data;
+
+                // Update KPIs
+                $(wrapper).find('#exec-exp-kpi-total').text(`KES ${Number(data.summary.total_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-exp-kpi-count').text(data.summary.count || 0);
+                $(wrapper).find('#exec-exp-kpi-cash').text(`KES ${Number(data.summary.cash_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-exp-kpi-bank').text(`KES ${Number(data.summary.bank_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-exp-kpi-top-category').text(data.summary.top_category || 'None');
+                $(wrapper).find('#exec-exp-kpi-top-amount').text(`KES ${Number(data.summary.top_category_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                // Update Footer
+                $(wrapper).find('#exec-exp-foot-total').text(`KES ${Number(data.summary.total_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                render_exec_exp_table(wrapper);
+            }
+        }
+    });
+}
+
+function render_exec_exp_table(wrapper) {
+    let data = window.EXEC_EXP_STATE.raw_data;
+    if (!data || !data.records) return;
+
+    let records = data.records;
+    let search = (window.EXEC_EXP_STATE.search || '').toLowerCase();
+
+    let filtered = records.filter(r => {
+        if (search) {
+            let text = `${r.voucher_no || ''} ${r.payee || ''} ${r.description || ''} ${r.reference_no || ''} ${r.expense_account || ''}`.toLowerCase();
+            if (!text.includes(search)) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="9" style="text-align: center; padding: 30px; color: #94a3b8;">No executive expenses recorded in this period.</td></tr>');
+        return;
+    }
+
+    let rowsHtml = '';
+    filtered.forEach(r => {
+        let amtStr = `KES ${Number(r.amount).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        let vLink = `<a href="/app/journal-entry/${r.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">${r.voucher_no}</a>`;
+        let catShort = (r.expense_account || '').replace(' - KIL', '');
+        let paidShort = (r.paid_from_account || '').replace(' - KIL', '');
+
+        rowsHtml += `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="font-size: 12px; color: #475569; white-space: nowrap;">${r.date_formatted}</td>
+                <td style="font-size: 12px; font-family: monospace;">${vLink}</td>
+                <td style="font-size: 13px; font-weight: 700; color: #0f172a;">${r.payee}</td>
+                <td style="font-size: 12px; color: #1e293b;">
+                    <span style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px;">${catShort}</span>
+                </td>
+                <td style="font-size: 12px; color: #475569;">
+                    <span style="font-size: 11px;">${paidShort}</span>
+                </td>
+                <td style="font-size: 11px; font-family: monospace; color: #64748b;">${r.reference_no}</td>
+                <td style="font-size: 12px; color: #334155; max-width: 280px; word-break: break-word;">${r.description}</td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #dc2626;">${amtStr}</td>
+                <td style="text-align: center; font-size: 11px; color: #64748b;">${r.owner}</td>
+            </tr>
+        `;
+    });
+
+    $(wrapper).find('#exec-exp-table-body').html(rowsHtml);
+}
+
+function print_exec_exp_register(wrapper) {
+    let data = window.EXEC_EXP_STATE.raw_data;
+    if (!data || !data.records || data.records.length === 0) {
+        frappe.msgprint("No expense records available to print.");
+        return;
+    }
+
+    let rowsHtml = '';
+    data.records.forEach(r => {
+        let amtStr = Number(r.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+        let catShort = (r.expense_account || '').replace(' - KIL', '');
+        let paidShort = (r.paid_from_account || '').replace(' - KIL', '');
+
+        rowsHtml += `
+            <tr>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${r.date_formatted}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-family: monospace;">${r.voucher_no}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-weight: bold;">${r.payee}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${catShort}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${paidShort}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${r.reference_no}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${r.description}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; font-weight: bold;">${amtStr}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: center;">${r.owner}</td>
+            </tr>
+        `;
+    });
+
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Executive Expenses Register</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 20px; color: #1e293b; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th { background: #f8fafc; text-align: left; padding: 8px; border-bottom: 2px solid #cbd5e1; font-size: 11px; }
+                @media print { body { padding: 0; } }
+            </style>
+        </head>
+        <body>
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 15px;">
+                <h2 style="margin: 0; color: #0f172a;">KILIBET INVESTMENT LTD</h2>
+                <h3 style="margin: 4px 0; color: #334155;">Executive & Corporate Expenses Register</h3>
+                <div style="font-size: 12px; color: #64748b;">Period: ${data.from_date} to ${data.to_date} | Generated: ${new Date().toLocaleString()}</div>
+            </div>
+
+            <div style="display: flex; gap: 20px; margin-bottom: 15px; font-size: 12px; background: #f8fafc; padding: 10px; border-radius: 6px;">
+                <div><strong>Total Expenses:</strong> KES ${Number(data.summary.total_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Cash Payments:</strong> KES ${Number(data.summary.cash_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Bank / Till Payments:</strong> KES ${Number(data.summary.bank_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Total Transactions:</strong> ${data.summary.count || 0}</div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Voucher #</th>
+                        <th>Payee</th>
+                        <th>Category</th>
+                        <th>Paid From</th>
+                        <th>Ref #</th>
+                        <th>Description</th>
+                        <th style="text-align: right;">Amount (KES)</th>
+                        <th style="text-align: center;">Recorded By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+            <script>window.onload = function() { window.print(); };</script>
+        </body>
+        </html>
+    `;
+
+    let w = window.open('', '_blank');
+    w.document.write(printHtml);
+    w.document.close();
+}
+
+function export_exec_exp_csv(wrapper) {
+    let data = window.EXEC_EXP_STATE.raw_data;
+    if (!data || !data.records || data.records.length === 0) {
+        frappe.msgprint("No expense records available to export.");
+        return;
+    }
+
+    let csv = "data:text/csv;charset=utf-8,";
+    csv += "Date,Voucher No,Payee,Expense Category,Paid From Account,Reference No,Description,Amount (KES),Recorded By\n";
+
+    data.records.forEach(r => {
+        let payee = (r.payee || '').replace(/"/g, '""');
+        let cat = (r.expense_account || '').replace(/"/g, '""');
+        let paid = (r.paid_from_account || '').replace(/"/g, '""');
+        let ref = (r.reference_no || '').replace(/"/g, '""');
+        let desc = (r.description || '').replace(/"/g, '""').replace(/\n/g, ' ');
+        let amt = (r.amount || 0).toFixed(2);
+        let owner = (r.owner || '').replace(/"/g, '""');
+
+        csv += `"${r.posting_date}","${r.voucher_no}","${payee}","${cat}","${paid}","${ref}","${desc}",${amt},"${owner}"\n`;
+    });
+
+    let uri = encodeURI(csv);
+    let link = document.createElement("a");
+    link.setAttribute("href", uri);
+    link.setAttribute("download", `Executive_Expenses_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+
+// ========================================================
+// BALANCE SHEET (FINANCIAL POSITION) MODULE
+// ========================================================
+function init_exec_balance_sheet(wrapper) {
+    if (!window.EXEC_BS_STATE) {
+        window.EXEC_BS_STATE = {
+            as_on_date: frappe.datetime.get_today(),
+            view: 'statement',
+            raw_data: null
+        };
+    }
+
+    $(wrapper).find('#exec-bs-as-on').val(window.EXEC_BS_STATE.as_on_date);
+
+    // Date Presets
+    $(wrapper).find('.exec-bs-preset').off('click').on('click', function() {
+        $(wrapper).find('.exec-bs-preset').removeClass('active').css({'background': '#fff', 'color': '#64748b', 'font-weight': '600', 'border-color': '#e2e8f0'});
+        $(this).addClass('active').css({'background': '#e0e7ff', 'color': '#3730a3', 'font-weight': '700', 'border-color': '#cbd5e1'});
+
+        let preset = $(this).data('preset');
+        let today = frappe.datetime.get_today();
+        let targetDate = today;
+
+        if (preset === 'today') {
+            targetDate = today;
+        } else if (preset === 'month_end') {
+            targetDate = today;
+        } else if (preset === 'last_month_end') {
+            let parts = today.split('-');
+            let y = parseInt(parts[0]);
+            let m = parseInt(parts[1]) - 1;
+            if (m === 0) {
+                m = 12;
+                y -= 1;
+            }
+            let mStr = m < 10 ? '0' + m : '' + m;
+            let lastDay = new Date(y, m, 0).getDate();
+            targetDate = `${y}-${mStr}-${lastDay}`;
+        } else if (preset === 'quarter_end') {
+            let parts = today.split('-');
+            let y = parseInt(parts[0]);
+            let m = parseInt(parts[1]);
+            let qEndMonth = Math.floor((m - 1) / 3) * 3;
+            if (qEndMonth === 0) {
+                qEndMonth = 12;
+                y -= 1;
+            }
+            let mStr = qEndMonth < 10 ? '0' + qEndMonth : '' + qEndMonth;
+            let lastDay = new Date(y, qEndMonth, 0).getDate();
+            targetDate = `${y}-${mStr}-${lastDay}`;
+        } else if (preset === 'year_end') {
+            let y = parseInt(today.split('-')[0]) - 1;
+            targetDate = `${y}-12-31`;
+        }
+
+        window.EXEC_BS_STATE.as_on_date = targetDate;
+        $(wrapper).find('#exec-bs-as-on').val(targetDate);
+        load_exec_balance_sheet(wrapper);
+    });
+
+    // Apply Button
+    $(wrapper).find('#btn-exec-bs-apply').off('click').on('click', function() {
+        window.EXEC_BS_STATE.as_on_date = $(wrapper).find('#exec-bs-as-on').val();
+        load_exec_balance_sheet(wrapper);
+    });
+
+    // View Switcher (Statement vs Breakdown)
+    $(wrapper).find('#exec-bs-view-switcher .exec-preset-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        $(wrapper).find('#exec-bs-view-switcher .exec-preset-btn').removeClass('active');
+        $(this).addClass('active');
+
+        let view = $(this).data('view');
+        window.EXEC_BS_STATE.view = view;
+        if (view === 'breakdown') {
+            $(wrapper).find('#exec-bs-statement-view').hide();
+            $(wrapper).find('#exec-bs-breakdown-view').show();
+        } else {
+            $(wrapper).find('#exec-bs-breakdown-view').hide();
+            $(wrapper).find('#exec-bs-statement-view').show();
+        }
+    });
+
+    // Print & Export
+    $(wrapper).find('#btn-exec-bs-print').off('click').on('click', function(e) {
+        e.preventDefault();
+        print_exec_balance_sheet(wrapper);
+    });
+    $(wrapper).find('#btn-exec-bs-export').off('click').on('click', function(e) {
+        e.preventDefault();
+        export_exec_bs_csv(wrapper);
+    });
+
+    // Station Segmented Tabs for Balance Sheet
+    $(wrapper).find('#exec-bs-station-tabs .exec-bs-station-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        let targetStation = $(this).data('station');
+        handle_exec_station_change(targetStation);
+    });
+
+    load_exec_balance_sheet(wrapper);
+}
+
+function load_exec_balance_sheet(wrapper) {
+    let station = $(wrapper).find('#exec-bs-station-tabs .exec-bs-station-btn.active').data('station');
+    if (station === undefined) {
+        station = $(wrapper).find('#exec-global-station-select').val() || '';
+    }
+
+    $(wrapper).find('#exec-bs-formal-table').html(`
+        <div style="text-align:center; padding:40px; color:#64748b;">
+            <div class="spinner-border text-primary" role="status" style="width:2rem; height:2rem; margin-bottom:12px;"></div>
+            <div style="font-size:13px; font-weight:600;">Calculating Balance Sheet Statement...</div>
+        </div>
+    `);
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_balance_sheet_summary',
+        args: {
+            as_on_date: window.EXEC_BS_STATE.as_on_date,
+            station: station
+        },
+        callback: function(r) {
+            if (r.message && !r.message.error) {
+                let bs = r.message;
+                window.EXEC_BS_STATE.raw_data = bs;
+
+                // Update Header Labels
+                let stLabel = bs.station ? (bs.station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : bs.station) : 'Consolidated';
+                $(wrapper).find('#exec-bs-station-badge').text(stLabel);
+                $(wrapper).find('#exec-bs-subtitle').text(`Statement of Financial Position: Assets, Liabilities, and Equity as of ${bs.as_on_date_formatted} (${stLabel}).`);
+                $(wrapper).find('#exec-bs-statement-date').text(`As of ${bs.as_on_date_formatted}`);
+                if (bs.company) {
+                    $(wrapper).find('#exec-bs-company-name').text(bs.company);
+                }
+
+                let sum = bs.summary;
+
+                // Update 5 KPI Cards
+                $(wrapper).find('#exec-bs-kpi-assets').text(`KES ${Number(sum.total_assets || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-bs-kpi-current-assets').text(`Current: KES ${Number(sum.current_assets || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                $(wrapper).find('#exec-bs-kpi-liabilities').text(`KES ${Number(sum.total_liabilities || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-bs-kpi-current-liabilities').text(`Current: KES ${Number(sum.current_liabilities || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                let wc = sum.working_capital || 0;
+                let wcEl = $(wrapper).find('#exec-bs-kpi-working-capital');
+                wcEl.text(`KES ${Number(wc).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                if (wc >= 0) {
+                    wcEl.css('color', '#0284c7');
+                } else {
+                    wcEl.css('color', '#dc2626');
+                }
+
+                $(wrapper).find('#exec-bs-kpi-current-ratio').text(`${(sum.current_ratio || 0).toFixed(2)}x`);
+
+                let eqWithProfit = sum.total_equity_and_reserves || 0;
+                $(wrapper).find('#exec-bs-kpi-equity').text(`KES ${Number(eqWithProfit).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                let badgeEl = $(wrapper).find('#exec-bs-balance-badge');
+                if (sum.is_balanced) {
+                    badgeEl.text('✓ Equation Balanced').css({'color': '#059669', 'font-weight': '700'});
+                } else {
+                    badgeEl.text(`⚠ Unbalanced (Diff: KES ${sum.difference})`).css({'color': '#dc2626', 'font-weight': '700'});
+                }
+
+                // Render Tables
+                render_exec_bs_statement(wrapper, bs);
+                render_exec_bs_breakdown(wrapper, bs);
+
+            } else {
+                let msg = (r.message && r.message.error) ? r.message.error : "Failed to load Balance Sheet.";
+                $(wrapper).find('#exec-bs-formal-table').html(`<div style="color:#dc2626; padding:30px; text-align:center;">${msg}</div>`);
+            }
+        }
+    });
+}
+
+function render_exec_bs_statement(wrapper, bs) {
+    let sum = bs.summary;
+
+    let html = `
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #cbd5e1; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
+                    <th style="padding:10px 12px; text-align:left;">Financial Line Item</th>
+                    <th style="padding:10px 12px; text-align:right; width:200px;">Amount (KES)</th>
+                    <th style="padding:10px 12px; text-align:right; width:120px;">% of Assets</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    // -------------------------------------------------------------
+    // SECTION 1: ASSETS
+    // -------------------------------------------------------------
+    html += `
+        <tr style="background:#f8fafc; font-weight:800; color:#0f172a; border-top:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#0284c7;">
+                1. ASSETS
+            </td>
+        </tr>
+    `;
+
+    (bs.asset_groups || []).forEach(grp => {
+        html += `
+            <tr style="background:#fdfdfd; font-weight:700; border-top:1px solid #f1f5f9;">
+                <td style="padding:8px 12px 6px 18px; color:#1e293b; font-size:12px;">${grp.bucket_name}</td>
+                <td style="padding:8px 12px 6px 12px; text-align:right; font-family:monospace; font-weight:700; color:#0284c7;">
+                    ${Number(grp.subtotal).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                </td>
+                <td style="padding:8px 12px 6px 12px; text-align:right; font-size:11px; color:#64748b;">
+                    ${sum.total_assets ? ((grp.subtotal / sum.total_assets) * 100).toFixed(1) : 0}%
+                </td>
+            </tr>
+        `;
+
+        (grp.items || []).forEach(acc => {
+            let accShort = (acc.account_name || acc.account || '').replace(' - KIL', '');
+            let amtStr = Number(acc.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+            let pct = sum.total_assets ? ((acc.amount / sum.total_assets) * 100).toFixed(1) : '0.0';
+
+            html += `
+                <tr style="border-bottom:1px solid #f8fafc;">
+                    <td style="padding:6px 12px 6px 36px; color:#475569; font-size:12px;">${accShort}</td>
+                    <td style="padding:6px 12px; text-align:right; font-family:monospace; font-size:12px; color:#334155;">${amtStr}</td>
+                    <td style="padding:6px 12px; text-align:right; color:#94a3b8; font-size:11px;">${pct}%</td>
+                </tr>
+            `;
+        });
+    });
+
+    // TOTAL ASSETS
+    html += `
+        <tr style="background:#f0fdf4; font-weight:800; border-top:2px solid #10b981; border-bottom:2px solid #10b981;">
+            <td style="padding:12px 12px; color:#0f172a; font-size:14px;">TOTAL ASSETS</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; font-size:16px; font-weight:800; color:#059669;">
+                KES ${Number(sum.total_assets).toLocaleString('en-US', {minimumFractionDigits: 2})}
+            </td>
+            <td style="padding:12px 12px; text-align:right; font-weight:800; font-size:13px; color:#059669;">100.0%</td>
+        </tr>
+    `;
+
+    // Spacer
+    html += `<tr><td colspan="3" style="height:18px;"></td></tr>`;
+
+    // -------------------------------------------------------------
+    // SECTION 2: LIABILITIES
+    // -------------------------------------------------------------
+    html += `
+        <tr style="background:#f8fafc; font-weight:800; color:#0f172a; border-top:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#d97706;">
+                2. LIABILITIES
+            </td>
+        </tr>
+    `;
+
+    (bs.liability_groups || []).forEach(grp => {
+        html += `
+            <tr style="background:#fdfdfd; font-weight:700; border-top:1px solid #f1f5f9;">
+                <td style="padding:8px 12px 6px 18px; color:#1e293b; font-size:12px;">${grp.bucket_name}</td>
+                <td style="padding:8px 12px 6px 12px; text-align:right; font-family:monospace; font-weight:700; color:#d97706;">
+                    ${Number(grp.subtotal).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                </td>
+                <td style="padding:8px 12px 6px 12px; text-align:right; font-size:11px; color:#64748b;">
+                    ${sum.total_assets ? ((grp.subtotal / sum.total_assets) * 100).toFixed(1) : 0}%
+                </td>
+            </tr>
+        `;
+
+        (grp.items || []).forEach(acc => {
+            let accShort = (acc.account_name || acc.account || '').replace(' - KIL', '');
+            let amtStr = Number(acc.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+            let pct = sum.total_assets ? ((acc.amount / sum.total_assets) * 100).toFixed(1) : '0.0';
+
+            html += `
+                <tr style="border-bottom:1px solid #f8fafc;">
+                    <td style="padding:6px 12px 6px 36px; color:#475569; font-size:12px;">${accShort}</td>
+                    <td style="padding:6px 12px; text-align:right; font-family:monospace; font-size:12px; color:#b45309;">${amtStr}</td>
+                    <td style="padding:6px 12px; text-align:right; color:#94a3b8; font-size:11px;">${pct}%</td>
+                </tr>
+            `;
+        });
+    });
+
+    // TOTAL LIABILITIES
+    html += `
+        <tr style="background:#fffbeb; font-weight:800; border-top:2px solid #f59e0b; border-bottom:2px solid #f59e0b;">
+            <td style="padding:12px 12px; color:#0f172a; font-size:14px;">TOTAL LIABILITIES</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; font-size:16px; font-weight:800; color:#d97706;">
+                KES ${Number(sum.total_liabilities).toLocaleString('en-US', {minimumFractionDigits: 2})}
+            </td>
+            <td style="padding:12px 12px; text-align:right; font-weight:800; font-size:13px; color:#d97706;">
+                ${sum.total_assets ? ((sum.total_liabilities / sum.total_assets) * 100).toFixed(1) : 0}%
+            </td>
+        </tr>
+    `;
+
+    // Spacer
+    html += `<tr><td colspan="3" style="height:18px;"></td></tr>`;
+
+    // -------------------------------------------------------------
+    // SECTION 3: EQUITY & RETAINED EARNINGS
+    // -------------------------------------------------------------
+    html += `
+        <tr style="background:#f8fafc; font-weight:800; color:#0f172a; border-top:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#4338ca;">
+                3. EQUITY & RETAINED EARNINGS
+            </td>
+        </tr>
+    `;
+
+    (bs.equity_groups || []).forEach(grp => {
+        (grp.items || []).forEach(acc => {
+            let accShort = (acc.account_name || acc.account || '').replace(' - KIL', '');
+            let amtStr = Number(acc.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+            let pct = sum.total_assets ? ((acc.amount / sum.total_assets) * 100).toFixed(1) : '0.0';
+
+            html += `
+                <tr style="border-bottom:1px solid #f8fafc;">
+                    <td style="padding:8px 12px 8px 24px; color:#334155;">${accShort}</td>
+                    <td style="padding:8px 12px; text-align:right; font-family:monospace; font-size:13px; color:#1e293b;">${amtStr}</td>
+                    <td style="padding:8px 12px; text-align:right; color:#64748b; font-size:12px;">${pct}%</td>
+                </tr>
+            `;
+        });
+    });
+
+    let profitColor = sum.provisional_profit >= 0 ? '#059669' : '#dc2626';
+    let profitPct = sum.total_assets ? ((sum.provisional_profit / sum.total_assets) * 100).toFixed(1) : '0.0';
+    html += `
+        <tr style="border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+            <td style="padding:10px 12px 10px 24px; font-weight:700; color:#0f172a;">
+                Cumulative Net Profit / (Loss) for Period
+                <span style="font-size:11px; font-weight:normal; color:#64748b; display:block;">(Transferred from Profit & Loss Statement)</span>
+            </td>
+            <td style="padding:10px 12px; text-align:right; font-family:monospace; font-weight:700; font-size:14px; color:${profitColor};">
+                ${Number(sum.provisional_profit).toLocaleString('en-US', {minimumFractionDigits: 2})}
+            </td>
+            <td style="padding:10px 12px; text-align:right; font-weight:700; color:${profitColor}; font-size:12px;">${profitPct}%</td>
+        </tr>
+    `;
+
+    // TOTAL EQUITY
+    html += `
+        <tr style="background:#eef2ff; font-weight:800; border-top:2px solid #6366f1; border-bottom:2px solid #6366f1;">
+            <td style="padding:12px 12px; color:#0f172a; font-size:14px;">TOTAL EQUITY & RETAINED EARNINGS</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; font-size:16px; font-weight:800; color:#4338ca;">
+                KES ${Number(sum.total_equity_and_reserves).toLocaleString('en-US', {minimumFractionDigits: 2})}
+            </td>
+            <td style="padding:12px 12px; text-align:right; font-weight:800; font-size:13px; color:#4338ca;">
+                ${sum.total_assets ? ((sum.total_equity_and_reserves / sum.total_assets) * 100).toFixed(1) : 0}%
+            </td>
+        </tr>
+    `;
+
+    // Spacer
+    html += `<tr><td colspan="3" style="height:18px;"></td></tr>`;
+
+    // -------------------------------------------------------------
+    // SECTION 4: TOTAL LIABILITIES AND EQUITY
+    // -------------------------------------------------------------
+    html += `
+        <tr style="background:#f1f5f9; font-weight:800; border-top:3px solid #0f172a; border-bottom:3px double #0f172a;">
+            <td style="padding:14px 12px; color:#0f172a; font-size:15px;">
+                TOTAL LIABILITIES AND EQUITY
+                <span style="font-size:11px; font-weight:600; color:#059669; display:block;">(Must equal Total Assets: KES ${Number(sum.total_assets).toLocaleString('en-US', {minimumFractionDigits: 2})})</span>
+            </td>
+            <td style="padding:14px 12px; text-align:right; font-family:monospace; font-size:18px; font-weight:800; color:#0f172a;">
+                KES ${Number(sum.total_liabilities_and_equity).toLocaleString('en-US', {minimumFractionDigits: 2})}
+            </td>
+            <td style="padding:14px 12px; text-align:right; font-weight:800; font-size:14px; color:#0f172a;">100.0%</td>
+        </tr>
+    `;
+
+    html += `</tbody></table>`;
+
+    $(wrapper).find('#exec-bs-formal-table').html(html);
+}
+
+function render_exec_bs_breakdown(wrapper, bs) {
+    let sum = bs.summary;
+
+    $(wrapper).find('#exec-bs-breakdown-total-assets').text(`KES ${Number(sum.total_assets).toLocaleString('en-US', {minimumFractionDigits: 2})}`);
+    $(wrapper).find('#exec-bs-breakdown-total-liab').text(`KES ${Number(sum.total_liabilities).toLocaleString('en-US', {minimumFractionDigits: 2})}`);
+
+    // Assets Composition List
+    let assetsListHtml = '';
+    (bs.asset_groups || []).forEach(grp => {
+        let pct = sum.total_assets > 0 ? ((grp.subtotal / sum.total_assets) * 100).toFixed(1) : 0;
+        let barWidth = Math.max(0, Math.min(100, pct));
+        assetsListHtml += `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 13px; font-weight: 700; color: #1e293b;">${grp.bucket_name}</span>
+                    <span style="font-size: 13px; font-weight: 800; font-family: monospace; color: #0284c7;">KES ${Number(grp.subtotal).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b;">
+                    <span>${grp.items ? grp.items.length : 0} accounts</span>
+                    <span>${pct}% of Assets</span>
+                </div>
+                <div style="height: 4px; background: #e2e8f0; border-radius: 4px; margin-top: 6px; overflow: hidden;">
+                    <div style="height: 100%; background: #0284c7; width: ${barWidth}%;"></div>
+                </div>
+            </div>
+        `;
+    });
+    $(wrapper).find('#exec-bs-assets-breakdown-list').html(assetsListHtml);
+
+    // Liabilities Composition List
+    let liabListHtml = '';
+    (bs.liability_groups || []).forEach(grp => {
+        let pct = sum.total_liabilities > 0 ? ((grp.subtotal / sum.total_liabilities) * 100).toFixed(1) : 0;
+        let barWidth = Math.max(0, Math.min(100, pct));
+        liabListHtml += `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-size: 13px; font-weight: 700; color: #1e293b;">${grp.bucket_name}</span>
+                    <span style="font-size: 13px; font-weight: 800; font-family: monospace; color: #d97706;">KES ${Number(grp.subtotal).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b;">
+                    <span>${grp.items ? grp.items.length : 0} accounts</span>
+                    <span>${pct}% of Liabilities</span>
+                </div>
+                <div style="height: 4px; background: #e2e8f0; border-radius: 4px; margin-top: 6px; overflow: hidden;">
+                    <div style="height: 100%; background: #f59e0b; width: ${barWidth}%;"></div>
+                </div>
+            </div>
+        `;
+    });
+    $(wrapper).find('#exec-bs-liab-breakdown-list').html(liabListHtml);
+
+    // Solvency & Metrics
+    let solvencyHtml = `
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 700; color: #15803d; text-transform: uppercase;">Working Capital</div>
+            <div style="font-size: 18px; font-weight: 800; font-family: monospace; color: #16a34a; margin-top: 2px;">
+                KES ${Number(sum.working_capital).toLocaleString('en-US', {minimumFractionDigits: 2})}
+            </div>
+            <div style="font-size: 11px; color: #166534; margin-top: 4px;">Buffer of liquid assets over short-term obligations</div>
+        </div>
+
+        <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 700; color: #3730a3; text-transform: uppercase;">Current Ratio (Liquidity)</div>
+            <div style="font-size: 18px; font-weight: 800; font-family: monospace; color: #4338ca; margin-top: 2px;">
+                ${sum.current_ratio.toFixed(2)}x
+            </div>
+            <div style="font-size: 11px; color: #312e81; margin-top: 4px;">Optimal benchmark is ≥ 1.0x (Currently ${sum.current_ratio >= 1 ? 'healthy' : 'tight'})</div>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 14px;">
+            <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Debt-to-Equity Ratio</div>
+            <div style="font-size: 18px; font-weight: 800; font-family: monospace; color: #0f172a; margin-top: 2px;">
+                ${sum.debt_to_equity.toFixed(2)}x
+            </div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Total liabilities relative to equity cushion</div>
+        </div>
+    `;
+    $(wrapper).find('#exec-bs-solvency-metrics').html(solvencyHtml);
+}
+
+function print_exec_balance_sheet(wrapper) {
+    let bs = window.EXEC_BS_STATE ? window.EXEC_BS_STATE.raw_data : null;
+    if (!bs) {
+        frappe.msgprint("No Balance Sheet data loaded to print.");
+        return;
+    }
+
+    let company = bs.company || 'KILIBET INVESTMENT LTD';
+    let dateStr = bs.as_on_date_formatted || bs.as_on_date;
+    let statementHtml = $(wrapper).find('#exec-bs-formal-table').html();
+
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Balance Sheet - ${company}</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                    color: #0f172a;
+                    padding: 32px;
+                    margin: 0;
+                    background: #fff;
+                }
+                .header {
+                    border-bottom: 2px solid #0f172a;
+                    padding-bottom: 16px;
+                    margin-bottom: 20px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-end;
+                }
+                h1 { margin: 0 0 4px 0; font-size: 24px; font-weight: 800; color: #0f172a; }
+                .sub { font-size: 14px; font-weight: 600; color: #475569; }
+                .meta { text-align: right; font-size: 12px; color: #64748b; }
+                table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+                th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #cbd5e1; font-weight: 700; color: #475569; }
+                td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+                @media print {
+                    body { padding: 10px; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div>
+                    <div style="font-size:11px; font-weight:700; color:#0284c7; text-transform:uppercase; letter-spacing:1px;">Fuel & Retail Station Operations</div>
+                    <h1>${company}</h1>
+                    <div class="sub">Statement of Financial Position (Balance Sheet)</div>
+                </div>
+                <div class="meta">
+                    <div style="font-weight:700; color:#1e293b; font-size:13px;">As of ${dateStr}</div>
+                    <div>Currency: Kenya Shillings (KES)</div>
+                    <div>Generated: ${new Date().toLocaleString()}</div>
+                </div>
+            </div>
+            <div>
+                ${statementHtml}
+            </div>
+            <script>
+                window.onload = function() {
+                    window.print();
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    let w = window.open('', '_blank');
+    w.document.write(printHtml);
+    w.document.close();
+}
+
+function export_exec_bs_csv(wrapper) {
+    let bs = window.EXEC_BS_STATE ? window.EXEC_BS_STATE.raw_data : null;
+    if (!bs) {
+        frappe.msgprint("No Balance Sheet data available to export.");
+        return;
+    }
+
+    let csv = "data:text/csv;charset=utf-8,";
+    csv += "Section,Category / Bucket,Account Name,Account Code,Amount (KES)\n";
+
+    // Assets
+    (bs.asset_groups || []).forEach(grp => {
+        (grp.items || []).forEach(it => {
+            let name = (it.account_name || '').replace(/"/g, '""');
+            let acc = (it.account || '').replace(/"/g, '""');
+            csv += `"1. ASSETS","${grp.bucket_name}","${name}","${acc}",${it.amount}\n`;
+        });
+        csv += `"1. ASSETS","SUBTOTAL: ${grp.bucket_name}","","",${grp.subtotal}\n`;
+    });
+    csv += `"1. ASSETS","TOTAL ASSETS","","",${bs.summary.total_assets}\n`;
+
+    // Liabilities
+    (bs.liability_groups || []).forEach(grp => {
+        (grp.items || []).forEach(it => {
+            let name = (it.account_name || '').replace(/"/g, '""');
+            let acc = (it.account || '').replace(/"/g, '""');
+            csv += `"2. LIABILITIES","${grp.bucket_name}","${name}","${acc}",${it.amount}\n`;
+        });
+        csv += `"2. LIABILITIES","SUBTOTAL: ${grp.bucket_name}","","",${grp.subtotal}\n`;
+    });
+    csv += `"2. LIABILITIES","TOTAL LIABILITIES","","",${bs.summary.total_liabilities}\n`;
+
+    // Equity
+    (bs.equity_groups || []).forEach(grp => {
+        (grp.items || []).forEach(it => {
+            let name = (it.account_name || '').replace(/"/g, '""');
+            let acc = (it.account || '').replace(/"/g, '""');
+            csv += `"3. EQUITY","${grp.bucket_name}","${name}","${acc}",${it.amount}\n`;
+        });
+    });
+    csv += `"3. EQUITY","Provisional Net Profit for Period","","",${bs.summary.provisional_profit}\n`;
+    csv += `"3. EQUITY","TOTAL EQUITY & RETAINED EARNINGS","","",${bs.summary.total_equity_and_reserves}\n`;
+    csv += `"SUMMARY","TOTAL LIABILITIES AND EQUITY","","",${bs.summary.total_liabilities_and_equity}\n`;
+
+    let uri = encodeURI(csv);
+    let link = document.createElement("a");
+    link.setAttribute("href", uri);
+    link.setAttribute("download", `Balance_Sheet_${bs.as_on_date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+/* =========================================================================
+   CARDS HOLDING ACCOUNT MODULE
+   ========================================================================= */
+
+window.CARDS_HOLDING_STATE = {
+    initialized: false,
+    from_date: "",
+    to_date: "",
+    card_type: "ALL",
+    status: "pending", // default to pending in holding
+    search: "",
+    page: 1,
+    page_length: 50,
+    total_pages: 1,
+    total_records: 0,
+    selected_items: new Map(), // name -> { name, amount, card, receipt_no, shift, date }
+    supplier_accounts: [],
+    card_types: [],
+    search_timer: null,
+    loading: false
+};
+
+function init_cards_holding(wrapper) {
+    let state = window.CARDS_HOLDING_STATE;
+
+    // Default date range: "this_month"
+    if (!state.from_date || !state.to_date) {
+        state.from_date = frappe.datetime.month_start();
+        state.to_date = frappe.datetime.get_today();
+        $(wrapper).find('#cards-filter-from').val(state.from_date);
+        $(wrapper).find('#cards-filter-to').val(state.to_date);
+    }
+
+    if (!state.initialized) {
+        state.initialized = true;
+
+        // Preset date buttons
+        $(wrapper).find('.cards-preset-btn').off('click').on('click', function(e) {
+            e.preventDefault();
+            $(wrapper).find('.cards-preset-btn').css({ background: '#fff', color: '#475569' }).removeClass('active');
+            $(this).css({ background: '#0f172a', color: '#fff' }).addClass('active');
+
+            let range = $(this).data('range');
+            let today = frappe.datetime.get_today();
+
+            if (range === 'today') {
+                state.from_date = today;
+                state.to_date = today;
+            } else if (range === 'this_week') {
+                state.from_date = frappe.datetime.add_days(today, -6);
+                state.to_date = today;
+            } else if (range === 'this_month') {
+                state.from_date = frappe.datetime.month_start();
+                state.to_date = today;
+            } else if (range === 'last_month') {
+                let firstOfThisMonth = new Date(frappe.datetime.month_start());
+                let lastOfPrevMonth = new Date(firstOfThisMonth.getTime() - 86400000);
+                let firstOfPrevMonth = new Date(lastOfPrevMonth.getFullYear(), lastOfPrevMonth.getMonth(), 1);
+                state.from_date = frappe.datetime.obj_to_str(firstOfPrevMonth);
+                state.to_date = frappe.datetime.obj_to_str(lastOfPrevMonth);
+            } else if (range === 'all') {
+                state.from_date = '';
+                state.to_date = '';
+            }
+
+            $(wrapper).find('#cards-filter-from').val(state.from_date || '');
+            $(wrapper).find('#cards-filter-to').val(state.to_date || '');
+            state.page = 1;
+            load_cards_holding_data(wrapper);
+        });
+
+        // Date input change
+        $(wrapper).find('#cards-filter-from, #cards-filter-to').off('change').on('change', function() {
+            $(wrapper).find('.cards-preset-btn').css({ background: '#fff', color: '#475569' }).removeClass('active');
+            state.from_date = $(wrapper).find('#cards-filter-from').val();
+            state.to_date = $(wrapper).find('#cards-filter-to').val();
+            state.page = 1;
+            load_cards_holding_data(wrapper);
+        });
+
+        // Card Type Filter
+        $(wrapper).find('#cards-filter-card-type').off('change').on('change', function() {
+            state.card_type = $(this).val();
+            state.page = 1;
+            load_cards_holding_data(wrapper);
+        });
+
+        // Status Filter
+        $(wrapper).find('#cards-filter-status').off('change').on('change', function() {
+            state.status = $(this).val();
+            state.page = 1;
+            load_cards_holding_data(wrapper);
+        });
+
+        // Search Input with Debounce
+        $(wrapper).find('#cards-filter-search').off('input').on('input', function() {
+            clearTimeout(state.search_timer);
+            let val = $(this).val().trim();
+            state.search_timer = setTimeout(() => {
+                state.search = val;
+                state.page = 1;
+                load_cards_holding_data(wrapper);
+            }, 300);
+        });
+
+        // Refresh Button
+        $(wrapper).find('#btn-cards-holding-refresh').off('click').on('click', function(e) {
+            e.preventDefault();
+            load_cards_holding_data(wrapper);
+        });
+
+        // Reconcile Fuel Invoices Button
+        $(wrapper).find('#btn-cards-reconcile-fuel').off('click').on('click', function(e) {
+            e.preventDefault();
+            open_supplier_payment_modal(wrapper, 'card_offset');
+        });
+
+        // Pagination Previous
+        $(wrapper).find('#btn-cards-prev-page').off('click').on('click', function(e) {
+            e.preventDefault();
+            if (state.page > 1) {
+                state.page--;
+                load_cards_holding_data(wrapper);
+            }
+        });
+
+        // Pagination Next
+        $(wrapper).find('#btn-cards-next-page').off('click').on('click', function(e) {
+            e.preventDefault();
+            if (state.page < state.total_pages) {
+                state.page++;
+                load_cards_holding_data(wrapper);
+            }
+        });
+
+        // Master Checkbox
+        $(wrapper).find('#cards-master-checkbox').off('change').on('change', function() {
+            let checked = $(this).is(':checked');
+            $(wrapper).find('.cards-row-checkbox').each(function() {
+                let name = $(this).val();
+                let amount = parseFloat($(this).data('amount')) || 0;
+                let card = $(this).data('card') || '';
+                let receipt = $(this).data('receipt') || '';
+                let shift = $(this).data('shift') || '';
+                let date = $(this).data('date') || '';
+
+                $(this).prop('checked', checked);
+                if (checked) {
+                    state.selected_items.set(name, { name, amount, card, receipt_no: receipt, shift, date });
+                } else {
+                    state.selected_items.delete(name);
+                }
+            });
+            update_cards_selection_ui(wrapper);
+        });
+
+        // Row Checkboxes Delegation
+        $(wrapper).find('#exec-cards-holding-table').off('change', '.cards-row-checkbox').on('change', '.cards-row-checkbox', function() {
+            let name = $(this).val();
+            let amount = parseFloat($(this).data('amount')) || 0;
+            let card = $(this).data('card') || '';
+            let receipt = $(this).data('receipt') || '';
+            let shift = $(this).data('shift') || '';
+            let date = $(this).data('date') || '';
+
+            if ($(this).is(':checked')) {
+                state.selected_items.set(name, { name, amount, card, receipt_no: receipt, shift, date });
+            } else {
+                state.selected_items.delete(name);
+            }
+            update_cards_selection_ui(wrapper);
+        });
+
+        // Clear Selection
+        $(wrapper).find('#btn-cards-quick-clear').off('click').on('click', function(e) {
+            e.preventDefault();
+            state.selected_items.clear();
+            $(wrapper).find('.cards-row-checkbox').prop('checked', false);
+            $(wrapper).find('#cards-master-checkbox').prop('checked', false).prop('indeterminate', false);
+            update_cards_selection_ui(wrapper);
+        });
+
+        // Bulk Post Dialog Buttons
+        $(wrapper).find('#btn-cards-post-bulk, #btn-cards-post-selected').off('click').on('click', function(e) {
+            e.preventDefault();
+            if (state.selected_items.size === 0) {
+                frappe.msgprint(__('Please select at least one card transaction to post.'));
+                return;
+            }
+            let records = Array.from(state.selected_items.values());
+            open_cards_posting_dialog(wrapper, records);
+        });
+
+        // Single Row Post Button Delegation
+        $(wrapper).find('#exec-cards-holding-table').off('click', '.btn-post-single-card').on('click', '.btn-post-single-card', function(e) {
+            e.preventDefault();
+            let name = $(this).data('name');
+            let amount = parseFloat($(this).data('amount')) || 0;
+            let card = $(this).data('card') || '';
+            let receipt = $(this).data('receipt') || '';
+            let shift = $(this).data('shift') || '';
+            let date = $(this).data('date') || '';
+
+            open_cards_posting_dialog(wrapper, [{ name, amount, card, receipt_no: receipt, shift, date }]);
+        });
+
+        // Single Row Undo Button Delegation
+        $(wrapper).find('#exec-cards-holding-table').off('click', '.btn-undo-single-card').on('click', '.btn-undo-single-card', function(e) {
+            e.preventDefault();
+            let name = $(this).data('name');
+            undo_cards_posting_action(wrapper, [name]);
+        });
+    }
+
+    load_cards_holding_data(wrapper);
+}
+
+function load_cards_holding_data(wrapper) {
+    let state = window.CARDS_HOLDING_STATE;
+    if (state.loading) return;
+    state.loading = true;
+
+    let station = $(wrapper).find('#exec-global-station-select').val() || $(wrapper).find('#exec-header-station-select').val() || '';
+
+    $(wrapper).find('#exec-cards-holding-table tbody').html(
+        '<tr><td colspan="11" style="text-align: center; padding: 32px; color: #64748b;"><span class="material-symbols-outlined" style="animation: spin 1s linear infinite; vertical-align: middle; margin-right: 6px;">progress_activity</span> Loading cards holding data...</td></tr>'
+    );
+
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_cards_holding_data",
+        args: {
+            from_date: state.from_date || '',
+            to_date: state.to_date || '',
+            card_type: state.card_type || 'ALL',
+            status: state.status || 'pending',
+            search: state.search || '',
+            page: state.page || 1,
+            page_length: state.page_length || 50,
+            station: station
+        },
+        callback: function(r) {
+            state.loading = false;
+            if (r && r.message) {
+                let data = r.message;
+                state.total_pages = data.total_pages || 1;
+                state.total_records = (data.summary && data.summary.total_count) || 0;
+                state.supplier_accounts = data.supplier_accounts || [];
+                state.card_types = data.card_types || [];
+
+                // Populate Card Types dropdown if empty
+                let cardSelect = $(wrapper).find('#cards-filter-card-type');
+                if (cardSelect.children('option').length <= 1 && state.card_types.length > 0) {
+                    state.card_types.forEach(ct => {
+                        cardSelect.append(`<option value="${ct.id}">${ct.label}</option>`);
+                    });
+                    if (state.card_type) cardSelect.val(state.card_type);
+                }
+
+                // Update KPI Cards
+                if (data.summary) {
+                    let s = data.summary;
+                    $(wrapper).find('#cards-kpi-pending-amt').text(format_currency(s.pending_amount || 0, "KES"));
+                    $(wrapper).find('#cards-kpi-pending-count').text((s.pending_count || 0).toLocaleString());
+
+                    $(wrapper).find('#cards-kpi-posted-amt').text(format_currency(s.posted_amount || 0, "KES"));
+                    $(wrapper).find('#cards-kpi-posted-count').text((s.posted_count || 0).toLocaleString());
+
+                    $(wrapper).find('#cards-kpi-total-amt').text(format_currency(s.total_amount || 0, "KES"));
+                    $(wrapper).find('#cards-kpi-total-count').text((s.total_count || 0).toLocaleString());
+                }
+
+                // Render Table rows
+                render_cards_holding_table(wrapper, data.records || []);
+
+                // Update Pagination Controls
+                let totalShown = 0;
+                if (data.summary) {
+                    if (state.status === 'pending') totalShown = data.summary.pending_count;
+                    else if (state.status === 'posted') totalShown = data.summary.posted_count;
+                    else totalShown = data.summary.total_count;
+                }
+
+                let startIdx = totalShown === 0 ? 0 : (state.page - 1) * state.page_length + 1;
+                let endIdx = Math.min(state.page * state.page_length, totalShown);
+
+                if (totalShown === 0) {
+                    $(wrapper).find('#cards-pagination-info').text('Showing 0 records');
+                } else {
+                    $(wrapper).find('#cards-pagination-info').text(`Showing ${startIdx} to ${endIdx} of ${totalShown.toLocaleString()} records`);
+                }
+                $(wrapper).find('#cards-current-page').text(`Page ${state.page} of ${state.total_pages || 1}`);
+                $(wrapper).find('#btn-cards-prev-page').prop('disabled', state.page <= 1);
+                $(wrapper).find('#btn-cards-next-page').prop('disabled', state.page >= state.total_pages);
+
+                // Update selection indicators
+                update_cards_selection_ui(wrapper);
+            } else {
+                $(wrapper).find('#exec-cards-holding-table tbody').html(
+                    '<tr><td colspan="11" style="text-align: center; padding: 30px; color: #ef4444;">Failed to load cards holding data.</td></tr>'
+                );
+            }
+        },
+        error: function() {
+            state.loading = false;
+            $(wrapper).find('#exec-cards-holding-table tbody').html(
+                '<tr><td colspan="11" style="text-align: center; padding: 30px; color: #ef4444;">Network or server error while loading cards holding.</td></tr>'
+            );
+        }
+    });
+}
+
+function render_cards_holding_table(wrapper, records) {
+    let state = window.CARDS_HOLDING_STATE;
+    let tbody = $(wrapper).find('#exec-cards-holding-table tbody');
+    let pageTotal = 0;
+
+    if (!records || records.length === 0) {
+        tbody.html('<tr><td colspan="11" style="text-align: center; padding: 36px; color: #64748b; font-size: 13px;">No station card transactions found matching current filters.</td></tr>');
+        $(wrapper).find('#cards-page-total').text('KES 0.00');
+        return;
+    }
+
+    let html = '';
+    records.forEach(r => {
+        let amt = parseFloat(r.amount) || 0;
+        pageTotal += amt;
+        let isSelected = state.selected_items.has(r.name);
+        let isReconciled = r.is_reconciled == 1;
+
+        let statusBadge = isReconciled
+            ? `<span style="background: #dcfce7; color: #166534; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;"><span class="material-symbols-outlined" style="font-size: 12px;">check</span> Posted</span>`
+            : `<span style="background: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 3px;"><span class="material-symbols-outlined" style="font-size: 12px;">hourglass_top</span> In Holding</span>`;
+
+        let actionHtml = isReconciled
+            ? `<button class="btn btn-xs btn-default btn-undo-single-card" data-name="${r.name}" style="font-size: 11px; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; color: #475569;" title="Revert to Holding">Undo</button>`
+            : `<button class="btn btn-xs btn-primary btn-post-single-card" data-name="${r.name}" data-amount="${amt}" data-card="${frappe.utils.escape_html(r.card || '')}" data-receipt="${frappe.utils.escape_html(r.receipt_no || '')}" data-shift="${frappe.utils.escape_html(r.shift || '')}" data-date="${r.date || ''}" style="font-size: 11px; padding: 3px 10px; border-radius: 4px; background: #0284c7; color: #fff; border: none; font-weight: 600; cursor: pointer;">Post</button>`;
+
+        let memoText = (r.memo || '').trim();
+        let postingInfo = '';
+        if (isReconciled) {
+            let byUser = r.reconciled_by || 'Director';
+            let recDate = r.reconciled_date_formatted || '';
+            postingInfo = `<div style="font-size: 11px; color: #15803d; font-weight: 500;" title="${frappe.utils.escape_html(memoText)}">${frappe.utils.escape_html(memoText || ('Posted by ' + byUser + ' ' + recDate))}</div>`;
+        } else {
+            postingInfo = `<div style="font-size: 11px; color: #94a3b8; font-style: italic;">Awaiting director posting</div>`;
+        }
+
+        html += `<tr style="border-bottom: 1px solid #f1f5f9; ${isSelected ? 'background: #f0fdf4;' : ''}">
+            <td style="padding: 10px 14px; text-align: center;">
+                <input type="checkbox" class="cards-row-checkbox" value="${r.name}" data-amount="${amt}" data-card="${frappe.utils.escape_html(r.card || '')}" data-receipt="${frappe.utils.escape_html(r.receipt_no || '')}" data-shift="${frappe.utils.escape_html(r.shift || '')}" data-date="${r.date || ''}" ${isSelected ? 'checked' : ''} style="cursor: pointer; width: 15px; height: 15px;">
+            </td>
+            <td style="padding: 10px 14px; font-size: 12px; color: #334155; white-space: nowrap;">${r.date_formatted || r.date}</td>
+            <td style="padding: 10px 14px; font-size: 12px; font-weight: 600;">
+                <a href="/app/station-cards/${r.name}" target="_blank" style="color: #0284c7; text-decoration: none;">${r.name}</a>
+            </td>
+            <td style="padding: 10px 14px; font-size: 12px; font-family: monospace; font-weight: 600; color: #0f172a;">${frappe.utils.escape_html(r.receipt_no || '-')}</td>
+            <td style="padding: 10px 14px; font-size: 12px; font-weight: 600; color: #1e293b;">
+                <span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 11px;">${frappe.utils.escape_html(r.card || '-')}</span>
+            </td>
+            <td style="padding: 10px 14px; font-size: 12px; color: #475569;">
+                <a href="/app/shift/${r.shift}" target="_blank" style="color: #475569; text-decoration: none;">${frappe.utils.escape_html(r.shift || '-')}</a>
+            </td>
+            <td style="padding: 10px 14px; font-size: 12px; color: #475569;">${frappe.utils.escape_html(r.csa_name || r.csa || '-')}</td>
+            <td style="padding: 10px 14px; text-align: right; font-family: monospace; font-weight: 700; color: #0f172a; font-size: 13px;">${format_currency(amt, "KES")}</td>
+            <td style="padding: 10px 14px; text-align: center;">${statusBadge}</td>
+            <td style="padding: 10px 14px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${postingInfo}</td>
+            <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">${actionHtml}</td>
+        </tr>`;
+    });
+
+    tbody.html(html);
+    $(wrapper).find('#cards-page-total').text(format_currency(pageTotal, "KES"));
+}
+
+function update_cards_selection_ui(wrapper) {
+    let state = window.CARDS_HOLDING_STATE;
+    let count = state.selected_items.size;
+    let totalAmt = 0;
+    state.selected_items.forEach(item => {
+        totalAmt += parseFloat(item.amount) || 0;
+    });
+
+    $(wrapper).find('#cards-selected-count').text(count);
+    $(wrapper).find('#cards-selected-amt').text(format_currency(totalAmt, "KES"));
+
+    if (count > 0) {
+        $(wrapper).find('#cards-bulk-bar').css('display', 'flex');
+        $(wrapper).find('#btn-cards-post-bulk').prop('disabled', false).css('opacity', '1');
+    } else {
+        $(wrapper).find('#cards-bulk-bar').hide();
+        $(wrapper).find('#btn-cards-post-bulk').prop('disabled', true).css('opacity', '0.6');
+    }
+
+    // Check master checkbox status on current page
+    let totalCheckboxes = $(wrapper).find('.cards-row-checkbox').length;
+    let checkedCount = $(wrapper).find('.cards-row-checkbox:checked').length;
+    let master = $(wrapper).find('#cards-master-checkbox');
+
+    if (totalCheckboxes > 0 && checkedCount === totalCheckboxes) {
+        master.prop('checked', true).prop('indeterminate', false);
+    } else if (checkedCount > 0) {
+        master.prop('checked', false).prop('indeterminate', true);
+    } else {
+        master.prop('checked', false).prop('indeterminate', false);
+    }
+}
+
+function open_cards_posting_dialog(wrapper, card_records) {
+    if (!card_records || card_records.length === 0) {
+        frappe.msgprint(__('No card records selected.'));
+        return;
+    }
+
+    let state = window.CARDS_HOLDING_STATE;
+    let cardsTotal = 0;
+    let cardTypeSet = new Set();
+    card_records.forEach(r => {
+        cardsTotal += parseFloat(r.amount) || 0;
+        if (r.card) cardTypeSet.add(r.card);
+    });
+
+    let cardTypesStr = Array.from(cardTypeSet).join(', ');
+
+    // Available supplier accounts
+    let accountOptions = [];
+    if (state.supplier_accounts && state.supplier_accounts.length > 0) {
+        accountOptions = state.supplier_accounts.map(a => a.name);
+    } else {
+        accountOptions = [
+            "RUBIS A/C - KIL",
+            "EQUITY (RUBIS) - KIL",
+            "KCB(RUBIS) - KIL",
+            "Creditors - KIL"
+        ];
+    }
+
+    // Default supplier account detection
+    let defaultAcc = "RUBIS A/C - KIL";
+    if (cardTypesStr.toUpperCase().includes("EQUITY")) {
+        defaultAcc = "EQUITY (RUBIS) - KIL";
+    } else if (cardTypesStr.toUpperCase().includes("KCB")) {
+        defaultAcc = "KCB(RUBIS) - KIL";
+    }
+    if (accountOptions.indexOf(defaultAcc) === -1) {
+        accountOptions.unshift(defaultAcc);
+    }
+
+    let summaryHtml = `
+        <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
+            <div style="font-size: 13px; font-weight: 700; color: #0369a1; margin-bottom: 6px;">Cards Holding Summary</div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #334155; margin-bottom: 3px;">
+                <span>Total Cards to Post:</span>
+                <strong>${card_records.length} card(s)</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #334155; margin-bottom: 3px;">
+                <span>Card Types:</span>
+                <span>${cardTypesStr || 'Station Cards'}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #0f172a; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1;">
+                <span>SPA Recorded Value:</span>
+                <span style="font-family: monospace; color: #0284c7; font-size: 14px;">${format_currency(cardsTotal, "KES")}</span>
+            </div>
+        </div>
+        <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+            Verify the amount actually credited to your supplier portal/statement. You can adjust the credited amount below if supplier commissions or merchant deductions were applied.
+        </p>
+    `;
+
+    let d = new frappe.ui.Dialog({
+        title: __('Post Cards to Supplier Account'),
+        fields: [
+            {
+                fieldname: 'summary_html',
+                fieldtype: 'HTML',
+                options: summaryHtml
+            },
+            {
+                label: __('Supplier Account Credited'),
+                fieldname: 'supplier_account',
+                fieldtype: 'Select',
+                options: accountOptions.join('\n'),
+                default: defaultAcc,
+                reqd: 1
+            },
+            {
+                label: __('Credited Amount in Supplier Account (KES)'),
+                fieldname: 'credited_amount',
+                fieldtype: 'Currency',
+                default: cardsTotal,
+                reqd: 1,
+                description: __('Actual amount confirmed received in supplier account/portal')
+            },
+            {
+                label: __('Posting Date'),
+                fieldname: 'posting_date',
+                fieldtype: 'Date',
+                default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                label: __('Supplier Ref / Batch # / Settlement ID'),
+                fieldname: 'reference',
+                fieldtype: 'Data',
+                placeholder: __('e.g. RUBIS-BATCH-20261012')
+            },
+            {
+                label: __('Create Accounting Journal Entry (GL)'),
+                fieldname: 'create_gl_entry',
+                fieldtype: 'Check',
+                default: 0,
+                description: __('Generate Journal Entry: Debit Supplier Account & Credit Card Holding Account')
+            },
+            {
+                label: __('Variance / Fee Account (if credited amount differs)'),
+                fieldname: 'variance_account',
+                fieldtype: 'Link',
+                options: 'Account',
+                depends_on: `eval:doc.credited_amount != ${cardsTotal}`
+            },
+            {
+                label: __('Notes / Remarks'),
+                fieldname: 'notes',
+                fieldtype: 'Small Text',
+                placeholder: __('Optional settlement details')
+            }
+        ],
+        primary_action_label: __('Confirm & Post to Supplier'),
+        primary_action: function(vals) {
+            if (!vals.supplier_account) {
+                frappe.msgprint(__('Please select a Supplier Account'));
+                return;
+            }
+
+            let card_names = card_records.map(r => r.name);
+            frappe.call({
+                method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.post_station_cards_to_supplier",
+                args: {
+                    card_names: JSON.stringify(card_names),
+                    supplier_account: vals.supplier_account,
+                    credited_amount: vals.credited_amount,
+                    posting_date: vals.posting_date,
+                    reference: vals.reference || '',
+                    variance_account: vals.variance_account || '',
+                    notes: vals.notes || '',
+                    create_gl_entry: vals.create_gl_entry ? 1 : 0
+                },
+                freeze: true,
+                freeze_message: __("Posting cards to supplier account..."),
+                callback: function(r) {
+                    if (r && r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: r.message.message,
+                            indicator: 'green'
+                        }, 7);
+                        d.hide();
+
+                        // Remove posted items from selection
+                        card_names.forEach(n => state.selected_items.delete(n));
+                        update_cards_selection_ui(wrapper);
+                        load_cards_holding_data(wrapper);
+
+                        // If Top-ups tab is visible, refresh it too
+                        if ($(wrapper).find('#tab-topups').is(':visible')) {
+                            load_topups_statement(wrapper);
+                        }
+                    } else {
+                        frappe.msgprint(__('Posting failed: ') + ((r && r.message) ? JSON.stringify(r.message) : 'Unknown error'));
+                    }
+                }
+            });
+        }
+    });
+
+    d.show();
+}
+
+function undo_cards_posting_action(wrapper, card_names) {
+    if (!card_names || card_names.length === 0) return;
+    let state = window.CARDS_HOLDING_STATE;
+
+    frappe.confirm(
+        __(`Are you sure you want to revert ${card_names.length} card transaction(s) back to pending in holding?`),
+        function() {
+            frappe.call({
+                method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.undo_station_cards_posting",
+                args: {
+                    card_names: JSON.stringify(card_names)
+                },
+                freeze: true,
+                freeze_message: __("Reverting cards to holding..."),
+                callback: function(r) {
+                    if (r && r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: r.message.message,
+                            indicator: 'orange'
+                        }, 5);
+                        load_cards_holding_data(wrapper);
+                    }
+                }
+            });
+        }
+    );
+}
+
+// ==============================================================================
+// SUPPLIER TRANSFER & FUEL INVOICES RECONCILIATION MODAL
+// ==============================================================================
+window.EXEC_SUPP_STATE = {
+    mode: 'bank_transfer', // 'bank_transfer' or 'card_offset'
+    form_data: null,
+    invoices: [],
+    selected_invoices: new Set()
+};
+
+function init_supplier_payment_modal(wrapper) {
+    let modal = $(wrapper).find('#exec-supplier-payment-modal');
+
+    // Close buttons
+    $(wrapper).find('#exec-supplier-payment-modal-close, #btn-exec-modal-supp-cancel').off('click').on('click', function() {
+        modal.hide();
+    });
+
+    // Mode Buttons
+    $(wrapper).find('.exec-supp-mode-btn').off('click').on('click', function() {
+        let mode = $(this).data('mode');
+        switch_supplier_modal_mode(wrapper, mode);
+    });
+
+    // Supplier Dropdown Change
+    $(wrapper).find('#exec-modal-supp-supplier').off('change').on('change', function() {
+        let supp = $(this).val();
+        load_supplier_invoices_for_modal(wrapper, supp);
+    });
+
+    // Source Account Change
+    $(wrapper).find('#exec-modal-supp-source-account').off('change').on('change', function() {
+        update_supplier_source_balance(wrapper);
+    });
+
+    // Master Invoice Checkbox
+    $(wrapper).find('#exec-supp-master-inv-check').off('change').on('change', function() {
+        let isChecked = $(this).prop('checked');
+        $(wrapper).find('.exec-supp-inv-check').prop('checked', isChecked);
+        recalc_selected_invoices(wrapper);
+    });
+
+    // Single Invoice Checkbox Delegation
+    $(wrapper).find('#exec-modal-supp-invs-body').off('change', '.exec-supp-inv-check').on('change', '.exec-supp-inv-check', function() {
+        recalc_selected_invoices(wrapper);
+    });
+
+    // "Select All" Button
+    $(wrapper).find('#btn-supp-inv-check-all').off('click').on('click', function() {
+        let allChecked = $(wrapper).find('.exec-supp-inv-check').length === $(wrapper).find('.exec-supp-inv-check:checked').length;
+        $(wrapper).find('.exec-supp-inv-check, #exec-supp-master-inv-check').prop('checked', !allChecked);
+        recalc_selected_invoices(wrapper);
+    });
+
+    // "Match Selected Invoices" Button
+    $(wrapper).find('#btn-supp-fill-amount').off('click').on('click', function(e) {
+        e.preventDefault();
+        let total = parseFloat($(this).data('total')) || 0;
+        if (total > 0) {
+            $(wrapper).find('#exec-modal-supp-amount').val(total.toFixed(2));
+        }
+    });
+
+    // Submit Form Button
+    $(wrapper).find('#btn-exec-modal-supp-submit').off('click').on('click', function() {
+        submit_supplier_payment_form(wrapper);
+    });
+}
+
+function open_supplier_payment_modal(wrapper, default_mode) {
+    default_mode = default_mode || 'bank_transfer';
+    let state = window.EXEC_SUPP_STATE;
+    state.mode = default_mode;
+    
+    // Reset form
+    $(wrapper).find('#exec-supplier-payment-form')[0].reset();
+    $(wrapper).find('#exec-modal-supp-date').val(frappe.datetime.get_today());
+    $(wrapper).find('#exec-modal-supp-alert').hide().removeClass('alert-danger alert-success');
+    $(wrapper).find('#exec-modal-supp-spinner').addClass('hidden');
+    $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', false);
+    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 12px;">Loading invoices...</td></tr>');
+
+    // Open modal immediately with loading state
+    $(wrapper).find('#exec-supplier-payment-modal').css('display', 'flex');
+
+    // Fetch live options & suppliers
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_supplier_payment_form_data',
+        callback: function(r) {
+            if (r.message) {
+                state.form_data = r.message;
+                populate_supplier_modal_dropdowns(wrapper);
+                switch_supplier_modal_mode(wrapper, state.mode);
+            }
+        }
+    });
+}
+
+function populate_supplier_modal_dropdowns(wrapper) {
+    let data = window.EXEC_SUPP_STATE.form_data;
+    if (!data) return;
+
+    // Populate Suppliers
+    let suppHtml = '';
+    (data.suppliers || []).forEach(s => {
+        let selected = s.name === data.default_supplier ? 'selected' : '';
+        suppHtml += `<option value="${s.name}" ${selected}>${s.supplier_name || s.name}</option>`;
+    });
+    $(wrapper).find('#exec-modal-supp-supplier').html(suppHtml);
+
+    // Initial render of invoices
+    render_supplier_modal_invoices(wrapper, data.invoices || [], data.total_outstanding || 0);
+}
+
+function switch_supplier_modal_mode(wrapper, mode) {
+    let state = window.EXEC_SUPP_STATE;
+    state.mode = mode;
+
+    // Update active tab button style
+    $(wrapper).find('.exec-supp-mode-btn').removeClass('active').css({
+        'background': 'transparent',
+        'color': '#64748b',
+        'box-shadow': 'none'
+    });
+    $(wrapper).find(`.exec-supp-mode-btn[data-mode="${mode}"]`).addClass('active').css({
+        'background': '#fff',
+        'color': '#0f172a',
+        'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'
+    });
+
+    let data = state.form_data;
+    let accSelect = $(wrapper).find('#exec-modal-supp-source-account');
+    let accountsList = [];
+
+    if (mode === 'bank_transfer') {
+        $(wrapper).find('#exec-modal-supp-title').text('Transfer to Fuel Supplier (Bank Payment)');
+        $(wrapper).find('#exec-modal-supp-source-label').text('Paid From (Bank Account)');
+        $(wrapper).find('#exec-modal-supp-submit-text').text('Confirm & Post Bank Transfer');
+        $(wrapper).find('#exec-modal-supp-remarks').attr('placeholder', 'e.g. Fuel tanker RTGS transfer');
+        accountsList = (data && data.bank_accounts) || [];
+    } else {
+        $(wrapper).find('#exec-modal-supp-title').text('Station Card Offset (Reconcile Invoices)');
+        $(wrapper).find('#exec-modal-supp-source-label').text('Paid From (Card Holding Account)');
+        $(wrapper).find('#exec-modal-supp-submit-text').text('Confirm & Offset Fuel Invoices');
+        $(wrapper).find('#exec-modal-supp-remarks').attr('placeholder', 'e.g. Rubis card sales settlement offset');
+        accountsList = (data && data.card_accounts) || [];
+    }
+
+    let accHtml = '<option value="">Select Account...</option>';
+    accountsList.forEach((acc, idx) => {
+        let isFirst = idx === 0 ? 'selected' : '';
+        accHtml += `<option value="${acc.name}" data-balance="${acc.balance}" ${isFirst}>${acc.name} (KES ${format_currency(acc.balance, '')})</option>`;
+    });
+    accSelect.html(accHtml);
+
+    update_supplier_source_balance(wrapper);
+}
+
+function update_supplier_source_balance(wrapper) {
+    let selectedOpt = $(wrapper).find('#exec-modal-supp-source-account option:selected');
+    let bal = parseFloat(selectedOpt.data('balance')) || 0;
+    let badge = $(wrapper).find('#exec-modal-supp-source-bal-badge');
+
+    badge.text('Bal: ' + format_currency(bal, 'KES'));
+    if (bal >= 0) {
+        badge.css({'background': '#dcfce7', 'color': '#166534'});
+    } else {
+        badge.css({'background': '#fee2e2', 'color': '#991b1b'});
+    }
+}
+
+function load_supplier_invoices_for_modal(wrapper, supplier) {
+    if (!supplier) return;
+    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 12px;">Loading invoices for ' + supplier + '...</td></tr>');
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_supplier_payment_form_data',
+        args: { supplier: supplier },
+        callback: function(r) {
+            if (r.message) {
+                render_supplier_modal_invoices(wrapper, r.message.invoices || [], r.message.total_outstanding || 0);
+            }
+        }
+    });
+}
+
+function render_supplier_modal_invoices(wrapper, invoices, totalOutstanding) {
+    window.EXEC_SUPP_STATE.invoices = invoices;
+    $(wrapper).find('#exec-modal-supp-total-invs').text(format_currency(totalOutstanding, 'KES'));
+
+    let tbody = $(wrapper).find('#exec-modal-supp-invs-body');
+    if (!invoices || invoices.length === 0) {
+        tbody.html('<tr><td colspan="6" style="text-align: center; color: #16a34a; font-weight: 700; padding: 16px;">✓ No outstanding fuel purchase invoices found for this supplier!</td></tr>');
+        $(wrapper).find('#exec-modal-supp-selected-invs-total').text('KES 0.00');
+        $(wrapper).find('#btn-supp-fill-amount').data('total', 0);
+        return;
+    }
+
+    let rowsHtml = '';
+    invoices.forEach(inv => {
+        rowsHtml += `
+            <tr>
+                <td style="text-align: center;">
+                    <input type="checkbox" class="exec-supp-inv-check" value="${inv.name}" data-outstanding="${inv.outstanding_amount}" checked>
+                </td>
+                <td style="font-weight: 700; color: #0284c7;">
+                    <a href="/app/purchase-invoice/${inv.name}" target="_blank" style="text-decoration: underline; color: inherit;">${inv.name}</a>
+                </td>
+                <td>${inv.posting_date_formatted || inv.posting_date}</td>
+                <td>${inv.bill_no || '-'}</td>
+                <td style="text-align: right; font-family: monospace;">${format_currency(inv.grand_total, 'KES')}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: 700; color: #dc2626;">${format_currency(inv.outstanding_amount, 'KES')}</td>
+            </tr>
+        `;
+    });
+    tbody.html(rowsHtml);
+
+    recalc_selected_invoices(wrapper);
+}
+
+function recalc_selected_invoices(wrapper) {
+    let total = 0;
+    let count = 0;
+    $(wrapper).find('.exec-supp-inv-check:checked').each(function() {
+        total += parseFloat($(this).data('outstanding')) || 0;
+        count++;
+    });
+
+    $(wrapper).find('#exec-modal-supp-selected-invs-total').text(format_currency(total, 'KES'));
+    $(wrapper).find('#btn-supp-fill-amount').data('total', total);
+
+    // If payment amount input is currently empty or 0, auto-fill with selected total
+    let currentAmt = parseFloat($(wrapper).find('#exec-modal-supp-amount').val()) || 0;
+    if (currentAmt === 0 && total > 0) {
+        $(wrapper).find('#exec-modal-supp-amount').val(total.toFixed(2));
+    }
+}
+
+function submit_supplier_payment_form(wrapper) {
+    let state = window.EXEC_SUPP_STATE;
+    let supplier = $(wrapper).find('#exec-modal-supp-supplier').val();
+    let source_acc = $(wrapper).find('#exec-modal-supp-source-account').val();
+    let amount = parseFloat($(wrapper).find('#exec-modal-supp-amount').val());
+    let posting_date = $(wrapper).find('#exec-modal-supp-date').val();
+    let ref = $(wrapper).find('#exec-modal-supp-ref').val().trim();
+    let remarks = $(wrapper).find('#exec-modal-supp-remarks').val().trim();
+
+    let alertBox = $(wrapper).find('#exec-modal-supp-alert');
+    alertBox.hide();
+
+    if (!supplier) {
+        alertBox.text("Please select a supplier.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (!source_acc) {
+        alertBox.text("Please select the source payment account.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (isNaN(amount) || amount <= 0) {
+        alertBox.text("Please enter a valid payment amount greater than 0.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (!posting_date) {
+        alertBox.text("Please specify payment date.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+
+    // Collect checked invoices
+    let checkedInvoices = [];
+    $(wrapper).find('.exec-supp-inv-check:checked').each(function() {
+        checkedInvoices.push($(this).val());
+    });
+
+    // UI Loading state
+    $(wrapper).find('#exec-modal-supp-spinner').removeClass('hidden');
+    $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', true);
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.submit_supplier_bank_transfer',
+        args: {
+            paid_from_account: source_acc,
+            supplier: supplier,
+            amount: amount,
+            posting_date: posting_date,
+            reference: ref,
+            invoice_names: JSON.stringify(checkedInvoices),
+            remarks: remarks,
+            payment_type_mode: state.mode
+        },
+        freeze: true,
+        freeze_message: state.mode === 'bank_transfer' ? __("Posting Bank Transfer to Supplier...") : __("Reconciling Fuel Invoices with Station Cards..."),
+        callback: function(r) {
+            $(wrapper).find('#exec-modal-supp-spinner').addClass('hidden');
+            $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', false);
+
+            if (r && r.message && r.message.success) {
+                frappe.show_alert({
+                    message: `<span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">check_circle</span> ${r.message.message} (<a href="/app/payment-entry/${r.message.payment_entry}" target="_blank" style="color: #fff; text-decoration: underline;">View Entry</a>)`,
+                    indicator: 'green'
+                }, 8);
+
+                $(wrapper).find('#exec-supplier-payment-modal').hide();
+
+                // Refresh affected views
+                if (typeof load_exec_cash_accounts === 'function') {
+                    load_exec_cash_accounts(wrapper);
+                }
+                if (typeof load_cards_holding_data === 'function') {
+                    load_cards_holding_data(wrapper);
+                }
+                if (typeof load_dashboard_data === 'function') {
+                    load_dashboard_data(wrapper);
+                }
+            } else {
+                let err = (r && r.message && r.message.message) ? r.message.message : 'Failed to post payment entry.';
+                alertBox.text(err).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+            }
+        },
+        error: function(err) {
+            $(wrapper).find('#exec-modal-supp-spinner').addClass('hidden');
+            $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', false);
+            alertBox.text("Server Error: " + (err.message || JSON.stringify(err))).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        }
+    });
+}
+
