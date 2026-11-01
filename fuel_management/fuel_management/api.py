@@ -1116,6 +1116,19 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
         else:
             if b.stock_entry: borrowed_out_ses.add(b.stock_entry)
             if b.return_stock_entry: borrowed_in_ses.add(b.return_stock_entry)
+    stock_entry_ids = set()
+    for item, row in data.items():
+        if "vouchers" in row:
+            for vid in row["vouchers"].keys():
+                v_type, v_no = vid.split('|')
+                if v_type == 'Stock Entry':
+                    stock_entry_ids.add(v_no)
+    
+    se_purposes = {}
+    if stock_entry_ids:
+        se_records = frappe.get_all("Stock Entry", filters={"name": ["in", list(stock_entry_ids)]}, fields=["name", "purpose"])
+        se_purposes = {s.name: s.purpose for s in se_records}
+
     for item, row in data.items():
         if "vouchers" in row:
             for vid, qty in row["vouchers"].items():
@@ -1124,6 +1137,19 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
                     row['borrowed_in'] += qty
                 elif v_type == 'Stock Entry' and v_no in borrowed_out_ses:
                     row['borrowed_out'] += abs(qty)
+                elif v_type in ['Purchase Invoice', 'Purchase Receipt']:
+                    if qty > 0:
+                        row["purchases"] += qty
+                    else:
+                        row["purchases"] -= abs(qty)
+                elif v_type in ['Sales Invoice', 'Delivery Note']:
+                    row["sales"] += abs(qty)
+                elif v_type == 'Stock Entry':
+                    purpose = se_purposes.get(v_no, '')
+                    if purpose == 'Material Issue':
+                        row["sales"] += abs(qty)
+                    elif purpose in ['Material Receipt', 'Repack']:
+                        pass
                 elif qty > 0:
                     row["purchases"] += qty
                 elif qty < 0:
