@@ -8544,7 +8544,7 @@ function render_purchases($wrapper) {
             let sup = (row.supplier || '').toLowerCase();
             let doc_inv = (row.document_invoice_number || '').toLowerCase();
             let tax_inv = (row.tax_invoice_number || '').toLowerCase();
-            let items_match = (row.items || []).some(i => (i.item || '').toLowerCase().includes(q));
+            let items_match = (row.items || []).some(i => (i.item || '').toLowerCase().includes(q) || (i.item_name || '').toLowerCase().includes(q));
             return n.includes(q) || sup.includes(q) || doc_inv.includes(q) || tax_inv.includes(q) || items_match;
         });
         
@@ -8552,12 +8552,14 @@ function render_purchases($wrapper) {
         if (filtered.length > 0) {
             filtered.forEach(row => {
                 let items_tags = (row.items || []).map(i => {
-                    let iname = (i.item || '').toUpperCase();
+                    let displayName = i.item_name || i.item || '';
+                    let iname = displayName.toUpperCase();
                     let icon = '📦';
                     if (iname.includes('PMS') || iname.includes('PETROL') || iname.includes('DIESEL') || iname.includes('AGO') || iname.includes('IK') || iname.includes('FUEL')) icon = '⛽';
                     else if (iname.includes('GAS') || iname.includes('LPG')) icon = '🔥';
                     else if (iname.includes('OIL') || iname.includes('LUBE')) icon = '🛢️';
-                    return `<span style="display: inline-flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin: 2px; font-weight: 600; color: #334155;">${icon} <b>${frappe.format(i.quantity, {fieldtype: 'Float'})}</b> &bull; ${frappe.utils.escape_html(i.item)}</span>`;
+                    let codeTag = (i.item && i.item !== displayName) ? ` <span style="font-size: 0.68rem; color: #64748b; font-weight: normal; font-family: monospace;">(${frappe.utils.escape_html(i.item)})</span>` : '';
+                    return `<span style="display: inline-flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; margin: 2px; font-weight: 600; color: #334155;">${icon} <b>${frappe.format(i.quantity, {fieldtype: 'Float'})}</b> &bull; ${frappe.utils.escape_html(displayName)}${codeTag}</span>`;
                 }).join(' ');
                 
                 html += `

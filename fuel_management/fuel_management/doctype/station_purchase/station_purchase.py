@@ -273,7 +273,13 @@ def get_purchases_history(date_from=None, date_to=None, limit=None, station=None
     purchases = frappe.db.sql(query, tuple(values), as_dict=True)
     
     for p in purchases:
-        p.items = frappe.get_all('Station Purchase Item', filters={'parent': p.name}, fields=['item', 'quantity'])
+        p.items = frappe.db.sql("""
+            SELECT spi.item, spi.quantity, COALESCE(NULLIF(it.item_name, ''), spi.item) as item_name
+            FROM `tabStation Purchase Item` spi
+            LEFT JOIN `tabItem` it ON spi.item = it.name
+            WHERE spi.parent = %s
+            ORDER BY spi.idx ASC
+        """, (p.name,), as_dict=True)
     
     return purchases
 
