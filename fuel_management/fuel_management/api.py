@@ -1057,7 +1057,8 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
     sles = frappe.get_all("Stock Ledger Entry",
         filters={"warehouse": ["in", warehouses], "is_cancelled": 0, "item_code": ["in", allowed_items]},
         fields=["item_code", "warehouse", "actual_qty", "qty_after_transaction", "posting_date", "posting_time", "creation", "voucher_type", "voucher_no"],
-        order_by="posting_date asc, posting_time asc, creation asc"
+        order_by="posting_date asc, posting_time asc, creation asc",
+        limit_page_length=0
     )
     
     data = {}
@@ -1105,8 +1106,7 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
         row["cl_store"] = sum(qty for (it, wh), qty in item_wh_cl.items() if it == item and wh in store_warehouses)
         row["cl_forecourt"] = sum(qty for (it, wh), qty in item_wh_cl.items() if it == item and wh in forecourt_warehouses)
 
-
-    borrowed_docs = frappe.get_all("Borrowed Product", filters={"docstatus": ["!=", 2]}, fields=["stock_entry", "return_stock_entry", "type"])
+    borrowed_docs = frappe.get_all("Borrowed Product", filters={"docstatus": ["!=", 2]}, fields=["stock_entry", "return_stock_entry", "type"], limit_page_length=0)
     borrowed_in_ses = set()
     borrowed_out_ses = set()
     for b in borrowed_docs:
@@ -1126,7 +1126,7 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
     
     se_purposes = {}
     if stock_entry_ids:
-        se_records = frappe.get_all("Stock Entry", filters={"name": ["in", list(stock_entry_ids)]}, fields=["name", "purpose"])
+        se_records = frappe.get_all("Stock Entry", filters={"name": ["in", list(stock_entry_ids)]}, fields=["name", "purpose"], limit_page_length=0)
         se_purposes = {s.name: s.purpose for s in se_records}
 
     for item, row in data.items():
@@ -1167,17 +1167,6 @@ def get_inventory_status_report(station_id=None, from_date=None, to_date=None, w
             
     # Group by item group
     grouped = {}
-
-    borrowed_docs = frappe.get_all("Borrowed Product", filters={"docstatus": ["!=", 2]}, fields=["stock_entry", "return_stock_entry", "type"])
-    borrowed_in_ses = set()
-    borrowed_out_ses = set()
-    for b in borrowed_docs:
-        if b.type == "Borrowed In":
-            if b.stock_entry: borrowed_in_ses.add(b.stock_entry)
-            if b.return_stock_entry: borrowed_out_ses.add(b.return_stock_entry)
-        else:
-            if b.stock_entry: borrowed_out_ses.add(b.stock_entry)
-            if b.return_stock_entry: borrowed_in_ses.add(b.return_stock_entry)
     for item, row in data.items():
         ig = row["item_group"] or "Other"
         
@@ -4260,6 +4249,11 @@ def edit_borrowed_product_return(docname, return_date, memo=None):
         
     if doc.return_stock_entry and frappe.db.exists("Stock Entry", doc.return_stock_entry):
         frappe.db.set_value("Stock Entry", doc.return_stock_entry, "posting_date", return_date)
+        frappe.db.sql("""
+            UPDATE `tabStock Ledger Entry`
+            SET posting_date = %s
+            WHERE voucher_type = 'Stock Entry' AND voucher_no = %s
+        """, (return_date, doc.return_stock_entry))
         
     frappe.db.commit()
     return {"status": "success", "message": f"Return date for {docname} updated to {return_date}."}
@@ -4301,7 +4295,7 @@ def delete_borrowed_product(docname):
 def edit_borrowed_product(docname, date=None, counterparty=None, memo=None):
     """
     Updates date, counterparty, and/or memo on an active borrowed product.
-    If date changes, syncs the initial Stock Entry posting_date.
+    If date changes, syncs the initial Stock Entry AND Stock Ledger Entry posting_date.
     """
     import frappe
     doc = frappe.get_doc("Borrowed Product", docname)
@@ -4309,6 +4303,11 @@ def edit_borrowed_product(docname, date=None, counterparty=None, memo=None):
         doc.db_set("date", date)
         if doc.stock_entry and frappe.db.exists("Stock Entry", doc.stock_entry):
             frappe.db.set_value("Stock Entry", doc.stock_entry, "posting_date", date)
+            frappe.db.sql("""
+                UPDATE `tabStock Ledger Entry`
+                SET posting_date = %s
+                WHERE voucher_type = 'Stock Entry' AND voucher_no = %s
+            """, (date, doc.stock_entry))
     if counterparty:
         doc.db_set("counterparty", counterparty)
     if memo is not None:
@@ -5890,7 +5889,8 @@ def get_stock_take_inventory(station=None, warehouse=None, as_of_date=None):
                 "posting_date": ["<=", as_of_date]
             },
             fields=["item_code", "warehouse", "qty_after_transaction", "valuation_rate", "posting_date", "posting_time", "creation"],
-            order_by="posting_date asc, posting_time asc, creation asc"
+            order_by="posting_date asc, posting_time asc, creation asc",
+            limit_page_length=0
         )
 
         for sle in sles:

@@ -6337,11 +6337,13 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
     
     let fromDate = fromInput.val();
     let toDate = toInput.val();
+    let is_store = (warehouse_type === 'store');
+    let colspan_val = is_store ? 8 : 6;
     let $tbody = $wrapper.find(`#list-${warehouse_type}-inventory`);
     let $spinner = $wrapper.find(`#btn-refresh-${warehouse_type}-inventory .spinner`);
     
     $spinner.removeClass('hidden');
-    $tbody.html('<tr><td colspan="6" class="text-center">Loading inventory report...</td></tr>');
+    $tbody.html(`<tr><td colspan="${colspan_val}" class="text-center">Loading inventory report...</td></tr>`);
     
     frappe.call({
         method: "fuel_management.fuel_management.api.get_inventory_status_report",
@@ -6371,7 +6373,7 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
                 sort_stock_groups(Object.keys(data)).forEach(group => {
                     html += `
                         <tr class="row-group-header">
-                            <td colspan="6">${group.toUpperCase()}</td>
+                            <td colspan="${colspan_val}" style="font-weight: 800; background: #f8fafc; color: #1e293b; padding: 8px 12px;">${group.toUpperCase()}</td>
                         </tr>
                     `;
                     
@@ -6385,13 +6387,31 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
                         let cl_val = (warehouse_type === "forecourt" ? row.cl_forecourt : row.cl_store) || 0;
                         let cl_cls = (cl_val < 0) ? 'negative-val' : '';
                         
+                        let borrowed_cols = '';
+                        if (is_store) {
+                            let b_in = parseFloat(row.borrowed_in || 0);
+                            let b_out = parseFloat(row.borrowed_out || 0);
+                            let b_in_str = (b_in > 0) ? `<span style="color: #047857; font-weight: 700;">+${b_in.toLocaleString('en-US')}</span>` : `<span style="color: #94a3b8;">0</span>`;
+                            let b_out_str = (b_out > 0) ? `<span style="color: #b91c1c; font-weight: 700;">-${b_out.toLocaleString('en-US')}</span>` : `<span style="color: #94a3b8;">0</span>`;
+                            
+                            borrowed_cols = `
+                                <td class="text-center" style="background: #f0fdf4;">${b_in_str}</td>
+                                <td class="text-center">${row.sales || 0}</td>
+                                <td class="text-center" style="background: #fef2f2;">${b_out_str}</td>
+                            `;
+                        } else {
+                            borrowed_cols = `
+                                <td class="text-center">${row.sales || 0}</td>
+                            `;
+                        }
+                        
                         html += `
                             <tr class="data-row">
                                 <td style="text-align: center;">${no++}</td>
                                 <td style="font-weight: 600; color: #1e293b;">${row.item_name} ${row.item_code !== row.item_name ? `<span style="font-size: 0.75rem; color: #64748b; font-weight: normal; font-family: monospace;">(${row.item_code})</span>` : ''}</td>
                                 <td class="text-center">${op_val}</td>
                                 <td class="text-center">${row.purchases || 0}</td>
-                                <td class="text-center">${row.sales || 0}</td>
+                                ${borrowed_cols}
                                 <td class="text-center ${cl_cls}" style="font-weight:bold;">${cl_val}</td>
                             </tr>
                         `;
@@ -6403,7 +6423,7 @@ function fetch_warehouse_inventory_report($wrapper, warehouse_type) {
                 }
                 
             } else {
-                html = '<tr><td colspan="6" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>';
+                html = `<tr><td colspan="${colspan_val}" class="text-center" style="color: #64748b; padding: 2rem;">No inventory data found for this period.</td></tr>`;
             }
             
             $tbody.html(html);
@@ -11888,6 +11908,17 @@ window.open_bp_return_modal = function(docname, counterparty) {
     });
 };
 
+function refresh_all_inventory_views() {
+    let $w = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('.dashboard-wrapper');
+    if (typeof fetch_inventory_report === 'function') {
+        fetch_inventory_report($w);
+    }
+    if (typeof fetch_warehouse_inventory_report === 'function') {
+        fetch_warehouse_inventory_report($w, 'store');
+        fetch_warehouse_inventory_report($w, 'forecourt');
+    }
+}
+
 window.submit_bp_return = function($wrapper) {
     let docname = $('#bp-return-docname').val();
     let return_date = $('#bp-return-date').val() || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.shift_date : '') || frappe.datetime.get_today();
@@ -11912,12 +11943,13 @@ window.submit_bp_return = function($wrapper) {
             $btn.prop('disabled', false);
             
             if (!r.exc) {
-                frappe.show_alert({message: "Successfully recorded return!", indicator: "green"});
+                frappe.show_alert({message: "Successfully recorded return! Stock balances updated.", indicator: "green"});
                 $('#bp-return-modal').hide();
                 fetch_bp_history();
                 if (typeof window.load_pending_borrowed_products_spa === 'function') {
                     window.load_pending_borrowed_products_spa();
                 }
+                refresh_all_inventory_views();
             }
         },
         error: function(err) {
@@ -11976,12 +12008,13 @@ window.submit_bp_edit_return = function() {
             $btn.find('.spinner').addClass('hidden');
             $btn.prop('disabled', false);
             if (!r.exc) {
-                frappe.show_alert({message: "Return details updated successfully!", indicator: "green"});
+                frappe.show_alert({message: "Return details updated successfully! Stock balances updated.", indicator: "green"});
                 $('#bp-edit-return-modal').hide();
                 fetch_bp_history();
                 if (typeof window.load_pending_borrowed_products_spa === 'function') {
                     window.load_pending_borrowed_products_spa();
                 }
+                refresh_all_inventory_views();
             }
         },
         error: function(err) {
@@ -12044,6 +12077,7 @@ window.submit_bp_edit_record = function() {
                 if (typeof window.load_pending_borrowed_products_spa === 'function') {
                     window.load_pending_borrowed_products_spa();
                 }
+                refresh_all_inventory_views();
             }
         },
         error: function(err) {
@@ -12073,6 +12107,7 @@ window.confirm_undo_return = function(docname) {
                         if (typeof window.load_pending_borrowed_products_spa === 'function') {
                             window.load_pending_borrowed_products_spa();
                         }
+                        refresh_all_inventory_views();
                     }
                 },
                 error: function(err) {
@@ -12102,6 +12137,7 @@ window.confirm_delete_borrowed_product = function(docname) {
                         if (typeof window.load_pending_borrowed_products_spa === 'function') {
                             window.load_pending_borrowed_products_spa();
                         }
+                        refresh_all_inventory_views();
                     }
                 },
                 error: function(err) {
