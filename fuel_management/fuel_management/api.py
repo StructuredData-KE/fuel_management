@@ -5633,8 +5633,8 @@ def get_or_create_stock_loss_account(company="KILIBET INVESTMENT LTD"):
     return acc_name
 
 @frappe.whitelist()
-def get_stock_take_inventory(station=None, warehouse=None):
-    from frappe.utils import flt
+def get_stock_take_inventory(station=None, warehouse=None, as_of_date=None):
+    from frappe.utils import flt, nowdate
     is_admin = (
         "System Manager" in frappe.get_roles() or
         "Fuel Station Owner" in frappe.get_roles() or
@@ -5644,33 +5644,85 @@ def get_stock_take_inventory(station=None, warehouse=None):
     if not is_admin:
         frappe.throw("Access Restricted: Only Administrators and Managers can access Stock Take.", frappe.PermissionError)
 
-    if not warehouse and station:
+    station_doc = None
+    if station:
         station_doc = frappe.get_doc("Fuel Station", station)
-        warehouse = station_doc.default_forecourt_warehouse or station_doc.default_store_warehouse
 
-    if not warehouse:
-        frappe.throw("Warehouse is required.")
+    forecourt_wh = getattr(station_doc, "default_forecourt_warehouse", None) if station_doc else None
+    store_wh = getattr(station_doc, "default_store_warehouse", None) if station_doc else None
 
-    # Get all active non-fuel stock items
+    # Handle warehouse resolution
+    if not warehouse or warehouse == "combined":
+        warehouse = "combined"
+        target_warehouses = [w for w in [forecourt_wh, store_wh] if w]
+    else:
+        target_warehouses = [warehouse]
+
+    if not target_warehouses:
+        frappe.throw("Warehouse could not be resolved for the selected station.")
+
+    # Get all active non-fuel stock items, filtered by station if provided
+    item_filters = {"is_stock_item": 1, "disabled": 0}
+    if station:
+        item_filters["station"] = station
+
     stock_items = frappe.get_all("Item",
-        filters={"is_stock_item": 1, "disabled": 0},
+        filters=item_filters,
         fields=["name", "item_name", "item_group", "stock_uom"]
     )
 
     # Exclude bulk fuel products like DIESEL, PMS, Petrol
     stock_items = [it for it in stock_items if not any(f in (it.item_name or "").lower() or f in (it.name or "").lower() for f in ["diesel", "pms 0", "petrol 0", "ago 0"])]
 
-    # Fetch bins for this warehouse
-    bin_map = {}
-    bins = frappe.get_all("Bin",
-        filters={"warehouse": warehouse},
-        fields=["item_code", "actual_qty", "valuation_rate"]
-    )
-    for b in bins:
-        bin_map[b.item_code] = {
-            "actual_qty": flt(b.actual_qty),
-            "valuation_rate": flt(b.valuation_rate)
-        }
+    # Determine whether to query live Bin or historical Stock Ledger Entry
+    today = nowdate()
+    use_historical = bool(as_of_date and str(as_of_date).strip() < today)
+
+    fc_map = {}
+    store_map = {}
+    total_qty_map = {}
+    val_rate_map = {}
+
+    if use_historical:
+        # Query Stock Ledger Entry up to as_of_date
+        sle_rows = frappe.db.sql("""
+            SELECT item_code, warehouse, SUM(actual_qty) as qty
+            FROM `tabStock Ledger Entry`
+            WHERE warehouse IN %s AND posting_date <= %s AND is_cancelled = 0
+            GROUP BY item_code, warehouse
+        """, (tuple(target_warehouses), as_of_date), as_dict=True)
+
+        for r in sle_rows:
+            qty = flt(r.qty)
+            if r.warehouse == forecourt_wh:
+                fc_map[r.item_code] = qty
+            elif r.warehouse == store_wh:
+                store_map[r.item_code] = qty
+            total_qty_map[r.item_code] = total_qty_map.get(r.item_code, 0.0) + qty
+
+        # Fetch latest valuation rate from Bin
+        bins = frappe.get_all("Bin",
+            filters={"warehouse": ["in", target_warehouses]},
+            fields=["item_code", "valuation_rate"]
+        )
+        for b in bins:
+            if b.item_code not in val_rate_map or b.valuation_rate:
+                val_rate_map[b.item_code] = flt(b.valuation_rate)
+    else:
+        # Query live Bins
+        bins = frappe.get_all("Bin",
+            filters={"warehouse": ["in", target_warehouses]},
+            fields=["item_code", "warehouse", "actual_qty", "valuation_rate"]
+        )
+        for b in bins:
+            qty = flt(b.actual_qty)
+            if b.warehouse == forecourt_wh:
+                fc_map[b.item_code] = qty
+            elif b.warehouse == store_wh:
+                store_map[b.item_code] = qty
+            total_qty_map[b.item_code] = total_qty_map.get(b.item_code, 0.0) + qty
+            if b.item_code not in val_rate_map or b.valuation_rate:
+                val_rate_map[b.item_code] = flt(b.valuation_rate)
 
     # Fetch selling prices from Price List with station fallback
     station_pl = "Standard Selling"
@@ -5701,9 +5753,19 @@ def get_stock_take_inventory(station=None, warehouse=None):
 
     result = []
     for it in stock_items:
-        b_info = bin_map.get(it.name, {"actual_qty": 0.0, "valuation_rate": 0.0})
-        rate = b_info["valuation_rate"] or price_map.get(it.name, 0.0)
-        
+        fc_q = fc_map.get(it.name, 0.0)
+        st_q = store_map.get(it.name, 0.0)
+        if warehouse == "combined":
+            sys_q = fc_q + st_q
+        elif warehouse == forecourt_wh:
+            sys_q = fc_q
+        elif warehouse == store_wh:
+            sys_q = st_q
+        else:
+            sys_q = total_qty_map.get(it.name, 0.0)
+
+        rate = val_rate_map.get(it.name, 0.0) or price_map.get(it.name, 0.0)
+
         grp_lower = (it.item_group or "").lower()
         prio = 99
         for k, v in group_priority.items():
@@ -5716,7 +5778,9 @@ def get_stock_take_inventory(station=None, warehouse=None):
             "item_name": it.item_name or it.name,
             "item_group": it.item_group or "Other",
             "stock_uom": it.stock_uom or "Nos",
-            "system_qty": b_info["actual_qty"],
+            "system_qty": sys_q,
+            "fc_qty": fc_q,
+            "store_qty": st_q,
             "valuation_rate": rate,
             "selling_rate": price_map.get(it.name, 0.0),
             "priority": prio
@@ -5736,12 +5800,17 @@ def get_stock_take_inventory(station=None, warehouse=None):
 
     result.sort(key=_stock_take_sort_key)
     return {
+        "station": station,
         "warehouse": warehouse,
+        "is_combined": (warehouse == "combined"),
+        "as_of_date": as_of_date or today,
+        "forecourt_wh": forecourt_wh,
+        "store_wh": store_wh,
         "items": result
     }
 
 @frappe.whitelist()
-def post_stock_take_correction(station, warehouse, items, remarks=None):
+def post_stock_take_correction(station, warehouse, items, remarks=None, posting_date=None):
     import json
     from frappe.utils import flt, nowdate, cint
     
@@ -5760,14 +5829,23 @@ def post_stock_take_correction(station, warehouse, items, remarks=None):
     if not items or len(items) == 0:
         frappe.throw("No item count changes provided.")
 
-    company = frappe.get_cached_value('Warehouse', warehouse, 'company')
+    station_doc = frappe.get_doc("Fuel Station", station) if station else None
+    forecourt_wh = getattr(station_doc, "default_forecourt_warehouse", None) if station_doc else None
+    store_wh = getattr(station_doc, "default_store_warehouse", None) if station_doc else None
+
+    company = None
+    if station_doc:
+        company = getattr(station_doc, "company", None)
+    if not company and warehouse and warehouse != "combined":
+        company = frappe.get_cached_value('Warehouse', warehouse, 'company')
     if not company:
-        station_doc = frappe.get_doc("Fuel Station", station) if station else None
-        company = getattr(station_doc, "company", None) or "KILIBET INVESTMENT LTD"
+        company = "KILIBET INVESTMENT LTD"
 
     abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
     stock_loss_acc = get_or_create_stock_loss_account(company)
     stock_adj_acc = frappe.get_cached_value('Company', company, 'stock_adjustment_account') or f"Stock Adjustment - {abbr}"
+
+    effective_date = posting_date if (posting_date and str(posting_date).strip()) else nowdate()
 
     shortage_items = []
     surplus_items = []
@@ -5779,6 +5857,8 @@ def post_stock_take_correction(station, warehouse, items, remarks=None):
         sys_qty = flt(it.get("system_qty", 0.0))
         phys_qty = flt(it.get("physical_qty", 0.0))
         val_rate = flt(it.get("valuation_rate", 0.0))
+        fc_q = flt(it.get("fc_qty", 0.0))
+        st_q = flt(it.get("store_qty", 0.0))
 
         # Check if UOM must be whole number
         uom = frappe.db.get_value("Item", item_code, "stock_uom") or "Nos"
@@ -5798,18 +5878,61 @@ def post_stock_take_correction(station, warehouse, items, remarks=None):
 
         if diff < 0:
             # Shortage -> Material Issue (Expense to Company: Stock Loss)
-            shortage_items.append({
-                "item_code": item_code,
-                "s_warehouse": warehouse,
-                "qty": diff_qty,
-                "expense_account": stock_loss_acc
-            })
+            if warehouse == "combined":
+                # Intelligently split shortage between Forecourt and Store
+                if fc_q > 0:
+                    deduct_fc = min(cint(round(fc_q)) if must_be_whole else fc_q, diff_qty)
+                    shortage_items.append({
+                        "item_code": item_code,
+                        "s_warehouse": forecourt_wh or warehouse,
+                        "qty": deduct_fc,
+                        "expense_account": stock_loss_acc
+                    })
+                    rem_shortage = diff_qty - deduct_fc
+                    if rem_shortage > 0 and store_wh:
+                        shortage_items.append({
+                            "item_code": item_code,
+                            "s_warehouse": store_wh,
+                            "qty": rem_shortage,
+                            "expense_account": stock_loss_acc
+                        })
+                elif st_q > 0 and store_wh:
+                    deduct_st = min(cint(round(st_q)) if must_be_whole else st_q, diff_qty)
+                    shortage_items.append({
+                        "item_code": item_code,
+                        "s_warehouse": store_wh,
+                        "qty": deduct_st,
+                        "expense_account": stock_loss_acc
+                    })
+                    rem_shortage = diff_qty - deduct_st
+                    if rem_shortage > 0 and forecourt_wh:
+                        shortage_items.append({
+                            "item_code": item_code,
+                            "s_warehouse": forecourt_wh,
+                            "qty": rem_shortage,
+                            "expense_account": stock_loss_acc
+                        })
+                else:
+                    shortage_items.append({
+                        "item_code": item_code,
+                        "s_warehouse": forecourt_wh or store_wh or warehouse,
+                        "qty": diff_qty,
+                        "expense_account": stock_loss_acc
+                    })
+            else:
+                shortage_items.append({
+                    "item_code": item_code,
+                    "s_warehouse": warehouse,
+                    "qty": diff_qty,
+                    "expense_account": stock_loss_acc
+                })
             total_shortage_val += diff_qty * val_rate
         else:
             # Surplus -> Material Receipt (Gain/Adjustment)
+            target_wh = (forecourt_wh or store_wh) if warehouse == "combined" else warehouse
             surplus_items.append({
                 "item_code": item_code,
-                "t_warehouse": warehouse,
+                "t_warehouse": target_wh,
                 "qty": diff_qty,
                 "basic_rate": val_rate,
                 "expense_account": stock_adj_acc
@@ -5822,14 +5945,18 @@ def post_stock_take_correction(station, warehouse, items, remarks=None):
     issue_doc_name = None
     receipt_doc_name = None
 
+    wh_label = "Combined (Forecourt + Store)" if warehouse == "combined" else warehouse
+
     # 1. Post Shortages (Material Issue)
     if shortage_items:
         se_issue = frappe.new_doc("Stock Entry")
         se_issue.stock_entry_type = "Material Issue"
         se_issue.purpose = "Material Issue"
         se_issue.company = company
-        se_issue.posting_date = nowdate()
-        se_issue.remarks = f"Stock Take Shortage Adjustment - Station: {station or 'Station'} - Warehouse: {warehouse}. {remarks or ''}".strip()
+        se_issue.posting_date = effective_date
+        se_issue.posting_time = "23:59:59"
+        se_issue.set_posting_time = 1
+        se_issue.remarks = f"Stock Take Shortage Adjustment (Count Date: {effective_date}) - Station: {station or 'Station'} - Warehouse: {wh_label}. {remarks or ''}".strip()
         for s_item in shortage_items:
             se_issue.append("items", s_item)
         se_issue.insert(ignore_permissions=True)
@@ -5842,8 +5969,10 @@ def post_stock_take_correction(station, warehouse, items, remarks=None):
         se_receipt.stock_entry_type = "Material Receipt"
         se_receipt.purpose = "Material Receipt"
         se_receipt.company = company
-        se_receipt.posting_date = nowdate()
-        se_receipt.remarks = f"Stock Take Surplus Adjustment - Station: {station or 'Station'} - Warehouse: {warehouse}. {remarks or ''}".strip()
+        se_receipt.posting_date = effective_date
+        se_receipt.posting_time = "23:59:59"
+        se_receipt.set_posting_time = 1
+        se_receipt.remarks = f"Stock Take Surplus Adjustment (Count Date: {effective_date}) - Station: {station or 'Station'} - Warehouse: {wh_label}. {remarks or ''}".strip()
         for r_item in surplus_items:
             se_receipt.append("items", r_item)
         se_receipt.insert(ignore_permissions=True)
@@ -5861,8 +5990,10 @@ def post_stock_take_correction(station, warehouse, items, remarks=None):
         "total_shortage_value": total_shortage_val,
         "total_surplus_value": total_surplus_val,
         "stock_loss_account": stock_loss_acc,
-        "message": "Stock correction successfully posted. Bins and general ledger updated."
+        "posting_date": effective_date,
+        "message": f"Stock correction successfully posted for {effective_date}. Bins and general ledger updated."
     }
+
 
 
 @frappe.whitelist()
