@@ -1371,10 +1371,12 @@ def create_borrowed_product(payload):
     return doc.name
 
 @frappe.whitelist()
-def get_borrowed_products(station, status="All", from_date=None, to_date=None, counterparty=None, limit=None):
+def get_borrowed_products(station=None, status="All", from_date=None, to_date=None, counterparty=None, limit=None):
     import frappe
-    filters = {"station": station}
-    if status != "All":
+    filters = {}
+    if station and station not in ("ALL", "All Stations", ""):
+        filters["station"] = station
+    if status and status != "All":
         filters["status"] = status
         
     if from_date and to_date:
@@ -1387,11 +1389,11 @@ def get_borrowed_products(station, status="All", from_date=None, to_date=None, c
     if counterparty:
         filters["counterparty"] = ["like", f"%{counterparty}%"]
         
-    limit_num = int(limit) if limit else (1000 if (from_date or to_date or counterparty or status != "All") else 20)
+    limit_num = int(limit) if limit else (1000 if (from_date or to_date or counterparty or (status and status != "All")) else 50)
         
     records = frappe.get_all("Borrowed Product", 
         filters=filters,
-        fields=["name", "date", "counterparty", "type", "status", "memo"],
+        fields=["name", "station", "date", "counterparty", "type", "status", "memo"],
         order_by="date desc, creation desc",
         limit_page_length=limit_num
     )
@@ -1402,8 +1404,15 @@ def get_borrowed_products(station, status="All", from_date=None, to_date=None, c
             filters={"parent": ["in", names]},
             fields=["parent", "item_code", "qty"]
         )
+        item_codes = list(set([i.item_code for i in all_items if i.item_code]))
+        item_name_map = {}
+        if item_codes:
+            item_data = frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=["name", "item_name"])
+            item_name_map = {d.name: (d.item_name or d.name) for d in item_data}
+
         items_map = {}
         for item in all_items:
+            item["item_name"] = item_name_map.get(item.item_code, item.item_code)
             items_map.setdefault(item.parent, []).append(item)
         for r in records:
             r["items"] = items_map.get(r.name, [])
@@ -4077,6 +4086,14 @@ def on_borrowed_product_inserted(doc, method=None):
 def get_borrowed_product_details(docname):
     import frappe
     doc = frappe.get_doc("Borrowed Product", docname)
+    items_out = []
+    for i in doc.items:
+        i_name = frappe.db.get_value("Item", i.item_code, "item_name") or i.item_code
+        items_out.append({
+            "item_code": i.item_code,
+            "item_name": i_name,
+            "qty": i.qty
+        })
     return {
         "name": doc.name,
         "counterparty": doc.counterparty,
@@ -4085,7 +4102,7 @@ def get_borrowed_product_details(docname):
         "status": doc.status,
         "station": doc.station,
         "memo": doc.memo or "",
-        "items": [{"item_code": i.item_code, "qty": i.qty} for i in doc.items]
+        "items": items_out
     }
 
 @frappe.whitelist()

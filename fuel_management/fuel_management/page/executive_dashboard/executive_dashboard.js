@@ -592,9 +592,80 @@ function load_dashboard_data(wrapper) {
                 if (data.inventory) {
                     render_tank_gauges(wrapper, data.inventory);
                 }
+
+                // 5. Update Pending Borrowed Products
+                render_pending_borrowed_products(wrapper, data.pending_borrowed);
             }
         }
     });
+}
+
+function render_pending_borrowed_products(wrapper, pending_data) {
+    let $tbody = $(wrapper).find('#exec-pending-bp-body');
+    let $badge = $(wrapper).find('#exec-bp-badge');
+    if (!$tbody.length) return;
+
+    // Attach Refresh Button listener
+    $(wrapper).find('#btn-exec-refresh-bp').off('click').on('click', function(e) {
+        e.preventDefault();
+        let filters = get_date_filters(wrapper);
+        let station = filters.station;
+        $tbody.html('<tr><td colspan="8" style="text-align:center; padding:24px; color:#94a3b8; font-size:13px;"><span class="spinner-border spinner-border-sm" style="margin-right:6px;"></span>Refreshing pending borrowed products...</td></tr>');
+        frappe.call({
+            method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_pending_borrowed_summary",
+            args: { station: station },
+            callback: function(r) {
+                render_pending_borrowed_products(wrapper, { count: (r.message || []).length, records: r.message || [] });
+            }
+        });
+    });
+
+    let records = (pending_data && pending_data.records) ? pending_data.records : [];
+    let count = records.length;
+    
+    $badge.text(`${count} Pending`);
+    if (count > 0) {
+        $badge.css({'background': '#fef3c7', 'color': '#b45309', 'border-color': '#fde68a'});
+        let html = '';
+        records.forEach(row => {
+            let isOut = row.type === 'Borrowed Out';
+            let typeBadge = isOut
+                ? `<span style="background:#fee2e2; color:#991b1b; padding:3px 10px; border-radius:9999px; font-size:11px; font-weight:700; border:1px solid #fecaca; display:inline-flex; align-items:center; gap:4px;">🔻 Lent Out</span>`
+                : `<span style="background:#dcfce7; color:#166534; padding:3px 10px; border-radius:9999px; font-size:11px; font-weight:700; border:1px solid #bbf7d0; display:inline-flex; align-items:center; gap:4px;">🔺 Borrowed In</span>`;
+                
+            let itemsSummary = (row.items || []).map(i => {
+                let label = i.item_name || i.item_code;
+                return `<b>${i.qty}x</b> ${frappe.utils.escape_html(label)}`;
+            }).join(', ');
+            
+            html += `
+                <tr style="border-bottom:1px solid #f1f5f9; transition:background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+                    <td style="padding:12px 14px; font-weight:700; color:#0f172a; font-family:monospace;">${frappe.utils.escape_html(row.name)}</td>
+                    <td style="padding:12px 14px; color:#475569; font-weight:600;">${frappe.utils.escape_html(row.station || 'All')}</td>
+                    <td style="padding:12px 14px; color:#64748b;">${frappe.datetime.str_to_user(row.date)}</td>
+                    <td style="padding:12px 14px;">${typeBadge}</td>
+                    <td style="padding:12px 14px; font-weight:700; color:#1e293b;">${frappe.utils.escape_html(row.counterparty)}</td>
+                    <td style="padding:12px 14px; color:#334155;">${itemsSummary || '<span style="color:#94a3b8;">No items</span>'}</td>
+                    <td style="padding:12px 14px; color:#64748b; font-size:12px; font-style:italic;">${frappe.utils.escape_html(row.memo || '—')}</td>
+                    <td style="padding:12px 14px; text-align:center;">
+                        <span style="background:#fffbeb; color:#d97706; padding:4px 10px; border-radius:9999px; font-size:11px; font-weight:700; border:1px solid #fef3c7;">Pending Return</span>
+                    </td>
+                </tr>
+            `;
+        });
+        $tbody.html(html);
+    } else {
+        $badge.text("0 Pending").css({'background': '#f0fdf4', 'color': '#166534', 'border-color': '#bbf7d0'});
+        $tbody.html(`
+            <tr>
+                <td colspan="8" style="text-align:center; padding:32px 16px; color:#059669; background:#f0fdf4; border-radius:8px;">
+                    <div style="font-size:22px; margin-bottom:6px;">🎉</div>
+                    <div style="font-size:14px; font-weight:700;">No Pending Borrowed Products</div>
+                    <div style="font-size:12px; color:#166534; margin-top:4px;">All cross-station and third-party stock transfers have been settled and returned.</div>
+                </td>
+            </tr>
+        `);
+    }
 }
 
 function load_tank_levels(wrapper, station) {

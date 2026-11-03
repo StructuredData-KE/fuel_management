@@ -1337,6 +1337,36 @@
       </div>
     </div>
 
+    <!-- Pending Borrowed Products (Cross-Station) Section -->
+    <div id="home-pending-bp-section" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.5rem 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 0.75rem; flex-wrap: wrap; gap: 0.75rem;">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="background: #fef3c7; color: #b45309; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>
+          </div>
+          <div>
+            <h2 style="font-family: sans-serif; font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
+              <span>Borrowed Products — Pending Returns</span>
+              <span id="home-pending-bp-badge" style="background: #fef3c7; color: #b45309; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 9999px; border: 1px solid #fde68a;">0 Pending</span>
+            </h2>
+            <div style="font-size: 0.75rem; color: #64748b;">Cross-station and third-party stock lent or borrowed awaiting settlement</div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="home-quick-action" data-nav="tab-borrowed" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 0.35rem 0.85rem; border-radius: 8px; font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all 0.2s;">
+            <span>📦 Open Borrowed Module</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+      
+      <div id="home-pending-bp-container" style="overflow-x: auto;">
+        <div style="text-align: center; color: #94a3b8; padding: 1.5rem 0; font-size: 0.85rem;">
+          <i class="fa fa-spinner fa-spin"></i> Loading pending borrowed products...
+        </div>
+      </div>
+    </div>
+
     <!-- 4. Tank Levels Priority Section -->
     <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.25rem;">

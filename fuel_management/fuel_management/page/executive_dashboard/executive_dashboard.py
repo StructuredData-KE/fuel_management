@@ -118,6 +118,50 @@ def get_dashboard_summary(from_date=None, to_date=None, station=None):
             "icon": "payments"
         })
 
+    # Pending Borrowed Products
+    bp_station_clause = ""
+    bp_params = []
+    if station and station not in ("ALL", "All Stations", ""):
+        bp_station_clause = " AND bp.station = %s"
+        bp_params.append(station)
+        
+    pending_bp_records = frappe.db.sql(f"""
+        SELECT 
+            bp.name, bp.station, bp.date, bp.counterparty, bp.type, bp.status, bp.memo
+        FROM `tabBorrowed Product` bp
+        WHERE bp.status = 'Pending Return' {bp_station_clause}
+        ORDER BY bp.date DESC, bp.creation DESC
+        LIMIT 100
+    """, bp_params, as_dict=True)
+    
+    if pending_bp_records:
+        names = [r.name for r in pending_bp_records]
+        items = frappe.get_all("Borrowed Product Item",
+            filters={"parent": ["in", names]},
+            fields=["parent", "item_code", "qty"]
+        )
+        item_codes = list(set([i.item_code for i in items if i.item_code]))
+        item_name_map = {}
+        if item_codes:
+            item_data = frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=["name", "item_name"])
+            item_name_map = {d.name: (d.item_name or d.name) for d in item_data}
+
+        items_map = {}
+        for item in items:
+            item["item_name"] = item_name_map.get(item.item_code, item.item_code)
+            items_map.setdefault(item.parent, []).append(item)
+        for r in pending_bp_records:
+            r["items"] = items_map.get(r.name, [])
+            
+    if len(pending_bp_records) > 0:
+        st_label = f" for {station}" if station and station not in ("ALL", "All Stations", "") else ""
+        alerts.append({
+            "title": f"Pending Borrowed Products{st_label} ({len(pending_bp_records)})",
+            "desc": f"There are {len(pending_bp_records)} borrowed product transactions awaiting settlement or return.",
+            "type": "warning",
+            "icon": "sync_alt"
+        })
+
     # Return Payload
     return {
         "financials": {
@@ -132,12 +176,53 @@ def get_dashboard_summary(from_date=None, to_date=None, station=None):
             "tank_levels": tank_levels,
             "summary": tank_data.get("summary", {})
         },
+        "pending_borrowed": {
+            "count": len(pending_bp_records),
+            "records": pending_bp_records
+        },
         "alerts": alerts,
         "date": f"{formatdate(from_date)} to {formatdate(to_date)}",
         "station": station or "All Stations"
     }
 
 @frappe.whitelist()
+def get_pending_borrowed_summary(station=None):
+    """Returns all pending borrowed product transactions, optionally filtered by station."""
+    station_clause = ""
+    params = []
+    if station and station not in ("ALL", "All Stations", ""):
+        station_clause = " AND bp.station = %s"
+        params.append(station)
+        
+    records = frappe.db.sql(f"""
+        SELECT 
+            bp.name, bp.station, bp.date, bp.counterparty, bp.type, bp.status, bp.memo
+        FROM `tabBorrowed Product` bp
+        WHERE bp.status = 'Pending Return' {station_clause}
+        ORDER BY bp.date DESC, bp.creation DESC
+        LIMIT 100
+    """, params, as_dict=True)
+    
+    if records:
+        names = [r.name for r in records]
+        items = frappe.get_all("Borrowed Product Item",
+            filters={"parent": ["in", names]},
+            fields=["parent", "item_code", "qty"]
+        )
+        item_codes = list(set([i.item_code for i in items if i.item_code]))
+        item_name_map = {}
+        if item_codes:
+            item_data = frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=["name", "item_name"])
+            item_name_map = {d.name: (d.item_name or d.name) for d in item_data}
+
+        items_map = {}
+        for item in items:
+            item["item_name"] = item_name_map.get(item.item_code, item.item_code)
+            items_map.setdefault(item.parent, []).append(item)
+        for r in records:
+            r["items"] = items_map.get(r.name, [])
+            
+    return records
 def get_tank_levels(station=None):
     """
     Returns live tank levels based on the latest physical dip stick readings

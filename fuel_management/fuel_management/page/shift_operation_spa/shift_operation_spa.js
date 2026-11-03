@@ -11321,12 +11321,12 @@ function render_borrowed_products($wrapper) {
     fetch_bp_history($wrapper);
     
     // Return modal events
-    $wrapper.find('#bp-return-modal-close, #btn-bp-return-cancel').off('click').on('click', function() {
-        $wrapper.find('#bp-return-modal').hide();
+    $('#bp-return-modal-close, #btn-bp-return-cancel').off('click').on('click', function() {
+        $('#bp-return-modal').hide();
     });
     
-    $wrapper.find('#btn-bp-return-submit').off('click').on('click', function() {
-        submit_bp_return($wrapper);
+    $('#btn-bp-return-submit').off('click').on('click', function() {
+        window.submit_bp_return();
     });
 }
 
@@ -11686,20 +11686,28 @@ function submit_borrowed_product($wrapper) {
 }
 
 function fetch_bp_history($wrapper) {
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('#tab-borrowed').closest('.dashboard-wrapper');
+    }
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = $(document);
+    }
+    
     let from_date = $wrapper.find('#bp-filter-from-date').val();
     let to_date = $wrapper.find('#bp-filter-to-date').val();
     let counterparty = $wrapper.find('#bp-filter-counterparty').val() || "";
+    let station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) ? window.ACTIVE_SHIFT.station : ((window.STATION_SETTINGS && window.STATION_SETTINGS.default_station) || "");
     
     let $btn = $wrapper.find('#btn-refresh-bp-history');
     $btn.find('.spinner').removeClass('hidden');
     
     let $tbody = $wrapper.find('#list-borrowed-saved');
-    $tbody.html('<tr><td colspan="8" class="text-center">Loading history...</td></tr>');
+    $tbody.html('<tr><td colspan="8" class="text-center" style="padding: 1.5rem; color: #64748b;"><i class="fa fa-spinner fa-spin"></i> Loading history...</td></tr>');
     
     frappe.call({
         method: 'fuel_management.fuel_management.api.get_borrowed_products',
         args: { 
-            station: window.ACTIVE_SHIFT.station,
+            station: station,
             status: "All",
             from_date: from_date,
             to_date: to_date,
@@ -11710,7 +11718,7 @@ function fetch_bp_history($wrapper) {
             $tbody.empty();
             let count = r.message ? r.message.length : 0;
             if (!from_date && !to_date && !counterparty) {
-                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 20 entries &bull; Use date filter for more)</span>`);
+                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 50 entries &bull; Use date filter for more)</span>`);
             } else {
                 $wrapper.find('#bp-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
             }
@@ -11718,29 +11726,32 @@ function fetch_bp_history($wrapper) {
             if (r.message && r.message.length > 0) {
                 r.message.forEach(row => {
                     let type_html = row.type === 'Borrowed In' 
-                        ? `<span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">IN</span>` 
-                        : `<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-full">OUT</span>`;
+                        ? `<span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full" style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:9999px;">IN</span>` 
+                        : `<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-full" style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:9999px;">OUT</span>`;
                         
                     let status_html = row.status === 'Pending Return'
-                        ? `<span class="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">Pending Return</span>`
-                        : `<span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">Returned</span>`;
+                        ? `<span class="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200" style="background:#fef3c7; color:#b45309; padding:2px 8px; border-radius:6px; font-weight:700;">Pending Return</span>`
+                        : `<span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200" style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:6px; font-weight:700;">Returned</span>`;
                         
-                    let items_html = row.items.map(i => `${i.qty}x ${i.item_code}`).join('<br>');
+                    let items_html = (row.items || []).map(i => {
+                        let label = i.item_name || i.item_code;
+                        return `<b>${i.qty}x</b> ${frappe.utils.escape_html(label)}`;
+                    }).join('<br>');
                     
                     let action_html = "";
                     if (row.status === 'Pending Return') {
-                        action_html = `<button class="btn btn-primary" style="padding: 0.25rem 0.75rem; font-size: 0.75rem;" onclick="open_bp_return_modal('${row.name}', '${row.counterparty}')">Return</button>`;
+                        action_html = `<button type="button" class="btn btn-primary btn-bp-trigger-return" data-doc="${row.name}" data-cp="${frappe.utils.escape_html(row.counterparty)}" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px;">Return</button>`;
                     }
                     
                     let tr = `
                         <tr>
-                            <td class="text-sm font-medium text-gray-900">${row.name}</td>
+                            <td class="text-sm font-medium text-gray-900" style="font-family: monospace; font-weight: 600;">${frappe.utils.escape_html(row.name)}</td>
                             <td class="text-sm text-gray-500">${frappe.datetime.str_to_user(row.date)}</td>
                             <td>${type_html}</td>
-                            <td class="text-sm text-gray-900 font-semibold">${row.counterparty}</td>
-                            <td class="text-sm text-gray-600">${items_html}</td>
+                            <td class="text-sm text-gray-900 font-semibold">${frappe.utils.escape_html(row.counterparty)}</td>
+                            <td class="text-sm text-gray-600">${items_html || '—'}</td>
                             <td>${status_html}</td>
-                            <td class="text-sm text-gray-500">${row.memo || ""}</td>
+                            <td class="text-sm text-gray-500">${frappe.utils.escape_html(row.memo || "")}</td>
                             <td>${action_html}</td>
                         </tr>
                     `;
@@ -11754,14 +11765,22 @@ function fetch_bp_history($wrapper) {
 }
 
 window.open_bp_return_modal = function(docname, counterparty) {
-    let $wrapper = $('.shift-operation-spa');
-    let $modal = $wrapper.find('#bp-return-modal');
+    let $modal = $('#bp-return-modal');
+    if (!$modal.length) {
+        $modal = $(document).find('#bp-return-modal');
+    }
     
-    $wrapper.find('#bp-return-docname').val(docname);
-    $wrapper.find('#bp-return-date').val(window.ACTIVE_SHIFT.shift_date || frappe.datetime.get_today());
+    let default_date = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.shift_date) ? window.ACTIVE_SHIFT.shift_date : frappe.datetime.get_today();
+    $('#bp-return-docname').val(docname);
+    $('#bp-return-date').val(default_date);
     
-    $wrapper.find('#bp-return-modal-body').html('<div class="text-center">Loading items...</div>');
-    $modal.css('display', 'flex');
+    $('#bp-return-modal-body').html(`
+        <div style="text-align:center; padding: 2.5rem 1rem; color: #64748b;">
+            <i class="fa fa-spinner fa-spin fa-2x" style="color: #2563eb; margin-bottom: 10px;"></i>
+            <div style="font-size: 0.9rem; font-weight: 600;">Loading items for ${frappe.utils.escape_html(counterparty || '')}...</div>
+        </div>
+    `);
+    $modal.css('display', 'flex').show();
     
     // Fetch items for this borrow record to show what's being returned
     frappe.call({
@@ -11771,47 +11790,83 @@ window.open_bp_return_modal = function(docname, counterparty) {
         },
         callback: function(r) {
             if (r.message) {
-                let html = `<div style="margin-bottom: 10px; font-weight: bold; color: #1e293b;">Items from ${counterparty}:</div>`;
-                html += `<table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
-                            <thead>
-                                <tr style="background: #f1f5f9;">
-                                    <th style="padding: 8px; text-align: left; border-bottom: 1px solid #cbd5e1; font-size: 0.85rem; color: #475569;">Item</th>
-                                    <th style="padding: 8px; text-align: center; border-bottom: 1px solid #cbd5e1; font-size: 0.85rem; color: #475569;">Qty to Return</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
+                let d = r.message;
+                let isOut = d.type === 'Borrowed Out';
+                let directionDesc = isOut
+                    ? `Returning these items records a <b>Material Receipt</b> back into the station Store warehouse.`
+                    : `Returning these items records a <b>Material Issue</b> out of the station Store warehouse back to ${frappe.utils.escape_html(counterparty || d.counterparty)}.`;
                 
-                (r.message.items || []).forEach(i => {
-                    html += `<tr>
-                                <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem;">${i.item_code}</td>
-                                <td style="padding: 8px; text-align: center; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; font-weight: 600;">${i.qty}</td>
-                             </tr>`;
+                let html = `
+                    <div style="margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-weight: 800; color: #0f172a; font-size: 1rem; font-family: monospace;">${frappe.utils.escape_html(docname)}</span>
+                            <span style="background: ${isOut ? '#fee2e2' : '#dcfce7'}; color: ${isOut ? '#991b1b' : '#166534'}; font-weight: 700; font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;">
+                                ${isOut ? '🔻 Lent Out' : '🔺 Borrowed In'}
+                            </span>
+                        </div>
+                        <div style="font-size: 0.85rem; color: #475569;">
+                            <b>Counterparty:</b> ${frappe.utils.escape_html(counterparty || d.counterparty)} &bull; 
+                            <b>Recorded Date:</b> ${frappe.datetime.str_to_user(d.date)}
+                        </div>
+                        ${d.memo ? `<div style="font-size: 0.8rem; color: #64748b; margin-top: 4px; font-style: italic;">Memo: ${frappe.utils.escape_html(d.memo)}</div>` : ''}
+                    </div>
+                `;
+                
+                html += `
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #334155; margin-bottom: 8px;">Items to Return / Settle:</div>
+                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                        <thead>
+                            <tr style="background: #f1f5f9; border-bottom: 1px solid #cbd5e1;">
+                                <th style="padding: 10px 12px; text-align: left; font-size: 0.8rem; font-weight: 700; color: #475569;">Product Item</th>
+                                <th style="padding: 10px 12px; text-align: center; font-size: 0.8rem; font-weight: 700; color: #475569; width: 130px;">Qty to Return</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                (d.items || []).forEach(i => {
+                    let label = i.item_name ? `${i.item_name} <span style="font-family: monospace; font-size: 0.78rem; color: #64748b;">(${i.item_code})</span>` : i.item_code;
+                    html += `
+                        <tr style="border-bottom: 1px solid #e2e8f0;">
+                            <td style="padding: 10px 12px; font-size: 0.875rem; color: #1e293b; font-weight: 600;">${label}</td>
+                            <td style="padding: 10px 12px; text-align: center; font-size: 1rem; font-weight: 800; color: #0284c7;">${i.qty}</td>
+                        </tr>
+                    `;
                 });
                 
-                html += `</tbody></table>`;
-                html += `<div class="alert alert-warning" style="font-size: 0.85rem; padding: 10px; margin-top: 10px;">
-                            <strong>Note:</strong> Returning this will automatically post a reverse Stock Entry.
-                         </div>`;
+                html += `
+                        </tbody>
+                    </table>
+                    <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; font-size: 0.825rem; color: #1e40af; display: flex; align-items: flex-start; gap: 8px;">
+                        <i class="fa fa-info-circle" style="margin-top: 3px; font-size: 1rem;"></i>
+                        <div>${directionDesc}</div>
+                    </div>
+                `;
                 
-                $wrapper.find('#bp-return-modal-body').html(html);
+                $('#bp-return-modal-body').html(html);
             }
         },
         error: function(err) {
             console.error("Failed to fetch borrow record details:", err);
-            $wrapper.find('#bp-return-modal-body').html(`
-                <div style="padding: 1.5rem; text-align: center; color: #ef4444; font-size: 0.85rem;">
-                    Failed to load borrowed product details. Please retry.
+            $('#bp-return-modal-body').html(`
+                <div style="padding: 2rem; text-align: center; color: #ef4444; font-size: 0.875rem;">
+                    Failed to load borrowed product details. Please check connection and retry.
                 </div>
             `);
         }
     });
 };
 
-function submit_bp_return($wrapper) {
-    let docname = $wrapper.find('#bp-return-docname').val();
-    let return_date = $wrapper.find('#bp-return-date').val() || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.shift_date : '') || frappe.datetime.get_today();
+window.submit_bp_return = function($wrapper) {
+    let docname = $('#bp-return-docname').val();
+    let return_date = $('#bp-return-date').val() || (window.ACTIVE_SHIFT ? window.ACTIVE_SHIFT.shift_date : '') || frappe.datetime.get_today();
     
-    let $btn = $wrapper.find('#btn-bp-return-submit');
+    if (!docname) {
+        frappe.msgprint(__('Missing record ID to return.'));
+        return;
+    }
+    
+    let $btn = $('#btn-bp-return-submit');
     $btn.find('.spinner').removeClass('hidden');
     $btn.prop('disabled', true);
     
@@ -11826,9 +11881,12 @@ function submit_bp_return($wrapper) {
             $btn.prop('disabled', false);
             
             if (!r.exc) {
-                frappe.show_alert({message: "Successfully returned!", indicator: "green"});
-                $wrapper.find('#bp-return-modal').hide();
-                fetch_bp_history($wrapper);
+                frappe.show_alert({message: "Successfully recorded return!", indicator: "green"});
+                $('#bp-return-modal').hide();
+                fetch_bp_history();
+                if (typeof window.load_pending_borrowed_products_spa === 'function') {
+                    window.load_pending_borrowed_products_spa();
+                }
             }
         },
         error: function(err) {
@@ -11842,7 +11900,23 @@ function submit_bp_return($wrapper) {
             });
         }
     });
-}
+};
+
+// Global Delegated Event Handlers for BP Return Modal
+$(document).off('click', '#bp-return-modal-close, #btn-bp-return-cancel').on('click', '#bp-return-modal-close, #btn-bp-return-cancel', function() {
+    $('#bp-return-modal').hide();
+});
+
+$(document).off('click', '#btn-bp-return-submit').on('click', '#btn-bp-return-submit', function() {
+    window.submit_bp_return();
+});
+
+$(document).off('click', '.btn-bp-trigger-return').on('click', '.btn-bp-trigger-return', function(e) {
+    e.preventDefault();
+    let doc = $(this).attr('data-doc');
+    let cp = $(this).attr('data-cp');
+    window.open_bp_return_modal(doc, cp);
+});
 
 
 // =========================================================
@@ -14345,6 +14419,103 @@ window.render_homepage_dom = function($wrapper, data, from_date, to_date) {
         </div>`;
     });
     $wrapper.find('#home-activity-container').html(actHtml || `<div style="text-align: center; color: #94a3b8; padding: 1.5rem 0; font-size: 0.85rem;">No recent activity</div>`);
+
+    // --- G. Pending Borrowed Products Section ---
+    if (typeof window.load_pending_borrowed_products_spa === 'function') {
+        window.load_pending_borrowed_products_spa($wrapper);
+    }
+};
+
+window.load_pending_borrowed_products_spa = function($wrapper) {
+    if (!$wrapper || !$wrapper.length) {
+        $wrapper = (window.SPA_WRAPPER && window.SPA_WRAPPER.length) ? window.SPA_WRAPPER : $('.dashboard-wrapper');
+    }
+    let $container = $wrapper ? $wrapper.find('#home-pending-bp-container') : $('#home-pending-bp-container');
+    let $badge = $wrapper ? $wrapper.find('#home-pending-bp-badge') : $('#home-pending-bp-badge');
+    if (!$container || !$container.length) $container = $('#home-pending-bp-container');
+    if (!$badge || !$badge.length) $badge = $('#home-pending-bp-badge');
+    if (!$container || !$container.length) return;
+
+    let stn = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) 
+        ? window.ACTIVE_SHIFT.station 
+        : ((window.STATION_SETTINGS && window.STATION_SETTINGS.default_station) || "");
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.get_borrowed_products',
+        args: {
+            station: stn,
+            status: "Pending Return"
+        },
+        callback: function(r) {
+            let list = r.message || [];
+            $badge.text(`${list.length} Pending`);
+            if (list.length > 0) {
+                $badge.css({'background': '#fef3c7', 'color': '#b45309', 'border-color': '#fde68a'});
+                
+                let html = `
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 4px;">
+                        <thead>
+                            <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left;">
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">Voucher #</th>
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">Date</th>
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">Type</th>
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">Counterparty</th>
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">Station</th>
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">Items</th>
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase;">Memo</th>
+                                <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #475569; text-transform: uppercase; text-align: center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                list.forEach(row => {
+                    let isOut = row.type === 'Borrowed Out';
+                    let typeBadge = isOut 
+                        ? `<span style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 700; border: 1px solid #fecaca; display: inline-flex; align-items: center; gap: 4px;">🔻 Lent Out</span>`
+                        : `<span style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 700; border: 1px solid #bbf7d0; display: inline-flex; align-items: center; gap: 4px;">🔺 Borrowed In</span>`;
+                    
+                    let itemsSummary = (row.items || []).map(i => {
+                        let label = i.item_name || i.item_code;
+                        return `<b>${i.qty}x</b> ${frappe.utils.escape_html(label)}`;
+                    }).join(', ');
+                    
+                    html += `
+                        <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+                            <td style="padding: 10px 12px; font-weight: 600; color: #0f172a; font-family: monospace;">${frappe.utils.escape_html(row.name)}</td>
+                            <td style="padding: 10px 12px; color: #64748b;">${frappe.datetime.str_to_user(row.date)}</td>
+                            <td style="padding: 10px 12px;">${typeBadge}</td>
+                            <td style="padding: 10px 12px; font-weight: 700; color: #1e293b;">${frappe.utils.escape_html(row.counterparty)}</td>
+                            <td style="padding: 10px 12px; color: #475569; font-size: 0.8rem;">${frappe.utils.escape_html(row.station || '')}</td>
+                            <td style="padding: 10px 12px; color: #334155;">${itemsSummary || '<span style="color:#94a3b8;">None</span>'}</td>
+                            <td style="padding: 10px 12px; color: #64748b; font-size: 0.8rem; font-style: italic;">${frappe.utils.escape_html(row.memo || '—')}</td>
+                            <td style="padding: 10px 12px; text-align: center;">
+                                <button type="button" class="btn btn-primary btn-bp-trigger-return" data-doc="${row.name}" data-cp="${frappe.utils.escape_html(row.counterparty)}" style="padding: 3px 12px; font-size: 0.75rem; font-weight: 700; border-radius: 6px;">
+                                    <i class="fa fa-undo"></i> Return
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += `</tbody></table>`;
+                $container.html(html);
+            } else {
+                $badge.text("0 Pending").css({'background': '#f0fdf4', 'color': '#166534', 'border-color': '#bbf7d0'});
+                $container.html(`
+                    <div style="text-align: center; color: #059669; padding: 1.75rem 0; font-size: 0.875rem; background: #f0fdf4; border-radius: 8px; border: 1px dashed #86efac; margin-top: 4px;">
+                        <div style="font-size: 1.25rem; margin-bottom: 4px;">🎉</div>
+                        <b>No Pending Borrowed Products!</b>
+                        <div style="font-size: 0.8rem; color: #166534; margin-top: 2px;">All lent and borrowed stocks for this station are fully reconciled and returned.</div>
+                    </div>
+                `);
+            }
+        },
+        error: function(err) {
+            console.error("Failed to fetch pending borrowed products for home:", err);
+            $container.html(`<div style="text-align:center; color:#ef4444; padding:1.5rem 0; font-size:0.85rem;">Failed to load pending borrowed products.</div>`);
+        }
+    });
 };
 
 window.render_homepage = function($wrapper, force_refresh=false) {
