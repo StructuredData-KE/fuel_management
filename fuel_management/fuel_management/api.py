@@ -5310,19 +5310,53 @@ def get_monthly_volume_analysis(station=None, from_date=None, to_date=None, mont
         period_man_sums[r.pump_nozzle] = period_man_sums.get(r.pump_nozzle, 0.0) + flt(r.sales_quantity_manual)
 
     # 6. RTT (Return to Tank)
-    rtt_items = frappe.get_all(
-        "Shift Return To Tank",
-        filters={"parent": ["in", shift_names]},
-        fields=["pump_nozzle", "fuel_tank", "quantity", "parent"]
-    )
     nozzle_rtt_map = {}
     tank_rtt_map = {}
-    for r in rtt_items:
-        qty = flt(r.quantity)
-        if r.pump_nozzle:
-            nozzle_rtt_map[r.pump_nozzle] = nozzle_rtt_map.get(r.pump_nozzle, 0.0) + qty
-        if r.fuel_tank:
-            tank_rtt_map[r.fuel_tank] = tank_rtt_map.get(r.fuel_tank, 0.0) + qty
+    nozzle_tank_map = {n.name: n.fuel_tank for n in station_nozzles}
+    station_nozzle_names = [n.name for n in station_nozzles]
+
+    # A. Station Return To Tank (standard module in SPA)
+    st_rtt_conditions = []
+    st_rtt_params = []
+    if shift_names:
+        st_rtt_conditions.append("shift IN %s")
+        st_rtt_params.append(tuple(shift_names))
+    if station_nozzle_names:
+        st_rtt_conditions.append("(pump_nozzle IN %s AND date BETWEEN %s AND %s)")
+        st_rtt_params.extend([tuple(station_nozzle_names), from_date, to_date])
+
+    if st_rtt_conditions:
+        st_rtts = frappe.db.sql(f"""
+            SELECT DISTINCT name, pump_nozzle, item, volume_returned, shift, date
+            FROM `tabStation Return To Tank`
+            WHERE {" OR ".join(st_rtt_conditions)}
+        """, tuple(st_rtt_params), as_dict=True)
+
+        seen_rtt_names = set()
+        for r in st_rtts:
+            if r.name in seen_rtt_names:
+                continue
+            seen_rtt_names.add(r.name)
+            vol = flt(r.volume_returned)
+            if r.pump_nozzle:
+                nozzle_rtt_map[r.pump_nozzle] = nozzle_rtt_map.get(r.pump_nozzle, 0.0) + vol
+                tank = nozzle_tank_map.get(r.pump_nozzle)
+                if tank:
+                    tank_rtt_map[tank] = tank_rtt_map.get(tank, 0.0) + vol
+
+    # B. Shift Return To Tank (child table on Shift, fallback/secondary)
+    if shift_names:
+        child_rtts = frappe.get_all(
+            "Shift Return To Tank",
+            filters={"parent": ["in", shift_names]},
+            fields=["pump_nozzle", "fuel_tank", "quantity", "parent"]
+        )
+        for r in child_rtts:
+            qty = flt(r.quantity)
+            if r.pump_nozzle:
+                nozzle_rtt_map[r.pump_nozzle] = nozzle_rtt_map.get(r.pump_nozzle, 0.0) + qty
+            if r.fuel_tank:
+                tank_rtt_map[r.fuel_tank] = tank_rtt_map.get(r.fuel_tank, 0.0) + qty
 
     # 7. Aggregate Pump Groups & Nozzles
     pump_groups_dict = {}
@@ -5515,8 +5549,19 @@ def get_monthly_volume_analysis(station=None, from_date=None, to_date=None, mont
         })
 
     # 11. Product Level Summary & Variance Reconciliations
-    pms_rtt = sum(v for k, v in nozzle_rtt_map.items() if "PMS" in k.upper())
-    ago_rtt = sum(v for k, v in nozzle_rtt_map.items() if "AGO" in k.upper())
+    nozzle_type_map = {
+        n.name: classify_fuel_type(n.name + " " + tank_product_map.get(n.fuel_tank, ""))
+        for n in station_nozzles
+    }
+
+    pms_rtt = sum(
+        v for k, v in nozzle_rtt_map.items()
+        if nozzle_type_map.get(k) == "PMS" or ("PMS" in k.upper())
+    )
+    ago_rtt = sum(
+        v for k, v in nozzle_rtt_map.items()
+        if nozzle_type_map.get(k) == "AGO" or ("AGO" in k.upper())
+    )
 
     pms_net_meter = pms_gross_meter - pms_rtt
     ago_net_meter = ago_gross_meter - ago_rtt
