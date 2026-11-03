@@ -1245,9 +1245,10 @@ def create_borrowed_doctypes():
                 {"fieldname": "station", "label": "Station", "fieldtype": "Link", "options": "Fuel Station", "reqd": 1},
                 {"fieldname": "type", "label": "Type", "fieldtype": "Select", "options": "Borrowed In\nBorrowed Out", "reqd": 1},
                 {"fieldname": "date", "label": "Date", "fieldtype": "Date", "reqd": 1},
+                {"fieldname": "return_date", "label": "Return Date", "fieldtype": "Date", "read_only": 1},
                 {"fieldname": "counterparty", "label": "Counterparty", "fieldtype": "Data", "reqd": 1},
                 {"fieldname": "memo", "label": "Memo", "fieldtype": "Data"},
-                {"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "Pending Return\nReturned", "default": "Pending Return"},
+                {"fieldname": "status", "label": "Status", "fieldtype": "Select", "options": "Pending Return\nReturned\nPartially Returned", "default": "Pending Return"},
                 {"fieldname": "stock_entry", "label": "Stock Entry", "fieldtype": "Link", "options": "Stock Entry", "read_only": 1},
                 {"fieldname": "return_stock_entry", "label": "Return Stock Entry", "fieldtype": "Link", "options": "Stock Entry", "read_only": 1},
                 {"fieldname": "items", "label": "Items", "fieldtype": "Table", "options": "Borrowed Product Item", "reqd": 1}
@@ -1258,6 +1259,26 @@ def create_borrowed_doctypes():
         print("Created Borrowed Product")
         
     frappe.db.commit()
+
+
+def ensure_borrowed_product_schema():
+    import frappe
+    try:
+        if not frappe.db.has_column("Borrowed Product", "return_date"):
+            frappe.db.sql("ALTER TABLE `tabBorrowed Product` ADD COLUMN `return_date` DATE NULL;")
+            frappe.clear_cache(doctype="Borrowed Product")
+            
+        # Backfill return_date for already returned rows that don't have return_date populated
+        frappe.db.sql("""
+            UPDATE `tabBorrowed Product` bp
+            INNER JOIN `tabStock Entry` se ON bp.return_stock_entry = se.name
+            SET bp.return_date = se.posting_date
+            WHERE (bp.return_date IS NULL OR bp.return_date = '')
+              AND bp.status IN ('Returned', 'Partially Returned');
+        """)
+        frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(f"Error ensuring Borrowed Product schema: {e}")
 
 
 def get_or_create_transit_warehouse(station, company):
@@ -1373,6 +1394,8 @@ def create_borrowed_product(payload):
 @frappe.whitelist()
 def get_borrowed_products(station=None, status="All", from_date=None, to_date=None, counterparty=None, limit=None):
     import frappe
+    ensure_borrowed_product_schema()
+    
     filters = {}
     if station and station not in ("ALL", "All Stations", ""):
         filters["station"] = station
@@ -1393,7 +1416,7 @@ def get_borrowed_products(station=None, status="All", from_date=None, to_date=No
         
     records = frappe.get_all("Borrowed Product", 
         filters=filters,
-        fields=["name", "station", "date", "counterparty", "type", "status", "memo"],
+        fields=["name", "station", "date", "return_date", "counterparty", "type", "status", "memo", "stock_entry", "return_stock_entry"],
         order_by="date desc, creation desc",
         limit_page_length=limit_num
     )
@@ -1414,8 +1437,13 @@ def get_borrowed_products(station=None, status="All", from_date=None, to_date=No
         for item in all_items:
             item["item_name"] = item_name_map.get(item.item_code, item.item_code)
             items_map.setdefault(item.parent, []).append(item)
+            
         for r in records:
             r["items"] = items_map.get(r.name, [])
+            if not r.get("return_date") and r.get("return_stock_entry"):
+                r["return_date"] = frappe.db.get_value("Stock Entry", r["return_stock_entry"], "posting_date")
+            if r.get("return_date"):
+                r["return_date"] = str(r["return_date"])
         
     return records
 
@@ -4098,10 +4126,13 @@ def get_borrowed_product_details(docname):
         "name": doc.name,
         "counterparty": doc.counterparty,
         "date": str(doc.date),
+        "return_date": str(doc.return_date) if hasattr(doc, "return_date") and doc.return_date else "",
         "type": doc.type,
         "status": doc.status,
         "station": doc.station,
         "memo": doc.memo or "",
+        "stock_entry": doc.stock_entry or "",
+        "return_stock_entry": doc.return_stock_entry or "",
         "items": items_out
     }
 
@@ -4110,6 +4141,7 @@ def return_borrowed_product(docname, return_date=None, returned_items=None):
     import frappe
     import json
     
+    ensure_borrowed_product_schema()
     doc = frappe.get_doc("Borrowed Product", docname)
     
     if doc.status == "Returned":
@@ -4178,10 +4210,112 @@ def return_borrowed_product(docname, return_date=None, returned_items=None):
         if returned_qty < item.qty:
             is_partial = True
             
+    doc.db_set("return_date", return_date)
     doc.db_set("return_stock_entry", se.name)
     doc.db_set("status", "Partially Returned" if is_partial else "Returned")
     frappe.db.commit()
     return "success"
+
+@frappe.whitelist()
+def undo_borrowed_product_return(docname):
+    """
+    Cancels the return Stock Entry for this borrowed product,
+    clears return_date and return_stock_entry, and reverts status to Pending Return.
+    """
+    import frappe
+    doc = frappe.get_doc("Borrowed Product", docname)
+    if doc.status not in ("Returned", "Partially Returned"):
+        frappe.throw(f"Borrowed Product {docname} is not in Returned status.")
+        
+    if doc.return_stock_entry and frappe.db.exists("Stock Entry", doc.return_stock_entry):
+        try:
+            se = frappe.get_doc("Stock Entry", doc.return_stock_entry)
+            if se.docstatus == 1:
+                se.flags.ignore_permissions = True
+                se.cancel()
+        except Exception as e:
+            frappe.log_error(f"Error cancelling return stock entry {doc.return_stock_entry}: {e}")
+            
+    doc.db_set("return_stock_entry", None)
+    if hasattr(doc, "return_date"):
+        doc.db_set("return_date", None)
+    doc.db_set("status", "Pending Return")
+    frappe.db.commit()
+    return {"status": "success", "message": f"Return for {docname} cancelled. Status reverted to Pending Return."}
+
+@frappe.whitelist()
+def edit_borrowed_product_return(docname, return_date, memo=None):
+    """
+    Updates the return_date (and optionally memo) for a returned borrowed product,
+    and syncs the posting_date of the return Stock Entry.
+    """
+    import frappe
+    doc = frappe.get_doc("Borrowed Product", docname)
+    if not return_date:
+        frappe.throw("Return Date is required.")
+        
+    doc.db_set("return_date", return_date)
+    if memo is not None:
+        doc.db_set("memo", memo)
+        
+    if doc.return_stock_entry and frappe.db.exists("Stock Entry", doc.return_stock_entry):
+        frappe.db.set_value("Stock Entry", doc.return_stock_entry, "posting_date", return_date)
+        
+    frappe.db.commit()
+    return {"status": "success", "message": f"Return date for {docname} updated to {return_date}."}
+
+@frappe.whitelist()
+def delete_borrowed_product(docname):
+    """
+    Deletes a borrowed product record. If stock entries exist, cancels them first.
+    """
+    import frappe
+    doc = frappe.get_doc("Borrowed Product", docname)
+    
+    # 1. Cancel return stock entry if any
+    if doc.return_stock_entry and frappe.db.exists("Stock Entry", doc.return_stock_entry):
+        try:
+            se_ret = frappe.get_doc("Stock Entry", doc.return_stock_entry)
+            if se_ret.docstatus == 1:
+                se_ret.flags.ignore_permissions = True
+                se_ret.cancel()
+        except Exception as e:
+            frappe.log_error(f"Error cancelling return stock entry on delete: {e}")
+            
+    # 2. Cancel initial stock entry if any
+    if doc.stock_entry and frappe.db.exists("Stock Entry", doc.stock_entry):
+        try:
+            se_init = frappe.get_doc("Stock Entry", doc.stock_entry)
+            if se_init.docstatus == 1:
+                se_init.flags.ignore_permissions = True
+                se_init.cancel()
+        except Exception as e:
+            frappe.log_error(f"Error cancelling initial stock entry on delete: {e}")
+            
+    # 3. Delete document
+    doc.delete(ignore_permissions=True)
+    frappe.db.commit()
+    return {"status": "success", "message": f"Borrowed Product {docname} deleted successfully."}
+
+@frappe.whitelist()
+def edit_borrowed_product(docname, date=None, counterparty=None, memo=None):
+    """
+    Updates date, counterparty, and/or memo on an active borrowed product.
+    If date changes, syncs the initial Stock Entry posting_date.
+    """
+    import frappe
+    doc = frappe.get_doc("Borrowed Product", docname)
+    if date:
+        doc.db_set("date", date)
+        if doc.stock_entry and frappe.db.exists("Stock Entry", doc.stock_entry):
+            frappe.db.set_value("Stock Entry", doc.stock_entry, "posting_date", date)
+    if counterparty:
+        doc.db_set("counterparty", counterparty)
+    if memo is not None:
+        doc.db_set("memo", memo)
+        
+    frappe.db.commit()
+    return {"status": "success", "message": f"Borrowed Product {docname} updated successfully."}
 
 @frappe.whitelist()
 def get_inventory_sales_history(station, from_date=None, to_date=None, search=None, limit=None, shift=None):

@@ -127,7 +127,7 @@ def get_dashboard_summary(from_date=None, to_date=None, station=None):
         
     pending_bp_records = frappe.db.sql(f"""
         SELECT 
-            bp.name, bp.station, bp.date, bp.counterparty, bp.type, bp.status, bp.memo
+            bp.name, bp.station, bp.date, bp.return_date, bp.counterparty, bp.type, bp.status, bp.memo
         FROM `tabBorrowed Product` bp
         WHERE bp.status = 'Pending Return' {bp_station_clause}
         ORDER BY bp.date DESC, bp.creation DESC
@@ -196,7 +196,7 @@ def get_pending_borrowed_summary(station=None):
         
     records = frappe.db.sql(f"""
         SELECT 
-            bp.name, bp.station, bp.date, bp.counterparty, bp.type, bp.status, bp.memo
+            bp.name, bp.station, bp.date, bp.return_date, bp.counterparty, bp.type, bp.status, bp.memo
         FROM `tabBorrowed Product` bp
         WHERE bp.status = 'Pending Return' {station_clause}
         ORDER BY bp.date DESC, bp.creation DESC

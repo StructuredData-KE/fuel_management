@@ -11702,7 +11702,7 @@ function fetch_bp_history($wrapper) {
     $btn.find('.spinner').removeClass('hidden');
     
     let $tbody = $wrapper.find('#list-borrowed-saved');
-    $tbody.html('<tr><td colspan="8" class="text-center" style="padding: 1.5rem; color: #64748b;"><i class="fa fa-spinner fa-spin"></i> Loading history...</td></tr>');
+    $tbody.html('<tr><td colspan="9" class="text-center" style="padding: 1.5rem; color: #64748b;"><i class="fa fa-spinner fa-spin"></i> Loading history...</td></tr>');
     
     frappe.call({
         method: 'fuel_management.fuel_management.api.get_borrowed_products',
@@ -11737,28 +11737,59 @@ function fetch_bp_history($wrapper) {
                         let label = i.item_name || i.item_code;
                         return `<b>${i.qty}x</b> ${frappe.utils.escape_html(label)}`;
                     }).join('<br>');
+
+                    let return_date_html = row.return_date 
+                        ? `<span style="font-weight: 600; color: #166534;">${frappe.datetime.str_to_user(row.return_date)}</span>` 
+                        : `<span style="color: #94a3b8; font-style: italic;">— (Pending)</span>`;
                     
                     let action_html = "";
                     if (row.status === 'Pending Return') {
-                        action_html = `<button type="button" class="btn btn-primary btn-bp-trigger-return" data-doc="${row.name}" data-cp="${frappe.utils.escape_html(row.counterparty)}" style="padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px;">Return</button>`;
+                        action_html = `
+                            <div style="display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-primary btn-bp-trigger-return" data-doc="${row.name}" data-cp="${frappe.utils.escape_html(row.counterparty)}" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px;">
+                                    <i class="fa fa-undo"></i> Return
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-bp-edit-record" data-doc="${row.name}" data-date="${row.date || ''}" data-cp="${frappe.utils.escape_html(row.counterparty || '')}" data-memo="${frappe.utils.escape_html(row.memo || '')}" title="Edit Record" style="padding: 0.25rem 0.55rem; font-size: 0.75rem; border-radius: 6px; background: #f8fafc; border: 1px solid #cbd5e1; color: #334155;">
+                                    <i class="fa fa-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-danger btn-bp-delete" data-doc="${row.name}" title="Delete Record" style="padding: 0.25rem 0.55rem; font-size: 0.75rem; border-radius: 6px; background: #fee2e2; border: 1px solid #fecaca; color: #dc2626;">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        action_html = `
+                            <div style="display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-secondary btn-bp-edit-return" data-doc="${row.name}" data-return-date="${row.return_date || ''}" data-memo="${frappe.utils.escape_html(row.memo || '')}" title="Edit Return Date / Notes" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 600; border-radius: 6px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8;">
+                                    <i class="fa fa-pencil"></i> Edit Return
+                                </button>
+                                <button type="button" class="btn btn-warning btn-bp-undo-return" data-doc="${row.name}" title="Undo Return (Re-open)" style="padding: 0.25rem 0.55rem; font-size: 0.75rem; border-radius: 6px; background: #fffbeb; border: 1px solid #fde68a; color: #b45309;">
+                                    <i class="fa fa-rotate-left"></i> Undo
+                                </button>
+                                <button type="button" class="btn btn-danger btn-bp-delete" data-doc="${row.name}" title="Delete Record" style="padding: 0.25rem 0.55rem; font-size: 0.75rem; border-radius: 6px; background: #fee2e2; border: 1px solid #fecaca; color: #dc2626;">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </div>
+                        `;
                     }
                     
                     let tr = `
                         <tr>
                             <td class="text-sm font-medium text-gray-900" style="font-family: monospace; font-weight: 600;">${frappe.utils.escape_html(row.name)}</td>
                             <td class="text-sm text-gray-500">${frappe.datetime.str_to_user(row.date)}</td>
+                            <td class="text-sm">${return_date_html}</td>
                             <td>${type_html}</td>
                             <td class="text-sm text-gray-900 font-semibold">${frappe.utils.escape_html(row.counterparty)}</td>
                             <td class="text-sm text-gray-600">${items_html || '—'}</td>
                             <td>${status_html}</td>
                             <td class="text-sm text-gray-500">${frappe.utils.escape_html(row.memo || "")}</td>
-                            <td>${action_html}</td>
+                            <td style="text-align: center;">${action_html}</td>
                         </tr>
                     `;
                     $tbody.append(tr);
                 });
             } else {
-                $tbody.append('<tr><td colspan="8" class="text-center" style="padding: 2rem; color: #64748b;">No borrowed products found.</td></tr>');
+                $tbody.append('<tr><td colspan="9" class="text-center" style="padding: 2rem; color: #64748b;">No borrowed products found.</td></tr>');
             }
         }
     });
@@ -11902,7 +11933,190 @@ window.submit_bp_return = function($wrapper) {
     });
 };
 
-// Global Delegated Event Handlers for BP Return Modal
+// Open Edit Return Modal
+window.open_bp_edit_return_modal = function(docname, return_date, memo) {
+    let $modal = $('#bp-edit-return-modal');
+    if (!$modal.length) {
+        $modal = $(document).find('#bp-edit-return-modal');
+    }
+    $('#edit-bp-return-docname').val(docname);
+    $('#edit-bp-return-doc-info').text(`Voucher: ${docname}`);
+    $('#edit-bp-return-date').val(return_date || frappe.datetime.get_today());
+    $('#edit-bp-return-memo').val(memo || '');
+    $modal.css('display', 'flex').show();
+};
+
+// Submit Edit Return
+window.submit_bp_edit_return = function() {
+    let docname = $('#edit-bp-return-docname').val();
+    let return_date = $('#edit-bp-return-date').val();
+    let memo = $('#edit-bp-return-memo').val();
+
+    if (!docname) {
+        frappe.msgprint(__('Missing record ID to update.'));
+        return;
+    }
+    if (!return_date) {
+        frappe.msgprint(__('Please select a valid return date.'));
+        return;
+    }
+
+    let $btn = $('#btn-bp-edit-return-submit');
+    $btn.find('.spinner').removeClass('hidden');
+    $btn.prop('disabled', true);
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.edit_borrowed_product_return',
+        args: {
+            docname: docname,
+            return_date: return_date,
+            memo: memo
+        },
+        callback: function(r) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            if (!r.exc) {
+                frappe.show_alert({message: "Return details updated successfully!", indicator: "green"});
+                $('#bp-edit-return-modal').hide();
+                fetch_bp_history();
+                if (typeof window.load_pending_borrowed_products_spa === 'function') {
+                    window.load_pending_borrowed_products_spa();
+                }
+            }
+        },
+        error: function(err) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            frappe.msgprint({
+                title: __('Update Failed'),
+                indicator: 'red',
+                message: err.message || __('Failed to update return details.')
+            });
+        }
+    });
+};
+
+// Open Edit Record Modal
+window.open_bp_edit_record_modal = function(docname, date, counterparty, memo) {
+    let $modal = $('#bp-edit-record-modal');
+    if (!$modal.length) {
+        $modal = $(document).find('#bp-edit-record-modal');
+    }
+    $('#edit-bp-record-docname').val(docname);
+    $('#edit-bp-record-doc-info').text(`Voucher: ${docname}`);
+    $('#edit-bp-record-date').val(date || '');
+    $('#edit-bp-record-counterparty').val(counterparty || '');
+    $('#edit-bp-record-memo').val(memo || '');
+    $modal.css('display', 'flex').show();
+};
+
+// Submit Edit Record
+window.submit_bp_edit_record = function() {
+    let docname = $('#edit-bp-record-docname').val();
+    let date = $('#edit-bp-record-date').val();
+    let counterparty = $('#edit-bp-record-counterparty').val();
+    let memo = $('#edit-bp-record-memo').val();
+
+    if (!docname) {
+        frappe.msgprint(__('Missing record ID to update.'));
+        return;
+    }
+
+    let $btn = $('#btn-bp-edit-record-submit');
+    $btn.find('.spinner').removeClass('hidden');
+    $btn.prop('disabled', true);
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.edit_borrowed_product',
+        args: {
+            docname: docname,
+            date: date,
+            counterparty: counterparty,
+            memo: memo
+        },
+        callback: function(r) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            if (!r.exc) {
+                frappe.show_alert({message: "Record updated successfully!", indicator: "green"});
+                $('#bp-edit-record-modal').hide();
+                fetch_bp_history();
+                if (typeof window.load_pending_borrowed_products_spa === 'function') {
+                    window.load_pending_borrowed_products_spa();
+                }
+            }
+        },
+        error: function(err) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            frappe.msgprint({
+                title: __('Update Failed'),
+                indicator: 'red',
+                message: err.message || __('Failed to update record.')
+            });
+        }
+    });
+};
+
+// Confirm Undo Return
+window.confirm_undo_return = function(docname) {
+    frappe.confirm(
+        __(`Are you sure you want to undo the return for <b>${frappe.utils.escape_html(docname)}</b>?<br><br>This will cancel the return stock entry and restore the status to <b>Pending Return</b>.`),
+        function() {
+            frappe.call({
+                method: 'fuel_management.fuel_management.api.undo_borrowed_product_return',
+                args: { docname: docname },
+                callback: function(r) {
+                    if (!r.exc) {
+                        frappe.show_alert({message: "Return undone. Status is now Pending Return.", indicator: "orange"});
+                        fetch_bp_history();
+                        if (typeof window.load_pending_borrowed_products_spa === 'function') {
+                            window.load_pending_borrowed_products_spa();
+                        }
+                    }
+                },
+                error: function(err) {
+                    frappe.msgprint({
+                        title: __('Undo Failed'),
+                        indicator: 'red',
+                        message: err.message || __('Failed to undo return.')
+                    });
+                }
+            });
+        }
+    );
+};
+
+// Confirm Delete Borrowed Product Record
+window.confirm_delete_borrowed_product = function(docname) {
+    frappe.confirm(
+        __(`Are you sure you want to permanently delete record <b>${frappe.utils.escape_html(docname)}</b>?<br><br><span style="color:#dc2626;">Any linked stock movements (initial issue/receipt and return) will also be cancelled.</span>`),
+        function() {
+            frappe.call({
+                method: 'fuel_management.fuel_management.api.delete_borrowed_product',
+                args: { docname: docname },
+                callback: function(r) {
+                    if (!r.exc) {
+                        frappe.show_alert({message: "Record deleted successfully.", indicator: "red"});
+                        fetch_bp_history();
+                        if (typeof window.load_pending_borrowed_products_spa === 'function') {
+                            window.load_pending_borrowed_products_spa();
+                        }
+                    }
+                },
+                error: function(err) {
+                    frappe.msgprint({
+                        title: __('Delete Failed'),
+                        indicator: 'red',
+                        message: err.message || __('Failed to delete record.')
+                    });
+                }
+            });
+        }
+    );
+};
+
+// Global Delegated Event Handlers for BP Return Modals and Actions
 $(document).off('click', '#bp-return-modal-close, #btn-bp-return-cancel').on('click', '#bp-return-modal-close, #btn-bp-return-cancel', function() {
     $('#bp-return-modal').hide();
 });
@@ -11916,6 +12130,55 @@ $(document).off('click', '.btn-bp-trigger-return').on('click', '.btn-bp-trigger-
     let doc = $(this).attr('data-doc');
     let cp = $(this).attr('data-cp');
     window.open_bp_return_modal(doc, cp);
+});
+
+// Edit Return Modal Handlers
+$(document).off('click', '#bp-edit-return-modal-close, #btn-bp-edit-return-cancel').on('click', '#bp-edit-return-modal-close, #btn-bp-edit-return-cancel', function() {
+    $('#bp-edit-return-modal').hide();
+});
+
+$(document).off('click', '#btn-bp-edit-return-submit').on('click', '#btn-bp-edit-return-submit', function() {
+    window.submit_bp_edit_return();
+});
+
+$(document).off('click', '.btn-bp-edit-return').on('click', '.btn-bp-edit-return', function(e) {
+    e.preventDefault();
+    let doc = $(this).attr('data-doc');
+    let return_date = $(this).attr('data-return-date');
+    let memo = $(this).attr('data-memo');
+    window.open_bp_edit_return_modal(doc, return_date, memo);
+});
+
+// Edit Record Modal Handlers
+$(document).off('click', '#bp-edit-record-modal-close, #btn-bp-edit-record-cancel').on('click', '#bp-edit-record-modal-close, #btn-bp-edit-record-cancel', function() {
+    $('#bp-edit-record-modal').hide();
+});
+
+$(document).off('click', '#btn-bp-edit-record-submit').on('click', '#btn-bp-edit-record-submit', function() {
+    window.submit_bp_edit_record();
+});
+
+$(document).off('click', '.btn-bp-edit-record').on('click', '.btn-bp-edit-record', function(e) {
+    e.preventDefault();
+    let doc = $(this).attr('data-doc');
+    let date = $(this).attr('data-date');
+    let cp = $(this).attr('data-cp');
+    let memo = $(this).attr('data-memo');
+    window.open_bp_edit_record_modal(doc, date, cp, memo);
+});
+
+// Undo Return Handler
+$(document).off('click', '.btn-bp-undo-return').on('click', '.btn-bp-undo-return', function(e) {
+    e.preventDefault();
+    let doc = $(this).attr('data-doc');
+    window.confirm_undo_return(doc);
+});
+
+// Delete Record Handler
+$(document).off('click', '.btn-bp-delete').on('click', '.btn-bp-delete', function(e) {
+    e.preventDefault();
+    let doc = $(this).attr('data-doc');
+    window.confirm_delete_borrowed_product(doc);
 });
 
 
@@ -14489,10 +14752,18 @@ window.load_pending_borrowed_products_spa = function($wrapper) {
                             <td style="padding: 10px 12px; color: #475569; font-size: 0.8rem;">${frappe.utils.escape_html(row.station || '')}</td>
                             <td style="padding: 10px 12px; color: #334155;">${itemsSummary || '<span style="color:#94a3b8;">None</span>'}</td>
                             <td style="padding: 10px 12px; color: #64748b; font-size: 0.8rem; font-style: italic;">${frappe.utils.escape_html(row.memo || '—')}</td>
-                            <td style="padding: 10px 12px; text-align: center;">
-                                <button type="button" class="btn btn-primary btn-bp-trigger-return" data-doc="${row.name}" data-cp="${frappe.utils.escape_html(row.counterparty)}" style="padding: 3px 12px; font-size: 0.75rem; font-weight: 700; border-radius: 6px;">
-                                    <i class="fa fa-undo"></i> Return
-                                </button>
+                            <td style="padding: 10px 12px; text-align: center; white-space: nowrap;">
+                                <div style="display: inline-flex; gap: 4px; align-items: center; justify-content: center;">
+                                    <button type="button" class="btn btn-primary btn-bp-trigger-return" data-doc="${row.name}" data-cp="${frappe.utils.escape_html(row.counterparty)}" style="padding: 3px 10px; font-size: 0.75rem; font-weight: 700; border-radius: 6px;">
+                                        <i class="fa fa-undo"></i> Return
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-bp-edit-record" data-doc="${row.name}" data-date="${row.date || ''}" data-cp="${frappe.utils.escape_html(row.counterparty || '')}" data-memo="${frappe.utils.escape_html(row.memo || '')}" title="Edit Record" style="padding: 3px 8px; font-size: 0.75rem; border-radius: 6px; background: #f8fafc; border: 1px solid #cbd5e1; color: #334155;">
+                                        <i class="fa fa-pencil"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-danger btn-bp-delete" data-doc="${row.name}" title="Delete Record" style="padding: 3px 8px; font-size: 0.75rem; border-radius: 6px; background: #fee2e2; border: 1px solid #fecaca; color: #dc2626;">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     `;

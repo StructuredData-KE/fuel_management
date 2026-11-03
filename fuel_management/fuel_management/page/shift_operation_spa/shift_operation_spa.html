@@ -5697,13 +5697,14 @@
                           <tr>
                               <th>ID</th>
                               <th>Date</th>
+                              <th>Return Date</th>
                               <th>Type</th>
                               <th>Counterparty</th>
                               <th>Items</th>
                               <th>Status</th>
-<th>Memo</th>
-<th>Action</th>
-</tr>
+                              <th>Memo</th>
+                              <th style="text-align: center; min-width: 160px;">Action</th>
+                          </tr>
                       </thead>
                       <tbody id="list-borrowed-saved">
                           <!-- rendered via js -->
@@ -6564,6 +6565,68 @@
             <button id="btn-bp-return-cancel" class="btn btn-secondary">Cancel</button>
             <button id="btn-bp-return-submit" class="btn btn-primary">
                 <span class="btn-text">Confirm Return</span>
+                <i class="fa fa-spinner fa-spin spinner hidden" style="margin-left: 5px;"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- BP Edit Return Modal -->
+<div id="bp-edit-return-modal" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+    <div class="spa-modal-content" style="background:#fff; width:90%; max-width:500px; border-radius:8px; padding:20px; box-shadow:0 4px 15px rgba(0,0,0,0.2); max-height:80vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+            <div>
+                <h3 style="margin:0; color:#1e293b; font-size:1.15rem; font-weight:700;">Edit Return Details</h3>
+                <div id="edit-bp-return-doc-info" style="font-size:0.8rem; color:#64748b; margin-top:2px;"></div>
+            </div>
+            <button id="bp-edit-return-modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#64748b;">&times;</button>
+        </div>
+        <input type="hidden" id="edit-bp-return-docname">
+        <div style="margin-bottom: 15px;">
+            <label style="display:block; font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">Return Date</label>
+            <input type="date" id="edit-bp-return-date" class="form-control" style="width: 100%;">
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label style="display:block; font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">Memo / Notes</label>
+            <input type="text" id="edit-bp-return-memo" class="form-control" placeholder="Optional notes" style="width: 100%;">
+        </div>
+        <div style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+            <button id="btn-bp-edit-return-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="btn-bp-edit-return-submit" class="btn btn-primary">
+                <span class="btn-text">Save Changes</span>
+                <i class="fa fa-spinner fa-spin spinner hidden" style="margin-left: 5px;"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- BP Edit Borrow Record Modal -->
+<div id="bp-edit-record-modal" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+    <div class="spa-modal-content" style="background:#fff; width:90%; max-width:500px; border-radius:8px; padding:20px; box-shadow:0 4px 15px rgba(0,0,0,0.2); max-height:80vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+            <div>
+                <h3 style="margin:0; color:#1e293b; font-size:1.15rem; font-weight:700;">Edit Borrowed Record</h3>
+                <div id="edit-bp-record-doc-info" style="font-size:0.8rem; color:#64748b; margin-top:2px;"></div>
+            </div>
+            <button id="bp-edit-record-modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#64748b;">&times;</button>
+        </div>
+        <input type="hidden" id="edit-bp-record-docname">
+        <div style="margin-bottom: 12px;">
+            <label style="display:block; font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">Borrow Date</label>
+            <input type="date" id="edit-bp-record-date" class="form-control" style="width: 100%;">
+        </div>
+        <div style="margin-bottom: 12px;">
+            <label style="display:block; font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">Counterparty</label>
+            <input type="text" id="edit-bp-record-counterparty" class="form-control" style="width: 100%;">
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label style="display:block; font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem;">Memo</label>
+            <input type="text" id="edit-bp-record-memo" class="form-control" placeholder="Optional notes" style="width: 100%;">
+        </div>
+        <div style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+            <button id="btn-bp-edit-record-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="btn-bp-edit-record-submit" class="btn btn-primary">
+                <span class="btn-text">Save Changes</span>
                 <i class="fa fa-spinner fa-spin spinner hidden" style="margin-left: 5px;"></i>
             </button>
         </div>
