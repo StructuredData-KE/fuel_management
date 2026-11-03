@@ -1573,7 +1573,8 @@ def send_end_shift_report(shift_name, html_content):
         recipients=recipients,
         subject=subject,
         message=email_body_html,
-        attachments=[{"fname": f"{shift.name}.pdf", "fcontent": pdf_bytes}]
+        attachments=[{"fname": f"{shift.name}.pdf", "fcontent": pdf_bytes}],
+        now=True
     )
     
     frappe.db.set_value("Shift", shift.name, "report_sent", 1)
