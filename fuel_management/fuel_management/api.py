@@ -5729,23 +5729,30 @@ def get_stock_take_inventory(station=None, warehouse=None, as_of_date=None):
     val_rate_map = {}
 
     if use_historical:
-        # Query Stock Ledger Entry up to as_of_date
-        sle_rows = frappe.db.sql("""
-            SELECT item_code, warehouse, SUM(actual_qty) as qty
-            FROM `tabStock Ledger Entry`
-            WHERE warehouse IN %s AND posting_date <= %s AND is_cancelled = 0
-            GROUP BY item_code, warehouse
-        """, (tuple(target_warehouses), as_of_date), as_dict=True)
+        # Query Stock Ledger Entry chronologically up to as_of_date
+        # To get the exact closing balance (qty_after_transaction) matching ERPNext and Total Inventory Status report
+        sles = frappe.get_all(
+            "Stock Ledger Entry",
+            filters={
+                "warehouse": ["in", target_warehouses],
+                "is_cancelled": 0,
+                "posting_date": ["<=", as_of_date]
+            },
+            fields=["item_code", "warehouse", "qty_after_transaction", "valuation_rate", "posting_date", "posting_time", "creation"],
+            order_by="posting_date asc, posting_time asc, creation asc"
+        )
 
-        for r in sle_rows:
-            qty = flt(r.qty)
-            if r.warehouse == forecourt_wh:
-                fc_map[r.item_code] = qty
-            elif r.warehouse == store_wh:
-                store_map[r.item_code] = qty
-            total_qty_map[r.item_code] = total_qty_map.get(r.item_code, 0.0) + qty
+        for sle in sles:
+            qty = flt(sle.qty_after_transaction)
+            rate = flt(sle.valuation_rate)
+            if sle.warehouse == forecourt_wh:
+                fc_map[sle.item_code] = qty
+            elif sle.warehouse == store_wh:
+                store_map[sle.item_code] = qty
+            if rate:
+                val_rate_map[sle.item_code] = rate
 
-        # Fetch latest valuation rate from Bin
+        # Fetch latest valuation rate from Bin if not yet in val_rate_map
         bins = frappe.get_all("Bin",
             filters={"warehouse": ["in", target_warehouses]},
             fields=["item_code", "valuation_rate"]
