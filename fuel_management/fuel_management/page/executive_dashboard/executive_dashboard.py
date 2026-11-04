@@ -503,14 +503,111 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
         accounts_agg[acc]["total_debit"] += flt(r['debit'])
         accounts_agg[acc]["total_credit"] += flt(r['credit'])
 
+    # Calculate underlying Fuel vs Lube COGS components
+    fuel_items = set(frappe.db.sql_list("SELECT name FROM tabItem WHERE item_group = 'FUELS' OR name IN ('DIESEL', 'Petrol 001', 'PMS', 'AGO', 'DPK')"))
+    
+    wh_pattern = None
+    if station:
+        if "galana" in station.lower():
+            wh_pattern = "%Galana%"
+        elif "rubis" in station.lower() or "poa" in station.lower():
+            wh_pattern = "%POA%"
+
+    # 1. Stock Entry Details (Fuel vs Lubes)
+    if wh_pattern:
+        se_details = frappe.db.sql('''
+            SELECT sei.item_code, sei.amount
+            FROM `tabStock Entry Detail` sei
+            JOIN `tabStock Entry` se ON sei.parent = se.name
+            WHERE se.posting_date >= %s AND se.posting_date <= %s
+            AND se.docstatus = 1
+            AND (se.from_warehouse LIKE %s OR se.remarks LIKE %s)
+        ''', (from_date, to_date, wh_pattern, wh_pattern), as_dict=True)
+    else:
+        se_details = frappe.db.sql('''
+            SELECT sei.item_code, sei.amount
+            FROM `tabStock Entry Detail` sei
+            JOIN `tabStock Entry` se ON sei.parent = se.name
+            WHERE se.posting_date >= %s AND se.posting_date <= %s
+            AND se.docstatus = 1
+        ''', (from_date, to_date), as_dict=True)
+
+    raw_fuel_cogs_se = sum(flt(r['amount']) for r in se_details if r['item_code'] in fuel_items)
+    raw_lube_cogs_se = sum(flt(r['amount']) for r in se_details if r['item_code'] not in fuel_items)
+
+    # 2. Purchase Invoices directly in COGS
+    if wh_pattern:
+        pi_details = frappe.db.sql('''
+            SELECT pii.item_code, pii.amount
+            FROM `tabPurchase Invoice Item` pii
+            JOIN `tabPurchase Invoice` pi ON pii.parent = pi.name
+            WHERE pi.posting_date >= %s AND pi.posting_date <= %s
+            AND pii.expense_account = 'Cost of Goods Sold - KIL'
+            AND pi.docstatus = 1
+            AND (pii.warehouse LIKE %s OR pi.remarks LIKE %s)
+        ''', (from_date, to_date, wh_pattern, wh_pattern), as_dict=True)
+    else:
+        pi_details = frappe.db.sql('''
+            SELECT pii.item_code, pii.amount
+            FROM `tabPurchase Invoice Item` pii
+            JOIN `tabPurchase Invoice` pi ON pii.parent = pi.name
+            WHERE pi.posting_date >= %s AND pi.posting_date <= %s
+            AND pii.expense_account = 'Cost of Goods Sold - KIL'
+            AND pi.docstatus = 1
+        ''', (from_date, to_date), as_dict=True)
+
+    raw_fuel_cogs_pi = sum(flt(r['amount']) for r in pi_details if r['item_code'] in fuel_items or not r['item_code'])
+    raw_lube_cogs_pi = sum(flt(r['amount']) for r in pi_details if r['item_code'] and r['item_code'] not in fuel_items)
+
+    # 3. Journal Entries hitting COGS
+    if wh_pattern:
+        jv_details = frappe.db.sql('''
+            SELECT jv.user_remark, jvd.debit, jvd.credit
+            FROM `tabJournal Entry Account` jvd
+            JOIN `tabJournal Entry` jv ON jvd.parent = jv.name
+            WHERE jv.posting_date >= %s AND jv.posting_date <= %s
+            AND jvd.account = 'Cost of Goods Sold - KIL'
+            AND jv.docstatus = 1
+            AND (jv.user_remark LIKE %s OR jvd.cost_center LIKE %s)
+        ''', (from_date, to_date, wh_pattern, wh_pattern), as_dict=True)
+    else:
+        jv_details = frappe.db.sql('''
+            SELECT jv.user_remark, jvd.debit, jvd.credit
+            FROM `tabJournal Entry Account` jvd
+            JOIN `tabJournal Entry` jv ON jvd.parent = jv.name
+            WHERE jv.posting_date >= %s AND jv.posting_date <= %s
+            AND jvd.account = 'Cost of Goods Sold - KIL'
+            AND jv.docstatus = 1
+        ''', (from_date, to_date), as_dict=True)
+
+    raw_fuel_cogs_jv = 0.0
+    raw_lube_cogs_jv = 0.0
+    for j in jv_details:
+        net = flt(j['debit']) - flt(j['credit'])
+        rem = (j.get('user_remark') or '').upper()
+        if any(k in rem for k in ['FUEL', 'DIESEL', 'PETROL', 'PMS', 'AGO']):
+            raw_fuel_cogs_jv += net
+        else:
+            raw_lube_cogs_jv += net
+
+    comp_fuel_cogs = raw_fuel_cogs_se + raw_fuel_cogs_pi + raw_fuel_cogs_jv
+    comp_lube_cogs = raw_lube_cogs_se + raw_lube_cogs_pi + raw_lube_cogs_jv
+    comp_total = comp_fuel_cogs + comp_lube_cogs
+
+    cogs_main_bal = 0.0
+    other_cogs_items = []
+
     for r in accounts_agg.values():
         if r['root_type'] == 'Income':
             bal = flt(r['total_credit']) - flt(r['total_debit'])
             if abs(bal) > 0.001:
+                acc_name_upper = (r['account_name'] or r['account']).upper()
+                category = "fuel" if any(k in acc_name_upper for k in ["FUEL", "PETROL", "DIESEL", "PMS", "AGO"]) else "lubes"
                 income_items.append({
                     "account": r['account'],
                     "account_name": r['account_name'],
                     "parent_account": r['parent_account'],
+                    "category": category,
                     "amount": round(bal, 2),
                     "balance": round(bal, 2)
                 })
@@ -524,19 +621,60 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
                     'Cost of Goods Sold' in (r['account_name'] or '') or
                     'Stock Adjustment' in (r['account_name'] or '')
                 )
-                item = {
-                    "account": r['account'],
-                    "account_name": r['account_name'],
-                    "parent_account": r['parent_account'],
-                    "amount": round(bal, 2),
-                    "balance": round(bal, 2)
-                }
                 if is_cogs:
-                    cogs_items.append(item)
+                    if 'Cost of Goods Sold' in (r['account_name'] or ''):
+                        cogs_main_bal += bal
+                    else:
+                        other_cogs_items.append({
+                            "account": r['account'],
+                            "account_name": r['account_name'],
+                            "parent_account": r['parent_account'],
+                            "category": "adjustment",
+                            "amount": round(bal, 2),
+                            "balance": round(bal, 2)
+                        })
                     total_cogs += bal
                 else:
-                    opex_items.append(item)
+                    opex_items.append({
+                        "account": r['account'],
+                        "account_name": r['account_name'],
+                        "parent_account": r['parent_account'],
+                        "amount": round(bal, 2),
+                        "balance": round(bal, 2)
+                    })
                     total_opex += bal
+
+    # Split main Cost of Goods Sold balance into Fuel vs Lubes based on underlying transactions
+    fuel_cogs_amount = 0.0
+    lube_cogs_amount = 0.0
+    if abs(cogs_main_bal) > 0.001:
+        if comp_total > 0:
+            fuel_ratio = comp_fuel_cogs / comp_total
+            fuel_cogs_amount = round(cogs_main_bal * fuel_ratio, 2)
+            lube_cogs_amount = round(cogs_main_bal - fuel_cogs_amount, 2)
+        else:
+            fuel_cogs_amount = round(cogs_main_bal, 2)
+            lube_cogs_amount = 0.0
+
+    if abs(fuel_cogs_amount) > 0.001:
+        cogs_items.append({
+            "account": "Cost of Fuel Sold",
+            "account_name": "Cost of Goods Sold - Fuel (PMS & AGO)",
+            "parent_account": "Stock Expenses - KIL",
+            "category": "fuel",
+            "amount": fuel_cogs_amount,
+            "balance": fuel_cogs_amount
+        })
+    if abs(lube_cogs_amount) > 0.001:
+        cogs_items.append({
+            "account": "Cost of Lubes & Inventory",
+            "account_name": "Cost of Goods Sold - Lubes & Inventory",
+            "parent_account": "Stock Expenses - KIL",
+            "category": "lubes",
+            "amount": lube_cogs_amount,
+            "balance": lube_cogs_amount
+        })
+    cogs_items.extend(other_cogs_items)
 
     total_income = round(total_income, 2)
     total_cogs = round(total_cogs, 2)
@@ -546,6 +684,15 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
     total_expense = round(total_cogs + total_opex, 2)
     net_profit = round(total_income - total_expense, 2)
     net_margin = round((net_profit / total_income * 100), 2) if total_income else 0.0
+
+    fuel_income = sum(item["amount"] for item in income_items if item.get("category") == "fuel")
+    lube_income = sum(item["amount"] for item in income_items if item.get("category") == "lubes")
+    
+    fuel_gross_profit = round(fuel_income - fuel_cogs_amount, 2)
+    fuel_gross_margin = round((fuel_gross_profit / fuel_income * 100), 2) if fuel_income else 0.0
+    
+    lube_gross_profit = round(lube_income - lube_cogs_amount, 2)
+    lube_gross_margin = round((lube_gross_profit / lube_income * 100), 2) if lube_income else 0.0
 
     # Calculate percentage share of turnover for each account
     for item in income_items:
@@ -567,7 +714,15 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
         "from_date": str(from_date),
         "to_date": str(to_date),
         "total_income": total_income,
+        "fuel_income": round(fuel_income, 2),
+        "lube_income": round(lube_income, 2),
         "total_cogs": total_cogs,
+        "fuel_cogs": fuel_cogs_amount,
+        "lube_cogs": lube_cogs_amount,
+        "fuel_gross_profit": fuel_gross_profit,
+        "fuel_gross_margin": fuel_gross_margin,
+        "lube_gross_profit": lube_gross_profit,
+        "lube_gross_margin": lube_gross_margin,
         "gross_profit": gross_profit,
         "gross_margin": gross_margin,
         "total_opex": total_opex,

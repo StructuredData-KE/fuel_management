@@ -1139,11 +1139,26 @@ function load_pnl_data(wrapper) {
                 $(wrapper).find('#exec-pnl-station-badge').text(shortStName);
                 $(wrapper).find('#exec-statement-station-name').text(shortStName);
 
-                // Update 5 KPI Cards
+                // Update 5 KPI Cards with Fuel vs Lubes breakdown
                 $(wrapper).find('#exec-pnl-income').text(format_currency(pnl.total_income, "KES"));
+                if (pnl.fuel_income !== undefined && pnl.lube_income !== undefined) {
+                    $(wrapper).find('#exec-pnl-income').siblings('div:last').html(`
+                        <span style="color:#0284c7; font-weight:600;">⛽ Fuel: ${format_currency(pnl.fuel_income, '')}</span> &bull; 
+                        <span style="color:#d97706; font-weight:600;">🛢️ Lubes: ${format_currency(pnl.lube_income, '')}</span>
+                    `);
+                }
+
                 $(wrapper).find('#exec-pnl-cogs').text(format_currency(pnl.total_cogs, "KES"));
                 let cogsPct = pnl.total_income > 0 ? ((pnl.total_cogs / pnl.total_income) * 100).toFixed(1) : 0;
-                $(wrapper).find('#exec-pnl-cogs-pct').text(`${cogsPct}% of Revenue`);
+                if (pnl.fuel_cogs !== undefined && pnl.lube_cogs !== undefined) {
+                    $(wrapper).find('#exec-pnl-cogs-pct').html(`
+                        <span style="color:#0284c7; font-weight:600;">⛽ Fuel: ${format_currency(pnl.fuel_cogs, '')}</span> &bull; 
+                        <span style="color:#d97706; font-weight:600;">🛢️ Lubes: ${format_currency(pnl.lube_cogs, '')}</span>
+                        <div style="color:#64748b; font-size:10px; margin-top:2px;">${cogsPct}% of Revenue</div>
+                    `);
+                } else {
+                    $(wrapper).find('#exec-pnl-cogs-pct').text(`${cogsPct}% of Revenue`);
+                }
 
                 // Gross Profit
                 let gp = pnl.gross_profit;
@@ -1151,7 +1166,15 @@ function load_pnl_data(wrapper) {
                 let gpMarginEl = $(wrapper).find('#exec-pnl-gross-margin');
                 let gpCard = $(wrapper).find('#exec-pnl-gp-card');
                 gpEl.text(format_currency(gp, "KES"));
-                gpMarginEl.text(`Gross Margin: ${pnl.gross_margin}%`);
+                if (pnl.fuel_gross_margin !== undefined && pnl.lube_gross_margin !== undefined) {
+                    gpMarginEl.html(`
+                        Gross Margin: <strong>${pnl.gross_margin}%</strong> &bull; 
+                        <span style="font-size:10px; font-weight:600; color:#0284c7;">Fuel: ${pnl.fuel_gross_margin}%</span> &bull; 
+                        <span style="font-size:10px; font-weight:600; color:#d97706;">Lubes: ${pnl.lube_gross_margin}%</span>
+                    `);
+                } else {
+                    gpMarginEl.text(`Gross Margin: ${pnl.gross_margin}%`);
+                }
                 if (gp >= 0) {
                     gpEl.css('color', '#059669');
                     gpMarginEl.css('color', '#059669');
@@ -1206,35 +1229,63 @@ function load_pnl_data(wrapper) {
 }
 
 function render_formal_pnl_statement(wrapper, pnl) {
+    let fuelIncome = pnl.fuel_income || 0;
+    let lubeIncome = pnl.lube_income || 0;
+    let fuelCogs = pnl.fuel_cogs || 0;
+    let lubeCogs = pnl.lube_cogs || 0;
+    let fuelGP = pnl.fuel_gross_profit || (fuelIncome - fuelCogs);
+    let fuelMargin = pnl.fuel_gross_margin || (fuelIncome > 0 ? ((fuelGP / fuelIncome) * 100).toFixed(2) : '0.00');
+    let lubeGP = pnl.lube_gross_profit || (lubeIncome - lubeCogs);
+    let lubeMargin = pnl.lube_gross_margin || (lubeIncome > 0 ? ((lubeGP / lubeIncome) * 100).toFixed(2) : '0.00');
+
     let html = `
-        <table style="width:100%; border-collapse:collapse; font-size:13px;">
-            <thead>
-                <tr style="border-bottom:2px solid #cbd5e1; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">
-                    <th style="padding:10px 12px; text-align:left;">Financial Line Item</th>
-                    <th style="padding:10px 12px; text-align:right; width:180px;">Amount (KES)</th>
-                    <th style="padding:10px 12px; text-align:right; width:120px;">% of Revenue</th>
-                </tr>
-            </thead>
-            <tbody>
+        <div style="background:#fff; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 2px 8px rgba(0,0,0,0.04); overflow:hidden;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0; color:#475569; font-size:11px; text-transform:uppercase; letter-spacing:0.6px; font-weight:700;">
+                        <th style="padding:12px 16px; text-align:left;">Financial Line Item</th>
+                        <th style="padding:12px 16px; text-align:right; width:220px;">Amount (KES)</th>
+                        <th style="padding:12px 16px; text-align:right; width:130px;">% of Revenue</th>
+                    </tr>
+                </thead>
+                <tbody>
     `;
 
     // 1. REVENUE SECTION
     html += `
-        <tr style="background:#f8fafc; font-weight:700; color:#0f172a; border-top:1px solid #e2e8f0;">
-            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#0284c7;">
+        <tr style="background:#f8fafc; font-weight:700; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 16px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#0284c7; display:flex; align-items:center; gap:6px;">
+                <span class="material-symbols-outlined" style="font-size:16px;">trending_up</span>
                 1. REVENUE / TURNOVER
             </td>
         </tr>
     `;
     if (!pnl.income_accounts || pnl.income_accounts.length === 0) {
-        html += `<tr><td colspan="3" style="padding:10px 24px; color:#94a3b8; font-style:italic;">No revenue entries recorded for this period.</td></tr>`;
+        html += `<tr><td colspan="3" style="padding:12px 24px; color:#94a3b8; font-style:italic;">No revenue entries recorded for this period.</td></tr>`;
     } else {
         pnl.income_accounts.forEach(acc => {
+            let isFuel = acc.category === 'fuel' || /FUEL|PETROL|DIESEL|PMS|AGO/i.test(acc.account_name);
+            let iconName = isFuel ? 'local_gas_station' : 'oil_barrel';
+            let iconColor = isFuel ? '#0284c7' : '#d97706';
+            let catBadge = isFuel 
+                ? '<span style="font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:8px;">Fuel</span>' 
+                : '<span style="font-size:10px; background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:8px;">Lubes / Store</span>';
+
             html += `
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 12px 8px 24px; color:#334155;">${acc.account_name}</td>
-                    <td style="padding:8px 12px; text-align:right; font-family:ui-monospace, monospace; font-weight:500; color:#059669;">${format_currency(acc.amount, '')}</td>
-                    <td style="padding:8px 12px; text-align:right; color:#64748b; font-size:12px;">${acc.pct}%</td>
+                <tr style="border-bottom:1px solid #f1f5f9; transition:background 0.15s;" onmouseover="this.style.background='#fbfcfe'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:10px 16px 10px 24px; color:#1e293b; font-weight:500;">
+                        <span class="material-symbols-outlined" style="font-size:16px; color:${iconColor}; vertical-align:middle; margin-right:6px;">${iconName}</span>
+                        ${acc.account_name}
+                        ${catBadge}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-weight:600; color:#059669; font-size:13px;">
+                        ${format_currency(acc.amount, '')}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right;">
+                        <span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; background:#ecfdf5; color:#059669;">
+                            ${acc.pct}%
+                        </span>
+                    </td>
                 </tr>
             `;
         });
@@ -1242,32 +1293,55 @@ function render_formal_pnl_statement(wrapper, pnl) {
     // Revenue Subtotal
     html += `
         <tr style="background:#f1f5f9; font-weight:700; border-top:1px solid #cbd5e1; border-bottom:2px solid #cbd5e1;">
-            <td style="padding:10px 12px; color:#0f172a;">TOTAL REVENUE (TURNOVER)</td>
-            <td style="padding:10px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:14px; font-weight:700; color:#059669;">${format_currency(pnl.total_income, 'KES')}</td>
-            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#059669;">100.0%</td>
+            <td style="padding:12px 16px; color:#0f172a; font-size:13px;">TOTAL REVENUE (TURNOVER)</td>
+            <td style="padding:12px 16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:14px; font-weight:700; color:#059669;">${format_currency(pnl.total_income, 'KES')}</td>
+            <td style="padding:12px 16px; text-align:right;">
+                <span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; background:#059669; color:#fff;">100.0%</span>
+            </td>
         </tr>
     `;
 
     // Spacer
-    html += `<tr><td colspan="3" style="height:12px;"></td></tr>`;
+    html += `<tr><td colspan="3" style="height:12px; background:#fafafa;"></td></tr>`;
 
     // 2. COST OF GOODS SOLD SECTION
     html += `
-        <tr style="background:#f8fafc; font-weight:700; color:#0f172a; border-top:1px solid #e2e8f0;">
-            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#475569;">
+        <tr style="background:#f8fafc; font-weight:700; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 16px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#475569; display:flex; align-items:center; gap:6px;">
+                <span class="material-symbols-outlined" style="font-size:16px;">inventory_2</span>
                 2. COST OF GOODS SOLD (COGS)
             </td>
         </tr>
     `;
     if (!pnl.cogs_accounts || pnl.cogs_accounts.length === 0) {
-        html += `<tr><td colspan="3" style="padding:10px 24px; color:#94a3b8; font-style:italic;">No cost of sales recorded for this period.</td></tr>`;
+        html += `<tr><td colspan="3" style="padding:12px 24px; color:#94a3b8; font-style:italic;">No cost of sales recorded for this period.</td></tr>`;
     } else {
         pnl.cogs_accounts.forEach(acc => {
+            let isFuel = acc.category === 'fuel' || /FUEL|PETROL|DIESEL|PMS|AGO/i.test(acc.account_name);
+            let isLube = acc.category === 'lubes' || /LUBE|STORE|INVENTORY|DRY/i.test(acc.account_name);
+            let iconName = isFuel ? 'local_gas_station' : (isLube ? 'oil_barrel' : 'inventory_2');
+            let iconColor = isFuel ? '#0284c7' : (isLube ? '#d97706' : '#64748b');
+            let catBadge = isFuel 
+                ? '<span style="font-size:10px; background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:8px;">Fuel Stock</span>' 
+                : (isLube 
+                    ? '<span style="font-size:10px; background:#fef3c7; color:#b45309; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:8px;">Lubes & Store</span>'
+                    : '<span style="font-size:10px; background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-weight:600; margin-left:8px;">Adjustment</span>');
+
             html += `
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 12px 8px 24px; color:#334155;">${acc.account_name}</td>
-                    <td style="padding:8px 12px; text-align:right; font-family:ui-monospace, monospace; font-weight:500; color:#334155;">${format_currency(acc.amount, '')}</td>
-                    <td style="padding:8px 12px; text-align:right; color:#64748b; font-size:12px;">${acc.pct}%</td>
+                <tr style="border-bottom:1px solid #f1f5f9; transition:background 0.15s;" onmouseover="this.style.background='#fbfcfe'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:10px 16px 10px 24px; color:#1e293b; font-weight:500;">
+                        <span class="material-symbols-outlined" style="font-size:16px; color:${iconColor}; vertical-align:middle; margin-right:6px;">${iconName}</span>
+                        ${acc.account_name}
+                        ${catBadge}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-weight:600; color:#334155; font-size:13px;">
+                        ${format_currency(acc.amount, '')}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right;">
+                        <span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; background:#f1f5f9; color:#475569;">
+                            ${acc.pct}%
+                        </span>
+                    </td>
                 </tr>
             `;
         });
@@ -1276,53 +1350,106 @@ function render_formal_pnl_statement(wrapper, pnl) {
     let cogsPct = pnl.total_income > 0 ? ((pnl.total_cogs / pnl.total_income) * 100).toFixed(1) : '0.0';
     html += `
         <tr style="background:#f1f5f9; font-weight:700; border-top:1px solid #cbd5e1; border-bottom:2px solid #cbd5e1;">
-            <td style="padding:10px 12px; color:#0f172a;">TOTAL COST OF GOODS SOLD</td>
-            <td style="padding:10px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:14px; font-weight:700; color:#334155;">${format_currency(pnl.total_cogs, 'KES')}</td>
-            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#64748b;">${cogsPct}%</td>
+            <td style="padding:12px 16px; color:#0f172a; font-size:13px;">TOTAL COST OF GOODS SOLD</td>
+            <td style="padding:12px 16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:14px; font-weight:700; color:#334155;">${format_currency(pnl.total_cogs, 'KES')}</td>
+            <td style="padding:12px 16px; text-align:right;">
+                <span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; background:#e2e8f0; color:#334155;">${cogsPct}%</span>
+            </td>
         </tr>
     `;
 
-    // Spacer
-    html += `<tr><td colspan="3" style="height:12px;"></td></tr>`;
+    // Departmental Margins Insight Strip
+    html += `
+        <tr>
+            <td colspan="3" style="padding: 12px 16px; background: #fafafa;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+                    <!-- Fuel Department Margin Card -->
+                    <div style="background:#fff; border:1px solid #e0f2fe; border-left:4px solid #0284c7; border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+                        <div>
+                            <div style="font-size:11px; font-weight:700; color:#0284c7; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:4px;">
+                                <span class="material-symbols-outlined" style="font-size:15px;">local_gas_station</span> Fuel Operations Gross Margin
+                            </div>
+                            <div style="font-size:15px; font-weight:800; font-family:'JetBrains Mono', monospace; color:#0f172a; margin-top:3px;">
+                                ${format_currency(fuelGP, 'KES')}
+                            </div>
+                            <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                                Sales: ${format_currency(fuelIncome, '')} &bull; COGS: ${format_currency(fuelCogs, '')}
+                            </div>
+                        </div>
+                        <span style="background:${fuelGP >= 0 ? '#e0f2fe' : '#fee2e2'}; color:${fuelGP >= 0 ? '#0369a1' : '#dc2626'}; padding:4px 10px; border-radius:16px; font-weight:700; font-size:12px;">
+                            ${fuelMargin}% Margin
+                        </span>
+                    </div>
 
-    // 3. GROSS PROFIT ROW
+                    <!-- Lubes & Store Department Margin Card -->
+                    <div style="background:#fff; border:1px solid #fef3c7; border-left:4px solid #d97706; border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,0.03);">
+                        <div>
+                            <div style="font-size:11px; font-weight:700; color:#d97706; text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:4px;">
+                                <span class="material-symbols-outlined" style="font-size:15px;">oil_barrel</span> Lubes & Store Gross Margin
+                            </div>
+                            <div style="font-size:15px; font-weight:800; font-family:'JetBrains Mono', monospace; color:#0f172a; margin-top:3px;">
+                                ${format_currency(lubeGP, 'KES')}
+                            </div>
+                            <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                                Sales: ${format_currency(lubeIncome, '')} &bull; COGS: ${format_currency(lubeCogs, '')}
+                            </div>
+                        </div>
+                        <span style="background:${lubeGP >= 0 ? '#fef3c7' : '#fee2e2'}; color:${lubeGP >= 0 ? '#b45309' : '#dc2626'}; padding:4px 10px; border-radius:16px; font-weight:700; font-size:12px;">
+                            ${lubeMargin}% Margin
+                        </span>
+                    </div>
+                </div>
+            </td>
+        </tr>
+    `;
+
+    // 3. OVERALL GROSS PROFIT ROW
     let gpColor = pnl.gross_profit >= 0 ? '#059669' : '#dc2626';
     let gpBg = pnl.gross_profit >= 0 ? '#ecfdf5' : '#fef2f2';
     html += `
         <tr style="background:${gpBg}; font-weight:800; border-top:2px solid ${gpColor}; border-bottom:2px solid ${gpColor};">
-            <td style="padding:12px 12px; color:#0f172a; font-size:14px;">
-                GROSS PROFIT / (LOSS)
-                <span style="font-size:11px; font-weight:600; color:#64748b; display:block;">(Revenue minus COGS)</span>
+            <td style="padding:14px 16px; color:#0f172a; font-size:14px;">
+                TOTAL GROSS PROFIT / (LOSS)
+                <span style="font-size:11px; font-weight:600; color:#64748b; display:block; margin-top:2px;">(Total Revenue minus Total COGS)</span>
             </td>
-            <td style="padding:12px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:16px; font-weight:800; color:${gpColor};">
+            <td style="padding:14px 16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:16px; font-weight:800; color:${gpColor};">
                 ${format_currency(pnl.gross_profit, 'KES')}
             </td>
-            <td style="padding:12px 12px; text-align:right; font-weight:800; font-size:14px; color:${gpColor};">
-                ${pnl.gross_margin}%
+            <td style="padding:14px 16px; text-align:right;">
+                <span style="display:inline-block; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:800; background:${gpColor}; color:#fff;">
+                    ${pnl.gross_margin}%
+                </span>
             </td>
         </tr>
     `;
 
     // Spacer
-    html += `<tr><td colspan="3" style="height:12px;"></td></tr>`;
+    html += `<tr><td colspan="3" style="height:12px; background:#fafafa;"></td></tr>`;
 
     // 4. OPERATING EXPENSES (OPEX)
     html += `
-        <tr style="background:#f8fafc; font-weight:700; color:#0f172a; border-top:1px solid #e2e8f0;">
-            <td colspan="3" style="padding:10px 12px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#b45309;">
+        <tr style="background:#f8fafc; font-weight:700; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0;">
+            <td colspan="3" style="padding:10px 16px; letter-spacing:0.5px; font-size:12px; text-transform:uppercase; color:#b45309; display:flex; align-items:center; gap:6px;">
+                <span class="material-symbols-outlined" style="font-size:16px;">receipt_long</span>
                 3. OPERATING & ADMINISTRATIVE EXPENSES (OPEX)
             </td>
         </tr>
     `;
     if (!pnl.opex_accounts || pnl.opex_accounts.length === 0) {
-        html += `<tr><td colspan="3" style="padding:10px 24px; color:#94a3b8; font-style:italic;">No operating overheads recorded for this period.</td></tr>`;
+        html += `<tr><td colspan="3" style="padding:12px 24px; color:#94a3b8; font-style:italic;">No operating overheads recorded for this period.</td></tr>`;
     } else {
         pnl.opex_accounts.forEach(acc => {
             html += `
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                    <td style="padding:8px 12px 8px 24px; color:#334155;">${acc.account_name}</td>
-                    <td style="padding:8px 12px; text-align:right; font-family:ui-monospace, monospace; font-weight:500; color:#dc2626;">${format_currency(acc.amount, '')}</td>
-                    <td style="padding:8px 12px; text-align:right; color:#64748b; font-size:12px;">${acc.pct}%</td>
+                <tr style="border-bottom:1px solid #f1f5f9; transition:background 0.15s;" onmouseover="this.style.background='#fbfcfe'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:10px 16px 10px 24px; color:#334155; font-weight:500;">${acc.account_name}</td>
+                    <td style="padding:10px 16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-weight:600; color:#dc2626; font-size:13px;">
+                        ${format_currency(acc.amount, '')}
+                    </td>
+                    <td style="padding:10px 16px; text-align:right;">
+                        <span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; background:#fef2f2; color:#dc2626;">
+                            ${acc.pct}%
+                        </span>
+                    </td>
                 </tr>
             `;
         });
@@ -1331,36 +1458,41 @@ function render_formal_pnl_statement(wrapper, pnl) {
     let opexPct = pnl.total_income > 0 ? ((pnl.total_opex / pnl.total_income) * 100).toFixed(1) : '0.0';
     html += `
         <tr style="background:#f1f5f9; font-weight:700; border-top:1px solid #cbd5e1; border-bottom:2px solid #cbd5e1;">
-            <td style="padding:10px 12px; color:#0f172a;">TOTAL OPERATING EXPENSES</td>
-            <td style="padding:10px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:14px; font-weight:700; color:#dc2626;">${format_currency(pnl.total_opex, 'KES')}</td>
-            <td style="padding:10px 12px; text-align:right; font-weight:700; color:#64748b;">${opexPct}%</td>
+            <td style="padding:12px 16px; color:#0f172a; font-size:13px;">TOTAL OPERATING EXPENSES</td>
+            <td style="padding:12px 16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:14px; font-weight:700; color:#dc2626;">${format_currency(pnl.total_opex, 'KES')}</td>
+            <td style="padding:12px 16px; text-align:right;">
+                <span style="display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:700; background:#fee2e2; color:#dc2626;">${opexPct}%</span>
+            </td>
         </tr>
     `;
 
     // Spacer
-    html += `<tr><td colspan="3" style="height:14px;"></td></tr>`;
+    html += `<tr><td colspan="3" style="height:14px; background:#fafafa;"></td></tr>`;
 
     // 5. NET PROFIT / (LOSS) ROW
     let npColor = pnl.net_profit >= 0 ? '#059669' : '#dc2626';
     let npBg = pnl.net_profit >= 0 ? '#d1fae5' : '#fee2e2';
     html += `
         <tr style="background:${npBg}; font-weight:800; border-top:3px solid ${npColor}; border-bottom:3px double ${npColor};">
-            <td style="padding:14px 12px; color:#0f172a; font-size:15px;">
+            <td style="padding:16px; color:#0f172a; font-size:15px;">
                 NET PROFIT / (LOSS)
-                <span style="font-size:11px; font-weight:600; color:#64748b; display:block;">(Gross Profit minus Operating Expenses)</span>
+                <span style="font-size:11px; font-weight:600; color:#64748b; display:block; margin-top:2px;">(Gross Profit minus Operating Expenses)</span>
             </td>
-            <td style="padding:14px 12px; text-align:right; font-family:ui-monospace, monospace; font-size:18px; font-weight:800; color:${npColor};">
+            <td style="padding:16px; text-align:right; font-family:'JetBrains Mono', ui-monospace, monospace; font-size:18px; font-weight:800; color:${npColor};">
                 ${format_currency(pnl.net_profit, 'KES')}
             </td>
-            <td style="padding:14px 12px; text-align:right; font-weight:800; font-size:15px; color:${npColor};">
-                ${pnl.net_margin}%
+            <td style="padding:16px; text-align:right;">
+                <span style="display:inline-block; padding:4px 12px; border-radius:14px; font-size:13px; font-weight:800; background:${npColor}; color:#fff;">
+                    ${pnl.net_margin}%
+                </span>
             </td>
         </tr>
     `;
 
     html += `
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
     `;
 
     $(wrapper).find('#exec-pnl-formal-table').html(html);
