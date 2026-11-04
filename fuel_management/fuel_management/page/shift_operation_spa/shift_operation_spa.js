@@ -8895,6 +8895,7 @@ function render_petty_cash(wrapper) {
         let name = u ? (u.employee_name || u.full_name || csa) : csa;
         return {csa, name};
     }).sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    window.PETTY_CASH_CSAS = sorted_csas;
     
     sorted_csas.forEach(item => {
         csaOptions += `<option value="${item.csa}">${item.name}</option>`;
@@ -9014,6 +9015,7 @@ function render_petty_cash(wrapper) {
             let $select = $wrapper.find('#pc-category');
             $select.empty().append('<option value="">Select Category...</option>');
             if(r.message) {
+                window.EXPENSE_CATEGORIES = r.message;
                 r.message.forEach(cat => {
                     $select.append(`<option value="${cat.name}">${cat.name}</option>`);
                 });
@@ -9122,8 +9124,79 @@ function render_petty_cash(wrapper) {
         
         let $btn = $(this);
         let orig_html = $btn.html();
+
+        if (window.EDITING_PETTY_CASH_ID) {
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Updating...');
+
+            frappe.call({
+                method: "fuel_management.fuel_management.api.update_petty_cash_entry",
+                args: {
+                    entry_id: window.EDITING_PETTY_CASH_ID,
+                    csa: csa,
+                    petty_cash_account: account,
+                    category: category,
+                    expense_account: expense_account,
+                    payee: payee,
+                    amount: amount,
+                    memo: memo
+                },
+                callback: function(r) {
+                    $btn.prop('disabled', false).html(orig_html);
+
+                    if (!r.exc && r.message && r.message.status === "success") {
+                        frappe.show_alert({message: "Petty Cash Entry updated successfully!", indicator: "green"});
+
+                        // Reset editing state
+                        window.EDITING_PETTY_CASH_ID = null;
+                        $wrapper.find('#pc-entry-header-title').text('💰 Record Petty Cash Expense');
+                        $wrapper.find('#pc-entry-badge-editing').hide();
+                        $wrapper.find('#btn-save-petty-cash-label').text('💾 Save Petty Cash Entry');
+                        $wrapper.find('#btn-cancel-edit-petty-cash').hide();
+
+                        // Reset form
+                        $wrapper.find('#pc-csa').val('');
+                        $wrapper.find('#pc-category').val('');
+                        $wrapper.find('#pc-expense-account').val('');
+                        $wrapper.find('#pc-payee').val('');
+                        $wrapper.find('#pc-amount').val('');
+                        $wrapper.find('#pc-memo').val('');
+
+                        // Refresh Accounts
+                        frappe.call({
+                            method: "frappe.client.get_list",
+                            args: {
+                                doctype: "Station Petty Cash Account",
+                                filters: { status: "Active" },
+                                fields: ["name", "current_balance"]
+                            },
+                            callback: function(acc_res) {
+                                if (acc_res.message) {
+                                    window.PETTY_CASH_ACCOUNTS = acc_res.message;
+                                    let cur_acc = $wrapper.find('#pc-account').val();
+                                    let acc = (window.PETTY_CASH_ACCOUNTS || []).find(a => a.name === cur_acc);
+                                    if (acc) {
+                                        $wrapper.find('#pc-balance').val(format_currency(acc.current_balance));
+                                    }
+                                }
+                            }
+                        });
+
+                        // Refresh History
+                        load_petty_cash_history($wrapper);
+
+                        // Switch back to history view
+                        $wrapper.find('#tab-petty-cash .seg-btn[data-view="history"]').click();
+                    }
+                },
+                error: function() {
+                    $btn.prop('disabled', false).html(orig_html);
+                }
+            });
+            return;
+        }
+
         $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Saving...');
-        
+
         frappe.call({
             method: "frappe.client.insert",
             args: {
@@ -9142,7 +9215,7 @@ function render_petty_cash(wrapper) {
             },
             callback: function(r) {
                 $btn.prop('disabled', false).html(orig_html);
-                
+
                 if(!r.exc) {
                     frappe.show_alert({message: "Petty Cash Entry saved successfully!", indicator: "green"});
                     // Reset form
@@ -9152,17 +9225,17 @@ function render_petty_cash(wrapper) {
                     $wrapper.find('#pc-payee').val('');
                     $wrapper.find('#pc-amount').val('');
                     $wrapper.find('#pc-memo').val('');
-                    
+
                     // Update Petty Cash balance in window cache
                     let pc_acc = (window.PETTY_CASH_ACCOUNTS || []).find(a => a.name === account);
                     if (pc_acc) {
                         pc_acc.current_balance = (pc_acc.current_balance || 0) - amount;
                         $wrapper.find('#pc-balance').val(format_currency(pc_acc.current_balance));
                     }
-                    
+
                     // Refresh History
                     load_petty_cash_history($wrapper);
-                    
+
                     // Switch back to history view
                     $wrapper.find('#tab-petty-cash .seg-btn[data-view="history"]').click();
                 }
@@ -9173,12 +9246,29 @@ function render_petty_cash(wrapper) {
         });
     });
 
+    // Cancel edit handler
+    $wrapper.find('#btn-cancel-edit-petty-cash').off('click').on('click', function() {
+        window.EDITING_PETTY_CASH_ID = null;
+        $wrapper.find('#pc-entry-header-title').text('💰 Record Petty Cash Expense');
+        $wrapper.find('#pc-entry-badge-editing').hide();
+        $wrapper.find('#btn-save-petty-cash-label').text('💾 Save Petty Cash Entry');
+        $wrapper.find('#btn-cancel-edit-petty-cash').hide();
+        $wrapper.find('#pc-csa').val('');
+        $wrapper.find('#pc-category').val('');
+        $wrapper.find('#pc-expense-account').val('');
+        $wrapper.find('#pc-payee').val('');
+        $wrapper.find('#pc-amount').val('');
+        $wrapper.find('#pc-memo').val('');
+        $wrapper.find('#tab-petty-cash .seg-btn[data-view="history"]').click();
+    });
+
     load_petty_cash_history($wrapper);
 }
 
 function load_petty_cash_history($wrapper) {
     if(!window.ACTIVE_SHIFT) return;
-    
+
+    let is_locked = window.ACTIVE_SHIFT.status !== 'Open';
     let search = ($wrapper.find('#pc-filter-search').val() || '').toLowerCase().trim();
     let filter_csa = $wrapper.find('#pc-filter-csa').val();
 
@@ -9194,7 +9284,7 @@ function load_petty_cash_history($wrapper) {
         callback: function(r) {
             let $tbody = $wrapper.find('#list-petty-cash-saved');
             $tbody.empty();
-            
+
             let total_shift_pc = 0;
 
             if(r.message && r.message.length > 0) {
@@ -9216,12 +9306,12 @@ function load_petty_cash_history($wrapper) {
                         let timeStr = row.creation ? (row.creation.split(' ')[1] ? row.creation.split(' ')[1].substring(0, 5) : "") : "";
                         let csa_name = row.csa;
                         if (window.USERS_LIST) {
-                            let u = window.USERS_LIST.find(user => user.name === row.csa);
+                            let u = window.USERS_LIST.find(user => user.name === row.csa || user.user_id === row.csa);
                             if(u) csa_name = u.employee_name || u.full_name;
                         }
 
                         let html = `
-                            <tr>
+                            <tr data-name="${row.name}">
                                 <td><b style="font-family: monospace; color: #1e293b;">${row.name}</b></td>
                                 <td style="color: #64748b; font-size: 0.85rem;">${timeStr}</td>
                                 <td><span style="font-weight: 700; color: #1e40af; background: #eff6ff; padding: 2px 6px; border-radius: 4px;">👤 ${csa_name || '--'}</span></td>
@@ -9230,15 +9320,253 @@ function load_petty_cash_history($wrapper) {
                                 <td style="font-weight: 600; color: #334155;">${row.payee || '--'}</td>
                                 <td class="text-right" style="font-weight: 800; color: #059669; font-size: 0.95rem;">${format_currency(row.amount)}</td>
                                 <td style="color: #475569; font-size: 0.85rem;" title="${row.memo || ''}">${row.memo || '--'}</td>
+                                <td style="text-align: center; white-space: nowrap;">
+                                    <button class="btn btn-xs btn-primary btn-edit-pc" data-name="${row.name}" ${is_locked ? 'disabled' : ''} style="padding: 3px 8px; font-size: 0.76rem; border-radius: 4px; background: #2563eb; color: #fff; border: none; cursor: ${is_locked ? 'not-allowed' : 'pointer'}; margin-right: 4px; font-weight: 700;" title="${is_locked ? 'Shift is locked' : 'Edit Entry'}">
+                                        <i class="fa fa-edit"></i> Edit
+                                    </button>
+                                    <button class="btn btn-xs btn-danger btn-delete-pc" data-name="${row.name}" data-amount="${row.amount}" ${is_locked ? 'disabled' : ''} style="padding: 3px 8px; font-size: 0.76rem; border-radius: 4px; background: #ef4444; color: #fff; border: none; cursor: ${is_locked ? 'not-allowed' : 'pointer'}; font-weight: 700;" title="${is_locked ? 'Shift is locked' : 'Delete Entry'}">
+                                        <i class="fa fa-trash"></i> Delete
+                                    </button>
+                                </td>
                             </tr>
                         `;
                         $tbody.append(html);
                     });
+
+                    // Wire Delete Handler
+                    $tbody.find('.btn-delete-pc').off('click').on('click', function(e) {
+                        e.preventDefault();
+                        if (is_locked) {
+                            frappe.show_alert({message: "Shift is closed/locked. Entries cannot be deleted.", indicator: "orange"});
+                            return;
+                        }
+                        let name = $(this).attr('data-name');
+                        let amount = parseFloat($(this).attr('data-amount') || 0);
+
+                        frappe.confirm(
+                            `Are you sure you want to delete Petty Cash Entry <b>${frappe.utils.escape_html(name)}</b> for <b>${format_currency(amount)}</b>? This will refund the petty cash account balance.`,
+                            function() {
+                                frappe.dom.freeze("Deleting Petty Cash Entry...");
+                                frappe.call({
+                                    method: "fuel_management.fuel_management.api.delete_petty_cash_entry",
+                                    args: { entry_id: name },
+                                    callback: function(del_res) {
+                                        frappe.dom.unfreeze();
+                                        if (del_res.message && del_res.message.status === "success") {
+                                            frappe.show_alert({message: "Petty Cash Entry deleted successfully!", indicator: "green"});
+
+                                            if (window.EDITING_PETTY_CASH_ID === name) {
+                                                $wrapper.find('#btn-cancel-edit-petty-cash').click();
+                                            }
+
+                                            // Refresh account balance
+                                            frappe.call({
+                                                method: "frappe.client.get_list",
+                                                args: {
+                                                    doctype: "Station Petty Cash Account",
+                                                    filters: { status: "Active" },
+                                                    fields: ["name", "current_balance"]
+                                                },
+                                                callback: function(res) {
+                                                    if (res.message) {
+                                                        window.PETTY_CASH_ACCOUNTS = res.message;
+                                                        let cur_acc = $wrapper.find('#pc-account').val();
+                                                        let acc = (window.PETTY_CASH_ACCOUNTS || []).find(a => a.name === cur_acc);
+                                                        if (acc) {
+                                                            $wrapper.find('#pc-balance').val(format_currency(acc.current_balance));
+                                                        }
+                                                    }
+                                                }
+                                            });
+
+                                            load_petty_cash_history($wrapper);
+                                        }
+                                    },
+                                    error: function() {
+                                        frappe.dom.unfreeze();
+                                    }
+                                });
+                            }
+                        );
+                    });
+
+                    // Wire Edit Handler
+                    $tbody.find('.btn-edit-pc').off('click').on('click', function(e) {
+                        e.preventDefault();
+                        if (is_locked) {
+                            frappe.show_alert({message: "Shift is closed/locked. Entries cannot be edited.", indicator: "orange"});
+                            return;
+                        }
+                        let name = $(this).attr('data-name');
+                        let row = (r.message || []).find(x => x.name === name);
+                        if (!row) {
+                            frappe.show_alert({message: "Entry not found.", indicator: "red"});
+                            return;
+                        }
+
+                        // Build CSA options
+                        let csa_options = (window.PETTY_CASH_CSAS || []).map(item => ({label: item.name, value: item.csa}));
+                        if (row.csa && !csa_options.some(o => o.value === row.csa)) {
+                            let u = window.USERS_LIST ? window.USERS_LIST.find(user => user.name === row.csa || user.user_id === row.csa) : null;
+                            let csa_label = u ? (u.employee_name || u.full_name || row.csa) : row.csa;
+                            csa_options.unshift({label: csa_label, value: row.csa});
+                        }
+
+                        // Build PC Account options
+                        let pc_account_options = (window.PETTY_CASH_ACCOUNTS || []).map(a => a.name);
+                        if (row.petty_cash_account && !pc_account_options.includes(row.petty_cash_account)) {
+                            pc_account_options.unshift(row.petty_cash_account);
+                        }
+
+                        // Build Category options
+                        let cat_options = (window.EXPENSE_CATEGORIES || []).map(c => c.name);
+                        if (row.category && !cat_options.includes(row.category)) {
+                            cat_options.unshift(row.category);
+                        }
+
+                        // Build Expense Account options
+                        let exp_options = (window.COA_EXPENSE_ACCOUNTS || []).map(a => ({label: `${a.account_name} (${a.name})`, value: a.name}));
+                        if (row.expense_account && !exp_options.some(o => o.value === row.expense_account)) {
+                            exp_options.unshift({label: row.expense_account, value: row.expense_account});
+                        }
+
+                        let edit_dialog = new frappe.ui.Dialog({
+                            title: `✏️ Edit Petty Cash Entry: ${row.name}`,
+                            fields: [
+                                {
+                                    label: 'Paid By / Deduct from CSA',
+                                    fieldname: 'csa',
+                                    fieldtype: 'Select',
+                                    options: csa_options,
+                                    default: row.csa,
+                                    reqd: 1
+                                },
+                                {
+                                    label: 'Petty Cash Account',
+                                    fieldname: 'petty_cash_account',
+                                    fieldtype: 'Select',
+                                    options: pc_account_options,
+                                    default: row.petty_cash_account,
+                                    reqd: 1
+                                },
+                                {
+                                    label: 'Expense Category',
+                                    fieldname: 'category',
+                                    fieldtype: 'Select',
+                                    options: cat_options,
+                                    default: row.category,
+                                    reqd: 1
+                                },
+                                {
+                                    label: 'Chart of Accounts Expense Account',
+                                    fieldname: 'expense_account',
+                                    fieldtype: 'Select',
+                                    options: exp_options,
+                                    default: row.expense_account,
+                                    reqd: 1
+                                },
+                                {
+                                    label: 'Payee / Beneficiary',
+                                    fieldname: 'payee',
+                                    fieldtype: 'Data',
+                                    default: row.payee || '',
+                                    reqd: 1
+                                },
+                                {
+                                    label: 'Amount (KES)',
+                                    fieldname: 'amount',
+                                    fieldtype: 'Currency',
+                                    default: row.amount,
+                                    reqd: 1
+                                },
+                                {
+                                    label: 'Description / Purpose',
+                                    fieldname: 'memo',
+                                    fieldtype: 'Small Text',
+                                    default: row.memo || '',
+                                    reqd: 1
+                                }
+                            ],
+                            primary_action_label: 'Save Changes',
+                            primary_action: function(values) {
+                                frappe.dom.freeze("Updating Petty Cash Entry...");
+                                frappe.call({
+                                    method: "fuel_management.fuel_management.api.update_petty_cash_entry",
+                                    args: {
+                                        entry_id: row.name,
+                                        csa: values.csa,
+                                        petty_cash_account: values.petty_cash_account,
+                                        category: values.category,
+                                        expense_account: values.expense_account,
+                                        payee: values.payee,
+                                        amount: values.amount,
+                                        memo: values.memo
+                                    },
+                                    callback: function(res) {
+                                        frappe.dom.unfreeze();
+                                        if (!res.exc && res.message && res.message.status === "success") {
+                                            frappe.show_alert({message: "Petty Cash Entry updated successfully!", indicator: "green"});
+                                            edit_dialog.hide();
+
+                                            // Update cache
+                                            frappe.call({
+                                                method: "frappe.client.get_list",
+                                                args: {
+                                                    doctype: "Station Petty Cash Account",
+                                                    filters: { status: "Active" },
+                                                    fields: ["name", "current_balance"]
+                                                },
+                                                callback: function(acc_res) {
+                                                    if (acc_res.message) {
+                                                        window.PETTY_CASH_ACCOUNTS = acc_res.message;
+                                                        let cur_acc = $wrapper.find('#pc-account').val();
+                                                        let acc = (window.PETTY_CASH_ACCOUNTS || []).find(a => a.name === cur_acc);
+                                                        if (acc) {
+                                                            $wrapper.find('#pc-balance').val(format_currency(acc.current_balance));
+                                                        }
+                                                    }
+                                                }
+                                            });
+
+                                            load_petty_cash_history($wrapper);
+                                        }
+                                    },
+                                    error: function() {
+                                        frappe.dom.unfreeze();
+                                    }
+                                });
+                            },
+                            secondary_action_label: 'Edit in Full Form',
+                            secondary_action: function() {
+                                edit_dialog.hide();
+                                // Load into full form
+                                window.EDITING_PETTY_CASH_ID = row.name;
+                                $wrapper.find('#pc-entry-header-title').text(`✏️ Editing Petty Cash Entry: ${row.name}`);
+                                $wrapper.find('#pc-entry-badge-editing').show();
+                                $wrapper.find('#btn-save-petty-cash-label').text(`💾 Update Entry (${row.name})`);
+                                $wrapper.find('#btn-cancel-edit-petty-cash').show();
+
+                                $wrapper.find('#pc-csa').val(row.csa);
+                                $wrapper.find('#pc-account').val(row.petty_cash_account).trigger('change');
+                                $wrapper.find('#pc-category').val(row.category);
+                                $wrapper.find('#pc-expense-account').val(row.expense_account);
+                                $wrapper.find('#pc-payee').val(row.payee);
+                                $wrapper.find('#pc-amount').val(row.amount);
+                                $wrapper.find('#pc-memo').val(row.memo);
+
+                                // Switch to entry view
+                                $wrapper.find('#tab-petty-cash .seg-btn[data-view="entry"]').click();
+                                frappe.show_alert({message: `Loaded ${row.name} for editing`, indicator: "blue"});
+                            }
+                        });
+
+                        edit_dialog.show();
+                    });
                 } else {
-                    $tbody.append('<tr><td colspan="8" class="text-center text-muted" style="padding: 2rem;">No matching petty cash entries found.</td></tr>');
+                    $tbody.append('<tr><td colspan="9" class="text-center text-muted" style="padding: 2rem;">No matching petty cash entries found.</td></tr>');
                 }
             } else {
-                $tbody.append('<tr><td colspan="8" class="text-center text-muted" style="padding: 2rem;">No petty cash entries recorded for this shift yet.</td></tr>');
+                $tbody.append('<tr><td colspan="9" class="text-center text-muted" style="padding: 2rem;">No petty cash entries recorded for this shift yet.</td></tr>');
             }
 
             $wrapper.find('#pc-history-total').text(`Total Shift Petty Cash: ${format_currency(total_shift_pc)}`);

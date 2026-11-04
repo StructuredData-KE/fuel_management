@@ -4799,6 +4799,7 @@
                             <th style="width: 130px;">Payee</th>
                             <th style="text-align: right; width: 110px;">Amount (KES)</th>
                             <th>Description / Memo</th>
+                            <th style="text-align: center; width: 130px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="list-petty-cash-saved">
@@ -4817,7 +4818,8 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid #f1f5f9; padding-bottom: 1rem;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 0.5rem;">
-                        <span>💰 Record Petty Cash Expense</span>
+                        <span id="pc-entry-header-title">💰 Record Petty Cash Expense</span>
+                        <span id="pc-entry-badge-editing" style="display: none; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px;">EDITING ENTRY</span>
                     </h3>
                     <div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">Deducts from the selected CSA&apos;s cash liability and debits the chosen Chart of Accounts Expense Account</div>
                 </div>
@@ -4922,10 +4924,15 @@
                 </div>
             </div>
 
-            <!-- Submit Button -->
-            <button class="btn-primary" id="btn-save-petty-cash" style="width: 100%; justify-content: center; font-size: 1.05rem; padding: 0.85rem 1.5rem; font-weight: 700; border-radius: 8px; background: #059669; border-color: #059669; display: flex; align-items: center; gap: 0.5rem;">
-                <span class="spinner hidden"></span> <span>💾 Save Petty Cash Entry</span>
-            </button>
+            <!-- Submit / Update Buttons -->
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+                <button class="btn-primary" id="btn-save-petty-cash" style="flex: 1; justify-content: center; font-size: 1.05rem; padding: 0.85rem 1.5rem; font-weight: 700; border-radius: 8px; background: #059669; border-color: #059669; display: flex; align-items: center; gap: 0.5rem;">
+                    <span class="spinner hidden"></span> <span id="btn-save-petty-cash-label">💾 Save Petty Cash Entry</span>
+                </button>
+                <button type="button" class="btn-secondary" id="btn-cancel-edit-petty-cash" style="display: none; padding: 0.85rem 1.25rem; font-weight: 700; border-radius: 8px; border: 1.5px solid #cbd5e1; background: #f8fafc; color: #475569; font-size: 1rem; cursor: pointer;">
+                    ✕ Cancel Edit
+                </button>
+            </div>
         </div>
     </div>
 </section>

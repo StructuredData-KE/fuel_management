@@ -6288,11 +6288,59 @@ def get_station_purchase_items(station=None):
     return items
 
 
+@frappe.whitelist()
+def delete_petty_cash_entry(entry_id):
+    """Safely delete a Station Petty Cash Entry and reverse petty cash account balance."""
+    if not entry_id:
+        frappe.throw(_("Petty cash entry ID is required."))
+
+    if not frappe.db.exists("Station Petty Cash Entry", entry_id):
+        frappe.throw(_("Petty cash entry {0} not found.").format(entry_id))
+
+    doc = frappe.get_doc("Station Petty Cash Entry", entry_id)
+    if doc.shift:
+        shift_status = frappe.db.get_value("Shift", doc.shift, "status")
+        shift_docstatus = frappe.db.get_value("Shift", doc.shift, "docstatus")
+        if shift_status != "Open" or shift_docstatus != 0:
+            frappe.throw(_("Cannot delete entry from a closed shift ({0}).").format(doc.shift))
+
+    doc.delete(ignore_permissions=True)
+    frappe.db.commit()
+    return {"status": "success", "message": _("Petty cash entry deleted successfully.")}
 
 
+@frappe.whitelist()
+def update_petty_cash_entry(entry_id, csa=None, petty_cash_account=None, category=None, expense_account=None, payee=None, amount=None, memo=None):
+    """Safely update a Station Petty Cash Entry and rebalance petty cash accounts."""
+    if not entry_id:
+        frappe.throw(_("Petty cash entry ID is required."))
 
+    if not frappe.db.exists("Station Petty Cash Entry", entry_id):
+        frappe.throw(_("Petty cash entry {0} not found.").format(entry_id))
 
+    doc = frappe.get_doc("Station Petty Cash Entry", entry_id)
+    if doc.shift:
+        shift_status = frappe.db.get_value("Shift", doc.shift, "status")
+        shift_docstatus = frappe.db.get_value("Shift", doc.shift, "docstatus")
+        if shift_status != "Open" or shift_docstatus != 0:
+            frappe.throw(_("Cannot edit entry from a closed shift ({0}).").format(doc.shift))
 
+    if csa:
+        doc.csa = csa
+    if petty_cash_account:
+        doc.petty_cash_account = petty_cash_account
+    if category:
+        doc.category = category
+    if expense_account:
+        doc.expense_account = expense_account
+    if payee:
+        doc.payee = payee
+    if amount is not None:
+        doc.amount = flt(amount)
+    if memo is not None:
+        doc.memo = memo
 
-
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"status": "success", "message": _("Petty cash entry updated successfully.")}
 
