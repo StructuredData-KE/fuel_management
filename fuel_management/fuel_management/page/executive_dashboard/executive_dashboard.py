@@ -223,6 +223,8 @@ def get_pending_borrowed_summary(station=None):
             r["items"] = items_map.get(r.name, [])
             
     return records
+
+@frappe.whitelist()
 def get_tank_levels(station=None):
     """
     Returns live tank levels based on the latest physical dip stick readings
