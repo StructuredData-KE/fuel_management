@@ -5692,24 +5692,51 @@
       
       <!-- HISTORY VIEW -->
       <div class="view-pane active" id="bp-history-view">
-            <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <div class="dash-card center-card" style="max-width: 1100px; width: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 12px;">
                     <div>
                         <h3 style="margin: 0 0 2px 0;">Historical Borrowed Products</h3>
-                        <div id="bp-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing latest 20 entries &bull; Use date filter for more)</div>
+                        <div id="bp-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing pending return entries)</div>
                     </div>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <input type="text" id="bp-filter-counterparty" class="spa-input" placeholder="Search counterparty..." style="width: 200px; padding: 5px 10px; border-radius: 5px; border: 1px solid #cbd5e1; font-size: 0.9em;">
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <label style="font-size: 0.85em; color: #475569; font-weight: bold;">From:</label>
-                            <input type="date" id="bp-filter-from-date" class="spa-input" style="padding: 5px 10px; border-radius: 5px; border: 1px solid #cbd5e1; font-size: 0.9em;">
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 5px;">
-                            <label style="font-size: 0.85em; color: #475569; font-weight: bold;">To:</label>
-                            <input type="date" id="bp-filter-to-date" class="spa-input" style="padding: 5px 10px; border-radius: 5px; border: 1px solid #cbd5e1; font-size: 0.9em;">
-                        </div>
-                        <button id="btn-refresh-bp-history" class="btn btn-primary" style="padding: 5px 15px; background: #1e3a8a; color: #fff; border-radius: 5px; border: none; cursor: pointer; font-weight: bold;">Refresh</button>
+                    <!-- Status Filter Pills -->
+                    <div class="bp-status-pill-group" style="display: flex; gap: 4px; background: #f1f5f9; padding: 4px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                        <button type="button" class="bp-status-btn active" data-status="Pending Return" style="padding: 5px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; border: none; cursor: pointer; background: #f59e0b; color: #ffffff; transition: all 0.15s; display: flex; align-items: center; gap: 5px;">
+                            <span>⏳</span> <span>Pending Returns</span> <span id="bp-pending-count-pill" style="background: rgba(0,0,0,0.2); padding: 1px 6px; border-radius: 9999px; font-size: 0.72rem;">0</span>
+                        </button>
+                        <button type="button" class="bp-status-btn" data-status="Returned" style="padding: 5px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; border: none; cursor: pointer; background: transparent; color: #475569; transition: all 0.15s; display: flex; align-items: center; gap: 5px;">
+                            <span>✓</span> <span>Returned</span>
+                        </button>
+                        <button type="button" class="bp-status-btn" data-status="All" style="padding: 5px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; border: none; cursor: pointer; background: transparent; color: #475569; transition: all 0.15s; display: flex; align-items: center; gap: 5px;">
+                            <span>All Records</span>
+                        </button>
                     </div>
+                </div>
+
+                <!-- Secondary Filter Bar: Counterparty & Date Range -->
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 15px; background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 200px;">
+                        <label style="font-size: 0.82rem; color: #475569; font-weight: 700; white-space: nowrap;">Counterparty:</label>
+                        <select id="bp-filter-counterparty-select" class="spa-input" style="flex: 1; padding: 5px 8px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; height: 35px;">
+                            <option value="">All Counterparties</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 170px;">
+                        <input type="text" id="bp-filter-counterparty" class="spa-input" placeholder="Search counterparty / memo..." style="width: 100%; padding: 5px 10px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; height: 35px;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label style="font-size: 0.82rem; color: #475569; font-weight: 700;">From:</label>
+                        <input type="date" id="bp-filter-from-date" class="spa-input" style="padding: 4px 8px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.82rem; height: 35px;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label style="font-size: 0.82rem; color: #475569; font-weight: 700;">To:</label>
+                        <input type="date" id="bp-filter-to-date" class="spa-input" style="padding: 4px 8px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.82rem; height: 35px;">
+                    </div>
+                    <button id="btn-clear-bp-dates" type="button" class="btn btn-default" title="Clear Date Range" style="padding: 4px 10px; height: 35px; border-radius: 6px; border: 1px solid #cbd5e1; background: #ffffff; color: #64748b; font-size: 0.8rem; cursor: pointer;">
+                        Clear Dates
+                    </button>
+                    <button id="btn-refresh-bp-history" class="btn btn-primary" style="padding: 4px 14px; height: 35px; background: #1e3a8a; color: #fff; border-radius: 6px; border: none; cursor: pointer; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa fa-refresh spinner hidden"></i> Refresh
+                    </button>
                 </div>
               <div class="table-responsive">
                   <table class="dash-table">

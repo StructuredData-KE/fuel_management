@@ -11821,18 +11821,84 @@ function render_borrowed_products($wrapper) {
         $lastInput.focus();
     });
     
-    // Set default filter dates to first and last of month
-    let fromInput = $wrapper.find('#bp-filter-from-date');
-    let toInput = $wrapper.find('#bp-filter-to-date');
-    if (!fromInput.val()) {
-        let d = new Date();
-        fromInput.val(new Date(d.getFullYear(), d.getMonth(), 2).toISOString().split('T')[0]);
+    // Default filter status is Pending Return
+    if (!window.BP_FILTER_STATUS) {
+        window.BP_FILTER_STATUS = "Pending Return";
     }
-    if (!toInput.val()) {
-        let d = new Date();
-        toInput.val(new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]);
-    }
-    
+
+    // Load Counterparties into filter dropdown
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.get_borrowed_product_counterparties',
+        args: { station: (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) ? window.ACTIVE_SHIFT.station : '' },
+        callback: function(r) {
+            let $sel = $wrapper.find('#bp-filter-counterparty-select');
+            let curVal = $sel.val();
+            $sel.empty().append('<option value="">All Counterparties</option>');
+            if (r.message && r.message.length) {
+                r.message.forEach(cp => {
+                    $sel.append(`<option value="${cp}">${cp}</option>`);
+                });
+                if (curVal) $sel.val(curVal);
+            }
+        }
+    });
+
+    // Bind Status Filter Buttons
+    $wrapper.find('.bp-status-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        $wrapper.find('.bp-status-btn').removeClass('active').css({background: 'transparent', color: '#475569', fontWeight: '600'});
+        $(this).addClass('active');
+        let st = $(this).attr('data-status');
+        window.BP_FILTER_STATUS = st;
+
+        if (st === 'Pending Return') {
+            $(this).css({background: '#f59e0b', color: '#ffffff', fontWeight: '700'});
+            $wrapper.find('#bp-filter-from-date').val('');
+            $wrapper.find('#bp-filter-to-date').val('');
+        } else if (st === 'Returned') {
+            $(this).css({background: '#10b981', color: '#ffffff', fontWeight: '700'});
+            if (!$wrapper.find('#bp-filter-from-date').val()) {
+                let d = new Date();
+                $wrapper.find('#bp-filter-from-date').val(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
+                $wrapper.find('#bp-filter-to-date').val(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]);
+            }
+        } else {
+            $(this).css({background: '#1e3a8a', color: '#ffffff', fontWeight: '700'});
+        }
+        fetch_bp_history($wrapper);
+    });
+
+    // Clear dates handler
+    $wrapper.find('#btn-clear-bp-dates').off('click').on('click', function(e) {
+        e.preventDefault();
+        $wrapper.find('#bp-filter-from-date').val('');
+        $wrapper.find('#bp-filter-to-date').val('');
+        fetch_bp_history($wrapper);
+    });
+
+    // Filter change listeners
+    $wrapper.find('#bp-filter-counterparty-select').off('change').on('change', function() {
+        let sel = $(this).val();
+        if (sel) {
+            $wrapper.find('#bp-filter-counterparty').val(sel);
+        } else {
+            $wrapper.find('#bp-filter-counterparty').val('');
+        }
+        fetch_bp_history($wrapper);
+    });
+
+    let bpSearchDebounce = null;
+    $wrapper.find('#bp-filter-counterparty').off('input change').on('input change', function() {
+        clearTimeout(bpSearchDebounce);
+        bpSearchDebounce = setTimeout(() => {
+            fetch_bp_history($wrapper);
+        }, 300);
+    });
+
+    $wrapper.find('#bp-filter-from-date, #bp-filter-to-date').off('change').on('change', function() {
+        fetch_bp_history($wrapper);
+    });
+
     $wrapper.find('#btn-refresh-bp-history').off('click').on('click', function() {
         fetch_bp_history($wrapper);
     });
@@ -12234,9 +12300,10 @@ function fetch_bp_history($wrapper) {
         $wrapper = $(document);
     }
     
-    let from_date = $wrapper.find('#bp-filter-from-date').val();
-    let to_date = $wrapper.find('#bp-filter-to-date').val();
-    let counterparty = $wrapper.find('#bp-filter-counterparty').val() || "";
+    let from_date = $wrapper.find('#bp-filter-from-date').val() || "";
+    let to_date = $wrapper.find('#bp-filter-to-date').val() || "";
+    let counterparty = ($wrapper.find('#bp-filter-counterparty-select').val() || $wrapper.find('#bp-filter-counterparty').val() || "").trim();
+    let status_filter = window.BP_FILTER_STATUS || "Pending Return";
     let station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) ? window.ACTIVE_SHIFT.station : ((window.STATION_SETTINGS && window.STATION_SETTINGS.default_station) || "");
     
     let $btn = $wrapper.find('#btn-refresh-bp-history');
@@ -12249,7 +12316,7 @@ function fetch_bp_history($wrapper) {
         method: 'fuel_management.fuel_management.api.get_borrowed_products',
         args: { 
             station: station,
-            status: "All",
+            status: status_filter,
             from_date: from_date,
             to_date: to_date,
             counterparty: counterparty
@@ -12258,10 +12325,14 @@ function fetch_bp_history($wrapper) {
             $btn.find('.spinner').addClass('hidden');
             $tbody.empty();
             let count = r.message ? r.message.length : 0;
-            if (!from_date && !to_date && !counterparty) {
-                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#64748b; font-size:0.85rem;">(Showing latest 50 entries &bull; Use date filter for more)</span>`);
+            
+            if (status_filter === 'Pending Return') {
+                $wrapper.find('#bp-pending-count-pill').text(count);
+                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#b45309; font-size:0.85rem; font-weight:700;"><i class="fa fa-clock-o"></i> Showing ${count} Pending Return ${count === 1 ? 'entry' : 'entries'} awaiting settlement</span>`);
+            } else if (status_filter === 'Returned') {
+                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:700;"><i class="fa fa-check-circle"></i> Showing ${count} Settled Return ${count === 1 ? 'entry' : 'entries'}</span>`);
             } else {
-                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#047857; font-size:0.85rem; font-weight:600;">(Showing ${count} filtered entries)</span>`);
+                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#1e3a8a; font-size:0.85rem; font-weight:700;"><i class="fa fa-list"></i> Showing ${count} total records</span>`);
             }
             
             if (r.message && r.message.length > 0) {

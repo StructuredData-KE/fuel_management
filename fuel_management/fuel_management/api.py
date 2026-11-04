@@ -1462,7 +1462,32 @@ def create_counterparty_doctype():
 @frappe.whitelist()
 def get_borrowing_counterparties():
     import frappe
-    return frappe.get_all("Borrowing Counterparty", fields=["name as value", "counterparty_name as label"])
+    cps = frappe.get_all("Borrowing Counterparty", fields=["name as value", "counterparty_name as label"])
+    try:
+        stations = frappe.get_all("Fuel Station", fields=["name as value", "station_name as label"])
+        existing = set(c["value"] for c in cps)
+        for s in stations:
+            val = s["value"]
+            if val not in existing:
+                cps.append({"value": val, "label": f"⛽ Station: {s.get('label') or val}"})
+    except Exception:
+        pass
+    return cps
+
+@frappe.whitelist()
+def get_borrowed_product_counterparties(station=None):
+    import frappe
+    filters = {}
+    if station and station not in ("ALL", "All Stations", ""):
+        filters["station"] = station
+    used = frappe.get_all("Borrowed Product", filters=filters, pluck="counterparty")
+    defined = frappe.get_all("Borrowing Counterparty", pluck="counterparty_name")
+    try:
+        stations = frappe.get_all("Fuel Station", pluck="name")
+    except Exception:
+        stations = []
+    combined = sorted(list(set(filter(None, [str(c).strip() for c in (used + defined + stations)]))))
+    return combined
 
 @frappe.whitelist()
 def debug_prices():
