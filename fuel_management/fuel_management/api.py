@@ -6344,3 +6344,41 @@ def update_petty_cash_entry(entry_id, csa=None, petty_cash_account=None, categor
     frappe.db.commit()
     return {"status": "success", "message": _("Petty cash entry updated successfully.")}
 
+
+@frappe.whitelist()
+def delete_cash_transfer(entry_id):
+    """Safely delete a Station Cash Transfer and cancel any related Journal Entry."""
+    if not entry_id:
+        frappe.throw(_("Cash Transfer entry ID is required."))
+
+    if not frappe.db.exists("Station Cash Transfer", entry_id):
+        frappe.throw(_("Cash Transfer {0} not found.").format(entry_id))
+
+    doc = frappe.get_doc("Station Cash Transfer", entry_id)
+    doc.delete(ignore_permissions=True)
+    frappe.db.commit()
+    return {"status": "success", "message": _("Cash Transfer deleted successfully.")}
+
+
+@frappe.whitelist()
+def update_cash_transfer(entry_id, date=None, transaction_number=None, destination_account=None, amount=None):
+    """Safely update a Station Cash Transfer and synchronize its Journal Entry."""
+    if not entry_id:
+        frappe.throw(_("Cash Transfer entry ID is required."))
+
+    if not frappe.db.exists("Station Cash Transfer", entry_id):
+        frappe.throw(_("Cash Transfer {0} not found.").format(entry_id))
+
+    doc = frappe.get_doc("Station Cash Transfer", entry_id)
+    if date:
+        doc.date = date
+    if transaction_number:
+        doc.transaction_number = transaction_number
+    if destination_account:
+        doc.destination_account = destination_account
+    if amount is not None:
+        doc.amount = flt(amount)
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"status": "success", "message": _("Cash Transfer updated successfully.")}

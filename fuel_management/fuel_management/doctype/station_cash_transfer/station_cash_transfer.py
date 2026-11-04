@@ -1,14 +1,45 @@
 import frappe
 from frappe.model.document import Document
+from frappe.utils import flt
 
 class StationCashTransfer(Document):
     def after_insert(self):
-        """
-        Generate a standard ERPNext Journal Entry when a Station Cash Transfer is submitted.
-        Debits the destination account, Credits the default station cash account.
-        """
+        self.create_journal_entry()
+
+    def on_update(self):
+        if not self.is_new():
+            old_doc = self.get_doc_before_save()
+            if old_doc:
+                if (old_doc.date != self.date or 
+                    old_doc.transaction_number != self.transaction_number or 
+                    old_doc.destination_account != self.destination_account or 
+                    flt(old_doc.amount) != flt(self.amount)):
+                    self.cancel_journal_entries()
+                    self.create_journal_entry()
+
+    def on_trash(self):
+        self.cancel_journal_entries()
+
+    def cancel_journal_entries(self):
+        """Cancel any submitted Journal Entry associated with this transfer."""
         try:
-            # Try to fetch company default cash account
+            jes = frappe.get_all(
+                "Journal Entry",
+                filters=[
+                    ["user_remark", "like", f"%{self.name}%"],
+                    ["docstatus", "=", 1]
+                ],
+                pluck="name"
+            )
+            for je_name in jes:
+                je = frappe.get_doc("Journal Entry", je_name)
+                je.cancel()
+        except Exception as e:
+            frappe.log_error(f"Failed to cancel Journal Entry for Cash Transfer {self.name}: {str(e)}", "Station Cash Transfer Error")
+
+    def create_journal_entry(self):
+        """Generate a standard ERPNext Journal Entry for this cash transfer."""
+        try:
             company = frappe.defaults.get_user_default("Company")
             if not company:
                 companies = frappe.get_all("Company")
@@ -19,7 +50,6 @@ class StationCashTransfer(Document):
                 
             station_cash_account = frappe.db.get_value("Company", company, "default_cash_account")
             if not station_cash_account:
-                # Fallback to first Cash account
                 cash_accounts = frappe.get_all("Account", filters={"account_type": "Cash", "company": company})
                 if cash_accounts:
                     station_cash_account = cash_accounts[0].name
@@ -35,20 +65,18 @@ class StationCashTransfer(Document):
                 "accounts": [
                     {
                         "account": self.destination_account,
-                        "debit_in_account_currency": self.amount,
+                        "debit_in_account_currency": flt(self.amount),
                         "credit_in_account_currency": 0
                     },
                     {
                         "account": station_cash_account,
                         "debit_in_account_currency": 0,
-                        "credit_in_account_currency": self.amount
+                        "credit_in_account_currency": flt(self.amount)
                     }
                 ]
             })
-            je.insert()
+            je.insert(ignore_permissions=True)
             je.submit()
-            
-            frappe.msgprint(f"Created Journal Entry {je.name} for Cash Transfer {self.name}")
         except Exception as e:
             frappe.log_error(f"Failed to create Journal Entry for Cash Transfer {self.name}: {str(e)}", "Station Cash Transfer Error")
-            # Don't throw so it still saves the record, but log it
+

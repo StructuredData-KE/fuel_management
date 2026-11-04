@@ -9608,6 +9608,7 @@ function render_cash_transfers(wrapper) {
             let $select = $wrapper.find('#ct-account');
             $select.empty().append('<option value="">Select Destination Account...</option>');
             if(r.message) {
+                window.BANK_CASH_ACCOUNTS = r.message;
                 r.message.forEach(acc => {
                     $select.append(`<option value="${acc.name}">${acc.name}</option>`);
                 });
@@ -9630,6 +9631,48 @@ function render_cash_transfers(wrapper) {
         let $btn = $(this);
         $btn.prop('disabled', true);
         $btn.find('.spinner').removeClass('hidden');
+
+        if (window.EDITING_CASH_TRANSFER_ID) {
+            frappe.call({
+                method: "fuel_management.fuel_management.api.update_cash_transfer",
+                args: {
+                    entry_id: window.EDITING_CASH_TRANSFER_ID,
+                    date: date,
+                    transaction_number: ref,
+                    destination_account: account,
+                    amount: amount
+                },
+                callback: function(r) {
+                    if (!r.exc && r.message && r.message.status === "success") {
+                        frappe.show_alert({message: "Cash Transfer updated successfully!", indicator: "green"});
+
+                        // Reset editing state
+                        window.EDITING_CASH_TRANSFER_ID = null;
+                        $wrapper.find('#ct-entry-header-title').text('Record External Cash Transfer');
+                        $wrapper.find('#ct-entry-badge-editing').hide();
+                        $wrapper.find('#btn-save-cash-transfer-label').text('Add Transfer');
+                        $wrapper.find('#btn-cancel-edit-cash-transfer').hide();
+
+                        // Reset form
+                        $wrapper.find('#ct-date').val(frappe.datetime.get_today());
+                        $wrapper.find('#ct-ref').val('');
+                        $wrapper.find('#ct-account').val('');
+                        $wrapper.find('#ct-amount').val('');
+
+                        // Refresh History
+                        load_cash_transfer_history($wrapper);
+
+                        // Switch back to history view
+                        $wrapper.find('#tab-cash-transfers .seg-btn[data-view="history"]').click();
+                    }
+                },
+                always: function() {
+                    $btn.prop('disabled', false);
+                    $btn.find('.spinner').addClass('hidden');
+                }
+            });
+            return;
+        }
         
         frappe.call({
             method: "frappe.client.insert",
@@ -9668,6 +9711,20 @@ function render_cash_transfers(wrapper) {
                 $btn.find('.spinner').addClass('hidden');
             }
         });
+    });
+
+    // Cancel edit handler
+    $wrapper.find('#btn-cancel-edit-cash-transfer').off('click').on('click', function() {
+        window.EDITING_CASH_TRANSFER_ID = null;
+        $wrapper.find('#ct-entry-header-title').text('Record External Cash Transfer');
+        $wrapper.find('#ct-entry-badge-editing').hide();
+        $wrapper.find('#btn-save-cash-transfer-label').text('Add Transfer');
+        $wrapper.find('#btn-cancel-edit-cash-transfer').hide();
+        $wrapper.find('#ct-date').val(frappe.datetime.get_today());
+        $wrapper.find('#ct-ref').val('');
+        $wrapper.find('#ct-account').val('');
+        $wrapper.find('#ct-amount').val('');
+        $wrapper.find('#tab-cash-transfers .seg-btn[data-view="history"]').click();
     });
 
     $wrapper.find('#ct-filter-date-from, #ct-filter-date-to').off('change').on('change', function() {
@@ -9711,19 +9768,155 @@ function load_cash_transfer_history($wrapper) {
             if(r.message && r.message.length > 0) {
                 r.message.forEach(row => {
                     let html = `
-                        <tr>
+                        <tr data-name="${row.name}">
                             <td><b>${row.name}</b></td>
                             <td>${frappe.datetime.str_to_user(row.date)}</td>
                             <td>${row.transaction_number}</td>
                             <td>${row.destination_account}</td>
                             <td>${row.entered_by || ''}</td>
                             <td class="text-right"><b>${format_currency(row.amount)}</b></td>
+                            <td style="text-align: center; white-space: nowrap;">
+                                <button class="btn btn-xs btn-primary btn-edit-ct" data-name="${row.name}" style="padding: 3px 8px; font-size: 0.76rem; border-radius: 4px; background: #2563eb; color: #fff; border: none; cursor: pointer; margin-right: 4px; font-weight: 700;" title="Edit Transfer">
+                                    <i class="fa fa-edit"></i> Edit
+                                </button>
+                                <button class="btn btn-xs btn-danger btn-delete-ct" data-name="${row.name}" data-amount="${row.amount}" style="padding: 3px 8px; font-size: 0.76rem; border-radius: 4px; background: #ef4444; color: #fff; border: none; cursor: pointer; font-weight: 700;" title="Delete Transfer">
+                                    <i class="fa fa-trash"></i> Delete
+                                </button>
+                            </td>
                         </tr>
                     `;
                     $tbody.append(html);
                 });
+
+                // Wire Delete Action
+                $tbody.find('.btn-delete-ct').off('click').on('click', function(e) {
+                    e.preventDefault();
+                    let name = $(this).attr('data-name');
+                    let amount = parseFloat($(this).attr('data-amount') || 0);
+
+                    frappe.confirm(
+                        `Are you sure you want to delete Cash Transfer <b>${frappe.utils.escape_html(name)}</b> for <b>${format_currency(amount)}</b>? This will also cancel any linked journal entry.`,
+                        function() {
+                            frappe.dom.freeze("Deleting Cash Transfer...");
+                            frappe.call({
+                                method: "fuel_management.fuel_management.api.delete_cash_transfer",
+                                args: { entry_id: name },
+                                callback: function(del_res) {
+                                    frappe.dom.unfreeze();
+                                    if (del_res.message && del_res.message.status === "success") {
+                                        frappe.show_alert({message: "Cash Transfer deleted successfully!", indicator: "green"});
+
+                                        if (window.EDITING_CASH_TRANSFER_ID === name) {
+                                            $wrapper.find('#btn-cancel-edit-cash-transfer').click();
+                                        }
+
+                                        load_cash_transfer_history($wrapper);
+                                    }
+                                },
+                                error: function() {
+                                    frappe.dom.unfreeze();
+                                }
+                            });
+                        }
+                    );
+                });
+
+                // Wire Edit Action
+                $tbody.find('.btn-edit-ct').off('click').on('click', function(e) {
+                    e.preventDefault();
+                    let name = $(this).attr('data-name');
+                    let row = (r.message || []).find(x => x.name === name);
+                    if (!row) {
+                        frappe.show_alert({message: "Transfer not found.", indicator: "red"});
+                        return;
+                    }
+
+                    let acc_options = (window.BANK_CASH_ACCOUNTS || []).map(a => a.name);
+                    if (row.destination_account && !acc_options.includes(row.destination_account)) {
+                        acc_options.unshift(row.destination_account);
+                    }
+
+                    let edit_dialog = new frappe.ui.Dialog({
+                        title: `✏️ Edit Cash Transfer: ${row.name}`,
+                        fields: [
+                            {
+                                label: 'Transfer Date',
+                                fieldname: 'date',
+                                fieldtype: 'Date',
+                                default: row.date,
+                                reqd: 1
+                            },
+                            {
+                                label: 'Transaction Number / Reference',
+                                fieldname: 'transaction_number',
+                                fieldtype: 'Data',
+                                default: row.transaction_number,
+                                reqd: 1
+                            },
+                            {
+                                label: 'Destination Account',
+                                fieldname: 'destination_account',
+                                fieldtype: 'Select',
+                                options: acc_options,
+                                default: row.destination_account,
+                                reqd: 1
+                            },
+                            {
+                                label: 'Amount (KES)',
+                                fieldname: 'amount',
+                                fieldtype: 'Currency',
+                                default: row.amount,
+                                reqd: 1
+                            }
+                        ],
+                        primary_action_label: 'Save Changes',
+                        primary_action: function(values) {
+                            frappe.dom.freeze("Updating Cash Transfer...");
+                            frappe.call({
+                                method: "fuel_management.fuel_management.api.update_cash_transfer",
+                                args: {
+                                    entry_id: row.name,
+                                    date: values.date,
+                                    transaction_number: values.transaction_number,
+                                    destination_account: values.destination_account,
+                                    amount: values.amount
+                                },
+                                callback: function(res) {
+                                    frappe.dom.unfreeze();
+                                    if (!res.exc && res.message && res.message.status === "success") {
+                                        frappe.show_alert({message: "Cash Transfer updated successfully!", indicator: "green"});
+                                        edit_dialog.hide();
+                                        load_cash_transfer_history($wrapper);
+                                    }
+                                },
+                                error: function() {
+                                    frappe.dom.unfreeze();
+                                }
+                            });
+                        },
+                        secondary_action_label: 'Edit in Full Form',
+                        secondary_action: function() {
+                            edit_dialog.hide();
+                            window.EDITING_CASH_TRANSFER_ID = row.name;
+                            $wrapper.find('#ct-entry-header-title').text(`✏️ Editing Cash Transfer: ${row.name}`);
+                            $wrapper.find('#ct-entry-badge-editing').show();
+                            $wrapper.find('#btn-save-cash-transfer-label').text(`Update Transfer (${row.name})`);
+                            $wrapper.find('#btn-cancel-edit-cash-transfer').show();
+
+                            $wrapper.find('#ct-date').val(row.date);
+                            $wrapper.find('#ct-ref').val(row.transaction_number);
+                            $wrapper.find('#ct-account').val(row.destination_account);
+                            $wrapper.find('#ct-amount').val(row.amount);
+
+                            $wrapper.find('#tab-cash-transfers .seg-btn[data-view="entry"]').click();
+                            frappe.show_alert({message: `Loaded ${row.name} for editing`, indicator: "blue"});
+                        }
+                    });
+
+                    edit_dialog.show();
+                });
             } else {
-                $tbody.append('<tr><td colspan="6" class="text-center text-muted">No external cash transfers recorded yet.</td></tr>');
+                $tbody.append('<tr><td colspan="7" class="text-center text-muted" style="padding: 2rem;">No external cash transfers recorded yet.</td></tr>');
             }
         }
     });
