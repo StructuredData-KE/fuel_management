@@ -11822,9 +11822,82 @@ function render_borrowed_products($wrapper) {
     });
     
     // Default filter status is Pending Return
+    // Default filter status is Pending Return
     if (!window.BP_FILTER_STATUS) {
         window.BP_FILTER_STATUS = "Pending Return";
     }
+
+    // Partner Category Selector (Inter-Station vs External)
+    function set_bp_partner_category(cat) {
+        if (cat === 'inter_station') {
+            $wrapper.find('#bp-cat-btn-inter').addClass('active').css({background: '#4f46e5', color: '#ffffff', borderColor: '#4f46e5', fontWeight: '700'});
+            $wrapper.find('#bp-cat-btn-external').removeClass('active').css({background: '#ffffff', color: '#475569', borderColor: '#cbd5e1', fontWeight: '600'});
+            $wrapper.find('#bp-inter-station-wrap').show();
+            $wrapper.find('#bp-external-cp-wrap').hide();
+            $wrapper.find('#bp-partner-label').text('Sister Station (Counterparty)');
+            $wrapper.find('#bp-partner-subhint').text('Select the station supplying or receiving the product');
+            $wrapper.find('#bp-is-inter-station').val('1');
+            $wrapper.find('#bp-partner-type-hint').html('💡 <b>Two-Step Approval</b>: Inter-Station borrowings require lending station manager approval. Once approved, items are automatically transferred between station store warehouses.').css('color', '#4f46e5');
+            
+            let t = $wrapper.find('#bp-type').val();
+            if (t === 'Borrowed In') {
+                $wrapper.find('#bp-type-hint').html('⏳ Sends a borrow request. Once approved by lending station manager, stock transfers to our store warehouse.').css('color', '#b45309');
+            } else {
+                $wrapper.find('#bp-type-hint').html('🔻 <b>Direct Handover</b>: Approving this will immediately transfer stock from our store warehouse to the sister station store warehouse.').css('color', '#dc2626');
+            }
+        } else {
+            $wrapper.find('#bp-cat-btn-external').addClass('active').css({background: '#1e3a8a', color: '#ffffff', borderColor: '#1e3a8a', fontWeight: '700'});
+            $wrapper.find('#bp-cat-btn-inter').removeClass('active').css({background: '#ffffff', color: '#475569', borderColor: '#cbd5e1', fontWeight: '600'});
+            $wrapper.find('#bp-inter-station-wrap').hide();
+            $wrapper.find('#bp-external-cp-wrap').show();
+            $wrapper.find('#bp-partner-label').text('External Counterparty / Vendor');
+            $wrapper.find('#bp-partner-subhint').text('Third-party station or vendor receiving or providing the product');
+            $wrapper.find('#bp-is-inter-station').val('0');
+            $wrapper.find('#bp-partner-type-hint').html('🏢 External borrowings record a Material Receipt or Material Issue against external dealers.').css('color', '#475569');
+            
+            let t = $wrapper.find('#bp-type').val();
+            if (t === 'Borrowed In') {
+                $wrapper.find('#bp-type-hint').html('🔺 Adds items into our station store warehouse as a Material Receipt.').css('color', '#15803d');
+            } else {
+                $wrapper.find('#bp-type-hint').html('🔻 Deducts items from our station store warehouse into borrowed transit.').css('color', '#dc2626');
+            }
+        }
+    }
+
+    $wrapper.find('#bp-cat-btn-inter').off('click').on('click', function() {
+        set_bp_partner_category('inter_station');
+    });
+    $wrapper.find('#bp-cat-btn-external').off('click').on('click', function() {
+        set_bp_partner_category('external');
+    });
+
+    $wrapper.find('#bp-type').off('change').on('change', function() {
+        let cat = $wrapper.find('#bp-is-inter-station').val() === '1' ? 'inter_station' : 'external';
+        set_bp_partner_category(cat);
+    });
+
+    // Populate Sister Stations dropdown
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Fuel Station',
+            fields: ['name', 'station_name'],
+            filters: { status: 'Active' },
+            limit_page_length: 100
+        },
+        callback: function(r) {
+            let curStation = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) ? window.ACTIVE_SHIFT.station : '';
+            let $stSel = $wrapper.find('#bp-inter-station-select');
+            $stSel.empty().append('<option value="">-- Select Sister Station --</option>');
+            if (r.message && r.message.length) {
+                r.message.forEach(s => {
+                    if (s.name !== curStation) {
+                        $stSel.append(`<option value="${frappe.utils.escape_html(s.name)}">⛽ ${frappe.utils.escape_html(s.station_name || s.name)}</option>`);
+                    }
+                });
+            }
+        }
+    });
 
     // Load Counterparties into filter dropdown
     frappe.call({
@@ -11833,7 +11906,7 @@ function render_borrowed_products($wrapper) {
         callback: function(r) {
             let $sel = $wrapper.find('#bp-filter-counterparty-select');
             let curVal = $sel.val();
-            $sel.empty().append('<option value="">All Counterparties</option>');
+            $sel.empty().append('<option value="">All Partners</option>');
             if (r.message && r.message.length) {
                 r.message.forEach(cp => {
                     $sel.append(`<option value="${cp}">${cp}</option>`);
@@ -11851,7 +11924,11 @@ function render_borrowed_products($wrapper) {
         let st = $(this).attr('data-status');
         window.BP_FILTER_STATUS = st;
 
-        if (st === 'Pending Return') {
+        if (st === 'Pending Approval') {
+            $(this).css({background: '#dc2626', color: '#ffffff', fontWeight: '700'});
+            $wrapper.find('#bp-filter-from-date').val('');
+            $wrapper.find('#bp-filter-to-date').val('');
+        } else if (st === 'Pending Return') {
             $(this).css({background: '#f59e0b', color: '#ffffff', fontWeight: '700'});
             $wrapper.find('#bp-filter-from-date').val('');
             $wrapper.find('#bp-filter-to-date').val('');
@@ -11873,6 +11950,11 @@ function render_borrowed_products($wrapper) {
         e.preventDefault();
         $wrapper.find('#bp-filter-from-date').val('');
         $wrapper.find('#bp-filter-to-date').val('');
+        fetch_bp_history($wrapper);
+    });
+
+    // Scope filter handler
+    $wrapper.find('#bp-filter-scope').off('change').on('change', function() {
         fetch_bp_history($wrapper);
     });
 
@@ -11906,6 +11988,7 @@ function render_borrowed_products($wrapper) {
     $wrapper.find('#btn-cancel-bp').off('click').on('click', function() {
         $wrapper.find('#bp-counterparty').val('');
         $wrapper.find('#bp-counterparty-search').val('');
+        $wrapper.find('#bp-inter-station-select').val('');
         $wrapper.find('#bp-memo').val('');
         $wrapper.find('#bp-items-container').empty();
         add_bp_item_row($wrapper);
@@ -11934,6 +12017,24 @@ function render_borrowed_products($wrapper) {
     
     $('#btn-bp-return-submit').off('click').on('click', function() {
         window.submit_bp_return();
+    });
+
+    // Approve modal events
+    $('#bp-approve-modal-close, #btn-bp-approve-cancel').off('click').on('click', function() {
+        $('#bp-approve-modal').hide();
+    });
+
+    $('#btn-bp-approve-submit').off('click').on('click', function() {
+        window.submit_bp_approve();
+    });
+
+    // Reject modal events
+    $('#bp-reject-modal-close, #btn-bp-reject-cancel').off('click').on('click', function() {
+        $('#bp-reject-modal').hide();
+    });
+
+    $('#btn-bp-reject-submit').off('click').on('click', function() {
+        window.submit_bp_reject();
     });
 }
 
@@ -12201,27 +12302,40 @@ function add_bp_item_row($wrapper, initial_item_code, initial_qty) {
 
 function submit_borrowed_product($wrapper) {
     let type = $wrapper.find('#bp-type').val();
-    let counterparty = $wrapper.find('#bp-counterparty').val();
-    let memo = $wrapper.find('#bp-memo').val();
-    let date = window.ACTIVE_SHIFT.shift_date || frappe.datetime.get_today();
+    let is_inter = $wrapper.find('#bp-is-inter-station').val() === '1';
+    let counterparty = '';
     
-    // Auto-resolve counterparty if typed but not selected from dropdown
-    if (!counterparty) {
-        let typed = ($wrapper.find('#bp-counterparty-search').val() || '').trim().toLowerCase();
-        if (typed && window.BP_COUNTERPARTIES) {
-            let found = window.BP_COUNTERPARTIES.find(c => (c.label || '').toLowerCase() === typed || (c.value || '').toLowerCase() === typed);
-            if (found) {
-                counterparty = found.value;
-                $wrapper.find('#bp-counterparty').val(counterparty);
+    if (is_inter) {
+        counterparty = $wrapper.find('#bp-inter-station-select').val();
+        if (!counterparty) {
+            frappe.msgprint("Please select a Sister Fuel Station as the counterparty.");
+            $wrapper.find('#bp-inter-station-select').focus();
+            return;
+        }
+    } else {
+        counterparty = $wrapper.find('#bp-counterparty').val();
+        if (!counterparty) {
+            let typed = ($wrapper.find('#bp-counterparty-search').val() || '').trim().toLowerCase();
+            if (typed && window.BP_COUNTERPARTIES) {
+                let found = window.BP_COUNTERPARTIES.find(c => (c.label || '').toLowerCase() === typed || (c.value || '').toLowerCase() === typed);
+                if (found) {
+                    counterparty = found.value;
+                    $wrapper.find('#bp-counterparty').val(counterparty);
+                }
             }
+            if (!counterparty && typed) {
+                counterparty = typed;
+            }
+        }
+        if (!counterparty) {
+            frappe.msgprint("Please select or search an External Counterparty.");
+            $wrapper.find('#bp-counterparty-search').focus();
+            return;
         }
     }
     
-    if (!counterparty) {
-        frappe.msgprint("Please select or search a Counterparty.");
-        $wrapper.find('#bp-counterparty-search').focus();
-        return;
-    }
+    let memo = $wrapper.find('#bp-memo').val();
+    let date = window.ACTIVE_SHIFT.shift_date || frappe.datetime.get_today();
     
     let items = [];
     let has_error = false;
@@ -12261,6 +12375,7 @@ function submit_borrowed_product($wrapper) {
         type: type,
         date: date,
         counterparty: counterparty,
+        is_inter_station: is_inter ? 1 : 0,
         memo: memo,
         items: items
     };
@@ -12277,17 +12392,29 @@ function submit_borrowed_product($wrapper) {
             $btn.prop('disabled', false);
             
             if (!r.exc && r.message) {
-                frappe.show_alert({message: "Successfully recorded " + type, indicator: "green"});
+                let msg = (typeof r.message === 'object' && r.message.message) ? r.message.message : ("Successfully recorded " + type);
+                frappe.show_alert({message: msg, indicator: "green"}, 7);
+                
                 $wrapper.find('#bp-counterparty').val('');
                 $wrapper.find('#bp-counterparty-search').val('');
+                $wrapper.find('#bp-inter-station-select').val('');
                 $wrapper.find('#bp-memo').val('');
                 $wrapper.find('#bp-items-container').empty();
                 add_bp_item_row($wrapper);
                 update_bp_items_summary($wrapper);
                 
+                // If it was a pending approval request, activate the Pending Approval tab in history
+                if (typeof r.message === 'object' && r.message.status === 'Pending Approval') {
+                    $wrapper.find('.bp-status-btn[data-status="Pending Approval"]').click();
+                }
+                
                 // Switch to history tab
                 $wrapper.find('#tab-borrowed .seg-btn[data-view="history"]').click();
             }
+        },
+        error: function(err) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
         }
     });
 }
@@ -12303,6 +12430,7 @@ function fetch_bp_history($wrapper) {
     let from_date = $wrapper.find('#bp-filter-from-date').val() || "";
     let to_date = $wrapper.find('#bp-filter-to-date').val() || "";
     let counterparty = ($wrapper.find('#bp-filter-counterparty-select').val() || $wrapper.find('#bp-filter-counterparty').val() || "").trim();
+    let filter_scope = $wrapper.find('#bp-filter-scope').val() || "";
     let status_filter = window.BP_FILTER_STATUS || "Pending Return";
     let station = (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.station) ? window.ACTIVE_SHIFT.station : ((window.STATION_SETTINGS && window.STATION_SETTINGS.default_station) || "");
     
@@ -12312,6 +12440,25 @@ function fetch_bp_history($wrapper) {
     let $tbody = $wrapper.find('#list-borrowed-saved');
     $tbody.html('<tr><td colspan="9" class="text-center" style="padding: 1.5rem; color: #64748b;"><i class="fa fa-spinner fa-spin"></i> Loading history...</td></tr>');
     
+    // Fetch live badges count
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.get_borrowed_products_counts',
+        args: { station: station },
+        callback: function(res) {
+            if (res.message) {
+                let apCount = res.message.pending_approvals || 0;
+                let prCount = res.message.pending_returns || 0;
+                $wrapper.find('#bp-approval-count-pill').text(apCount);
+                if (apCount > 0) {
+                    $wrapper.find('#bp-approval-count-pill').css({background: '#dc2626', color: '#ffffff'});
+                } else {
+                    $wrapper.find('#bp-approval-count-pill').css({background: 'rgba(220,38,38,0.15)', color: '#dc2626'});
+                }
+                $wrapper.find('#bp-pending-count-pill').text(prCount);
+            }
+        }
+    });
+
     frappe.call({
         method: 'fuel_management.fuel_management.api.get_borrowed_products',
         args: { 
@@ -12319,14 +12466,17 @@ function fetch_bp_history($wrapper) {
             status: status_filter,
             from_date: from_date,
             to_date: to_date,
-            counterparty: counterparty
+            counterparty: counterparty,
+            filter_scope: filter_scope
         },
         callback: function(r) {
             $btn.find('.spinner').addClass('hidden');
             $tbody.empty();
             let count = r.message ? r.message.length : 0;
             
-            if (status_filter === 'Pending Return') {
+            if (status_filter === 'Pending Approval') {
+                $wrapper.find('#bp-history-subtitle').html(`<span style="color:#dc2626; font-size:0.85rem; font-weight:700;"><i class="fa fa-exclamation-triangle"></i> Showing ${count} Pending Approval request${count === 1 ? '' : 's'}</span>`);
+            } else if (status_filter === 'Pending Return') {
                 $wrapper.find('#bp-pending-count-pill').text(count);
                 $wrapper.find('#bp-history-subtitle').html(`<span style="color:#b45309; font-size:0.85rem; font-weight:700;"><i class="fa fa-clock-o"></i> Showing ${count} Pending Return ${count === 1 ? 'entry' : 'entries'} awaiting settlement</span>`);
             } else if (status_filter === 'Returned') {
@@ -12337,13 +12487,57 @@ function fetch_bp_history($wrapper) {
             
             if (r.message && r.message.length > 0) {
                 r.message.forEach(row => {
-                    let type_html = row.type === 'Borrowed In' 
-                        ? `<span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full" style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:9999px;">IN</span>` 
-                        : `<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-full" style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:9999px;">OUT</span>`;
+                    let is_inter = row.is_inter_station == 1;
+                    let lender = row.lending_station || (row.type === 'Borrowed Out' ? row.station : row.counterparty);
+                    let borrower = row.borrowing_station || (row.type === 'Borrowed In' ? row.station : row.counterparty);
+                    let isLender = station === lender;
+                    
+                    let type_badge = is_inter
+                        ? `<span style="background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:9999px; font-size:0.72rem; font-weight:700; white-space:nowrap; display:inline-block;"><i class="fa fa-exchange"></i> Inter-Station</span>`
+                        : `<span style="background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:9999px; font-size:0.72rem; font-weight:600; white-space:nowrap; display:inline-block;">🏢 External</span>`;
                         
-                    let status_html = row.status === 'Pending Return'
-                        ? `<span class="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200" style="background:#fef3c7; color:#b45309; padding:2px 8px; border-radius:6px; font-weight:700;">Pending Return</span>`
-                        : `<span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200" style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:6px; font-weight:700;">Returned</span>`;
+                    let type_html = row.type === 'Borrowed In' 
+                        ? `<span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full" style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:9999px; font-weight:800; display:inline-block; margin-bottom:3px;">IN</span><br>${type_badge}` 
+                        : `<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-full" style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:9999px; font-weight:800; display:inline-block; margin-bottom:3px;">OUT</span><br>${type_badge}`;
+                    
+                    let cp_display = "";
+                    if (is_inter) {
+                        cp_display = `
+                            <div style="font-size:0.83rem;">
+                                <div style="font-weight:700; color:#1e293b;">
+                                    <span style="${isLender ? 'color:#15803d; font-weight:800;' : 'color:#475569;'}">${frappe.utils.escape_html(lender)}</span>
+                                    <i class="fa fa-long-arrow-right" style="font-size:0.75rem; color:#6366f1; margin:0 4px;"></i>
+                                    <span style="${!isLender ? 'color:#15803d; font-weight:800;' : 'color:#475569;'}">${frappe.utils.escape_html(borrower)}</span>
+                                </div>
+                                <div style="font-size:0.72rem; margin-top:2px;">
+                                    ${isLender ? '<span style="color:#b91c1c; font-weight:700;">⛽ (Our Station Lending)</span>' : '<span style="color:#2563eb; font-weight:700;">⛽ (Our Station Borrowing)</span>'}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        cp_display = `<div class="text-sm text-gray-900 font-semibold">${frappe.utils.escape_html(row.counterparty)}</div>`;
+                    }
+                    
+                    let status_html = "";
+                    if (row.status === 'Pending Approval') {
+                        if (isLender) {
+                            status_html = `<span style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5; padding:3px 8px; border-radius:6px; font-weight:800; font-size:0.75rem; display:inline-block;"><i class="fa fa-exclamation-triangle"></i> Needs Your Approval</span>`;
+                        } else {
+                            status_html = `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:3px 8px; border-radius:6px; font-weight:700; font-size:0.75rem; display:inline-block;"><i class="fa fa-clock-o"></i> Waiting for ${frappe.utils.escape_html(lender)}</span>`;
+                        }
+                    } else if (row.status === 'Pending Return') {
+                        status_html = `<span style="background:#fef3c7; color:#b45309; border:1px solid #fde68a; padding:3px 8px; border-radius:6px; font-weight:700; font-size:0.75rem; display:inline-block;"><i class="fa fa-clock-o"></i> Pending Return</span>`;
+                    } else if (row.status === 'Returned') {
+                        status_html = `<span style="background:#dcfce7; color:#166534; border:1px solid #bbf7d0; padding:3px 8px; border-radius:6px; font-weight:700; font-size:0.75rem; display:inline-block;"><i class="fa fa-check"></i> Returned</span>`;
+                    } else if (row.status === 'Rejected') {
+                        status_html = `<span style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:3px 8px; border-radius:6px; font-weight:700; font-size:0.75rem; display:inline-block;">✕ Rejected</span>`;
+                    } else {
+                        status_html = `<span style="background:#f1f5f9; color:#475569; padding:3px 8px; border-radius:6px; font-size:0.75rem;">${frappe.utils.escape_html(row.status)}</span>`;
+                    }
+                    
+                    if (row.stock_entry) {
+                        status_html += `<div style="margin-top:3px;"><a href="/app/stock-entry/${frappe.utils.escape_html(row.stock_entry)}" target="_blank" style="font-size:0.72rem; font-family:monospace; color:#2563eb; font-weight:700; text-decoration:underline;"><i class="fa fa-external-link"></i> ${frappe.utils.escape_html(row.stock_entry)}</a></div>`;
+                    }
                         
                     let items_html = (row.items || []).map(i => {
                         let label = i.item_name || i.item_code;
@@ -12355,7 +12549,28 @@ function fetch_bp_history($wrapper) {
                         : `<span style="color: #94a3b8; font-style: italic;">— (Pending)</span>`;
                     
                     let action_html = "";
-                    if (row.status === 'Pending Return') {
+                    if (row.status === 'Pending Approval') {
+                        if (isLender) {
+                            action_html = `
+                                <div style="display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                    <button type="button" class="btn btn-success btn-bp-approve-request" data-doc="${row.name}" data-borrower="${frappe.utils.escape_html(borrower)}" style="padding: 0.3rem 0.75rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background:#16a34a; border:none; color:#fff;">
+                                        <i class="fa fa-check"></i> Approve & Release
+                                    </button>
+                                    <button type="button" class="btn btn-danger btn-bp-reject-request" data-doc="${row.name}" style="padding: 0.3rem 0.55rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background:#dc2626; border:none; color:#fff;">
+                                        <i class="fa fa-times"></i> Reject
+                                    </button>
+                                </div>
+                            `;
+                        } else {
+                            action_html = `
+                                <div style="display: flex; gap: 5px; justify-content: center; align-items: center;">
+                                    <button type="button" class="btn btn-danger btn-bp-delete" data-doc="${row.name}" title="Cancel Request" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; border-radius: 6px; background: #fee2e2; border: 1px solid #fecaca; color: #dc2626; font-weight:600;">
+                                        <i class="fa fa-trash"></i> Cancel
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    } else if (row.status === 'Pending Return') {
                         action_html = `
                             <div style="display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: wrap;">
                                 <button type="button" class="btn btn-primary btn-bp-trigger-return" data-doc="${row.name}" data-cp="${frappe.utils.escape_html(row.counterparty)}" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px;">
@@ -12391,7 +12606,7 @@ function fetch_bp_history($wrapper) {
                             <td class="text-sm text-gray-500">${frappe.datetime.str_to_user(row.date)}</td>
                             <td class="text-sm">${return_date_html}</td>
                             <td>${type_html}</td>
-                            <td class="text-sm text-gray-900 font-semibold">${frappe.utils.escape_html(row.counterparty)}</td>
+                            <td>${cp_display}</td>
                             <td class="text-sm text-gray-600">${items_html || '—'}</td>
                             <td>${status_html}</td>
                             <td class="text-sm text-gray-500">${frappe.utils.escape_html(row.memo || "")}</td>
@@ -12406,6 +12621,145 @@ function fetch_bp_history($wrapper) {
         }
     });
 }
+
+// Modal and Action Event Handlers for Approval & Rejection
+$(document).off('click.bp_approve_req').on('click.bp_approve_req', '.btn-bp-approve-request', function() {
+    let docname = $(this).attr('data-doc');
+    window.open_bp_approve_modal(docname);
+});
+
+$(document).off('click.bp_reject_req').on('click.bp_reject_req', '.btn-bp-reject-request', function() {
+    let docname = $(this).attr('data-doc');
+    window.open_bp_reject_modal(docname);
+});
+
+window.open_bp_approve_modal = function(docname) {
+    let $modal = $('#bp-approve-modal');
+    $('#bp-approve-docname').val(docname);
+    $('#bp-approve-doc-info').text(`Request: ${docname}`);
+    $('#bp-approve-modal-body').html(`
+        <div style="text-align:center; padding: 2rem; color: #64748b;">
+            <i class="fa fa-spinner fa-spin fa-2x" style="color: #16a34a; margin-bottom: 8px;"></i>
+            <div>Loading transfer request details...</div>
+        </div>
+    `);
+    $modal.css('display', 'flex').show();
+    
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.get_borrowed_product_details',
+        args: { docname: docname },
+        callback: function(r) {
+            if (r.message) {
+                let d = r.message;
+                let html = `
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;">
+                        <div style="font-size: 0.88rem; font-weight: 700; color: #166534;">
+                            Transfer Route: ${frappe.utils.escape_html(d.lending_station)} (Store) ➔ ${frappe.utils.escape_html(d.borrowing_station)} (Store)
+                        </div>
+                        <div style="font-size: 0.8rem; color: #15803d; margin-top: 3px;">
+                            Requested on: <b>${frappe.datetime.str_to_user(d.date)}</b> ${d.memo ? '&bull; Memo: ' + frappe.utils.escape_html(d.memo) : ''}
+                        </div>
+                    </div>
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #334155; margin-bottom: 6px;">Requested Items to Release:</div>
+                    <table style="width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 12px;">
+                        <thead>
+                            <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                                <th style="padding: 8px 12px; text-align: left; font-size: 0.8rem; color: #475569;">Item</th>
+                                <th style="padding: 8px 12px; text-align: center; font-size: 0.8rem; color: #475569; width: 120px;">Release Qty</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                (d.items || []).forEach(it => {
+                    html += `
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 8px 12px; font-weight: 600; font-size: 0.85rem; color: #1e293b;">
+                                ${frappe.utils.escape_html(it.item_name || it.item_code)}
+                                <div style="font-size: 0.72rem; color: #64748b; font-family: monospace;">${frappe.utils.escape_html(it.item_code)}</div>
+                            </td>
+                            <td style="padding: 8px 12px; text-align: center; font-weight: 800; font-size: 0.95rem; color: #16a34a;">${it.qty}</td>
+                        </tr>
+                    `;
+                });
+                html += `
+                        </tbody>
+                    </table>
+                    <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px; font-size: 0.8rem; color: #1e40af; display: flex; gap: 8px;">
+                        <i class="fa fa-info-circle" style="margin-top: 2px;"></i>
+                        <div>
+                            Approving will immediately create an ERPNext <b>Material Transfer</b> Stock Entry. 
+                            Stock will be deducted from your station store and added to <b>${frappe.utils.escape_html(d.borrowing_station)}</b>.
+                        </div>
+                    </div>
+                `;
+                $('#bp-approve-modal-body').html(html);
+            }
+        }
+    });
+};
+
+window.submit_bp_approve = function() {
+    let docname = $('#bp-approve-docname').val();
+    if (!docname) return;
+    
+    let $btn = $('#btn-bp-approve-submit');
+    $btn.find('.spinner').removeClass('hidden');
+    $btn.prop('disabled', true);
+    
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.approve_inter_station_borrow',
+        args: { docname: docname },
+        callback: function(r) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            if (!r.exc && r.message) {
+                frappe.show_alert({message: r.message.message || "Transfer approved and stock dispatched!", indicator: "green"}, 7);
+                $('#bp-approve-modal').hide();
+                fetch_bp_history();
+                refresh_all_inventory_views();
+            }
+        },
+        error: function(err) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+        }
+    });
+};
+
+window.open_bp_reject_modal = function(docname) {
+    $('#bp-reject-docname').val(docname);
+    $('#bp-reject-doc-info').text(`Request: ${docname}`);
+    $('#bp-reject-reason').val('');
+    $('#bp-reject-modal').css('display', 'flex').show();
+};
+
+window.submit_bp_reject = function() {
+    let docname = $('#bp-reject-docname').val();
+    let reason = $('#bp-reject-reason').val();
+    if (!docname) return;
+    
+    let $btn = $('#btn-bp-reject-submit');
+    $btn.find('.spinner').removeClass('hidden');
+    $btn.prop('disabled', true);
+    
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.reject_inter_station_borrow',
+        args: { docname: docname, reason: reason },
+        callback: function(r) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+            if (!r.exc) {
+                frappe.show_alert({message: "Request rejected.", indicator: "orange"});
+                $('#bp-reject-modal').hide();
+                fetch_bp_history();
+            }
+        },
+        error: function(err) {
+            $btn.find('.spinner').addClass('hidden');
+            $btn.prop('disabled', false);
+        }
+    });
+};
 
 window.open_bp_return_modal = function(docname, counterparty) {
     let $modal = $('#bp-return-modal');
@@ -12434,10 +12788,15 @@ window.open_bp_return_modal = function(docname, counterparty) {
         callback: function(r) {
             if (r.message) {
                 let d = r.message;
-                let isOut = d.type === 'Borrowed Out';
-                let directionDesc = isOut
-                    ? `Returning these items records a <b>Material Receipt</b> back into the station Store warehouse.`
-                    : `Returning these items records a <b>Material Issue</b> out of the station Store warehouse back to ${frappe.utils.escape_html(counterparty || d.counterparty)}.`;
+                let directionDesc = "";
+                if (d.is_inter_station == 1) {
+                    directionDesc = `Returning these items records an internal <b>Material Transfer</b> from <b>${frappe.utils.escape_html(d.borrowing_station)}</b> Store back to <b>${frappe.utils.escape_html(d.lending_station)}</b> Store warehouse.`;
+                } else {
+                    let isOut = d.type === 'Borrowed Out';
+                    directionDesc = isOut
+                        ? `Returning these items records a <b>Material Receipt</b> back into the station Store warehouse.`
+                        : `Returning these items records a <b>Material Issue</b> out of the station Store warehouse back to ${frappe.utils.escape_html(counterparty || d.counterparty)}.`;
+                }
                 
                 let html = `
                     <div style="margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;">

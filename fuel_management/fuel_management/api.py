@@ -1253,8 +1253,25 @@ def create_borrowed_doctypes():
 def ensure_borrowed_product_schema():
     import frappe
     try:
-        if not frappe.db.has_column("Borrowed Product", "return_date"):
-            frappe.db.sql("ALTER TABLE `tabBorrowed Product` ADD COLUMN `return_date` DATE NULL;")
+        new_cols = [
+            ("return_date", "DATE NULL"),
+            ("is_inter_station", "INT DEFAULT 0"),
+            ("lending_station", "VARCHAR(140) NULL"),
+            ("borrowing_station", "VARCHAR(140) NULL"),
+            ("approval_status", "VARCHAR(40) DEFAULT 'Approved'"),
+            ("approved_by", "VARCHAR(140) NULL"),
+            ("approved_at", "DATETIME NULL"),
+            ("rejected_by", "VARCHAR(140) NULL"),
+            ("rejected_at", "DATETIME NULL"),
+            ("rejection_reason", "TEXT NULL")
+        ]
+        modified = False
+        for col, col_type in new_cols:
+            if not frappe.db.has_column("Borrowed Product", col):
+                frappe.db.sql(f"ALTER TABLE `tabBorrowed Product` ADD COLUMN `{col}` {col_type};")
+                modified = True
+                
+        if modified:
             frappe.clear_cache(doctype="Borrowed Product")
             
         # Backfill return_date for already returned rows that don't have return_date populated
@@ -1309,12 +1326,13 @@ def get_or_create_transit_warehouse(station, company):
 def create_borrowed_product(payload):
     import frappe
     import json
+    ensure_borrowed_product_schema()
     data = json.loads(payload)
     
     station = data.get("station")
     b_type = data.get("type")
     date = data.get("date")
-    counterparty = data.get("counterparty")
+    counterparty = (data.get("counterparty") or "").strip()
     memo = data.get("memo")
     items = data.get("items", [])
     
@@ -1330,14 +1348,41 @@ def create_borrowed_product(payload):
         or frappe.db.get_single_value("Global Defaults", "default_company")
     )
     
+    # Check if this is an inter-station transaction
+    clean_cp = counterparty.replace("⛽ Station:", "").strip()
+    is_inter = 1 if (data.get("is_inter_station") or frappe.db.exists("Fuel Station", clean_cp)) else 0
+    
+    lending_station = None
+    borrowing_station = None
+    initial_status = "Pending Return"
+    initial_approval_status = "Approved"
+    
+    if is_inter:
+        if clean_cp == station:
+            frappe.throw("You cannot borrow from or lend to the same station.")
+        if b_type == "Borrowed In":
+            borrowing_station = station
+            lending_station = clean_cp
+            initial_status = "Pending Approval"
+            initial_approval_status = "Pending Approval"
+        else:
+            lending_station = station
+            borrowing_station = clean_cp
+            initial_status = "Pending Return"
+            initial_approval_status = "Approved"
+            
     doc = frappe.get_doc({
         "doctype": "Borrowed Product",
         "station": station,
         "type": b_type,
         "date": date,
-        "counterparty": counterparty,
+        "counterparty": clean_cp if is_inter else counterparty,
         "memo": memo,
-        "status": "Pending Return"
+        "status": initial_status,
+        "is_inter_station": is_inter,
+        "lending_station": lending_station,
+        "borrowing_station": borrowing_station,
+        "approval_status": initial_approval_status
     })
     
     for item in items:
@@ -1348,7 +1393,59 @@ def create_borrowed_product(payload):
         
     doc.insert(ignore_permissions=True)
     
-    # Handle Stock Entry
+    # Handle Stock Entry based on mode:
+    # Case 1: Inter-Station Borrow Request ("Borrowed In") -> Awaiting Lending Station approval! DO NOT create stock entry yet.
+    if is_inter and b_type == "Borrowed In":
+        frappe.db.commit()
+        return {
+            "name": doc.name,
+            "status": "Pending Approval",
+            "message": f"Inter-station borrow request sent to {lending_station}. Stock will transfer once approved by their manager."
+        }
+        
+    # Case 2: Inter-Station Direct Issue ("Borrowed Out") -> Lender records physical handover -> create Material Transfer immediately!
+    if is_inter and b_type == "Borrowed Out":
+        lender_doc = station_doc
+        borrower_doc = frappe.get_doc("Fuel Station", borrowing_station)
+        
+        s_wh = lender_doc.default_store_warehouse
+        t_wh = borrower_doc.default_store_warehouse
+        
+        if not s_wh or not t_wh:
+            frappe.throw(f"Both stations must have a Default Store Warehouse configured (Lender: {s_wh}, Borrower: {t_wh})")
+            
+        frappe.flags.warehouse_account_map = {}
+        se = frappe.new_doc("Stock Entry")
+        se.stock_entry_type = "Material Transfer"
+        se.purpose = "Material Transfer"
+        se.posting_date = date
+        se.posting_time = frappe.utils.nowtime()
+        se.company = company
+        
+        for item in items:
+            se.append("items", {
+                "item_code": item.get("item_code"),
+                "qty": item.get("qty"),
+                "s_warehouse": s_wh,
+                "t_warehouse": t_wh,
+                "cost_center": getattr(lender_doc, 'cost_center', None) or frappe.defaults.get_user_default("Cost Center")
+            })
+            
+        se.flags.ignore_permissions = True
+        se.insert(ignore_permissions=True)
+        se.submit()
+        
+        doc.db_set("stock_entry", se.name)
+        doc.db_set("approved_by", frappe.session.user)
+        doc.db_set("approved_at", frappe.utils.now_datetime())
+        frappe.db.commit()
+        return {
+            "name": doc.name,
+            "status": "Pending Return",
+            "message": f"Recorded! Stock transferred from {station} store to {borrowing_station} store."
+        }
+        
+    # Case 3: External Partner (Receipt or Issue)
     frappe.flags.warehouse_account_map = {}
     se = frappe.new_doc("Stock Entry")
     se.posting_date = date
@@ -1377,38 +1474,192 @@ def create_borrowed_product(payload):
     se.submit()
     
     doc.db_set("stock_entry", se.name)
-    
-    return doc.name
+    frappe.db.commit()
+    return {
+        "name": doc.name,
+        "status": "Pending Return",
+        "message": f"Successfully recorded {b_type}."
+    }
 
 @frappe.whitelist()
-def get_borrowed_products(station=None, status="All", from_date=None, to_date=None, counterparty=None, limit=None):
+def approve_inter_station_borrow(docname):
+    """
+    Called by the Lending Station manager to approve a Borrowed In request from another station.
+    Creates a Stock Entry (Material Transfer) from Lending Station's store to Borrowing Station's store.
+    """
     import frappe
     ensure_borrowed_product_schema()
     
-    filters = {}
+    doc = frappe.get_doc("Borrowed Product", docname)
+    if doc.status != "Pending Approval":
+        frappe.throw(f"Record {docname} is not in 'Pending Approval' status (Current: {doc.status}).")
+        
+    if not getattr(doc, "is_inter_station", 0) or not doc.lending_station or not doc.borrowing_station:
+        frappe.throw("This record is not configured as an Inter-Station transaction.")
+        
+    lender_doc = frappe.get_doc("Fuel Station", doc.lending_station)
+    borrower_doc = frappe.get_doc("Fuel Station", doc.borrowing_station)
+    
+    s_wh = lender_doc.default_store_warehouse
+    t_wh = borrower_doc.default_store_warehouse
+    
+    if not s_wh:
+        frappe.throw(f"Lending station ({doc.lending_station}) does not have a Default Store Warehouse configured.")
+    if not t_wh:
+        frappe.throw(f"Borrowing station ({doc.borrowing_station}) does not have a Default Store Warehouse configured.")
+        
+    company = (
+        lender_doc.company if hasattr(lender_doc, "company") and lender_doc.company
+        else (frappe.db.get_value("Warehouse", s_wh, "company") if s_wh else None)
+        or frappe.defaults.get_user_default("Company")
+        or frappe.db.get_single_value("Global Defaults", "default_company")
+    )
+    
+    frappe.flags.warehouse_account_map = {}
+    se = frappe.new_doc("Stock Entry")
+    se.stock_entry_type = "Material Transfer"
+    se.purpose = "Material Transfer"
+    se.posting_date = frappe.utils.nowdate()
+    se.posting_time = frappe.utils.nowtime()
+    se.company = company
+    
+    for item in doc.items:
+        se.append("items", {
+            "item_code": item.item_code,
+            "qty": item.qty,
+            "s_warehouse": s_wh,
+            "t_warehouse": t_wh,
+            "cost_center": getattr(lender_doc, 'cost_center', None) or frappe.defaults.get_user_default("Cost Center")
+        })
+        
+    se.flags.ignore_permissions = True
+    se.insert(ignore_permissions=True)
+    se.submit()
+    
+    doc.db_set("stock_entry", se.name)
+    doc.db_set("status", "Pending Return")
+    doc.db_set("approval_status", "Approved")
+    doc.db_set("approved_by", frappe.session.user)
+    doc.db_set("approved_at", frappe.utils.now_datetime())
+    frappe.db.commit()
+    
+    return {
+        "status": "success",
+        "message": f"Approved! Stock transferred from {doc.lending_station} to {doc.borrowing_station} (Stock Entry: {se.name}).",
+        "stock_entry": se.name
+    }
+
+@frappe.whitelist()
+def reject_inter_station_borrow(docname, reason=None):
+    """
+    Called by the Lending Station manager to reject a Borrowed In request.
+    """
+    import frappe
+    ensure_borrowed_product_schema()
+    
+    doc = frappe.get_doc("Borrowed Product", docname)
+    if doc.status != "Pending Approval":
+        frappe.throw(f"Record {docname} is not in 'Pending Approval' status.")
+        
+    doc.db_set("status", "Rejected")
+    doc.db_set("approval_status", "Rejected")
+    doc.db_set("rejected_by", frappe.session.user)
+    doc.db_set("rejected_at", frappe.utils.now_datetime())
+    if reason:
+        doc.db_set("rejection_reason", reason)
+    frappe.db.commit()
+    
+    return {
+        "status": "success",
+        "message": f"Request {docname} has been rejected."
+    }
+
+@frappe.whitelist()
+def get_borrowed_products_counts(station=None):
+    import frappe
+    ensure_borrowed_product_schema()
+    
+    st_filter = ""
+    params = {}
     if station and station not in ("ALL", "All Stations", ""):
-        filters["station"] = station
+        st_filter = "AND (bp.station = %(station)s OR (bp.is_inter_station = 1 AND (bp.lending_station = %(station)s OR bp.borrowing_station = %(station)s)))"
+        params["station"] = station
+        
+    approval_filter = ""
+    approval_params = {}
+    if station and station not in ("ALL", "All Stations", ""):
+        approval_filter = "AND bp.is_inter_station = 1 AND bp.lending_station = %(station)s"
+        approval_params["station"] = station
+    else:
+        approval_filter = "AND bp.is_inter_station = 1"
+        
+    pending_approvals = frappe.db.sql(f"""
+        SELECT COUNT(*) as count 
+        FROM `tabBorrowed Product` bp 
+        WHERE bp.status = 'Pending Approval' {approval_filter}
+    """, approval_params, as_dict=True)[0].count
+    
+    pending_returns = frappe.db.sql(f"""
+        SELECT COUNT(*) as count 
+        FROM `tabBorrowed Product` bp 
+        WHERE bp.status = 'Pending Return' {st_filter}
+    """, params, as_dict=True)[0].count
+    
+    return {
+        "pending_approvals": pending_approvals,
+        "pending_returns": pending_returns
+    }
+
+@frappe.whitelist()
+def get_borrowed_products(station=None, status="All", from_date=None, to_date=None, counterparty=None, filter_scope=None, limit=None):
+    import frappe
+    ensure_borrowed_product_schema()
+    
+    where_clauses = ["1=1"]
+    params = {}
+    
+    if station and station not in ("ALL", "All Stations", ""):
+        where_clauses.append("(bp.station = %(station)s OR (bp.is_inter_station = 1 AND (bp.lending_station = %(station)s OR bp.borrowing_station = %(station)s)))")
+        params["station"] = station
+        
     if status and status != "All":
-        filters["status"] = status
+        where_clauses.append("bp.status = %(status)s")
+        params["status"] = status
+        
+    if filter_scope == "inter_station":
+        where_clauses.append("bp.is_inter_station = 1")
+    elif filter_scope == "external":
+        where_clauses.append("(bp.is_inter_station IS NULL OR bp.is_inter_station = 0)")
         
     if from_date and to_date:
-        filters["date"] = ["between", [from_date, to_date]]
+        where_clauses.append("bp.date BETWEEN %(from_date)s AND %(to_date)s")
+        params["from_date"] = from_date
+        params["to_date"] = to_date
     elif from_date:
-        filters["date"] = [">=", from_date]
+        where_clauses.append("bp.date >= %(from_date)s")
+        params["from_date"] = from_date
     elif to_date:
-        filters["date"] = ["<=", to_date]
+        where_clauses.append("bp.date <= %(to_date)s")
+        params["to_date"] = to_date
         
     if counterparty:
-        filters["counterparty"] = ["like", f"%{counterparty}%"]
+        where_clauses.append("(bp.counterparty LIKE %(counterparty)s OR bp.lending_station LIKE %(counterparty)s OR bp.borrowing_station LIKE %(counterparty)s)")
+        params["counterparty"] = f"%{counterparty}%"
         
     limit_num = int(limit) if limit else (1000 if (from_date or to_date or counterparty or (status and status != "All")) else 50)
-        
-    records = frappe.get_all("Borrowed Product", 
-        filters=filters,
-        fields=["name", "station", "date", "return_date", "counterparty", "type", "status", "memo", "stock_entry", "return_stock_entry"],
-        order_by="date desc, creation desc",
-        limit_page_length=limit_num
-    )
+    
+    where_sql = " AND ".join(where_clauses)
+    records = frappe.db.sql(f"""
+        SELECT 
+            bp.name, bp.station, bp.date, bp.return_date, bp.counterparty, bp.type, 
+            bp.status, bp.memo, bp.stock_entry, bp.return_stock_entry,
+            bp.is_inter_station, bp.lending_station, bp.borrowing_station,
+            bp.approval_status, bp.approved_by, bp.approved_at, bp.rejected_by, bp.rejected_at, bp.rejection_reason
+        FROM `tabBorrowed Product` bp
+        WHERE {where_sql}
+        ORDER BY bp.date desc, bp.creation desc
+        LIMIT {limit_num}
+    """, params, as_dict=True)
     
     if records:
         names = [r.name for r in records]
@@ -1433,6 +1684,10 @@ def get_borrowed_products(station=None, status="All", from_date=None, to_date=No
                 r["return_date"] = frappe.db.get_value("Stock Entry", r["return_stock_entry"], "posting_date")
             if r.get("return_date"):
                 r["return_date"] = str(r["return_date"])
+            if r.get("date"):
+                r["date"] = str(r["date"])
+            if r.get("approved_at"):
+                r["approved_at"] = str(r["approved_at"])
         
     return records
 
@@ -4127,6 +4382,7 @@ def on_borrowed_product_inserted(doc, method=None):
 @frappe.whitelist()
 def get_borrowed_product_details(docname):
     import frappe
+    ensure_borrowed_product_schema()
     doc = frappe.get_doc("Borrowed Product", docname)
     items_out = []
     for i in doc.items:
@@ -4147,6 +4403,12 @@ def get_borrowed_product_details(docname):
         "memo": doc.memo or "",
         "stock_entry": doc.stock_entry or "",
         "return_stock_entry": doc.return_stock_entry or "",
+        "is_inter_station": getattr(doc, "is_inter_station", 0),
+        "lending_station": getattr(doc, "lending_station", "") or "",
+        "borrowing_station": getattr(doc, "borrowing_station", "") or "",
+        "approval_status": getattr(doc, "approval_status", "") or "",
+        "approved_by": getattr(doc, "approved_by", "") or "",
+        "rejection_reason": getattr(doc, "rejection_reason", "") or "",
         "items": items_out
     }
 
@@ -4171,6 +4433,66 @@ def return_borrowed_product(docname, return_date=None, returned_items=None):
         # Default to all items on the borrow record
         returned_items = [{"item_code": i.item_code, "qty": i.qty} for i in doc.items]
         
+    # Check if this is an Inter-Station loan
+    if getattr(doc, "is_inter_station", 0) == 1:
+        # Inter-station return: Material Transfer from borrowing_station store warehouse back to lending_station store warehouse
+        lender_doc = frappe.get_doc("Fuel Station", doc.lending_station)
+        borrower_doc = frappe.get_doc("Fuel Station", doc.borrowing_station)
+        
+        # Source is Borrower Store (returning it), Target is Lender Store (receiving it back)
+        s_wh = borrower_doc.default_store_warehouse
+        t_wh = lender_doc.default_store_warehouse
+        
+        if not s_wh or not t_wh:
+            frappe.throw(f"Both stations must have a Default Store Warehouse configured (Borrower: {s_wh}, Lender: {t_wh})")
+            
+        company = (
+            borrower_doc.company if hasattr(borrower_doc, "company") and borrower_doc.company
+            else (frappe.db.get_value("Warehouse", s_wh, "company") if s_wh else None)
+            or frappe.defaults.get_user_default("Company")
+            or frappe.db.get_single_value("Global Defaults", "default_company")
+        )
+        
+        se = frappe.new_doc("Stock Entry")
+        se.purpose = "Material Transfer"
+        se.stock_entry_type = "Material Transfer"
+        se.posting_date = return_date
+        se.posting_time = frappe.utils.nowtime()
+        frappe.flags.warehouse_account_map = {}
+        se.company = company
+        
+        has_items = False
+        for r_item in returned_items:
+            qty_val = float(r_item.get('qty', 0))
+            if qty_val > 0:
+                has_items = True
+                se.append("items", {
+                    "item_code": r_item['item_code'],
+                    "qty": qty_val,
+                    "s_warehouse": s_wh,
+                    "t_warehouse": t_wh,
+                    "cost_center": getattr(borrower_doc, 'cost_center', None) or frappe.defaults.get_user_default("Cost Center")
+                })
+        if not has_items:
+            frappe.throw("No returned quantities provided.")
+            
+        se.flags.ignore_permissions = True
+        se.insert(ignore_permissions=True)
+        se.submit()
+        
+        is_partial = False
+        for item in doc.items:
+            returned_qty = next((float(r.get('qty', 0)) for r in returned_items if r['item_code'] == item.item_code), 0)
+            if returned_qty < item.qty:
+                is_partial = True
+                
+        doc.db_set("return_date", return_date)
+        doc.db_set("return_stock_entry", se.name)
+        doc.db_set("status", "Partially Returned" if is_partial else "Returned")
+        frappe.db.commit()
+        return "success"
+        
+    # Standard external partner return
     station = frappe.get_doc("Fuel Station", doc.station)
     warehouse = station.default_store_warehouse
     

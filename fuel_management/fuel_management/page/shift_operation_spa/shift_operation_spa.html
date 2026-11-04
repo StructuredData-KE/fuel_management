@@ -5699,7 +5699,10 @@
                         <div id="bp-history-subtitle" style="font-size: 0.85rem; color: #64748b;">(Showing pending return entries)</div>
                     </div>
                     <!-- Status Filter Pills -->
-                    <div class="bp-status-pill-group" style="display: flex; gap: 4px; background: #f1f5f9; padding: 4px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                    <div class="bp-status-pill-group" style="display: flex; gap: 4px; background: #f1f5f9; padding: 4px; border-radius: 8px; border: 1px solid #cbd5e1; flex-wrap: wrap;">
+                        <button type="button" class="bp-status-btn" data-status="Pending Approval" style="padding: 5px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; border: none; cursor: pointer; background: transparent; color: #b45309; transition: all 0.15s; display: flex; align-items: center; gap: 5px;">
+                            <span>⚠️</span> <span>Pending Approval</span> <span id="bp-approval-count-pill" style="background: rgba(220,38,38,0.15); color: #dc2626; padding: 1px 7px; border-radius: 9999px; font-size: 0.72rem; font-weight: 800;">0</span>
+                        </button>
                         <button type="button" class="bp-status-btn active" data-status="Pending Return" style="padding: 5px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 700; border: none; cursor: pointer; background: #f59e0b; color: #ffffff; transition: all 0.15s; display: flex; align-items: center; gap: 5px;">
                             <span>⏳</span> <span>Pending Returns</span> <span id="bp-pending-count-pill" style="background: rgba(0,0,0,0.2); padding: 1px 6px; border-radius: 9999px; font-size: 0.72rem;">0</span>
                         </button>
@@ -5712,16 +5715,24 @@
                     </div>
                 </div>
 
-                <!-- Secondary Filter Bar: Counterparty & Date Range -->
+                <!-- Secondary Filter Bar: Counterparty, Scope & Date Range -->
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 15px; background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 200px;">
-                        <label style="font-size: 0.82rem; color: #475569; font-weight: 700; white-space: nowrap;">Counterparty:</label>
-                        <select id="bp-filter-counterparty-select" class="spa-input" style="flex: 1; padding: 5px 8px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; height: 35px;">
-                            <option value="">All Counterparties</option>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label style="font-size: 0.82rem; color: #475569; font-weight: 700; white-space: nowrap;">Scope:</label>
+                        <select id="bp-filter-scope" class="spa-input" style="padding: 5px 8px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.82rem; height: 35px; font-weight: 700; color: #1e3a8a;">
+                            <option value="">All Types (Inter-Station + External)</option>
+                            <option value="inter_station">⛽ Inter-Station Only</option>
+                            <option value="external">🏢 External Third-Party Only</option>
                         </select>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 170px;">
-                        <input type="text" id="bp-filter-counterparty" class="spa-input" placeholder="Search counterparty / memo..." style="width: 100%; padding: 5px 10px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; height: 35px;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 180px;">
+                        <label style="font-size: 0.82rem; color: #475569; font-weight: 700; white-space: nowrap;">Partner:</label>
+                        <select id="bp-filter-counterparty-select" class="spa-input" style="flex: 1; padding: 5px 8px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; height: 35px;">
+                            <option value="">All Partners</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 140px;">
+                        <input type="text" id="bp-filter-counterparty" class="spa-input" placeholder="Search partner / memo..." style="width: 100%; padding: 5px 10px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-size: 0.85rem; height: 35px;">
                     </div>
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <label style="font-size: 0.82rem; color: #475569; font-weight: 700;">From:</label>
@@ -5794,6 +5805,24 @@
                   </div>
               </div>
 
+              <!-- Partner Category Toggle -->
+              <div style="margin-bottom: 1.25rem; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">
+                  <label class="spa-label" style="font-weight: 700; color: #334155; margin-bottom: 0.5rem; display: block; font-size: 0.85rem;">
+                      Borrowing Partner Category <span style="color: #ef4444;">*</span>
+                  </label>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <button type="button" id="bp-cat-btn-inter" class="btn active" style="padding: 7px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; border: 1.5px solid #4f46e5; background: #4f46e5; color: #ffffff; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                          <span>⛽</span> <span>Inter-Station (Sister Fuel Station)</span>
+                      </button>
+                      <button type="button" id="bp-cat-btn-external" class="btn" style="padding: 7px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; border: 1.5px solid #cbd5e1; background: #ffffff; color: #475569; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                          <span>🏢</span> <span>External Third-Party / Dealer</span>
+                      </button>
+                  </div>
+                  <div id="bp-partner-type-hint" style="font-size: 0.78rem; color: #4f46e5; font-weight: 600; margin-top: 6px;">
+                      💡 Inter-Station borrowings require lending station manager approval. Once approved, items are automatically transferred between station store warehouses.
+                  </div>
+              </div>
+
               <!-- Top Form Row: Type and Counterparty -->
               <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
                   <div>
@@ -5801,27 +5830,35 @@
                           Transaction Type <span style="color: #ef4444;">*</span>
                       </label>
                       <select class="spa-input form-control" id="bp-type" style="height: 42px; font-weight: 700; font-size: 0.9rem; border-radius: 8px;">
-                          <option value="Borrowed Out">Borrowed Out (Lending Stock to Counterparty)</option>
-                          <option value="Borrowed In">Borrowed In (Borrowing Stock from Counterparty)</option>
+                          <option value="Borrowed In">Borrowed In (Requesting Stock from Sister Station)</option>
+                          <option value="Borrowed Out">Borrowed Out (Lending Stock to Sister Station)</option>
                       </select>
-                      <div id="bp-type-hint" style="font-size: 0.75rem; margin-top: 4px; font-weight: 600; color: #dc2626;">
-                          🔻 Deducts items from our station forecourt/store inventory
+                      <div id="bp-type-hint" style="font-size: 0.75rem; margin-top: 4px; font-weight: 600; color: #b45309;">
+                          ⏳ Sends a borrow request. Once approved by lending station manager, stock transfers to our store warehouse.
                       </div>
                   </div>
                   <div>
                       <label class="spa-label" style="font-weight: 700; color: #334155; margin-bottom: 0.4rem; display: block; font-size: 0.85rem;">
-                          Counterparty Station / Vendor <span style="color: #ef4444;">*</span>
+                          <span id="bp-partner-label">Sister Station (Counterparty)</span> <span style="color: #ef4444;">*</span>
                       </label>
-                      <div class="searchable-combobox-wrap" style="position: relative;">
-                          <input type="text" class="spa-input form-control" id="bp-counterparty-search" placeholder="🔍 Search counterparty (e.g. KOBIL UGANDA ROAD)..." style="height: 42px; font-weight: 600; font-size: 0.88rem; padding-right: 32px; border-radius: 8px;" autocomplete="off">
-                          <input type="hidden" id="bp-counterparty" value="">
+                      <!-- Inter-Station Select Dropdown -->
+                      <div id="bp-inter-station-wrap">
+                          <select id="bp-inter-station-select" class="spa-input form-control" style="height: 42px; font-weight: 700; font-size: 0.88rem; border-radius: 8px;">
+                              <option value="">-- Select Sister Station --</option>
+                          </select>
+                      </div>
+                      <!-- External Combobox Wrap (Hidden when Inter-Station) -->
+                      <div class="searchable-combobox-wrap" id="bp-external-cp-wrap" style="position: relative; display: none;">
+                          <input type="text" class="spa-input form-control" id="bp-counterparty-search" placeholder="🔍 Search dealer (e.g. KOBIL UGANDA ROAD)..." style="height: 42px; font-weight: 600; font-size: 0.88rem; padding-right: 32px; border-radius: 8px;" autocomplete="off">
                           <button type="button" id="btn-toggle-bp-cp-dd" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px;">
                               <i class="fa fa-chevron-down" style="font-size: 0.75rem;"></i>
                           </button>
                           <div class="combobox-dropdown-menu" id="bp-counterparty-dropdown" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; max-height: 240px; overflow-y: auto; background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.18); z-index: 9999;"></div>
                       </div>
-                      <div style="font-size: 0.75rem; margin-top: 4px; color: #64748b;">
-                          Station or supplier receiving or providing the product
+                      <input type="hidden" id="bp-counterparty" value="">
+                      <input type="hidden" id="bp-is-inter-station" value="1">
+                      <div id="bp-partner-subhint" style="font-size: 0.75rem; margin-top: 4px; color: #64748b;">
+                          Select the station supplying or receiving the product
                       </div>
                   </div>
               </div>
@@ -6592,6 +6629,58 @@
     </div>
 </div>
 
+
+<!-- BP Approve Inter-Station Modal -->
+<div id="bp-approve-modal" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index:10001; justify-content:center; align-items:center;">
+    <div class="spa-modal-content" style="background:#fff; width:90%; max-width:560px; border-radius:12px; padding:24px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.25); max-height:85vh; display:flex; flex-direction:column; border:1px solid #e2e8f0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size: 1.3rem; background: #dcfce7; color: #15803d; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800;">✓</span>
+                <div>
+                    <h3 style="margin:0; color:#1e293b; font-size:1.15rem; font-weight:800;">Approve & Release Inter-Station Stock</h3>
+                    <div id="bp-approve-doc-info" style="font-size:0.8rem; color:#64748b; margin-top:2px;"></div>
+                </div>
+            </div>
+            <button id="bp-approve-modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#64748b;">&times;</button>
+        </div>
+        <input type="hidden" id="bp-approve-docname">
+        <div id="bp-approve-modal-body" style="overflow-y:auto; flex-grow:1; margin-bottom:15px;">
+            <!-- Dynamic summary injected here -->
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #e2e8f0; padding-top:12px;">
+            <button id="btn-bp-approve-cancel" class="btn btn-secondary" style="padding:6px 16px; font-weight:600; border-radius:6px;">Cancel</button>
+            <button id="btn-bp-approve-submit" class="btn btn-success" style="padding:6px 20px; font-weight:700; border-radius:6px; background:#16a34a; border:none; color:#fff; display:flex; align-items:center; gap:6px;">
+                <span class="btn-text">Confirm & Release Stock</span>
+                <i class="fa fa-spinner fa-spin spinner hidden"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- BP Reject Inter-Station Modal -->
+<div id="bp-reject-modal" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index:10001; justify-content:center; align-items:center;">
+    <div class="spa-modal-content" style="background:#fff; width:90%; max-width:480px; border-radius:12px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.25); max-height:85vh; display:flex; flex-direction:column; border:1px solid #e2e8f0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+            <div>
+                <h3 style="margin:0; color:#dc2626; font-size:1.15rem; font-weight:800;">Reject Borrow Request</h3>
+                <div id="bp-reject-doc-info" style="font-size:0.8rem; color:#64748b; margin-top:2px;"></div>
+            </div>
+            <button id="bp-reject-modal-close" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#64748b;">&times;</button>
+        </div>
+        <input type="hidden" id="bp-reject-docname">
+        <div style="margin-bottom:15px;">
+            <label style="display:block; font-size:0.85rem; font-weight:700; color:#475569; margin-bottom:0.35rem;">Reason for Rejection <span style="font-weight:400; color:#94a3b8;">(Optional)</span></label>
+            <textarea id="bp-reject-reason" class="form-control" rows="3" placeholder="e.g. Insufficient store stock, needed for current shift..." style="width:100%; border-radius:8px;"></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #e2e8f0; padding-top:12px;">
+            <button id="btn-bp-reject-cancel" class="btn btn-secondary" style="padding:6px 16px; font-weight:600; border-radius:6px;">Cancel</button>
+            <button id="btn-bp-reject-submit" class="btn btn-danger" style="padding:6px 20px; font-weight:700; border-radius:6px; background:#dc2626; border:none; color:#fff; display:flex; align-items:center; gap:6px;">
+                <span class="btn-text">Confirm Rejection</span>
+                <i class="fa fa-spinner fa-spin spinner hidden"></i>
+            </button>
+        </div>
+    </div>
+</div>
 
 <!-- BP Return Modal -->
 <div id="bp-return-modal" class="spa-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
