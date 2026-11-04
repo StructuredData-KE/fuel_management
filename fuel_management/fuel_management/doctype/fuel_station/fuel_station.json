@@ -35,6 +35,12 @@
    "options": "Warehouse"
   },
   {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
    "default": "Active",
    "fieldname": "status",
    "fieldtype": "Select",

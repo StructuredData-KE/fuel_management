@@ -1191,15 +1191,34 @@ class Shift(Document):
             else:
                 se.posting_time = nowtime()
 
+            # Station cost center resolution
+            station_cost_center = getattr(station_doc, "cost_center", None)
+            if not station_cost_center:
+                if "galana" in (self.station or "").lower():
+                    station_cost_center = "GALANA ANNEX - KIL"
+                else:
+                    company_default = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+                    station_cost_center = frappe.get_cached_value("Company", company_default, "cost_center") or None
+
             for item_code, qty in sales_per_item.items():
                 company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
-                se.append("items", {
+                
+                # Fallback valuation rate: prevent zero COGS if stock is negative or unvalued
+                item_rate = frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": station_doc.default_forecourt_warehouse}, "valuation_rate") or 0.0
+                if item_rate <= 0:
+                    item_rate = frappe.db.get_value("Item", item_code, "last_purchase_rate") or frappe.db.get_value("Item", item_code, "valuation_rate") or 0.0
+
+                item_row = {
                     "item_code": item_code,
                     "qty": qty,
                     "s_warehouse": station_doc.default_forecourt_warehouse,
-                    "cost_center": frappe.get_cached_value("Company", company, "cost_center") or None,
+                    "cost_center": station_cost_center,
                     "allow_zero_valuation_rate": 1
-                })
+                }
+                if item_rate > 0:
+                    item_row["basic_rate"] = item_rate
+
+                se.append("items", item_row)
 
             se.insert(ignore_permissions=True)
             se.submit()
