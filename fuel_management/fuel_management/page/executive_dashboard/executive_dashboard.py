@@ -423,6 +423,14 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
         GROUP BY pii.parent
     """, (from_date, to_date)))
 
+    sr_warehouses = dict(frappe.db.sql("""
+        SELECT sri.parent, GROUP_CONCAT(DISTINCT sri.warehouse)
+        FROM `tabStock Reconciliation Item` sri
+        JOIN `tabStock Reconciliation` sr ON sri.parent = sr.name
+        WHERE sr.posting_date >= %s AND sr.posting_date <= %s
+        GROUP BY sri.parent
+    """, (from_date, to_date)))
+
     shift_stations = dict(frappe.db.sql("SELECT name, station FROM `tabShift`"))
 
     jv_remarks = dict(frappe.db.sql("""
@@ -431,6 +439,12 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
     """, (from_date, to_date)))
 
     def attribute_entry(r):
+        cc = (r.get('cost_center') or '').upper()
+        if "GALANA" in cc:
+            return "Galana Annex"
+        if "RUBIS" in cc or "POA" in cc:
+            return "RUBIS POA PLACE"
+
         acc_str = (r['account'] + " " + (r.get('account_name') or '')).upper()
         v_no = r.get('voucher_no') or ""
         v_type = r.get('voucher_type') or ""
@@ -440,6 +454,12 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
             return "Galana Annex"
         if "RUBIS" in acc_str:
             return "RUBIS POA PLACE"
+        if v_type == "Stock Reconciliation" and v_no in sr_warehouses:
+            sr_info = (sr_warehouses[v_no] or "").upper()
+            if "GALANA" in sr_info:
+                return "Galana Annex"
+            elif "RUBIS" in sr_info or "POA" in sr_info:
+                return "RUBIS POA PLACE"
         if v_type == "Stock Entry" and v_no in se_warehouses:
             se_info = se_warehouses[v_no].upper()
             if "GALANA" in se_info:
@@ -590,8 +610,32 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
         else:
             raw_lube_cogs_jv += net
 
-    comp_fuel_cogs = raw_fuel_cogs_se + raw_fuel_cogs_pi + raw_fuel_cogs_jv
-    comp_lube_cogs = raw_lube_cogs_se + raw_lube_cogs_pi + raw_lube_cogs_jv
+    # 4. Stock Reconciliation hitting COGS
+    if wh_pattern:
+        sr_details = frappe.db.sql('''
+            SELECT sri.item_code, sri.amount_difference as amount
+            FROM `tabStock Reconciliation Item` sri
+            JOIN `tabStock Reconciliation` sr ON sri.parent = sr.name
+            WHERE sr.posting_date >= %s AND sr.posting_date <= %s
+            AND sr.docstatus = 1
+            AND sr.expense_account = 'Cost of Goods Sold - KIL'
+            AND (sri.warehouse LIKE %s OR sr.cost_center LIKE %s)
+        ''', (from_date, to_date, wh_pattern, wh_pattern), as_dict=True)
+    else:
+        sr_details = frappe.db.sql('''
+            SELECT sri.item_code, sri.amount_difference as amount
+            FROM `tabStock Reconciliation Item` sri
+            JOIN `tabStock Reconciliation` sr ON sri.parent = sr.name
+            WHERE sr.posting_date >= %s AND sr.posting_date <= %s
+            AND sr.docstatus = 1
+            AND sr.expense_account = 'Cost of Goods Sold - KIL'
+        ''', (from_date, to_date), as_dict=True)
+
+    raw_fuel_cogs_sr = sum(flt(r['amount']) for r in sr_details if r['item_code'] in fuel_items)
+    raw_lube_cogs_sr = sum(flt(r['amount']) for r in sr_details if r['item_code'] and r['item_code'] not in fuel_items)
+
+    comp_fuel_cogs = raw_fuel_cogs_se + raw_fuel_cogs_pi + raw_fuel_cogs_jv + raw_fuel_cogs_sr
+    comp_lube_cogs = raw_lube_cogs_se + raw_lube_cogs_pi + raw_lube_cogs_jv + raw_lube_cogs_sr
     comp_total = comp_fuel_cogs + comp_lube_cogs
 
     cogs_main_bal = 0.0
