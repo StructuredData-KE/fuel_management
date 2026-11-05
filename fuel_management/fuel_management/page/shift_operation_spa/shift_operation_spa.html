@@ -4973,6 +4973,7 @@
                             <th>Entry ID</th>
                             <th>Date</th>
                             <th>Transaction Ref</th>
+                            <th>Source (From)</th>
                             <th>Destination Account</th>
                             <th>Entered By</th>
                             <th style="text-align: right;">Amount</th>
@@ -4992,7 +4993,7 @@
         <div class="dash-card center-card" style="max-width: 1000px; width: 100%;">
             <div class="card-header-flex" style="align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <h3 id="ct-entry-header-title" style="margin: 0;">Record External Cash Transfer</h3>
+                    <h3 id="ct-entry-header-title" style="margin: 0;">Record External Cash / M-Pesa Transfer</h3>
                     <span id="ct-entry-badge-editing" style="display: none; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 4px;">EDITING ENTRY</span>
                 </div>
             </div>
@@ -5004,7 +5005,11 @@
                 </div>
                 <div class="form-group full-width">
                     <label>Transaction Number / Reference <span style="color:red;">*</span></label>
-                    <input type="text" id="ct-ref" class="spa-input" placeholder="e.g. Bank Slip 12345">
+                    <input type="text" id="ct-ref" class="spa-input" placeholder="e.g. Bank Slip 12345 or M-Pesa Code">
+                </div>
+                <div class="form-group full-width">
+                    <label>Source Account (Transfer From) <span style="color:red;">*</span></label>
+                    <select id="ct-source-account" class="spa-input"></select>
                 </div>
                 <div class="form-group full-width">
                     <label>Destination Account <span style="color:red;">*</span></label>

@@ -641,7 +641,9 @@ class Shift(Document):
             if not m.mpesa_till: continue
             till_doc = frappe.get_doc("M-Pesa Till", m.mpesa_till)
             mop_account = till_doc.default_account
-            bank_account = getattr(till_doc, "bank_account", None)
+            bank_account = getattr(m, "destination_account", None) or getattr(till_doc, "bank_account", None)
+            if not bank_account and self.station:
+                bank_account = frappe.db.get_value("Fuel Station", self.station, "bank_account")
 
             m_amt = flt(m.amount, 2)
             m_transfers = flt(m.transfers_made, 2)
@@ -662,7 +664,7 @@ class Shift(Document):
                 
             if m_transfers > 0:
                 if not bank_account:
-                    frappe.throw(f"No Bank Account mapped for Transfers on M-Pesa Till: {m.mpesa_till}. Please configure the Bank Account in the Till settings.")
+                    frappe.throw(f"No Bank Account mapped for Transfers on M-Pesa Till: {m.mpesa_till}. Please configure the Bank Account in the Till or Station settings.")
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for M-Pesa Till: {m.mpesa_till}")
                     

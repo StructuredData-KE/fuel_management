@@ -162,12 +162,77 @@ def get_dashboard_summary(from_date=None, to_date=None, station=None):
             "icon": "sync_alt"
         })
 
+    # M-Pesa Tills Live Balance Calculation
+    mpesa_station_filter = ""
+    mpesa_station_args = []
+    if station and station not in ("ALL", "All Stations", ""):
+        mpesa_station_filter = " AND station = %s"
+        mpesa_station_args.append(station)
+
+    active_tills = frappe.db.sql(f"""
+        SELECT name, till_name, till_number, station, default_account, bank_account
+        FROM `tabM-Pesa Till`
+        WHERE is_active = 1 {mpesa_station_filter}
+        ORDER BY station ASC, till_name ASC
+    """, mpesa_station_args, as_dict=True)
+
+    tills_summary = []
+    total_live_mpesa = 0.0
+    mpesa_account_names = set()
+
+    for t in active_tills:
+        if t.default_account:
+            mpesa_account_names.add(t.default_account)
+
+        latest_reading = frappe.db.sql("""
+            SELECT mp.closing_balance, mp.opening_balance, mp.amount, s.shift_date, s.status
+            FROM `tabShift M-Pesa Payment` mp
+            JOIN `tabShift` s ON s.name = mp.parent
+            WHERE mp.mpesa_till = %s AND s.docstatus < 2
+            ORDER BY s.shift_date DESC, s.creation DESC
+            LIMIT 1
+        """, (t.name,), as_dict=True)
+
+        till_balance = 0.0
+        last_date = None
+        if latest_reading:
+            r = latest_reading[0]
+            last_date = r.shift_date
+            if r.status == "Closed" or flt(r.closing_balance) > 0:
+                till_balance = flt(r.closing_balance)
+            else:
+                till_balance = flt(r.opening_balance)
+        
+        total_live_mpesa += till_balance
+        tills_summary.append({
+            "till": t.name,
+            "station": t.station,
+            "balance": till_balance,
+            "last_date": str(last_date) if last_date else "",
+            "account": t.default_account or "",
+            "bank_account": t.bank_account or ""
+        })
+
+    gl_mpesa_balance = 0.0
+    if mpesa_account_names:
+        from erpnext.accounts.utils import get_balance_on
+        for acc in mpesa_account_names:
+            gl_mpesa_balance += flt(get_balance_on(acc))
+
+    mpesa_live_data = {
+        "total_balance": total_live_mpesa,
+        "gl_balance": gl_mpesa_balance,
+        "tills_count": len(active_tills),
+        "tills": tills_summary
+    }
+
     # Return Payload
     return {
         "financials": {
             "total_sales_today": total_sales_today,
             "collections": collections,
-            "top_up_holding_balance": holding_balance
+            "top_up_holding_balance": holding_balance,
+            "mpesa_live": mpesa_live_data
         },
         "reconciliations": {
             "fuel_variance_today": shift_variance
@@ -3074,6 +3139,378 @@ def get_supplier_payments_register(supplier=None, from_date=None, to_date=None, 
         "page_length": page_length,
         "total_pages": (total_count + page_length - 1) // page_length if page_length else 1
     }
+
+
+# ========================================================
+# M-PESA RECONCILIATION & TILL AUDITING MODULE
+# ========================================================
+
+@frappe.whitelist()
+def get_mpesa_reconciliation_data(from_date=None, to_date=None, station=None, till=None, status_filter=None):
+    """
+    Returns itemized shift M-Pesa records, transfer routings, and audit status.
+    Performs carryover check, math discrepancy check, and unverified transfer audit.
+    """
+    if not to_date:
+        to_date = today()
+    if not from_date:
+        from_date = add_days(to_date, -30)
+
+    conditions = ["s.docstatus < 2", "DATE(s.shift_date) >= %s", "DATE(s.shift_date) <= %s"]
+    params = [from_date, to_date]
+
+    if station and station not in ("ALL", "All Stations", ""):
+        conditions.append("s.station = %s")
+        params.append(station)
+
+    if till and till not in ("ALL", "All Tills", ""):
+        conditions.append("mp.mpesa_till = %s")
+        params.append(till)
+
+    where_clause = " AND ".join(conditions)
+
+    # 1. Fetch shift mpesa readings
+    shift_rows = frappe.db.sql(f"""
+        SELECT 
+            mp.name, mp.parent as shift_id, s.station, s.shift_date, s.status as shift_status,
+            mp.mpesa_till, mp.csa, mp.opening_balance, mp.closing_balance, mp.transfers_made, mp.amount, mp.posted,
+            mp.bank_name, mp.destination_account, mp.audit_status, mp.statement_ref, mp.audit_note,
+            mp.verified_by, mp.verified_on
+        FROM `tabShift M-Pesa Payment` mp
+        JOIN `tabShift` s ON s.name = mp.parent
+        WHERE {where_clause}
+        ORDER BY mp.mpesa_till ASC, s.shift_date ASC, s.creation ASC
+    """, params, as_dict=True)
+
+    # Resolve CSA employee names
+    csa_ids = list(set([r.csa for r in shift_rows if r.csa]))
+    csa_name_map = {}
+    if csa_ids:
+        emp_data = frappe.get_all("Employee", filters={"name": ["in", csa_ids]}, fields=["name", "employee_name"])
+        csa_name_map = {e.name: (e.employee_name or e.name) for e in emp_data}
+
+    # 2. Perform Intelligent Carryover & Math Auditing
+    audited_shifts = []
+    till_chains = {}
+    for r in shift_rows:
+        till_chains.setdefault(r.mpesa_till, []).append(r)
+
+    total_collections = 0.0
+    total_transfers = 0.0
+    total_discrepancies = 0
+    total_verified = 0
+    total_pending = 0
+
+    for t_name, rows in till_chains.items():
+        prev_closing = None
+        for i, row in enumerate(rows):
+            row["csa_name"] = csa_name_map.get(row.csa, row.csa or "Unassigned")
+            opening = flt(row.opening_balance)
+            closing = flt(row.closing_balance)
+            transfers = flt(row.transfers_made)
+            recorded_amount = flt(row.amount)
+
+            total_collections += recorded_amount
+            total_transfers += transfers
+
+            expected_closing = opening + recorded_amount - transfers
+            calc_collections = closing - opening + transfers
+
+            flags = []
+
+            # Check 1: Carryover continuity (Shift N opening vs Shift N-1 closing)
+            carryover_mismatch = False
+            if prev_closing is not None and abs(opening - prev_closing) > 0.01:
+                carryover_mismatch = True
+                diff = opening - prev_closing
+                sign = "+" if diff > 0 else ""
+                flags.append(f"Opening Mismatch: {sign}{diff:,.0f} KES (Prev: {prev_closing:,.0f}, Opened: {opening:,.0f})")
+
+            # Check 2: Math Discrepancy
+            math_discrepancy = False
+            if abs(recorded_amount - calc_collections) > 0.01 and (closing > 0 or transfers > 0):
+                math_discrepancy = True
+                diff = recorded_amount - calc_collections
+                flags.append(f"Arithmetic Discrepancy: {diff:,.0f} KES diff")
+
+            # Check 3: Negative Collections
+            if recorded_amount < 0 and row.shift_status in ("Closed", "Ended"):
+                flags.append("Negative Collections Input")
+
+            # Check 4: Unverified Transfer
+            if transfers > 0 and (row.audit_status or "Pending") != "Verified":
+                flags.append(f"Unverified Sweep: {transfers:,.0f} KES")
+
+            is_discrepancy = len(flags) > 0
+            if is_discrepancy:
+                total_discrepancies += 1
+
+            status = row.audit_status or ("Verified" if not is_discrepancy and row.shift_status == "Closed" and not transfers else "Pending")
+            if status == "Verified":
+                total_verified += 1
+            elif status != "Flagged":
+                total_pending += 1
+
+            row["carryover_mismatch"] = carryover_mismatch
+            row["math_discrepancy"] = math_discrepancy
+            row["audit_flags"] = flags
+            row["is_discrepancy"] = is_discrepancy
+            row["calculated_closing"] = expected_closing
+            row["status_display"] = "Flagged" if is_discrepancy else (row.audit_status or "Pending")
+            row["shift_date_formatted"] = formatdate(row.shift_date)
+
+            audited_shifts.append(row)
+            if closing > 0:
+                prev_closing = closing
+            elif opening > 0:
+                prev_closing = opening
+
+    # Sort audited shifts newest first for display
+    audited_shifts.sort(key=lambda x: (str(x.shift_date), str(x.name)), reverse=True)
+
+    # 3. Fetch Transfers & Sweeps Routing (from SCT and Shifts)
+    sct_conditions = ["docstatus < 2", "date >= %s", "date <= %s"]
+    sct_params = [from_date, to_date]
+    if station and station not in ("ALL", "All Stations", ""):
+        sct_conditions.append("(station = %s OR station IS NULL OR station = '')")
+        sct_params.append(station)
+
+    sct_where = " AND ".join(sct_conditions)
+    sct_rows = frappe.db.sql(f"""
+        SELECT 
+            name, date, transaction_number, source_account, destination_account, amount, entered_by, station,
+            audit_status, audit_note
+        FROM `tabStation Cash Transfer`
+        WHERE {sct_where} AND (
+            source_account LIKE '%MPESA%' OR source_account LIKE '%TILL%' OR
+            destination_account LIKE '%MPESA%' OR destination_account LIKE '%TILL%'
+        )
+        ORDER BY date DESC, creation DESC
+    """, sct_params, as_dict=True)
+
+    shift_transfers = []
+    for r in shift_rows:
+        if flt(r.transfers_made) > 0:
+            shift_transfers.append({
+                "type": "Shift Sweep",
+                "transfer_id": r.name,
+                "shift_id": r.shift_id,
+                "date": str(r.shift_date),
+                "date_formatted": formatdate(r.shift_date),
+                "station": r.station,
+                "source": r.mpesa_till,
+                "destination": r.destination_account or r.bank_name or "Mapped Bank Account",
+                "ref": r.statement_ref or f"Shift {r.shift_id}",
+                "amount": flt(r.transfers_made),
+                "entered_by": r.csa_name or "CSA",
+                "audit_status": r.audit_status or "Pending",
+                "audit_note": r.audit_note or ""
+            })
+
+    all_transfers = shift_transfers + [{
+        "type": "Direct Transfer",
+        "transfer_id": s.name,
+        "shift_id": "-",
+        "date": str(s.date),
+        "date_formatted": formatdate(s.date),
+        "station": s.station or station or "Station",
+        "source": s.source_account or "M-Pesa Till",
+        "destination": s.destination_account,
+        "ref": s.transaction_number,
+        "amount": flt(s.amount),
+        "entered_by": s.entered_by or "Manager",
+        "audit_status": s.audit_status or "Pending",
+        "audit_note": s.audit_note or ""
+    } for s in sct_rows]
+
+    all_transfers.sort(key=lambda x: str(x["date"]), reverse=True)
+
+    # 4. Live Tills Balance summary
+    live_tills = frappe.db.sql("""
+        SELECT name, till_name, till_number, station, default_account, bank_account
+        FROM `tabM-Pesa Till`
+        WHERE is_active = 1
+        ORDER BY station ASC, till_name ASC
+    """, as_dict=True)
+
+    tills_balance_list = []
+    total_live_balance = 0.0
+    for t in live_tills:
+        if station and station not in ("ALL", "All Stations", "") and t.station != station:
+            continue
+        latest = frappe.db.sql("""
+            SELECT mp.closing_balance, mp.opening_balance, s.shift_date, s.status
+            FROM `tabShift M-Pesa Payment` mp
+            JOIN `tabShift` s ON s.name = mp.parent
+            WHERE mp.mpesa_till = %s AND s.docstatus < 2
+            ORDER BY s.shift_date DESC, s.creation DESC
+            LIMIT 1
+        """, (t.name,), as_dict=True)
+
+        bal = 0.0
+        ld = None
+        if latest:
+            l = latest[0]
+            ld = l.shift_date
+            bal = flt(l.closing_balance) if (l.status == "Closed" or flt(l.closing_balance) > 0) else flt(l.opening_balance)
+
+        total_live_balance += bal
+        tills_balance_list.append({
+            "till": t.name,
+            "station": t.station,
+            "balance": bal,
+            "last_date": str(ld) if ld else "",
+            "account": t.default_account or "",
+            "bank_account": t.bank_account or ""
+        })
+
+    # Apply status filter if provided
+    if status_filter == "discrepancies":
+        audited_shifts = [r for r in audited_shifts if r.get("is_discrepancy")]
+    elif status_filter == "verified":
+        audited_shifts = [r for r in audited_shifts if r.get("audit_status") == "Verified"]
+    elif status_filter == "pending":
+        audited_shifts = [r for r in audited_shifts if r.get("audit_status") != "Verified"]
+
+    return {
+        "kpis": {
+            "live_balance": total_live_balance,
+            "total_collections": total_collections,
+            "total_transfers": total_transfers,
+            "net_movement": total_collections - total_transfers,
+            "discrepancies_count": total_discrepancies,
+            "verified_count": total_verified,
+            "pending_count": total_pending,
+            "total_records": len(shift_rows)
+        },
+        "shifts": audited_shifts,
+        "transfers": all_transfers,
+        "tills": tills_balance_list,
+        "from_date": from_date,
+        "to_date": to_date,
+        "station": station or "All Stations"
+    }
+
+
+@frappe.whitelist()
+def verify_mpesa_shift_reading(row_name, status="Verified", statement_ref=None, audit_note=None):
+    """Marks a shift M-Pesa reading as Verified or Flagged with audit note."""
+    if not row_name:
+        frappe.throw("Reading ID is required.")
+
+    update_dict = {
+        "audit_status": status,
+        "verified_by": frappe.session.user,
+        "verified_on": now_datetime()
+    }
+    if statement_ref is not None:
+        update_dict["statement_ref"] = statement_ref
+    if audit_note is not None:
+        update_dict["audit_note"] = audit_note
+
+    frappe.db.set_value("Shift M-Pesa Payment", row_name, update_dict)
+    frappe.db.commit()
+    return {"status": "success", "message": f"M-Pesa reading marked as {status}."}
+
+
+@frappe.whitelist()
+def audit_mpesa_transfer_routing(transfer_id, transfer_type="Direct Transfer", status="Verified", audit_note=None, bank_slip_ref=None):
+    """Audits and verifies an M-Pesa sweep / transfer."""
+    if not transfer_id:
+        frappe.throw("Transfer ID is required.")
+
+    if transfer_type == "Shift Sweep" or frappe.db.exists("Shift M-Pesa Payment", transfer_id):
+        frappe.db.set_value("Shift M-Pesa Payment", transfer_id, {
+            "audit_status": status,
+            "statement_ref": bank_slip_ref,
+            "audit_note": audit_note,
+            "verified_by": frappe.session.user,
+            "verified_on": now_datetime()
+        })
+    elif frappe.db.exists("Station Cash Transfer", transfer_id):
+        frappe.db.set_value("Station Cash Transfer", transfer_id, {
+            "audit_status": status,
+            "audit_note": audit_note
+        })
+    frappe.db.commit()
+    return {"status": "success", "message": f"Transfer marked as {status}."}
+
+
+@frappe.whitelist()
+def submit_mpesa_statement_audit(station, till, statement_date, statement_opening, statement_inflows, statement_transfers, statement_closing, notes=None):
+    """
+    Performs side-by-side reconciliation between actual Safaricom Till statement figures and system records.
+    """
+    from frappe.utils import flt
+    st_open = flt(statement_opening)
+    st_in = flt(statement_inflows)
+    st_out = flt(statement_transfers)
+    st_close = flt(statement_closing)
+
+    conditions = ["s.docstatus < 2", "DATE(s.shift_date) = %s"]
+    params = [statement_date]
+    if station and station not in ("ALL", "All Stations", ""):
+        conditions.append("s.station = %s")
+        params.append(station)
+    if till and till not in ("ALL", "All Tills", ""):
+        conditions.append("mp.mpesa_till = %s")
+        params.append(till)
+
+    where_clause = " AND ".join(conditions)
+    records = frappe.db.sql(f"""
+        SELECT 
+            mp.name, mp.opening_balance, mp.closing_balance, mp.transfers_made, mp.amount
+        FROM `tabShift M-Pesa Payment` mp
+        JOIN `tabShift` s ON s.name = mp.parent
+        WHERE {where_clause}
+    """, params, as_dict=True)
+
+    sys_in = sum(flt(r.amount) for r in records)
+    sys_out = sum(flt(r.transfers_made) for r in records)
+    sys_open = flt(records[0].opening_balance) if records else 0.0
+    sys_close = flt(records[-1].closing_balance) if records else 0.0
+
+    inflow_variance = st_in - sys_in
+    transfer_variance = st_out - sys_out
+    closing_variance = st_close - sys_close
+    is_matched = abs(inflow_variance) < 1.0 and abs(transfer_variance) < 1.0 and abs(closing_variance) < 1.0
+
+    if is_matched:
+        for r in records:
+            frappe.db.set_value("Shift M-Pesa Payment", r.name, {
+                "audit_status": "Verified",
+                "statement_ref": f"Stmt {statement_date}",
+                "audit_note": notes or "Auto-matched with statement",
+                "verified_by": frappe.session.user,
+                "verified_on": now_datetime()
+            })
+        frappe.db.commit()
+
+    return {
+        "statement_date": statement_date,
+        "station": station,
+        "till": till,
+        "statement": {
+            "opening": st_open,
+            "inflows": st_in,
+            "transfers": st_out,
+            "closing": st_close
+        },
+        "system": {
+            "opening": sys_open,
+            "inflows": sys_in,
+            "transfers": sys_out,
+            "closing": sys_close
+        },
+        "variance": {
+            "inflow_diff": inflow_variance,
+            "transfer_diff": transfer_variance,
+            "closing_diff": closing_variance
+        },
+        "is_matched": is_matched,
+        "summary": "PERFECT MATCH! All collections & transfers verified against statement." if is_matched else f"DISCREPANCY DETECTED: Collections diff {inflow_variance:,.2f} KES, Transfers diff {transfer_variance:,.2f} KES."
+    }
+
 
 
 

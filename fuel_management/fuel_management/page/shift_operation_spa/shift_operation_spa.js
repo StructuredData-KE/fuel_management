@@ -9595,23 +9595,89 @@ function render_cash_transfers(wrapper) {
         $wrapper.find('#ct-' + view + '-view').addClass('active');
     });
     
-    // Load ERPNext Accounts
+    // Load Destination & Source ERPNext Accounts
     frappe.call({
         method: "frappe.client.get_list",
         args: {
             doctype: "Account",
-            filters: { is_group: 0, account_type: ["in", ["Bank", "Cash"]] },
-            fields: ["name"],
-            limit_page_length: 500
+            filters: { is_group: 0 },
+            fields: ["name", "account_type"],
+            limit_page_length: 600
         },
         callback: function(r) {
             let $select = $wrapper.find('#ct-account');
+            let $sourceSelect = $wrapper.find('#ct-source-account');
             $select.empty().append('<option value="">Select Destination Account...</option>');
+            $sourceSelect.empty();
+
             if(r.message) {
                 window.BANK_CASH_ACCOUNTS = r.message;
+                
+                let mpesaSources = [];
+                let cashSources = [];
+                let destBanks = [];
+                let destSuppliers = [];
+                let destOther = [];
+
                 r.message.forEach(acc => {
-                    $select.append(`<option value="${acc.name}">${acc.name}</option>`);
+                    let upper = (acc.name || '').toUpperCase();
+                    let isMpesa = upper.includes('MPESA') || upper.includes('TILL');
+                    let isCash = acc.account_type === 'Cash' || upper.includes('CASH');
+                    let isBank = acc.account_type === 'Bank' || upper.includes('EQUITY') || upper.includes('KCB');
+                    let isSupplier = upper.includes('A/C') || upper.includes('GALANA') || upper.includes('RUBIS') || acc.account_type === 'Payable';
+
+                    if (isMpesa) {
+                        mpesaSources.push(acc.name);
+                    } else if (isCash) {
+                        cashSources.push(acc.name);
+                    }
+
+                    if (isBank) {
+                        destBanks.push(acc.name);
+                    } else if (isSupplier && !isMpesa) {
+                        destSuppliers.push(acc.name);
+                    } else {
+                        destOther.push(acc.name);
+                    }
                 });
+
+                // Populate Source (From)
+                let sourceHtml = '';
+                if (mpesaSources.length) {
+                    sourceHtml += '<optgroup label="📱 M-Pesa Tills">';
+                    mpesaSources.forEach(a => { sourceHtml += `<option value="${a}">${a}</option>`; });
+                    sourceHtml += '</optgroup>';
+                }
+                if (cashSources.length) {
+                    sourceHtml += '<optgroup label="💵 Cash Accounts">';
+                    cashSources.forEach(a => { sourceHtml += `<option value="${a}">${a}</option>`; });
+                    sourceHtml += '</optgroup>';
+                }
+                $sourceSelect.html(sourceHtml);
+
+                // Auto-select M-Pesa Till for current station if possible
+                let curStation = (window.ACTIVE_STATION || '').toUpperCase();
+                let matchedTill = mpesaSources.find(a => curStation && (
+                    (curStation.includes('GALANA') && a.includes('GALANA')) ||
+                    (curStation.includes('RUBIS') && (a.includes('RUBIS') || a.includes('TILLS - KIL')))
+                ));
+                if (matchedTill) {
+                    $sourceSelect.val(matchedTill);
+                }
+
+                // Populate Destination (To)
+                let destHtml = '<option value="">Select Destination Account...</option>';
+                if (destBanks.length) {
+                    destHtml += '<optgroup label="🏦 Bank Accounts (Equity, KCB, etc.)">';
+                    destBanks.forEach(a => { destHtml += `<option value="${a}">${a}</option>`; });
+                    destHtml += '</optgroup>';
+                }
+                if (destSuppliers.length) {
+                    destHtml += '<optgroup label="⛽ Fuel Supplier Accounts (Galana, Rubis, etc.)">';
+                    destSuppliers.forEach(a => { destHtml += `<option value="${a}">${a}</option>`; });
+                    destHtml += '</optgroup>';
+                }
+                $select.html(destHtml);
             }
         }
     });
@@ -9620,6 +9686,7 @@ function render_cash_transfers(wrapper) {
     $wrapper.find('#btn-save-cash-transfer').off('click').on('click', function() {
         let date = $wrapper.find('#ct-date').val();
         let ref = $wrapper.find('#ct-ref').val();
+        let source_account = $wrapper.find('#ct-source-account').val();
         let account = $wrapper.find('#ct-account').val();
         let amount = parseFloat($wrapper.find('#ct-amount').val());
         
@@ -9639,16 +9706,18 @@ function render_cash_transfers(wrapper) {
                     entry_id: window.EDITING_CASH_TRANSFER_ID,
                     date: date,
                     transaction_number: ref,
+                    source_account: source_account,
                     destination_account: account,
-                    amount: amount
+                    amount: amount,
+                    station: window.ACTIVE_STATION || ""
                 },
                 callback: function(r) {
                     if (!r.exc && r.message && r.message.status === "success") {
-                        frappe.show_alert({message: "Cash Transfer updated successfully!", indicator: "green"});
+                        frappe.show_alert({message: "Transfer updated successfully!", indicator: "green"});
 
                         // Reset editing state
                         window.EDITING_CASH_TRANSFER_ID = null;
-                        $wrapper.find('#ct-entry-header-title').text('Record External Cash Transfer');
+                        $wrapper.find('#ct-entry-header-title').text('Record External Cash / M-Pesa Transfer');
                         $wrapper.find('#ct-entry-badge-editing').hide();
                         $wrapper.find('#btn-save-cash-transfer-label').text('Add Transfer');
                         $wrapper.find('#btn-cancel-edit-cash-transfer').hide();
@@ -9679,8 +9748,10 @@ function render_cash_transfers(wrapper) {
             args: {
                 doc: {
                     doctype: "Station Cash Transfer",
+                    station: window.ACTIVE_STATION || "",
                     date: date,
                     transaction_number: ref,
+                    source_account: source_account,
                     destination_account: account,
                     amount: amount,
                     entered_by: frappe.session.user
@@ -9688,7 +9759,7 @@ function render_cash_transfers(wrapper) {
             },
             callback: function(r) {
                 if(!r.exc) {
-                    frappe.show_alert({message: "Cash Transfer recorded!", indicator: "green"});
+                    frappe.show_alert({message: "Transfer recorded and posted successfully!", indicator: "green"});
                     // Reset form
                     $wrapper.find('#ct-date').val(frappe.datetime.get_today());
                     $wrapper.find('#ct-ref').val('');
@@ -9751,7 +9822,7 @@ function load_cash_transfer_history($wrapper) {
         args: {
             doctype: "Station Cash Transfer",
             filters: filters,
-            fields: ["name", "date", "transaction_number", "destination_account", "amount", "entered_by"],
+            fields: ["name", "date", "transaction_number", "source_account", "destination_account", "amount", "entered_by", "station"],
             order_by: "date desc, creation desc",
             limit_page_length: limit_num
         },
@@ -9767,12 +9838,18 @@ function load_cash_transfer_history($wrapper) {
             
             if(r.message && r.message.length > 0) {
                 r.message.forEach(row => {
+                    let isMpesa = (row.source_account || '').toUpperCase().includes('MPESA') || (row.source_account || '').toUpperCase().includes('TILL');
+                    let srcBadge = isMpesa 
+                        ? `<span style="font-size:0.75rem; font-weight:700; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:3px;">📱 ${(row.source_account || '').replace(' - KIL', '')}</span>`
+                        : `<span style="font-size:0.75rem; font-weight:600; background:#f8fafc; color:#475569; border:1px solid #e2e8f0; padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:3px;">💵 ${(row.source_account || 'Main Cash').replace(' - KIL', '')}</span>`;
+
                     let html = `
                         <tr data-name="${row.name}">
                             <td><b>${row.name}</b></td>
                             <td>${frappe.datetime.str_to_user(row.date)}</td>
                             <td>${row.transaction_number}</td>
-                            <td>${row.destination_account}</td>
+                            <td>${srcBadge}</td>
+                            <td><b>${row.destination_account}</b></td>
                             <td>${row.entered_by || ''}</td>
                             <td class="text-right"><b>${format_currency(row.amount)}</b></td>
                             <td style="text-align: center; white-space: nowrap;">
@@ -9835,9 +9912,13 @@ function load_cash_transfer_history($wrapper) {
                     if (row.destination_account && !acc_options.includes(row.destination_account)) {
                         acc_options.unshift(row.destination_account);
                     }
+                    let src_options = (window.BANK_CASH_ACCOUNTS || []).map(a => a.name);
+                    if (row.source_account && !src_options.includes(row.source_account)) {
+                        src_options.unshift(row.source_account);
+                    }
 
                     let edit_dialog = new frappe.ui.Dialog({
-                        title: `✏️ Edit Cash Transfer: ${row.name}`,
+                        title: `✏️ Edit Transfer: ${row.name}`,
                         fields: [
                             {
                                 label: 'Transfer Date',
@@ -9851,6 +9932,14 @@ function load_cash_transfer_history($wrapper) {
                                 fieldname: 'transaction_number',
                                 fieldtype: 'Data',
                                 default: row.transaction_number,
+                                reqd: 1
+                            },
+                            {
+                                label: 'Source Account (Transfer From)',
+                                fieldname: 'source_account',
+                                fieldtype: 'Select',
+                                options: src_options,
+                                default: row.source_account || '',
                                 reqd: 1
                             },
                             {
@@ -9878,8 +9967,10 @@ function load_cash_transfer_history($wrapper) {
                                     entry_id: row.name,
                                     date: values.date,
                                     transaction_number: values.transaction_number,
+                                    source_account: values.source_account,
                                     destination_account: values.destination_account,
-                                    amount: values.amount
+                                    amount: values.amount,
+                                    station: row.station || window.ACTIVE_STATION || ""
                                 },
                                 callback: function(res) {
                                     frappe.dom.unfreeze();

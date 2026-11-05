@@ -7,13 +7,22 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "station",
   "date",
   "transaction_number",
+  "source_account",
   "destination_account",
   "amount",
   "entered_by"
  ],
  "fields": [
+  {
+   "fieldname": "station",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Fuel Station",
+   "options": "Fuel Station"
+  },
   {
    "fieldname": "date",
    "fieldtype": "Date",
@@ -27,6 +36,13 @@
    "in_list_view": 1,
    "label": "Transaction Number / Reference",
    "reqd": 1
+  },
+  {
+   "fieldname": "source_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Account (From)",
+   "options": "Account"
   },
   {
    "fieldname": "destination_account",

@@ -150,6 +150,8 @@ function init_spa_ui(wrapper) {
                 load_topups_statement(wrapper);
             } else if (target === 'tab-cards-holding') {
                 init_cards_holding(wrapper);
+            } else if (target === 'tab-mpesa-reconciliation') {
+                init_exec_mpesa_reconciliation(wrapper);
             }
 
             // Close sidebar on mobile
@@ -174,7 +176,7 @@ function init_spa_ui(wrapper) {
         }
     });
 
-    // Top Holding Accounts Switcher (Top Ups Holding vs Cards Holding)
+    // Top Holding Accounts Switcher (Top Ups Holding vs Cards Holding vs M-Pesa Recon)
     $(wrapper).find('.exec-holding-top-switch').off('click').on('click', function(e) {
         e.preventDefault();
         let targetTab = $(this).data('target-tab');
@@ -192,7 +194,25 @@ function init_spa_ui(wrapper) {
             load_topups_statement(wrapper);
         } else if (targetTab === 'tab-cards-holding') {
             init_cards_holding(wrapper);
+        } else if (targetTab === 'tab-mpesa-reconciliation') {
+            init_exec_mpesa_reconciliation(wrapper);
         }
+    });
+
+    // Click on Executive Homepage Live M-Pesa KPI card
+    $(wrapper).find('#exec-card-mpesa-balance').off('click').on('click', function(e) {
+        e.preventDefault();
+        let navItem = $(wrapper).find('.exec-nav-item[data-tab="tab-mpesa-reconciliation"]');
+        let parentSec = navItem.closest('.exec-nav-section-wrapper');
+        if (parentSec.length) {
+            parentSec.find('.exec-nav-section-header').removeClass('collapsed');
+            parentSec.find('.exec-nav-section-body').removeClass('collapsed').show();
+        }
+        $(wrapper).find('.exec-nav-item').removeClass('active');
+        navItem.addClass('active');
+        $(wrapper).find('.exec-main').hide();
+        $(wrapper).find('#tab-mpesa-reconciliation').show();
+        init_exec_mpesa_reconciliation(wrapper);
     });
 
     // Mobile menu toggle
@@ -365,6 +385,8 @@ function init_spa_ui(wrapper) {
         } else if (activeTab === 'tab-cards-holding') {
             if (window.CARDS_HOLDING_STATE) window.CARDS_HOLDING_STATE.page = 1;
             load_cards_holding_data(wrapper);
+        } else if (activeTab === 'tab-mpesa-reconciliation') {
+            load_mpesa_reconciliation_data(wrapper);
         } else if (activeTab === 'tab-cash-accounts') {
             load_exec_cash_accounts(wrapper);
         } else if (activeTab === 'tab-supplier-accounts') {
@@ -602,6 +624,23 @@ function load_dashboard_data(wrapper) {
                 
                 // Update Holding Account Balance
                 $(wrapper).find('#exec-holding-balance').text(format_currency(f.top_up_holding_balance || 0, "KES"));
+
+                // Update Live M-Pesa Tills Balance Card
+                if (f.mpesa_live) {
+                    let mpl = f.mpesa_live;
+                    $(wrapper).find('#exec-mpesa-live-balance').text(format_currency(mpl.total_live_balance || 0, "KES"));
+                    $(wrapper).find('#exec-mpesa-tills-count').text((mpl.active_tills_count || 0) + " Active Tills");
+                    
+                    let pills_html = "";
+                    if (mpl.tills_breakdown && mpl.tills_breakdown.length) {
+                        mpl.tills_breakdown.forEach(tb => {
+                            pills_html += `<span style="font-size:10.5px; padding:2px 7px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534; font-weight:600;" title="${frappe.utils.escape_html(tb.station || '')}">
+                                ${frappe.utils.escape_html(tb.till_name)}: ${format_currency(tb.current_balance, "KES")}
+                            </span>`;
+                        });
+                    }
+                    $(wrapper).find('#exec-mpesa-till-pills').html(pills_html);
+                }
 
                 // 3. Update Alerts
                 let alerts = data.alerts;
@@ -8524,4 +8563,842 @@ function submit_supplier_payment_form(wrapper) {
         }
     });
 }
+
+// =========================================================================
+// M-PESA TILLS RECONCILIATION & AUDIT MODULE
+// =========================================================================
+
+window.MPESA_RECON_STATE = {
+    station: '',
+    till: '',
+    from_date: '',
+    to_date: '',
+    status_filter: 'all',
+    search: '',
+    active_subpane: 'mpesa-pane-shifts',
+    shifts_data: [],
+    transfers_data: [],
+    tills_list: [],
+    summary: {},
+    live_tills: [],
+    initialized: false
+};
+
+function init_exec_mpesa_reconciliation(wrapper) {
+    let state = window.MPESA_RECON_STATE;
+
+    // Default Date Range: Last 7 Days if not set
+    if (!state.from_date || !state.to_date) {
+        let today = frappe.datetime.get_today();
+        state.to_date = today;
+        state.from_date = frappe.datetime.add_days(today, -6);
+    }
+    $(wrapper).find('#mpesa-recon-from-date').val(state.from_date);
+    $(wrapper).find('#mpesa-recon-to-date').val(state.to_date);
+
+    // Sync station from executive sidebar if set
+    let execStation = $(wrapper).find('#exec-station-filter').val() || '';
+    if (execStation && execStation !== 'all') {
+        state.station = execStation;
+    }
+
+    // Populate Station Selects
+    let stSel = $(wrapper).find('#mpesa-recon-station-filter');
+    let stmtStSel = $(wrapper).find('#stmt-match-station');
+    let currentStationOptions = $(wrapper).find('#exec-station-filter option');
+
+    if (currentStationOptions.length > 1) {
+        stSel.empty().append('<option value="">All Stations</option>');
+        stmtStSel.empty().append('<option value="">Select Station</option>');
+        currentStationOptions.each(function() {
+            let val = $(this).val();
+            let txt = $(this).text();
+            if (val && val !== 'all') {
+                stSel.append(`<option value="${frappe.utils.escape_html(val)}">${frappe.utils.escape_html(txt)}</option>`);
+                stmtStSel.append(`<option value="${frappe.utils.escape_html(val)}">${frappe.utils.escape_html(txt)}</option>`);
+            }
+        });
+        if (state.station) {
+            stSel.val(state.station);
+            stmtStSel.val(state.station);
+        }
+    }
+
+    // Only bind listeners once
+    if (!state.initialized) {
+        state.initialized = true;
+
+        // Presets
+        $(wrapper).find('.mpesa-preset-btn').on('click', function(e) {
+            e.preventDefault();
+            $(wrapper).find('.mpesa-preset-btn').removeClass('active').css({
+                'border-color': '#cbd5e1', 'background': '#f8fafc', 'color': '#334155', 'font-weight': 'normal'
+            });
+            $(this).addClass('active').css({
+                'border-color': '#16a34a', 'background': '#f0fdf4', 'color': '#166534', 'font-weight': '700'
+            });
+
+            let preset = $(this).data('preset');
+            let today = frappe.datetime.get_today();
+            if (preset === 'today') {
+                state.from_date = today;
+                state.to_date = today;
+            } else if (preset === 'yesterday') {
+                let y = frappe.datetime.add_days(today, -1);
+                state.from_date = y;
+                state.to_date = y;
+            } else if (preset === 'week') {
+                state.from_date = frappe.datetime.add_days(today, -6);
+                state.to_date = today;
+            } else if (preset === 'month') {
+                state.from_date = frappe.datetime.month_start();
+                state.to_date = frappe.datetime.month_end();
+            } else if (preset === 'last_month') {
+                let d = new Date();
+                let lmStart = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+                let lmEnd = new Date(d.getFullYear(), d.getMonth(), 0);
+                state.from_date = frappe.datetime.obj_to_str(lmStart);
+                state.to_date = frappe.datetime.obj_to_str(lmEnd);
+            }
+            $(wrapper).find('#mpesa-recon-from-date').val(state.from_date);
+            $(wrapper).find('#mpesa-recon-to-date').val(state.to_date);
+            load_mpesa_reconciliation_data(wrapper);
+        });
+
+        // Date Inputs
+        $(wrapper).find('#mpesa-recon-from-date, #mpesa-recon-to-date').on('change', function() {
+            state.from_date = $(wrapper).find('#mpesa-recon-from-date').val();
+            state.to_date = $(wrapper).find('#mpesa-recon-to-date').val();
+            load_mpesa_reconciliation_data(wrapper);
+        });
+
+        // Station Select Filter
+        $(wrapper).find('#mpesa-recon-station-filter').on('change', function() {
+            state.station = $(this).val();
+            state.till = '';
+            $(wrapper).find('#stmt-match-station').val(state.station);
+            load_mpesa_reconciliation_data(wrapper);
+        });
+
+        // Till Select Filter
+        $(wrapper).find('#mpesa-recon-till-filter').on('change', function() {
+            state.till = $(this).val();
+            load_mpesa_reconciliation_data(wrapper);
+        });
+
+        // Status Filter
+        $(wrapper).find('#mpesa-recon-status-filter').on('change', function() {
+            state.status_filter = $(this).val();
+            load_mpesa_reconciliation_data(wrapper);
+        });
+
+        // Search Input
+        let searchTimeout = null;
+        $(wrapper).find('#mpesa-search-input').on('keyup', function() {
+            clearTimeout(searchTimeout);
+            let val = $(this).val().toLowerCase().trim();
+            searchTimeout = setTimeout(function() {
+                state.search = val;
+                filter_mpesa_tables_locally(wrapper);
+            }, 250);
+        });
+
+        // Refresh Button
+        $(wrapper).find('#btn-mpesa-recon-refresh').on('click', function(e) {
+            e.preventDefault();
+            load_mpesa_reconciliation_data(wrapper);
+        });
+
+        // Segmented Subtabs
+        $(wrapper).find('#mpesa-segmented-control .seg-btn').on('click', function(e) {
+            e.preventDefault();
+            let targetPane = $(this).data('target');
+            state.active_subpane = targetPane;
+
+            $(wrapper).find('#mpesa-segmented-control .seg-btn').removeClass('active').css({
+                'background': 'transparent', 'color': '#64748b', 'box-shadow': 'none'
+            });
+            $(this).addClass('active').css({
+                'background': '#fff', 'color': '#0f172a', 'box-shadow': '0 1px 3px rgba(0,0,0,0.08)'
+            });
+
+            $(wrapper).find('.mpesa-subpane').hide();
+            $(wrapper).find('#' + targetPane).fadeIn(150);
+        });
+
+        // Statement Matcher Station -> Tills
+        $(wrapper).find('#stmt-match-station').on('change', function() {
+            let st = $(this).val();
+            populate_stmt_match_tills(wrapper, st);
+        });
+
+        // Statement Matcher Run Audit
+        $(wrapper).find('#btn-stmt-match-run').on('click', function(e) {
+            e.preventDefault();
+            submit_mpesa_statement_matcher(wrapper);
+        });
+
+        // Modal Handlers
+        $(wrapper).find('#btn-mpesa-modal-close, #btn-mpesa-modal-cancel').on('click', function(e) {
+            e.preventDefault();
+            $(wrapper).find('#modal-mpesa-audit-action').fadeOut(120);
+        });
+
+        $(wrapper).find('#btn-mpesa-modal-submit').on('click', function(e) {
+            e.preventDefault();
+            submit_mpesa_audit_action(wrapper);
+        });
+
+        // CSV Export
+        $(wrapper).find('#btn-mpesa-export-csv').on('click', function(e) {
+            e.preventDefault();
+            export_mpesa_recon_csv(wrapper);
+        });
+    }
+
+    load_mpesa_reconciliation_data(wrapper);
+}
+
+function load_mpesa_reconciliation_data(wrapper) {
+    let state = window.MPESA_RECON_STATE;
+    state.from_date = $(wrapper).find('#mpesa-recon-from-date').val() || state.from_date;
+    state.to_date = $(wrapper).find('#mpesa-recon-to-date').val() || state.to_date;
+    state.station = $(wrapper).find('#mpesa-recon-station-filter').val() || state.station;
+    state.till = $(wrapper).find('#mpesa-recon-till-filter').val() || state.till;
+    state.status_filter = $(wrapper).find('#mpesa-recon-status-filter').val() || 'all';
+
+    // Update station badge
+    let stText = state.station ? state.station : 'All Stations';
+    $(wrapper).find('#exec-mpesa-recon-station-badge').text(stText);
+
+    // Show table loaders
+    $(wrapper).find('#mpesa-shifts-table-body').html(
+        `<tr><td colspan="11" style="text-align: center; padding: 36px; color: #64748b;"><span class="spinner"></span> Loading M-Pesa shift readings...</td></tr>`
+    );
+    $(wrapper).find('#mpesa-transfers-table-body').html(
+        `<tr><td colspan="10" style="text-align: center; padding: 36px; color: #64748b;"><span class="spinner"></span> Loading M-Pesa sweeps & transfers...</td></tr>`
+    );
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_mpesa_reconciliation_data',
+        args: {
+            from_date: state.from_date,
+            to_date: state.to_date,
+            station: state.station,
+            till: state.till,
+            status_filter: state.status_filter
+        },
+        callback: function(r) {
+            if (!r || !r.message) {
+                $(wrapper).find('#mpesa-shifts-table-body').html('<tr><td colspan="11" style="text-align:center; padding:24px; color:#ef4444;">No data returned from server.</td></tr>');
+                $(wrapper).find('#mpesa-transfers-table-body').html('<tr><td colspan="10" style="text-align:center; padding:24px; color:#ef4444;">No data returned from server.</td></tr>');
+                return;
+            }
+
+            let d = r.message;
+            state.shifts_data = d.shifts || [];
+            state.transfers_data = d.transfers || [];
+            state.tills_list = d.tills_list || [];
+            state.summary = d.summary || {};
+            state.live_tills = d.live_tills || [];
+
+            // Update KPI cards
+            let sm = state.summary;
+            $(wrapper).find('#mpesa-kpi-live-balance').text(format_currency(sm.live_balance || 0, "KES"));
+            $(wrapper).find('#mpesa-kpi-live-sub').text(`${(state.live_tills || []).length} active station tills monitored`);
+
+            $(wrapper).find('#mpesa-kpi-collections-amt').text(format_currency(sm.total_collections || 0, "KES"));
+            $(wrapper).find('#mpesa-kpi-collections-sub').text(`${sm.total_shifts_count || 0} shifts recorded in period`);
+
+            $(wrapper).find('#mpesa-kpi-transfers-amt').text(format_currency(sm.total_transfers || 0, "KES"));
+            $(wrapper).find('#mpesa-kpi-transfers-sub').text(`${sm.total_transfers_count || 0} sweeps to Bank / Supplier accounts`);
+
+            let flagCount = sm.flagged_count || 0;
+            $(wrapper).find('#mpesa-kpi-flags-count').text(`${flagCount} Flags`);
+            if (flagCount > 0) {
+                $(wrapper).find('#mpesa-kpi-flags-card').css({'border-left': '5px solid #ef4444', 'border-color': '#fecaca'});
+                $(wrapper).find('#mpesa-kpi-flags-count').css('color', '#dc2626');
+                $(wrapper).find('#mpesa-kpi-flags-sub').text(`${flagCount} carryover skips or math variances detected`);
+            } else {
+                $(wrapper).find('#mpesa-kpi-flags-card').css({'border-left': '5px solid #16a34a', 'border-color': '#bbf7d0'});
+                $(wrapper).find('#mpesa-kpi-flags-count').css('color', '#16a34a').text('0 Flags (Clean)');
+                $(wrapper).find('#mpesa-kpi-flags-sub').text('All recorded collections and carryovers match');
+            }
+
+            $(wrapper).find('#mpesa-subtab-shifts-badge').text(`${flagCount} flags`);
+            $(wrapper).find('#mpesa-subtab-transfers-count').text(state.transfers_data.length);
+
+            // Populate Till filter options if empty or changed
+            let tillSel = $(wrapper).find('#mpesa-recon-till-filter');
+            let currentTillVal = tillSel.val();
+            tillSel.empty().append('<option value="">All Active Tills</option>');
+            state.tills_list.forEach(t => {
+                let optText = t.till_name + (t.station ? ` (${t.station})` : '');
+                tillSel.append(`<option value="${frappe.utils.escape_html(t.till_name)}">${frappe.utils.escape_html(optText)}</option>`);
+            });
+            if (currentTillVal) {
+                tillSel.val(currentTillVal);
+            }
+
+            // Also populate statement matcher till options
+            populate_stmt_match_tills(wrapper, state.station);
+
+            // Render tables
+            render_mpesa_shifts_table(wrapper);
+            render_mpesa_transfers_table(wrapper);
+        },
+        error: function(err) {
+            $(wrapper).find('#mpesa-shifts-table-body').html(`<tr><td colspan="11" style="text-align:center; padding:24px; color:#ef4444;">Error: ${frappe.utils.escape_html(err.message || 'Failed to load')}</td></tr>`);
+            $(wrapper).find('#mpesa-transfers-table-body').html(`<tr><td colspan="10" style="text-align:center; padding:24px; color:#ef4444;">Error: ${frappe.utils.escape_html(err.message || 'Failed to load')}</td></tr>`);
+        }
+    });
+}
+
+function render_mpesa_shifts_table(wrapper) {
+    let state = window.MPESA_RECON_STATE;
+    let list = state.shifts_data || [];
+    let tbody = $(wrapper).find('#mpesa-shifts-table-body');
+    tbody.empty();
+
+    if (!list.length) {
+        tbody.html('<tr><td colspan="11" style="text-align:center; padding:36px; color:#64748b;">No M-Pesa shift readings found for selected criteria.</td></tr>');
+        $(wrapper).find('#mpesa-shifts-count-info').text('Showing 0 shifts');
+        return;
+    }
+
+    let search = (state.search || '').toLowerCase();
+    let renderedCount = 0;
+
+    list.forEach(item => {
+        // Local search filter
+        if (search) {
+            let str = `${item.shift || ''} ${item.station || ''} ${item.till_name || ''} ${item.cashier_name || ''} ${item.audit_status || ''}`.toLowerCase();
+            if (!str.includes(search)) return;
+        }
+        renderedCount++;
+
+        // Math badge
+        let mathBadge = '';
+        if (item.math_status === 'OK') {
+            mathBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#f0fdf4; color:#166534; font-weight:700; border:1px solid #bbf7d0;">✓ Bal 0.00</span>`;
+        } else {
+            let diffTxt = format_currency(item.math_discrepancy || 0, "KES");
+            mathBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#fef2f2; color:#dc2626; font-weight:700; border:1px solid #fecaca;" title="Formula: Collections should equal Closing - Opening + Sweeps">⚠️ Diff: ${diffTxt}</span>`;
+        }
+
+        // Carryover badge
+        let carryBadge = '';
+        if (item.carryover_status === 'Match') {
+            carryBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#f0fdf4; color:#166534; font-weight:700; border:1px solid #bbf7d0;">✓ Continuous</span>`;
+        } else if (item.carryover_status === 'Mismatch') {
+            carryBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#fef2f2; color:#dc2626; font-weight:700; border:1px solid #fecaca;" title="Expected Opening: ${format_currency(item.expected_opening || 0, 'KES')}">🚨 Skip: exp ${format_currency(item.expected_opening || 0, 'KES')}</span>`;
+        } else {
+            carryBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#f1f5f9; color:#64748b; font-weight:600;">Initial</span>`;
+        }
+
+        // Audit status badge
+        let stBadge = '';
+        let st = item.audit_status || 'Pending';
+        if (st === 'Verified') {
+            stBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#dcfce7; color:#15803d; font-weight:800; border:1px solid #86efac;">🟢 Verified</span>`;
+        } else if (st === 'Flagged') {
+            stBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#fee2e2; color:#b91c1c; font-weight:800; border:1px solid #fca5a5;">🔴 Flagged</span>`;
+        } else {
+            stBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#fef3c7; color:#b45309; font-weight:800; border:1px solid #fde68a;">🟡 Pending</span>`;
+        }
+
+        let rowBg = (item.is_flagged) ? 'background:#fffbfb;' : '';
+
+        let rowHtml = `
+            <tr style="border-bottom: 1px solid #f1f5f9; ${rowBg}">
+                <td style="padding: 10px 12px;">
+                    <div style="font-weight: 700; color: #0f172a; font-family: monospace;">
+                        <a href="/app/shift/${item.shift}" target="_blank" style="color: #0284c7; text-decoration: underline;">${frappe.utils.escape_html(item.shift || '')}</a>
+                    </div>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${frappe.utils.escape_html(item.station || '')}</div>
+                </td>
+                <td style="padding: 10px 12px;">
+                    <div style="color: #334155; font-weight: 600;">${item.shift_date || ''}</div>
+                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">CSA: ${frappe.utils.escape_html(item.cashier_name || 'N/A')}</div>
+                </td>
+                <td style="padding: 10px 12px;">
+                    <span style="font-weight: 700; color: #0f172a; background: #f8fafc; padding: 3px 8px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+                        ${frappe.utils.escape_html(item.till_name || '')}
+                    </span>
+                </td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-size: 12.5px; color: #334155;">
+                    ${format_currency(item.opening_balance || 0, "KES")}
+                </td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-size: 12.5px; font-weight: 700; color: #059669;">
+                    +${format_currency(item.collections || 0, "KES")}
+                </td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-size: 12.5px; font-weight: 700; color: #0284c7;">
+                    ${item.transfers_out > 0 ? '-' + format_currency(item.transfers_out, "KES") : '0.00'}
+                </td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-size: 12.5px; font-weight: 800; color: #0f172a;">
+                    ${format_currency(item.closing_balance || 0, "KES")}
+                </td>
+                <td style="padding: 10px 12px; text-align: center;">
+                    ${mathBadge}
+                </td>
+                <td style="padding: 10px 12px; text-align: center;">
+                    ${carryBadge}
+                </td>
+                <td style="padding: 10px 12px; text-align: center;">
+                    ${stBadge}
+                </td>
+                <td style="padding: 10px 12px; text-align: center;">
+                    <button type="button" class="btn-mpesa-audit-shift btn btn-xs" 
+                        data-row-name="${frappe.utils.escape_html(item.row_name || '')}"
+                        data-shift="${frappe.utils.escape_html(item.shift || '')}"
+                        data-station="${frappe.utils.escape_html(item.station || '')}"
+                        data-date="${frappe.utils.escape_html(item.shift_date || '')}"
+                        data-till="${frappe.utils.escape_html(item.till_name || '')}"
+                        data-collections="${item.collections || 0}"
+                        data-status="${frappe.utils.escape_html(item.audit_status || 'Pending')}"
+                        data-stmt-ref="${frappe.utils.escape_html(item.statement_ref || '')}"
+                        data-note="${frappe.utils.escape_html(item.audit_note || '')}"
+                        style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; color: #1e293b; cursor: pointer;">
+                        Audit / Verify
+                    </button>
+                </td>
+            </tr>
+        `;
+        tbody.append(rowHtml);
+    });
+
+    $(wrapper).find('#mpesa-shifts-count-info').text(`Showing ${renderedCount} shifts`);
+
+    // Bind Audit button click
+    tbody.find('.btn-mpesa-audit-shift').off('click').on('click', function(e) {
+        e.preventDefault();
+        let btn = $(this);
+        open_mpesa_audit_modal(wrapper, {
+            target_type: 'shift_reading',
+            target_id: btn.data('row-name'),
+            shift: btn.data('shift'),
+            station: btn.data('station'),
+            date: btn.data('date'),
+            till: btn.data('till'),
+            amount: btn.data('collections'),
+            status: btn.data('status'),
+            stmt_ref: btn.data('stmt-ref'),
+            note: btn.data('note')
+        });
+    });
+}
+
+function render_mpesa_transfers_table(wrapper) {
+    let state = window.MPESA_RECON_STATE;
+    let list = state.transfers_data || [];
+    let tbody = $(wrapper).find('#mpesa-transfers-table-body');
+    tbody.empty();
+
+    if (!list.length) {
+        tbody.html('<tr><td colspan="10" style="text-align:center; padding:36px; color:#64748b;">No M-Pesa sweeps or transfers recorded in this period.</td></tr>');
+        $(wrapper).find('#mpesa-transfers-count-info').text('Showing 0 transfers');
+        return;
+    }
+
+    let search = (state.search || '').toLowerCase();
+    let renderedCount = 0;
+
+    list.forEach(t => {
+        if (search) {
+            let str = `${t.transfer_id || ''} ${t.station || ''} ${t.destination_account || ''} ${t.source_account || ''} ${t.audit_status || ''}`.toLowerCase();
+            if (!str.includes(search)) return;
+        }
+        renderedCount++;
+
+        let stBadge = '';
+        let st = t.audit_status || 'Pending';
+        if (st === 'Verified') {
+            stBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#dcfce7; color:#15803d; font-weight:800; border:1px solid #86efac;">🟢 Verified</span>`;
+        } else if (st === 'Flagged') {
+            stBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#fee2e2; color:#b91c1c; font-weight:800; border:1px solid #fca5a5;">🔴 Flagged</span>`;
+        } else {
+            stBadge = `<span style="font-size:11px; padding:3px 8px; border-radius:999px; background:#fef3c7; color:#b45309; font-weight:800; border:1px solid #fde68a;">🟡 Pending</span>`;
+        }
+
+        let typeBadge = (t.transfer_type === 'Station Cash Transfer')
+            ? `<span style="font-size:10.5px; padding:2px 7px; background:#e0f2fe; color:#0369a1; border-radius:6px; font-weight:600;">Cash Transfer</span>`
+            : `<span style="font-size:10.5px; padding:2px 7px; background:#fef3c7; color:#b45309; border-radius:6px; font-weight:600;">Shift Sweep</span>`;
+
+        let rowHtml = `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 10px 12px;">
+                    <div style="font-weight: 700; color: #0284c7; font-family: monospace;">${frappe.utils.escape_html(t.transfer_id || '')}</div>
+                </td>
+                <td style="padding: 10px 12px; color: #334155; font-size: 12px;">
+                    ${t.transfer_date || ''} ${t.transfer_time || ''}
+                </td>
+                <td style="padding: 10px 12px;">
+                    <div style="font-weight: 600; color: #0f172a;">${frappe.utils.escape_html(t.station || '')}</div>
+                    <div style="font-size: 11px; color: #64748b;">Shift: ${frappe.utils.escape_html(t.shift || 'N/A')}</div>
+                </td>
+                <td style="padding: 10px 12px;">
+                    ${typeBadge}
+                </td>
+                <td style="padding: 10px 12px;">
+                    <span style="font-size: 11.5px; font-weight: 700; color: #166534; background: #f0fdf4; padding: 2px 7px; border-radius: 6px; border: 1px solid #bbf7d0;">
+                        ${frappe.utils.escape_html(t.source_account || 'M-Pesa Till')}
+                    </span>
+                </td>
+                <td style="padding: 10px 12px;">
+                    <span style="font-size: 11.5px; font-weight: 700; color: #1e40af; background: #eff6ff; padding: 2px 7px; border-radius: 6px; border: 1px solid #bfdbfe;">
+                        ${frappe.utils.escape_html(t.destination_account || 'Bank / Supplier')}
+                    </span>
+                </td>
+                <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #0284c7;">
+                    ${format_currency(t.amount || 0, "KES")}
+                </td>
+                <td style="padding: 10px 12px; font-size: 11.5px; color: #475569;">
+                    ${frappe.utils.escape_html(t.slip_ref || 'None')}
+                </td>
+                <td style="padding: 10px 12px; text-align: center;">
+                    ${stBadge}
+                </td>
+                <td style="padding: 10px 12px; text-align: center;">
+                    <button type="button" class="btn-mpesa-audit-transfer btn btn-xs"
+                        data-transfer-id="${frappe.utils.escape_html(t.transfer_id || '')}"
+                        data-transfer-type="${frappe.utils.escape_html(t.transfer_type || '')}"
+                        data-station="${frappe.utils.escape_html(t.station || '')}"
+                        data-date="${frappe.utils.escape_html(t.transfer_date || '')}"
+                        data-source="${frappe.utils.escape_html(t.source_account || '')}"
+                        data-dest="${frappe.utils.escape_html(t.destination_account || '')}"
+                        data-amount="${t.amount || 0}"
+                        data-status="${frappe.utils.escape_html(t.audit_status || 'Pending')}"
+                        data-slip="${frappe.utils.escape_html(t.slip_ref || '')}"
+                        data-note="${frappe.utils.escape_html(t.audit_note || '')}"
+                        style="padding: 4px 10px; font-size: 11px; font-weight: 700; border-radius: 6px; background: #fff; border: 1px solid #cbd5e1; color: #1e293b; cursor: pointer;">
+                        Verify
+                    </button>
+                </td>
+            </tr>
+        `;
+        tbody.append(rowHtml);
+    });
+
+    $(wrapper).find('#mpesa-transfers-count-info').text(`Showing ${renderedCount} transfers`);
+
+    tbody.find('.btn-mpesa-audit-transfer').off('click').on('click', function(e) {
+        e.preventDefault();
+        let btn = $(this);
+        open_mpesa_audit_modal(wrapper, {
+            target_type: 'transfer',
+            transfer_type: btn.data('transfer-type'),
+            target_id: btn.data('transfer-id'),
+            station: btn.data('station'),
+            date: btn.data('date'),
+            source: btn.data('source'),
+            dest: btn.data('dest'),
+            amount: btn.data('amount'),
+            status: btn.data('status'),
+            stmt_ref: btn.data('slip'),
+            note: btn.data('note')
+        });
+    });
+}
+
+function filter_mpesa_tables_locally(wrapper) {
+    render_mpesa_shifts_table(wrapper);
+    render_mpesa_transfers_table(wrapper);
+}
+
+function open_mpesa_audit_modal(wrapper, opts) {
+    let modal = $(wrapper).find('#modal-mpesa-audit-action');
+    modal.find('#mpesa-audit-target-type').val(opts.target_type);
+    modal.find('#mpesa-audit-target-id').val(opts.target_id);
+    modal.find('#mpesa-audit-stmt-ref').val(opts.stmt_ref || '');
+    modal.find('#mpesa-audit-note').val(opts.note || '');
+    modal.find('#mpesa-audit-alert').hide().text('');
+
+    if (opts.status === 'Verified') {
+        modal.find('input[name="mpesa-audit-status-choice"][value="Verified"]').prop('checked', true);
+    } else {
+        modal.find('input[name="mpesa-audit-status-choice"][value="Flagged"]').prop('checked', true);
+    }
+
+    let infoHtml = '';
+    if (opts.target_type === 'shift_reading') {
+        modal.find('#mpesa-modal-title').text('Audit & Verify M-Pesa Shift Reading');
+        infoHtml = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div><strong>Shift:</strong> ${frappe.utils.escape_html(opts.shift || '')}</div>
+                <div><strong>Station:</strong> ${frappe.utils.escape_html(opts.station || '')}</div>
+                <div><strong>Till:</strong> ${frappe.utils.escape_html(opts.till || '')}</div>
+                <div><strong>Collections:</strong> <span style="font-family:monospace; color:#059669; font-weight:800;">${format_currency(opts.amount || 0, "KES")}</span></div>
+            </div>
+        `;
+    } else {
+        modal.find('#mpesa-modal-title').text('Audit & Verify M-Pesa Sweep / Transfer');
+        modal.data('transfer-type', opts.transfer_type || 'Station Cash Transfer');
+        infoHtml = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div><strong>Transfer ID:</strong> ${frappe.utils.escape_html(opts.target_id || '')}</div>
+                <div><strong>Station:</strong> ${frappe.utils.escape_html(opts.station || '')}</div>
+                <div><strong>Route:</strong> ${frappe.utils.escape_html(opts.source || '')} ➔ ${frappe.utils.escape_html(opts.dest || '')}</div>
+                <div><strong>Amount:</strong> <span style="font-family:monospace; color:#0284c7; font-weight:800;">${format_currency(opts.amount || 0, "KES")}</span></div>
+            </div>
+        `;
+    }
+    modal.find('#mpesa-audit-item-info').html(infoHtml);
+    modal.css('display', 'flex').hide().fadeIn(150);
+}
+
+function submit_mpesa_audit_action(wrapper) {
+    let modal = $(wrapper).find('#modal-mpesa-audit-action');
+    let targetType = modal.find('#mpesa-audit-target-type').val();
+    let targetId = modal.find('#mpesa-audit-target-id').val();
+    let decision = modal.find('input[name="mpesa-audit-status-choice"]:checked').val() || 'Verified';
+    let stmtRef = modal.find('#mpesa-audit-stmt-ref').val().trim();
+    let note = modal.find('#mpesa-audit-note').val().trim();
+    let alertBox = modal.find('#mpesa-audit-alert');
+
+    modal.find('#mpesa-modal-spinner').removeClass('hidden');
+    modal.find('#btn-mpesa-modal-submit').prop('disabled', true);
+
+    if (targetType === 'shift_reading') {
+        frappe.call({
+            method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.verify_mpesa_shift_reading',
+            args: {
+                row_name: targetId,
+                status: decision,
+                statement_ref: stmtRef,
+                audit_note: note
+            },
+            callback: function(r) {
+                modal.find('#mpesa-modal-spinner').addClass('hidden');
+                modal.find('#btn-mpesa-modal-submit').prop('disabled', false);
+                if (r && r.message && r.message.success) {
+                    frappe.show_alert({
+                        message: `<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">check_circle</span> ${r.message.message}`,
+                        indicator: 'green'
+                    }, 5);
+                    modal.fadeOut(120);
+                    load_mpesa_reconciliation_data(wrapper);
+                } else {
+                    let msg = (r && r.message && r.message.message) ? r.message.message : 'Failed to update audit status.';
+                    alertBox.text(msg).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+                }
+            },
+            error: function(err) {
+                modal.find('#mpesa-modal-spinner').addClass('hidden');
+                modal.find('#btn-mpesa-modal-submit').prop('disabled', false);
+                alertBox.text(err.message || 'Server error occurred.').css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+            }
+        });
+    } else {
+        let transferType = modal.data('transfer-type') || 'Station Cash Transfer';
+        frappe.call({
+            method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.audit_mpesa_transfer_routing',
+            args: {
+                transfer_id: targetId,
+                transfer_type: transferType,
+                status: decision,
+                audit_note: note,
+                bank_slip_ref: stmtRef
+            },
+            callback: function(r) {
+                modal.find('#mpesa-modal-spinner').addClass('hidden');
+                modal.find('#btn-mpesa-modal-submit').prop('disabled', false);
+                if (r && r.message && r.message.success) {
+                    frappe.show_alert({
+                        message: `<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">check_circle</span> ${r.message.message}`,
+                        indicator: 'green'
+                    }, 5);
+                    modal.fadeOut(120);
+                    load_mpesa_reconciliation_data(wrapper);
+                } else {
+                    let msg = (r && r.message && r.message.message) ? r.message.message : 'Failed to update audit status.';
+                    alertBox.text(msg).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+                }
+            },
+            error: function(err) {
+                modal.find('#mpesa-modal-spinner').addClass('hidden');
+                modal.find('#btn-mpesa-modal-submit').prop('disabled', false);
+                alertBox.text(err.message || 'Server error occurred.').css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+            }
+        });
+    }
+}
+
+function populate_stmt_match_tills(wrapper, station) {
+    let state = window.MPESA_RECON_STATE;
+    let tillSel = $(wrapper).find('#stmt-match-till');
+    tillSel.empty().append('<option value="">Select Till</option>');
+    (state.tills_list || []).forEach(t => {
+        if (!station || t.station === station) {
+            tillSel.append(`<option value="${frappe.utils.escape_html(t.till_name)}">${frappe.utils.escape_html(t.till_name)}</option>`);
+        }
+    });
+}
+
+function submit_mpesa_statement_matcher(wrapper) {
+    let station = $(wrapper).find('#stmt-match-station').val();
+    let till = $(wrapper).find('#stmt-match-till').val();
+    let date = $(wrapper).find('#stmt-match-date').val();
+    let op = parseFloat($(wrapper).find('#stmt-match-opening').val()) || 0;
+    let inf = parseFloat($(wrapper).find('#stmt-match-inflows').val()) || 0;
+    let trf = parseFloat($(wrapper).find('#stmt-match-transfers').val()) || 0;
+    let cl = parseFloat($(wrapper).find('#stmt-match-closing').val()) || 0;
+    let notes = $(wrapper).find('#stmt-match-notes').val();
+
+    if (!station || !till || !date) {
+        frappe.msgprint(__('Please select Station, Till Name, and Statement Date to run audit.'));
+        return;
+    }
+
+    let resBox = $(wrapper).find('#stmt-match-results-box');
+    resBox.html('<div style="padding:24px; text-align:center;"><span class="spinner"></span> Running comparison against shift records...</div>');
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.submit_mpesa_statement_audit',
+        args: {
+            station: station,
+            till: till,
+            statement_date: date,
+            statement_opening: op,
+            statement_inflows: inf,
+            statement_transfers: trf,
+            statement_closing: cl,
+            notes: notes
+        },
+        callback: function(r) {
+            if (!r || !r.message || !r.message.success) {
+                resBox.html(`<div style="padding:16px; color:#ef4444;">${(r && r.message && r.message.message) || 'Statement audit failed.'}</div>`);
+                return;
+            }
+
+            let res = r.message.audit_result;
+            let statusPill = (res.status === 'Balanced')
+                ? `<span style="font-size:12px; padding:4px 12px; border-radius:999px; background:#dcfce7; color:#15803d; font-weight:800; border:1px solid #86efac;">🟢 BALANCED (0.00 VARIANCE)</span>`
+                : `<span style="font-size:12px; padding:4px 12px; border-radius:999px; background:#fee2e2; color:#b91c1c; font-weight:800; border:1px solid #fca5a5;">🚨 VARIANCE DETECTED</span>`;
+
+            let html = `
+                <div style="text-align:left;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                        <div>
+                            <span style="font-size:13px; font-weight:800; color:#0f172a;">${frappe.utils.escape_html(till)} • ${date}</span>
+                            <div style="font-size:11px; color:#64748b;">${frappe.utils.escape_html(station)}</div>
+                        </div>
+                        <div>${statusPill}</div>
+                    </div>
+
+                    <table style="width:100%; font-size:12px; border-collapse:collapse; margin-bottom:14px;">
+                        <thead>
+                            <tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+                                <th style="padding:6px 8px; text-align:left;">Metric</th>
+                                <th style="padding:6px 8px; text-align:right;">Safaricom Stmt</th>
+                                <th style="padding:6px 8px; text-align:right;">System / SPA</th>
+                                <th style="padding:6px 8px; text-align:right;">Variance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:6px 8px; font-weight:600;">Opening Balance</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace;">${format_currency(res.statement_opening, "KES")}</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace;">${format_currency(res.system_opening, "KES")}</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace; color:${res.opening_variance === 0 ? '#16a34a' : '#dc2626'}; font-weight:700;">${format_currency(res.opening_variance, "KES")}</td>
+                            </tr>
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:6px 8px; font-weight:600;">Inflows / Collections</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace;">${format_currency(res.statement_inflows, "KES")}</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace;">${format_currency(res.system_collections, "KES")}</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace; color:${res.inflows_variance === 0 ? '#16a34a' : '#dc2626'}; font-weight:700;">${format_currency(res.inflows_variance, "KES")}</td>
+                            </tr>
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:6px 8px; font-weight:600;">Sweeps / Transfers</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace;">${format_currency(res.statement_transfers, "KES")}</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace;">${format_currency(res.system_transfers, "KES")}</td>
+                                <td style="padding:6px 8px; text-align:right; font-family:monospace; color:${res.transfers_variance === 0 ? '#16a34a' : '#dc2626'}; font-weight:700;">${format_currency(res.transfers_variance, "KES")}</td>
+                            </tr>
+                            <tr style="border-bottom:2px solid #e2e8f0; font-weight:700;">
+                                <td style="padding:8px 8px;">Closing Balance</td>
+                                <td style="padding:8px 8px; text-align:right; font-family:monospace;">${format_currency(res.statement_closing, "KES")}</td>
+                                <td style="padding:8px 8px; text-align:right; font-family:monospace;">${format_currency(res.system_closing, "KES")}</td>
+                                <td style="padding:8px 8px; text-align:right; font-family:monospace; color:${res.closing_variance === 0 ? '#16a34a' : '#dc2626'}; font-weight:800;">${format_currency(res.closing_variance, "KES")}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div style="font-size:11.5px; color:#64748b; background:#f8fafc; border-radius:6px; padding:8px 12px; border:1px solid #e2e8f0;">
+                        ${frappe.utils.escape_html(res.message || '')}
+                    </div>
+                </div>
+            `;
+            resBox.html(html);
+            load_mpesa_reconciliation_data(wrapper);
+        },
+        error: function(err) {
+            resBox.html(`<div style="padding:16px; color:#ef4444;">Server error: ${frappe.utils.escape_html(err.message || 'Unknown error')}</div>`);
+        }
+    });
+}
+
+function export_mpesa_recon_csv(wrapper) {
+    let state = window.MPESA_RECON_STATE;
+    let rows = [
+        ["M-PESA TILLS AUDIT & RECONCILIATION REPORT"],
+        ["Export Date", frappe.datetime.now_datetime()],
+        ["Station Filter", state.station || "All Stations"],
+        ["Till Filter", state.till || "All Active Tills"],
+        ["Date Range", `${state.from_date} to ${state.to_date}`],
+        ["Status Filter", state.status_filter],
+        [],
+        ["--- SECTION 1: SHIFT COLLECTIONS & READINGS AUDIT ---"],
+        ["Shift ID", "Station", "Date", "Cashier", "Till Name", "Opening (KES)", "Collections (KES)", "Sweeps Out (KES)", "Closing (KES)", "Math Discrepancy", "Math Status", "Carryover Status", "Audit Status", "Statement Ref", "Audit Note"]
+    ];
+
+    (state.shifts_data || []).forEach(s => {
+        rows.push([
+            s.shift || "",
+            s.station || "",
+            s.shift_date || "",
+            s.cashier_name || "",
+            s.till_name || "",
+            (s.opening_balance || 0).toFixed(2),
+            (s.collections || 0).toFixed(2),
+            (s.transfers_out || 0).toFixed(2),
+            (s.closing_balance || 0).toFixed(2),
+            (s.math_discrepancy || 0).toFixed(2),
+            s.math_status || "",
+            s.carryover_status || "",
+            s.audit_status || "",
+            s.statement_ref || "",
+            (s.audit_note || "").replace(/(\r\n|\n|\r)/gm, " ")
+        ]);
+    });
+
+    rows.push([]);
+    rows.push(["--- SECTION 2: TRANSFERS & SWEEPS ROUTING ---"]);
+    rows.push(["Transfer ID", "Type", "Station", "Date", "Time", "Shift", "Source Till", "Destination Account", "Amount (KES)", "Slip Ref", "Audit Status", "Audit Note"]);
+
+    (state.transfers_data || []).forEach(t => {
+        rows.push([
+            t.transfer_id || "",
+            t.transfer_type || "",
+            t.station || "",
+            t.transfer_date || "",
+            t.transfer_time || "",
+            t.shift || "",
+            t.source_account || "",
+            t.destination_account || "",
+            (t.amount || 0).toFixed(2),
+            t.slip_ref || "",
+            t.audit_status || "",
+            (t.audit_note || "").replace(/(\r\n|\n|\r)/gm, " ")
+        ]);
+    });
+
+    let csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `mpesa_reconciliation_${state.station || 'all'}_${state.from_date}_to_${state.to_date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 

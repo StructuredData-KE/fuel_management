@@ -6850,7 +6850,7 @@ def delete_cash_transfer(entry_id):
 
 
 @frappe.whitelist()
-def update_cash_transfer(entry_id, date=None, transaction_number=None, destination_account=None, amount=None):
+def update_cash_transfer(entry_id, date=None, transaction_number=None, destination_account=None, amount=None, source_account=None, station=None):
     """Safely update a Station Cash Transfer and synchronize its Journal Entry."""
     if not entry_id:
         frappe.throw(_("Cash Transfer entry ID is required."))
@@ -6863,10 +6863,14 @@ def update_cash_transfer(entry_id, date=None, transaction_number=None, destinati
         doc.date = date
     if transaction_number:
         doc.transaction_number = transaction_number
+    if source_account:
+        doc.source_account = source_account
     if destination_account:
         doc.destination_account = destination_account
     if amount is not None:
         doc.amount = flt(amount)
+    if station:
+        doc.station = station
 
     doc.save(ignore_permissions=True)
     frappe.db.commit()

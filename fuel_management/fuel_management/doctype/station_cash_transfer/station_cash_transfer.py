@@ -12,6 +12,7 @@ class StationCashTransfer(Document):
             if old_doc:
                 if (old_doc.date != self.date or 
                     old_doc.transaction_number != self.transaction_number or 
+                    getattr(old_doc, "source_account", None) != getattr(self, "source_account", None) or
                     old_doc.destination_account != self.destination_account or 
                     flt(old_doc.amount) != flt(self.amount)):
                     self.cancel_journal_entries()
@@ -38,7 +39,7 @@ class StationCashTransfer(Document):
             frappe.log_error(f"Failed to cancel Journal Entry for Cash Transfer {self.name}: {str(e)}", "Station Cash Transfer Error")
 
     def create_journal_entry(self):
-        """Generate a standard ERPNext Journal Entry for this cash transfer."""
+        """Generate a standard ERPNext Journal Entry for this cash/M-Pesa transfer."""
         try:
             company = frappe.defaults.get_user_default("Company")
             if not company:
@@ -48,20 +49,25 @@ class StationCashTransfer(Document):
             if not company:
                 frappe.throw("No Company found in the system.")
                 
-            station_cash_account = frappe.db.get_value("Company", company, "default_cash_account")
+            station_cash_account = getattr(self, "source_account", None)
+            if not station_cash_account and getattr(self, "station", None):
+                station_cash_account = frappe.db.get_value("Fuel Station", self.station, "cash_account")
+            if not station_cash_account:
+                station_cash_account = frappe.db.get_value("Company", company, "default_cash_account")
             if not station_cash_account:
                 cash_accounts = frappe.get_all("Account", filters={"account_type": "Cash", "company": company})
                 if cash_accounts:
                     station_cash_account = cash_accounts[0].name
                 else:
-                    frappe.throw("No default cash account found to debit/credit.")
+                    frappe.throw("No default cash or source account found to debit/credit.")
                 
+            source_label = "M-Pesa Till" if "MPESA" in (station_cash_account or "").upper() else "Cash"
             je = frappe.get_doc({
                 "doctype": "Journal Entry",
                 "voucher_type": "Journal Entry",
                 "posting_date": self.date,
                 "company": company,
-                "user_remark": f"External Cash Transfer: {self.transaction_number} - {self.name}",
+                "user_remark": f"Station Transfer ({source_label} Sweep): {self.transaction_number} - {self.name} from {station_cash_account} to {self.destination_account}",
                 "accounts": [
                     {
                         "account": self.destination_account,
