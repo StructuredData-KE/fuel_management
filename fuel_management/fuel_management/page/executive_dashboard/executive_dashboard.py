@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import today, getdate, flt, formatdate
+from frappe.utils import today, getdate, flt, formatdate, now_datetime
 import json
 
 @frappe.whitelist()
@@ -3443,7 +3443,7 @@ def verify_mpesa_shift_reading(row_name, status="Verified", statement_ref=None, 
     update_dict = {
         "audit_status": status,
         "verified_by": frappe.session.user,
-        "verified_on": now_datetime()
+        "verified_on": frappe.utils.now_datetime()
     }
     if statement_ref is not None:
         update_dict["statement_ref"] = statement_ref
@@ -3452,7 +3452,7 @@ def verify_mpesa_shift_reading(row_name, status="Verified", statement_ref=None, 
 
     frappe.db.set_value("Shift M-Pesa Payment", row_name, update_dict)
     frappe.db.commit()
-    return {"status": "success", "message": f"M-Pesa reading marked as {status}."}
+    return {"success": True, "status": "success", "message": f"M-Pesa reading marked as {status}."}
 
 
 @frappe.whitelist()
@@ -3467,7 +3467,7 @@ def audit_mpesa_transfer_routing(transfer_id, transfer_type="Direct Transfer", s
             "statement_ref": bank_slip_ref,
             "audit_note": audit_note,
             "verified_by": frappe.session.user,
-            "verified_on": now_datetime()
+            "verified_on": frappe.utils.now_datetime()
         })
     elif frappe.db.exists("Station Cash Transfer", transfer_id):
         frappe.db.set_value("Station Cash Transfer", transfer_id, {
@@ -3475,7 +3475,7 @@ def audit_mpesa_transfer_routing(transfer_id, transfer_type="Direct Transfer", s
             "audit_note": audit_note
         })
     frappe.db.commit()
-    return {"status": "success", "message": f"Transfer marked as {status}."}
+    return {"success": True, "status": "success", "message": f"Transfer marked as {status}."}
 
 
 @frappe.whitelist()
@@ -3524,7 +3524,7 @@ def submit_mpesa_statement_audit(station, till, statement_date, statement_openin
                 "statement_ref": f"Stmt {statement_date}",
                 "audit_note": notes or "Auto-matched with statement",
                 "verified_by": frappe.session.user,
-                "verified_on": now_datetime()
+                "verified_on": frappe.utils.now_datetime()
             })
         frappe.db.commit()
 

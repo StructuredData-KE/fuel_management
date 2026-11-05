@@ -9175,7 +9175,7 @@ function submit_mpesa_audit_action(wrapper) {
             callback: function(r) {
                 modal.find('#mpesa-modal-spinner').addClass('hidden');
                 modal.find('#btn-mpesa-modal-submit').prop('disabled', false);
-                if (r && r.message && r.message.success) {
+                if (r && r.message && (r.message.success || r.message.status === 'success')) {
                     frappe.show_alert({
                         message: `<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">check_circle</span> ${r.message.message}`,
                         indicator: 'green'
@@ -9207,7 +9207,7 @@ function submit_mpesa_audit_action(wrapper) {
             callback: function(r) {
                 modal.find('#mpesa-modal-spinner').addClass('hidden');
                 modal.find('#btn-mpesa-modal-submit').prop('disabled', false);
-                if (r && r.message && r.message.success) {
+                if (r && r.message && (r.message.success || r.message.status === 'success')) {
                     frappe.show_alert({
                         message: `<span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">check_circle</span> ${r.message.message}`,
                         indicator: 'green'
