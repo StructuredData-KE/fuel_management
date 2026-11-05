@@ -267,6 +267,17 @@ function init_spa_ui(wrapper) {
         let shortsBadgeText = selectedStation ? (selectedStation === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : selectedStation) : 'All Stations (Consolidated)';
         $(wrapper).find('#exec-shorts-station-badge').text(shortsBadgeText);
 
+        // Synchronize Debtors Management station badges
+        let debtorsBadgeText = selectedStation ? (selectedStation === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : selectedStation) : 'All Stations (Consolidated)';
+        $(wrapper).find('#exec-debtors-station-badge').text(debtorsBadgeText);
+        $(wrapper).find('#exec-aging-station-badge').text(debtorsBadgeText);
+
+        // Invalidate cached debtors state on station change so switching views always reflects the current station
+        if (window.DEBTORS_STATE) {
+            window.DEBTORS_STATE.debtors = null;
+            window.DEBTORS_STATE.aging_data = null;
+        }
+
         load_tank_levels(wrapper, selectedStation);
         if (typeof fetch_inventory_report === 'function') {
             fetch_inventory_report($(wrapper));
@@ -299,8 +310,26 @@ function init_spa_ui(wrapper) {
             if (window.CARDS_HOLDING_STATE) window.CARDS_HOLDING_STATE.page = 1;
             load_cards_holding_data(wrapper);
         } else if (activeTab === 'tab-customers') {
-            if (typeof window.load_debtors_data === 'function') {
-                window.load_debtors_data();
+            let debtorsSubview = (window.DEBTORS_STATE && window.DEBTORS_STATE.active_subview) || 'balances';
+            if (debtorsSubview === 'aging') {
+                if (typeof window.load_debtors_aging === 'function') {
+                    window.load_debtors_aging();
+                }
+            } else if (debtorsSubview === 'statement') {
+                if (typeof window.load_debtors_data === 'function') {
+                    window.load_debtors_data(function() {
+                        let selectedCust = $(wrapper).find('#stmt-customer-select').val();
+                        if (selectedCust) {
+                            window.load_customer_statement();
+                        } else {
+                            window.update_statement_customer_card();
+                        }
+                    });
+                }
+            } else {
+                if (typeof window.load_debtors_data === 'function') {
+                    window.load_debtors_data();
+                }
             }
         }
     }
@@ -2236,12 +2265,24 @@ window.switch_debtors_subview = function(subview) {
             window.render_debtors_balances();
         }
     } else if (subview === 'statement') {
-        window.populate_debtor_dropdown();
-        let selectedCust = $w.find('#stmt-customer-select').val();
-        if (selectedCust) {
-            window.load_customer_statement();
+        if (!window.DEBTORS_STATE.debtors || window.DEBTORS_STATE.debtors.length === 0) {
+            window.load_debtors_data(function() {
+                window.populate_debtor_dropdown();
+                let selectedCust = $w.find('#stmt-customer-select').val();
+                if (selectedCust) {
+                    window.load_customer_statement();
+                } else {
+                    window.update_statement_customer_card();
+                }
+            });
         } else {
-            window.update_statement_customer_card();
+            window.populate_debtor_dropdown();
+            let selectedCust = $w.find('#stmt-customer-select').val();
+            if (selectedCust) {
+                window.load_customer_statement();
+            } else {
+                window.update_statement_customer_card();
+            }
         }
     } else if (subview === 'aging') {
         if (!window.DEBTORS_STATE.aging_data) {
@@ -2272,8 +2313,11 @@ window.populate_debtor_dropdown = function() {
     });
 
     $select.html(options);
-    if (currentVal) {
+    if (currentVal && list.some(d => d.id === currentVal)) {
         $select.val(currentVal);
+    } else {
+        $select.val('');
+        window.DEBTORS_STATE.selected_customer_id = null;
     }
 };
 
@@ -2306,7 +2350,14 @@ window.view_customer_statement = function(customerId) {
 
 window.load_debtors_data = function(callback) {
     const $w = $(window.DEBTORS_STATE.wrapper || document);
-    let station = $w.find('#exec-global-station-select').val() || $w.find('#exec-header-station-select').val() || '';
+    let station = $w.find('#exec-global-station-select').val() 
+        || $w.find('#exec-header-station-select').val() 
+        || window.ACTIVE_STATION 
+        || '';
+
+    let badgeText = station ? (station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : station) : 'All Stations (Consolidated)';
+    $w.find('#exec-debtors-station-badge').text(badgeText);
+    $w.find('#exec-aging-station-badge').text(badgeText);
 
     $w.find('#debtors-balances-body').html(`
         <tr>
@@ -2790,7 +2841,14 @@ window.load_debtors_aging = function() {
         </tr>
     `);
 
-    let station = $w.find('#exec-global-station-select').val() || $w.find('#exec-header-station-select').val() || '';
+    let station = $w.find('#exec-global-station-select').val() 
+        || $w.find('#exec-header-station-select').val() 
+        || window.ACTIVE_STATION 
+        || '';
+
+    let badgeText = station ? (station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : station) : 'All Stations (Consolidated)';
+    $w.find('#exec-debtors-station-badge').text(badgeText);
+    $w.find('#exec-aging-station-badge').text(badgeText);
 
     frappe.call({
         method: "fuel_management.fuel_management.page.shift_operation_spa.shift_operation_spa.get_debtors_aging_analysis",

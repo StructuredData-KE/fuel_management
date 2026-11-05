@@ -1773,8 +1773,14 @@ def reload_spa_page():
 @frappe.whitelist()
 def get_debtors_data(station=None):
     from frappe.utils import flt
-    if not station:
-        station = frappe.defaults.get_user_default("station") or frappe.defaults.get_user_default("Fuel Station")
+    if station in ("ALL", "All Stations", "All Stations (Consolidated)", "", "None", "null", None):
+        user_roles = frappe.get_roles()
+        if "System Manager" not in user_roles and "Executive" not in user_roles and "Director" not in user_roles:
+            station = frappe.defaults.get_user_default("station") or frappe.defaults.get_user_default("Fuel Station")
+        else:
+            station = None
+    else:
+        station = str(station).strip()
     
     # 1. Invoices from Shift Invoices
     inv_where = "WHERE s.docstatus < 2"
@@ -1831,7 +1837,7 @@ def get_debtors_data(station=None):
         all_customers = frappe.db.sql("""
             SELECT name, customer_name, credit_limit, email_id, mobile_no, primary_address, disabled, station, is_shared_customer
             FROM `tabCustomer`
-            WHERE disabled = 0 AND (station = %(station)s OR is_shared_customer = 1 OR station IS NULL OR station = '')
+            WHERE disabled = 0 AND station = %(station)s
             ORDER BY customer_name asc
         """, {"station": station}, as_dict=True)
     else:
@@ -2029,12 +2035,19 @@ def register_customer_vehicle(customer, vehicle_registration, fuel_product=None,
 
 @frappe.whitelist()
 def get_station_customers(station=None):
-    if not station:
-        station = frappe.defaults.get_user_default("station") or frappe.defaults.get_user_default("Fuel Station")
+    if station in ("ALL", "All Stations", "All Stations (Consolidated)", "", "None", "null", None):
+        user_roles = frappe.get_roles()
+        if "System Manager" not in user_roles and "Executive" not in user_roles and "Director" not in user_roles:
+            station = frappe.defaults.get_user_default("station") or frappe.defaults.get_user_default("Fuel Station")
+        else:
+            station = None
+    else:
+        station = str(station).strip()
+
     cond = ""
     params = {}
     if station:
-        cond = "AND (station = %(station)s OR is_shared_customer = 1 OR station IS NULL OR station = '')"
+        cond = "AND station = %(station)s"
         params["station"] = station
     sql = f"""
         SELECT name, customer_name, station, is_shared_customer, credit_limit
