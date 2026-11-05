@@ -65,12 +65,13 @@ frappe.pages['executive_dashboard'].on_page_load = function(wrapper) {
 
 function init_spa_ui(wrapper) {
     // Navigation logic
-    $(wrapper).find('.exec-nav-item').on('click', function(e) {
+    $(wrapper).off('click', '.exec-nav-item').on('click', '.exec-nav-item', function(e) {
         if ($(this).attr('data-tab')) {
             e.preventDefault();
             
             const target = $(this).data('tab');
             const debtorsView = $(this).attr('data-debtors-view');
+            const accountName = $(this).attr('data-account');
 
             // Remove active class from all nav items
             $(wrapper).find('.exec-nav-item').removeClass('active');
@@ -95,7 +96,17 @@ function init_spa_ui(wrapper) {
             } else if (target === 'tab-balance-sheet') {
                 init_exec_balance_sheet(wrapper);
             } else if (target === 'tab-cash-accounts') {
+                if (accountName) {
+                    window.EXEC_CA_STATE = window.EXEC_CA_STATE || {};
+                    window.EXEC_CA_STATE.active_account = accountName;
+                }
                 init_exec_cash_accounts(wrapper);
+            } else if (target === 'tab-supplier-accounts') {
+                if (accountName) {
+                    window.EXEC_SUPP_ACC_STATE = window.EXEC_SUPP_ACC_STATE || {};
+                    window.EXEC_SUPP_ACC_STATE.active_account = accountName;
+                }
+                init_exec_supplier_accounts(wrapper);
             } else if (target === 'tab-expenses') {
                 init_exec_expenses(wrapper);
             } else if (target === 'tab-inventory') {
@@ -177,6 +188,7 @@ function init_spa_ui(wrapper) {
         load_pnl_data(wrapper);
         load_hr_data(wrapper);
         load_topups_statement(wrapper);
+        render_sidebar_account_modules(wrapper, window.ACTIVE_STATION);
     }
 
     // Dashboard Date Preset Buttons
@@ -285,6 +297,9 @@ function init_spa_ui(wrapper) {
             window.DEBTORS_STATE.aging_data = null;
         }
 
+        // Dynamically update Cash & Bank and Supplier Accounts in the sidebar
+        render_sidebar_account_modules(wrapper, selectedStation);
+
         load_tank_levels(wrapper, selectedStation);
         if (typeof fetch_inventory_report === 'function') {
             fetch_inventory_report($(wrapper));
@@ -316,6 +331,10 @@ function init_spa_ui(wrapper) {
         } else if (activeTab === 'tab-cards-holding') {
             if (window.CARDS_HOLDING_STATE) window.CARDS_HOLDING_STATE.page = 1;
             load_cards_holding_data(wrapper);
+        } else if (activeTab === 'tab-cash-accounts') {
+            load_exec_cash_accounts(wrapper);
+        } else if (activeTab === 'tab-supplier-accounts') {
+            load_exec_supplier_account(wrapper);
         } else if (activeTab === 'tab-customers') {
             let debtorsSubview = (window.DEBTORS_STATE && window.DEBTORS_STATE.active_subview) || 'balances';
             if (debtorsSubview === 'aging') {
@@ -399,6 +418,7 @@ function init_spa_ui(wrapper) {
     load_hr_data(wrapper);
     load_analytics_data(wrapper);
     load_topups_statement(wrapper);
+    render_sidebar_account_modules(wrapper, window.ACTIVE_STATION);
 
     
     // Populate Station Dropdown
@@ -5716,6 +5736,100 @@ function export_exec_deductions_csv(result) {
 
 
 // ========================================================
+// SIDEBAR ACCOUNT MODULES RENDERING (CASH & BANK & SUPPLIERS)
+// ========================================================
+function render_sidebar_account_modules(wrapper, selectedStation) {
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_executive_accounts",
+        args: {
+            station: selectedStation || ""
+        },
+        callback: function(r) {
+            if (!r.message) return;
+            let cashAccounts = r.message.cash_bank_accounts || [];
+            let supplierAccounts = r.message.supplier_accounts || [];
+
+            window.EXEC_ACCOUNTS_CACHE = {
+                cash_bank: cashAccounts,
+                suppliers: supplierAccounts
+            };
+
+            let activeTab = $(wrapper).find('.exec-main:visible').attr('id') || 'tab-dashboard';
+            let activeCashAcc = window.EXEC_CA_STATE ? window.EXEC_CA_STATE.active_account : null;
+            let activeSuppAcc = window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.active_account : null;
+
+            // Render Cash & Bank Accounts in sidebar
+            let cashHtml = '';
+            let validCashFound = false;
+            cashAccounts.forEach(acc => {
+                let isCurrent = (activeTab === 'tab-cash-accounts' && acc.name === activeCashAcc);
+                if (acc.name === activeCashAcc) validCashFound = true;
+
+                let icon = 'payments';
+                let upper = (acc.name || '').toUpperCase();
+                if (upper.includes('MPESA') || upper.includes('TILL')) {
+                    icon = 'phone_android';
+                } else if (acc.account_type === 'Bank' || upper.includes('EQUITY') || upper.includes('KCB')) {
+                    icon = 'account_balance';
+                }
+
+                let shortLabel = acc.label || acc.name.replace(' - KIL', '');
+
+                cashHtml += `
+                    <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-cash-accounts" data-account="${acc.name}" title="${acc.name}">
+                        <span class="material-symbols-outlined">${icon}</span>
+                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortLabel}</span>
+                    </a>
+                `;
+            });
+            if (cashAccounts.length === 0) {
+                cashHtml = '<div style="font-size: 11px; color: #94a3b8; padding: 6px 16px;">No accounts found</div>';
+            }
+            $(wrapper).find('#exec-sidebar-cash-accounts').html(cashHtml);
+
+            // Render Supplier Accounts in sidebar
+            let suppHtml = '';
+            let validSuppFound = false;
+            supplierAccounts.forEach(acc => {
+                let isCurrent = (activeTab === 'tab-supplier-accounts' && acc.name === activeSuppAcc);
+                if (acc.name === activeSuppAcc) validSuppFound = true;
+
+                let shortLabel = acc.label || acc.name.replace(' - KIL', '');
+
+                suppHtml += `
+                    <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-supplier-accounts" data-account="${acc.name}" title="${acc.name}">
+                        <span class="material-symbols-outlined">local_shipping</span>
+                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortLabel}</span>
+                    </a>
+                `;
+            });
+            if (supplierAccounts.length === 0) {
+                suppHtml = '<div style="font-size: 11px; color: #94a3b8; padding: 6px 16px;">No supplier accounts</div>';
+            }
+            $(wrapper).find('#exec-sidebar-supplier-accounts').html(suppHtml);
+
+            // If user is currently on cash accounts tab and active account is no longer in list, switch to first available
+            if (activeTab === 'tab-cash-accounts') {
+                if (!validCashFound && cashAccounts.length > 0) {
+                    window.EXEC_CA_STATE = window.EXEC_CA_STATE || {};
+                    window.EXEC_CA_STATE.active_account = cashAccounts[0].name;
+                    $(wrapper).find(`#exec-sidebar-cash-accounts .exec-nav-item[data-account="${cashAccounts[0].name}"]`).addClass('active');
+                    load_exec_cash_accounts(wrapper);
+                }
+            } else if (activeTab === 'tab-supplier-accounts') {
+                if (!validSuppFound && supplierAccounts.length > 0) {
+                    window.EXEC_SUPP_ACC_STATE = window.EXEC_SUPP_ACC_STATE || {};
+                    window.EXEC_SUPP_ACC_STATE.active_account = supplierAccounts[0].name;
+                    $(wrapper).find(`#exec-sidebar-supplier-accounts .exec-nav-item[data-account="${supplierAccounts[0].name}"]`).addClass('active');
+                    load_exec_supplier_account(wrapper);
+                }
+            }
+        }
+    });
+}
+
+
+// ========================================================
 // CASH & BANK ACCOUNTS MODULE
 // ========================================================
 function init_exec_cash_accounts(wrapper) {
@@ -5821,7 +5935,8 @@ function load_exec_cash_accounts(wrapper) {
         args: {
             account: window.EXEC_CA_STATE.active_account,
             from_date: window.EXEC_CA_STATE.from_date,
-            to_date: window.EXEC_CA_STATE.to_date
+            to_date: window.EXEC_CA_STATE.to_date,
+            is_supplier: 0
         },
         callback: function(r) {
             if (r.message) {
@@ -5829,40 +5944,13 @@ function load_exec_cash_accounts(wrapper) {
                 window.EXEC_CA_STATE.raw_data = data;
                 window.EXEC_CA_STATE.active_account = data.account;
 
-                // Render account switcher pills
-                let pillsHtml = '';
-                (data.accounts_list || []).forEach(acc => {
-                    let isActive = acc.name === data.account;
-                    let bg = isActive ? '#2563eb' : '#f8fafc';
-                    let color = isActive ? '#ffffff' : '#1e293b';
-                    let border = isActive ? '#2563eb' : '#cbd5e1';
-                    let typeBadge = acc.account_type === 'Cash' 
-                        ? `<span style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: ${isActive ? 'rgba(255,255,255,0.25)' : '#e2e8f0'}; color: ${isActive ? '#fff' : '#475569'}; font-weight: 700;">CASH</span>` 
-                        : `<span style="font-size: 10px; padding: 1px 6px; border-radius: 4px; background: ${isActive ? 'rgba(255,255,255,0.25)' : '#dbeafe'}; color: ${isActive ? '#fff' : '#1d4ed8'}; font-weight: 700;">BANK</span>`;
-                    
-                    let shortName = acc.name.replace(' - KIL', '');
-                    pillsHtml += `
-                        <div class="exec-ca-pill" data-account="${acc.name}" style="flex-shrink: 0; min-width: 170px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 10px; padding: 8px 14px; cursor: pointer; transition: all 0.2s;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <span style="font-size: 12px; font-weight: 700;">${shortName}</span>
-                                ${typeBadge}
-                            </div>
-                            <div style="font-size: 14px; font-weight: 800; font-family: monospace;">
-                                KES ${Number(acc.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                            </div>
-                        </div>
-                    `;
-                });
-                $(wrapper).find('#exec-ca-accounts-pills').html(pillsHtml);
+                // Sync sidebar active state
+                $(wrapper).find('#exec-sidebar-cash-accounts .exec-nav-item').removeClass('active');
+                $(wrapper).find(`#exec-sidebar-cash-accounts .exec-nav-item[data-account="${data.account}"]`).addClass('active');
 
-                $(wrapper).find('.exec-ca-pill').off('click').on('click', function() {
-                    let targetAccount = $(this).data('account');
-                    window.EXEC_CA_STATE.active_account = targetAccount;
-                    load_exec_cash_accounts(wrapper);
-                });
-
-                // Update Total Liquid & Active Badge
-                $(wrapper).find('#exec-ca-total-liquid').text(`KES ${Number(data.total_liquid || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                // Update Header and Active Badge
+                let cleanName = (data.account || '').replace(' - KIL', '');
+                $(wrapper).find('#exec-ca-header-title').text(`${cleanName} (Cash & Bank Account)`);
                 $(wrapper).find('#exec-ca-active-account-badge').text(data.account);
 
                 // Update 5 KPIs
@@ -6050,6 +6138,322 @@ function export_exec_ca_csv(wrapper) {
     link.setAttribute("href", uri);
     let safeName = (data.account || 'Cash_Account').replace(/[^a-zA-Z0-9]/g, '_');
     link.setAttribute("download", `Ledger_${safeName}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+
+// ========================================================
+// SUPPLIER ACCOUNTS MODULE
+// ========================================================
+function init_exec_supplier_accounts(wrapper) {
+    if (!window.EXEC_SUPP_ACC_STATE) {
+        window.EXEC_SUPP_ACC_STATE = {
+            active_account: null,
+            from_date: null,
+            to_date: null,
+            type_filter: 'all',
+            search: '',
+            raw_data: null
+        };
+    }
+
+    let today = frappe.datetime.get_today();
+    if (!window.EXEC_SUPP_ACC_STATE.to_date) {
+        window.EXEC_SUPP_ACC_STATE.to_date = today;
+        window.EXEC_SUPP_ACC_STATE.from_date = frappe.datetime.add_days(today, -6);
+    }
+
+    $(wrapper).find('#exec-supp-from').val(window.EXEC_SUPP_ACC_STATE.from_date);
+    $(wrapper).find('#exec-supp-to').val(window.EXEC_SUPP_ACC_STATE.to_date);
+
+    // Date Presets
+    $(wrapper).find('.exec-supp-preset').off('click').on('click', function() {
+        $(wrapper).find('.exec-supp-preset').removeClass('active').css({'background': '#fff', 'color': '#64748b', 'font-weight': '600', 'border-color': '#e2e8f0'});
+        $(this).addClass('active').css({'background': '#e0e7ff', 'color': '#3730a3', 'font-weight': '700', 'border-color': '#cbd5e1'});
+
+        let preset = $(this).data('preset');
+        let end = frappe.datetime.get_today();
+        let start = end;
+
+        if (preset === 'today') {
+            start = end;
+        } else if (preset === 'last_7') {
+            start = frappe.datetime.add_days(end, -6);
+        } else if (preset === 'this_month') {
+            start = frappe.datetime.month_start();
+        } else if (preset === 'last_month') {
+            let parts = end.split('-');
+            let year = parseInt(parts[0]);
+            let month = parseInt(parts[1]) - 1;
+            if (month === 0) {
+                month = 12;
+                year -= 1;
+            }
+            let monthStr = month < 10 ? '0' + month : '' + month;
+            start = `${year}-${monthStr}-01`;
+            let lastDay = new Date(year, month, 0).getDate();
+            end = `${year}-${monthStr}-${lastDay}`;
+        } else if (preset === 'this_year') {
+            let year = end.split('-')[0];
+            start = `${year}-01-01`;
+        }
+
+        window.EXEC_SUPP_ACC_STATE.from_date = start;
+        window.EXEC_SUPP_ACC_STATE.to_date = end;
+        $(wrapper).find('#exec-supp-from').val(start);
+        $(wrapper).find('#exec-supp-to').val(end);
+        load_exec_supplier_account(wrapper);
+    });
+
+    // Apply button
+    $(wrapper).find('#btn-exec-supp-apply').off('click').on('click', function() {
+        window.EXEC_SUPP_ACC_STATE.from_date = $(wrapper).find('#exec-supp-from').val();
+        window.EXEC_SUPP_ACC_STATE.to_date = $(wrapper).find('#exec-supp-to').val();
+        load_exec_supplier_account(wrapper);
+    });
+
+    // Search input
+    $(wrapper).find('#exec-supp-search-input').off('input').on('input', function() {
+        window.EXEC_SUPP_ACC_STATE.search = $(this).val().trim().toLowerCase();
+        render_exec_supp_table(wrapper);
+    });
+
+    // Type filter buttons
+    $(wrapper).find('.exec-supp-type-filter').off('click').on('click', function() {
+        $(wrapper).find('.exec-supp-type-filter').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600'});
+        $(this).addClass('active').css({'background': '#fff', 'color': '#0f172a', 'font-weight': '700'});
+        window.EXEC_SUPP_ACC_STATE.type_filter = $(this).data('filter');
+        render_exec_supp_table(wrapper);
+    });
+
+    // Print & Export & Payment modal
+    $(wrapper).find('#btn-exec-supp-print').off('click').on('click', function() {
+        print_exec_supp_ledger(wrapper);
+    });
+    $(wrapper).find('#btn-exec-supp-export').off('click').on('click', function() {
+        export_exec_supp_csv(wrapper);
+    });
+    $(wrapper).find('#btn-exec-supp-record-payment').off('click').on('click', function() {
+        open_supplier_payment_modal(wrapper, 'bank_transfer');
+    });
+
+    load_exec_supplier_account(wrapper);
+}
+
+function load_exec_supplier_account(wrapper) {
+    $(wrapper).find('#exec-supp-table-body').html('<tr><td colspan="7" style="text-align: center; padding: 30px; color: #94a3b8;"><span class="spinner"></span> Loading supplier ledger...</td></tr>');
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_cash_accounts_overview',
+        args: {
+            account: window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.active_account : null,
+            from_date: window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.from_date : null,
+            to_date: window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.to_date : null,
+            is_supplier: 1
+        },
+        callback: function(r) {
+            if (r.message) {
+                let data = r.message;
+                window.EXEC_SUPP_ACC_STATE = window.EXEC_SUPP_ACC_STATE || {};
+                window.EXEC_SUPP_ACC_STATE.raw_data = data;
+                window.EXEC_SUPP_ACC_STATE.active_account = data.account;
+
+                // Sync sidebar active state
+                $(wrapper).find('#exec-sidebar-supplier-accounts .exec-nav-item').removeClass('active');
+                $(wrapper).find(`#exec-sidebar-supplier-accounts .exec-nav-item[data-account="${data.account}"]`).addClass('active');
+
+                // Update Header and Active Badge
+                let cleanName = (data.account || '').replace(' - KIL', '');
+                $(wrapper).find('#exec-supp-header-title').text(`${cleanName} (Supplier Account)`);
+                $(wrapper).find('#exec-supp-active-account-badge').text(data.account);
+
+                // Update 5 KPIs (Deliveries / Credits vs Payments / Debits)
+                $(wrapper).find('#exec-supp-kpi-opening').text(`KES ${Number(data.opening_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                let deliveries = data.total_credits || data.total_outflows || 0;
+                let payments = data.total_debits || data.total_inflows || 0;
+                $(wrapper).find('#exec-supp-kpi-deliveries').text(`KES ${Number(deliveries).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-supp-kpi-payments').text(`KES ${Number(payments).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-supp-kpi-net').text(`KES ${Number(data.net_change || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-supp-kpi-closing').text(`KES ${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                // Update Footers
+                $(wrapper).find('#exec-supp-foot-deliveries').text(`KES ${Number(deliveries).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-supp-foot-payments').text(`KES ${Number(payments).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+                $(wrapper).find('#exec-supp-foot-closing').text(`KES ${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
+                render_exec_supp_table(wrapper);
+            }
+        }
+    });
+}
+
+function render_exec_supp_table(wrapper) {
+    let data = window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.raw_data : null;
+    if (!data || !data.transactions) return;
+
+    let txns = data.transactions;
+    let typeFilter = window.EXEC_SUPP_ACC_STATE.type_filter;
+    let search = (window.EXEC_SUPP_ACC_STATE.search || '').toLowerCase();
+
+    let filtered = txns.filter(t => {
+        if (typeFilter === 'credits' && (t.credit <= 0)) return false;
+        if (typeFilter === 'debits' && (t.debit <= 0)) return false;
+
+        if (search) {
+            let text = `${t.voucher_no || ''} ${t.voucher_type || ''} ${t.remarks || ''} ${t.against || ''}`.toLowerCase();
+            if (!text.includes(search)) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        $(wrapper).find('#exec-supp-table-body').html('<tr><td colspan="7" style="text-align: center; padding: 30px; color: #94a3b8;">No supplier transactions found matching criteria.</td></tr>');
+        return;
+    }
+
+    let rowsHtml = '';
+    filtered.forEach(t => {
+        let creditStr = t.credit > 0 ? `KES ${Number(t.credit).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '-';
+        let debitStr = t.debit > 0 ? `KES ${Number(t.debit).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '-';
+        let runningStr = `KES ${Number(t.running_balance).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+
+        let vLink = t.voucher_no;
+        if (t.voucher_type && t.voucher_no) {
+            vLink = `<a href="/app/${frappe.router.slug(t.voucher_type)}/${t.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 600; text-decoration: underline;">${t.voucher_no}</a>`;
+        }
+
+        let memo = (t.remarks || '').replace(/\n/g, ' · ');
+
+        rowsHtml += `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="font-size: 12px; color: #475569; white-space: nowrap;">${t.date_formatted}</td>
+                <td style="font-size: 12px; font-family: monospace;">
+                    <div style="font-weight: 700; color: #0f172a;">${vLink}</div>
+                    <div style="font-size: 10px; color: #94a3b8;">${t.voucher_type}</div>
+                </td>
+                <td style="font-size: 12px; color: #1e293b; max-width: 320px; word-break: break-word;">${memo}</td>
+                <td style="font-size: 11px; color: #64748b; max-width: 220px; word-break: break-word;">${t.against || '-'}</td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; color: ${t.credit > 0 ? '#d97706' : '#94a3b8'}; font-weight: ${t.credit > 0 ? '700' : 'normal'};">${creditStr}</td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; color: ${t.debit > 0 ? '#16a34a' : '#94a3b8'}; font-weight: ${t.debit > 0 ? '700' : 'normal'};">${debitStr}</td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">${runningStr}</td>
+            </tr>
+        `;
+    });
+
+    $(wrapper).find('#exec-supp-table-body').html(rowsHtml);
+}
+
+function print_exec_supp_ledger(wrapper) {
+    let data = window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.raw_data : null;
+    if (!data || !data.transactions) {
+        frappe.msgprint("No supplier ledger records available to print.");
+        return;
+    }
+
+    let txns = data.transactions;
+    let rowsHtml = '';
+    txns.forEach(t => {
+        let creditStr = t.credit > 0 ? Number(t.credit).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-';
+        let debitStr = t.debit > 0 ? Number(t.debit).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-';
+        let runningStr = Number(t.running_balance).toLocaleString('en-US', {minimumFractionDigits: 2});
+        let memo = (t.remarks || '').replace(/\n/g, ' · ');
+
+        rowsHtml += `
+            <tr>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${t.date_formatted}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-family: monospace;">${t.voucher_no} (${t.voucher_type})</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${memo}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${t.against || '-'}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; color: #d97706;">${creditStr}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; color: #16a34a;">${debitStr}</td>
+                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; font-weight: bold;">${runningStr}</td>
+            </tr>
+        `;
+    });
+
+    let deliveries = data.total_credits || data.total_outflows || 0;
+    let payments = data.total_debits || data.total_inflows || 0;
+
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Supplier Account Ledger - ${data.account}</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 20px; color: #1e293b; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                th { background: #f8fafc; text-align: left; padding: 8px; border-bottom: 2px solid #cbd5e1; font-size: 11px; }
+                @media print { body { padding: 0; } }
+            </style>
+        </head>
+        <body>
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 15px;">
+                <h2 style="margin: 0; color: #0f172a;">KILIBET INVESTMENT LTD</h2>
+                <h3 style="margin: 4px 0; color: #334155;">Supplier Account Ledger: ${data.account}</h3>
+                <div style="font-size: 12px; color: #64748b;">Period: ${data.from_date} to ${data.to_date} | Generated: ${new Date().toLocaleString()}</div>
+            </div>
+
+            <div style="display: flex; gap: 20px; margin-bottom: 15px; font-size: 12px; background: #f8fafc; padding: 10px; border-radius: 6px;">
+                <div><strong>Opening (B/F):</strong> KES ${Number(data.opening_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Deliveries (Credits):</strong> KES ${Number(deliveries).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Payments (Debits):</strong> KES ${Number(payments).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Net Movement:</strong> KES ${Number(data.net_change || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                <div><strong>Closing (C/F):</strong> KES ${Number(data.closing_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Voucher #</th>
+                        <th>Description / Memo</th>
+                        <th>Against</th>
+                        <th style="text-align: right; color: #d97706;">Deliveries (Credit)</th>
+                        <th style="text-align: right; color: #16a34a;">Payments (Debit)</th>
+                        <th style="text-align: right;">Running Bal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+            <script>window.onload = function() { window.print(); };</script>
+        </body>
+        </html>
+    `;
+
+    let w = window.open('', '_blank');
+    w.document.write(printHtml);
+    w.document.close();
+}
+
+function export_exec_supp_csv(wrapper) {
+    let data = window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.raw_data : null;
+    if (!data || !data.transactions || data.transactions.length === 0) {
+        frappe.msgprint("No supplier ledger records available to export.");
+        return;
+    }
+
+    let csv = "data:text/csv;charset=utf-8,";
+    csv += "Date,Voucher Type,Voucher No,Description,Against Account,Deliveries Credit (KES),Payments Debit (KES),Running Balance (KES)\n";
+
+    data.transactions.forEach(t => {
+        let memo = (t.remarks || '').replace(/"/g, '""').replace(/\n/g, ' ');
+        let against = (t.against || '').replace(/"/g, '""');
+        let c = (t.credit || 0).toFixed(2);
+        let d = (t.debit || 0).toFixed(2);
+        let b = (t.running_balance || 0).toFixed(2);
+
+        csv += `"${t.posting_date}","${t.voucher_type}","${t.voucher_no}","${memo}","${against}",${c},${d},${b}\n`;
+    });
+
+    let uri = encodeURI(csv);
+    let link = document.createElement("a");
+    link.setAttribute("href", uri);
+    let safeName = (data.account || 'Supplier_Account').replace(/[^a-zA-Z0-9]/g, '_');
+    link.setAttribute("download", `Supplier_Ledger_${safeName}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

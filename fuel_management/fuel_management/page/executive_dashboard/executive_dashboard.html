@@ -615,10 +615,17 @@
                 <span class="material-symbols-outlined">balance</span>
                 Balance Sheet
             </a>
-            <a class="exec-nav-item" data-tab="tab-cash-accounts">
-                <span class="material-symbols-outlined">account_balance_wallet</span>
-                Cash Accounts
-            </a>
+            <!-- CASH & BANK ACCOUNTS -->
+            <div class="exec-nav-section-title" style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.8px; padding: 12px 16px 4px 16px;">Cash & Bank Accounts</div>
+            <div id="exec-sidebar-cash-accounts" style="display: flex; flex-direction: column; gap: 2px;">
+                <!-- Dynamically populated per station -->
+            </div>
+
+            <!-- SUPPLIER ACCOUNTS -->
+            <div class="exec-nav-section-title" style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.8px; padding: 12px 16px 4px 16px;">Supplier Accounts</div>
+            <div id="exec-sidebar-supplier-accounts" style="display: flex; flex-direction: column; gap: 2px;">
+                <!-- Dynamically populated per station -->
+            </div>
             <a class="exec-nav-item" data-tab="tab-expenses">
                 <span class="material-symbols-outlined">receipt_long</span>
                 Expenses
@@ -2747,8 +2754,8 @@
     <main class="exec-main" id="tab-cash-accounts" style="display:none;">
         <div class="exec-header">
             <div>
-                <h1 class="exec-header-title">Cash & Bank Accounts</h1>
-                <p class="exec-header-subtitle">Live liquidity, station cash balances, bank ledgers and itemized transaction activity.</p>
+                <h1 class="exec-header-title" id="exec-ca-header-title">Cash & Bank Accounts</h1>
+                <p class="exec-header-subtitle" id="exec-ca-header-subtitle">Live liquidity, station cash balances, bank ledgers and itemized transaction activity.</p>
             </div>
             
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -2780,20 +2787,8 @@
             <button type="button" class="btn btn-xs exec-ca-preset" data-preset="today" style="font-size: 11px; padding: 3px 12px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; font-weight: 600; cursor: pointer;">Today</button>
         </div>
 
-        <!-- Accounts Overview Carousel / Quick Selector -->
-        <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">All Cash & Bank Balances (Click to switch view)</span>
-                <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Total Liquid Assets: <span id="exec-ca-total-liquid" style="font-family: monospace; color: #16a34a;">KES 0.00</span></span>
-            </div>
-            <div id="exec-ca-accounts-pills" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px;">
-                <!-- Dynamically rendered pills -->
-                <div style="color: #94a3b8; font-size: 12px;">Loading accounts...</div>
-            </div>
-        </div>
-
         <!-- Selected Account 5 KPI Summary Cards -->
-        <div class="exec-metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+        <div class="exec-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px;">
             <div class="exec-card" style="border-left: 4px solid #64748b;">
                 <div class="exec-card-header">
                     <span class="exec-card-title">Opening Balance (B/F)</span>
@@ -2882,6 +2877,142 @@
                             <td style="text-align: right; font-family: monospace; color: #16a34a;" id="exec-ca-foot-inflows">KES 0.00</td>
                             <td style="text-align: right; font-family: monospace; color: #dc2626;" id="exec-ca-foot-outflows">KES 0.00</td>
                             <td style="text-align: right; font-family: monospace; font-weight: 800; color: #0f172a;" id="exec-ca-foot-closing">KES 0.00</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- TAB: SUPPLIER ACCOUNTS                     -->
+    <!-- ========================================== -->
+    <main class="exec-main" id="tab-supplier-accounts" style="display:none;">
+        <div class="exec-header">
+            <div>
+                <h1 class="exec-header-title" id="exec-supp-header-title">Supplier Accounts</h1>
+                <p class="exec-header-subtitle" id="exec-supp-header-subtitle">Fuel & product supplier ledgers, deliveries/invoices (credits), payments made (debits) and net balances.</p>
+            </div>
+            
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <input type="date" id="exec-supp-from" class="form-control input-sm" style="height: 32px; font-size: 12px; width: 130px; border-radius: 6px;">
+                    <span style="color: #94a3b8; font-size: 12px;">to</span>
+                    <input type="date" id="exec-supp-to" class="form-control input-sm" style="height: 32px; font-size: 12px; width: 130px; border-radius: 6px;">
+                    <button type="button" id="btn-exec-supp-apply" class="btn btn-sm btn-primary" style="height: 32px; padding: 0 14px; font-weight: 600; font-size: 12px; border-radius: 6px; background: #2563eb; color: #fff; border: none; cursor: pointer;">Apply</button>
+                </div>
+                <button type="button" id="btn-exec-supp-print" class="btn btn-sm btn-secondary" style="height: 32px; padding: 0 12px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">print</span> Print Ledger
+                </button>
+                <button type="button" id="btn-exec-supp-export" class="btn btn-sm btn-secondary" style="height: 32px; padding: 0 12px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">download</span> Export CSV
+                </button>
+                <button type="button" id="btn-exec-supp-record-payment" class="btn btn-sm" style="height: 32px; padding: 0 14px; font-weight: 700; font-size: 12px; border-radius: 6px; background: #0284c7; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 2px 4px rgba(2,132,199,0.25);">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">send_money</span> Transfer / Pay Supplier
+                </button>
+            </div>
+        </div>
+
+        <!-- Date Presets -->
+        <div style="display: flex; gap: 6px; align-items: center; margin-top: -12px;">
+            <span style="font-size: 12px; color: #64748b; font-weight: 600;">Presets:</span>
+            <button type="button" class="btn btn-xs exec-supp-preset active" data-preset="last_7" style="font-size: 11px; padding: 3px 12px; border-radius: 14px; border: 1px solid #cbd5e1; background: #e0e7ff; color: #3730a3; font-weight: 700; cursor: pointer;">Last 7 Days</button>
+            <button type="button" class="btn btn-xs exec-supp-preset" data-preset="this_month" style="font-size: 11px; padding: 3px 12px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; font-weight: 600; cursor: pointer;">This Month</button>
+            <button type="button" class="btn btn-xs exec-supp-preset" data-preset="last_month" style="font-size: 11px; padding: 3px 12px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; font-weight: 600; cursor: pointer;">Last Month</button>
+            <button type="button" class="btn btn-xs exec-supp-preset" data-preset="this_year" style="font-size: 11px; padding: 3px 12px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; font-weight: 600; cursor: pointer;">This Year</button>
+            <button type="button" class="btn btn-xs exec-supp-preset" data-preset="today" style="font-size: 11px; padding: 3px 12px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; font-weight: 600; cursor: pointer;">Today</button>
+        </div>
+
+        <!-- Supplier 5 KPI Summary Cards -->
+        <div class="exec-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px;">
+            <div class="exec-card" style="border-left: 4px solid #64748b;">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Opening Balance (B/F)</span>
+                    <span class="material-symbols-outlined" style="color: #64748b; font-size: 20px;">history</span>
+                </div>
+                <div class="exec-card-value" id="exec-supp-kpi-opening" style="font-size: 20px; font-family: monospace;">KES 0.00</div>
+                <div style="font-size: 11px; color: #64748b; margin-top: 4px;">As of start date</div>
+            </div>
+
+            <div class="exec-card" style="border-left: 4px solid #d97706;">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Deliveries / Invoices (Credits)</span>
+                    <span class="material-symbols-outlined" style="color: #d97706; font-size: 20px;">local_shipping</span>
+                </div>
+                <div class="exec-card-value" id="exec-supp-kpi-deliveries" style="font-size: 20px; font-family: monospace; color: #d97706;">KES 0.00</div>
+                <div style="font-size: 11px; color: #d97706; margin-top: 4px;">Period fuel/product deliveries</div>
+            </div>
+
+            <div class="exec-card" style="border-left: 4px solid #10b981;">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Payments Made (Debits)</span>
+                    <span class="material-symbols-outlined" style="color: #10b981; font-size: 20px;">payments</span>
+                </div>
+                <div class="exec-card-value" id="exec-supp-kpi-payments" style="font-size: 20px; font-family: monospace; color: #16a34a;">KES 0.00</div>
+                <div style="font-size: 11px; color: #10b981; margin-top: 4px;">Transfers & settlement debits</div>
+            </div>
+
+            <div class="exec-card" style="border-left: 4px solid #3b82f6;">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Net Movement</span>
+                    <span class="material-symbols-outlined" style="color: #3b82f6; font-size: 20px;">swap_vert</span>
+                </div>
+                <div class="exec-card-value" id="exec-supp-kpi-net" style="font-size: 20px; font-family: monospace;">KES 0.00</div>
+                <div style="font-size: 11px; color: #3b82f6; margin-top: 4px;">Payments minus Deliveries</div>
+            </div>
+
+            <div class="exec-card" style="border-left: 4px solid #6366f1;">
+                <div class="exec-card-header">
+                    <span class="exec-card-title">Closing Balance (C/F)</span>
+                    <span class="material-symbols-outlined" style="color: #6366f1; font-size: 20px;">account_balance</span>
+                </div>
+                <div class="exec-card-value" id="exec-supp-kpi-closing" style="font-size: 20px; font-family: monospace; color: #4338ca; font-weight: 800;">KES 0.00</div>
+                <div style="font-size: 11px; color: #6366f1; margin-top: 4px;">End of period position</div>
+            </div>
+        </div>
+
+        <!-- Supplier Ledger Table Card -->
+        <div class="exec-chart-area" style="padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="position: relative; width: 280px;">
+                        <input type="text" id="exec-supp-search-input" class="form-control" placeholder="Search memo, voucher, invoice #..." style="padding-left: 32px; height: 36px; font-size: 13px;">
+                        <span class="material-symbols-outlined" style="position: absolute; left: 8px; top: 9px; font-size: 18px; color: #94a3b8;">search</span>
+                    </div>
+                    <span id="exec-supp-active-account-badge" style="font-size: 12px; font-weight: 700; color: #92400e; background: #fef3c7; padding: 6px 12px; border-radius: 6px; border: 1px solid #fde68a;">GALANA A/C - KIL</span>
+                </div>
+
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <div style="display: flex; background: #e2e8f0; padding: 2px; border-radius: 8px; gap: 2px;">
+                        <button type="button" class="btn btn-xs exec-supp-type-filter active" data-filter="all" style="padding: 4px 12px; font-weight: 700; border-radius: 6px; border: none; background: #fff; color: #0f172a; cursor: pointer;">All Lines</button>
+                        <button type="button" class="btn btn-xs exec-supp-type-filter" data-filter="credits" style="padding: 4px 12px; font-weight: 600; border-radius: 6px; border: none; background: transparent; color: #d97706; cursor: pointer;">Deliveries (Credits)</button>
+                        <button type="button" class="btn btn-xs exec-supp-type-filter" data-filter="debits" style="padding: 4px 12px; font-weight: 600; border-radius: 6px; border: none; background: transparent; color: #16a34a; cursor: pointer;">Payments (Debits)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <table class="table table-bordered" style="width: 100%; margin: 0; background: #fff; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #f8fafc;">
+                            <th style="width: 95px;">Date</th>
+                            <th style="width: 160px;">Voucher Type & #</th>
+                            <th>Description / Memo / Remarks</th>
+                            <th style="width: 220px;">Against Account</th>
+                            <th style="text-align: right; width: 140px; color: #d97706;">Deliveries (Credit)</th>
+                            <th style="text-align: right; width: 140px; color: #16a34a;">Payments (Debit)</th>
+                            <th style="text-align: right; width: 140px; font-weight: 800;">Running Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exec-supp-table-body">
+                        <tr><td colspan="7" style="text-align: center; padding: 30px; color: #94a3b8;">Loading supplier account ledger...</td></tr>
+                    </tbody>
+                    <tfoot style="background: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
+                        <tr>
+                            <td colspan="4" style="text-align: right;">TOTALS:</td>
+                            <td style="text-align: right; font-family: monospace; color: #d97706;" id="exec-supp-foot-deliveries">KES 0.00</td>
+                            <td style="text-align: right; font-family: monospace; color: #16a34a;" id="exec-supp-foot-payments">KES 0.00</td>
+                            <td style="text-align: right; font-family: monospace; font-weight: 800; color: #0f172a;" id="exec-supp-foot-closing">KES 0.00</td>
                         </tr>
                     </tfoot>
                 </table>

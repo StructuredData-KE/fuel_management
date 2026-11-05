@@ -2034,10 +2034,81 @@ def toggle_reconciliation_status(doctype, names, is_reconciled=1):
 
 
 @frappe.whitelist()
-def get_cash_accounts_overview(account=None, from_date=None, to_date=None, search=None):
+def get_executive_accounts(station=None):
     """
-    Returns ledger, balances, and breakdown for Cash and Bank accounts.
+    Returns classified Cash & Bank and Supplier accounts for Executive Panel sidebar.
+    Filters dynamically by operating station context.
     """
+    company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+
+    raw_accounts = frappe.db.sql("""
+        SELECT name, account_name, account_type, parent_account
+        FROM `tabAccount`
+        WHERE is_group = 0 
+          AND (account_type IN ('Cash', 'Bank') OR name LIKE '%A/C%' OR name LIKE '%GALANA%' OR name LIKE '%RUBIS%')
+          AND company = %s
+          AND docstatus < 2
+        ORDER BY FIELD(account_type, 'Cash', 'Bank'), name
+    """, (company,), as_dict=True)
+
+    cash_bank = []
+    suppliers = []
+
+    for acc in raw_accounts:
+        acc_name = acc["name"]
+        short_name = acc["account_name"] or acc_name.replace(" - KIL", "")
+        acc_type = acc["account_type"]
+        upper_name = acc_name.upper()
+
+        # Calculate current live balance
+        bal = frappe.db.sql("""
+            SELECT SUM(debit - credit)
+            FROM `tabGL Entry`
+            WHERE account = %s AND is_cancelled = 0
+        """, (acc_name,))[0][0] or 0.0
+
+        item = {
+            "name": acc_name,
+            "label": short_name,
+            "account_type": acc_type,
+            "current_balance": round(flt(bal), 2),
+            "station": ""
+        }
+
+        # Determine station association
+        if "GALANA" in upper_name:
+            item["station"] = "Galana Annex"
+        elif "RUBIS" in upper_name:
+            item["station"] = "RUBIS POA PLACE"
+        elif "SHIFT MAIN CASH" in upper_name:
+            item["station"] = "RUBIS POA PLACE"
+        else:
+            item["station"] = "" # Shared / General
+
+        # Filter by station context if provided
+        if station and station not in ("ALL", "All Stations", ""):
+            # If account has station and doesn't match selected station, skip
+            if item["station"] and item["station"].lower() != station.lower():
+                continue
+
+        # Separate Supplier Accounts from Cash & Bank
+        if "GALANA A/C" in upper_name or "RUBIS A/C" in upper_name or "SUPPLIER" in upper_name or acc_type == "Payable":
+            suppliers.append(item)
+        elif acc_type in ("Cash", "Bank"):
+            cash_bank.append(item)
+
+    return {
+        "cash_bank_accounts": cash_bank,
+        "supplier_accounts": suppliers
+    }
+
+
+@frappe.whitelist()
+def get_cash_accounts_overview(account=None, from_date=None, to_date=None, search=None, is_supplier=0):
+    """
+    Returns ledger, balances, and breakdown for Cash, Bank, or Supplier accounts.
+    """
+    from frappe.utils import cint
     if not to_date:
         to_date = today()
     if not from_date:
@@ -2045,47 +2116,16 @@ def get_cash_accounts_overview(account=None, from_date=None, to_date=None, searc
 
     company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
 
-    # Fetch all active Cash & Bank accounts
-    accounts_list = frappe.db.sql("""
-        SELECT name, account_name, account_type
-        FROM `tabAccount`
-        WHERE is_group = 0 
-          AND account_type IN ('Cash', 'Bank')
-          AND company = %s
-          AND docstatus < 2
-        ORDER BY FIELD(account_type, 'Cash', 'Bank'), name
-    """, (company,), as_dict=True)
+    is_supp = cint(is_supplier) or False
+    if account:
+        acc_upper = account.upper()
+        if "GALANA A/C" in acc_upper or "RUBIS A/C" in acc_upper or "SUPPLIER" in acc_upper:
+            is_supp = True
 
-    if not accounts_list:
-        accounts_list = frappe.db.sql("""
-            SELECT name, account_name, account_type
-            FROM `tabAccount`
-            WHERE is_group = 0 
-              AND account_type IN ('Cash', 'Bank')
-              AND docstatus < 2
-            ORDER BY FIELD(account_type, 'Cash', 'Bank'), name
-        """, as_dict=True)
-
-    # Calculate current live balance for each cash/bank account
-    for acc in accounts_list:
-        bal = frappe.db.sql("""
-            SELECT SUM(debit - credit)
-            FROM `tabGL Entry`
-            WHERE account = %s AND is_cancelled = 0
-        """, (acc["name"],))[0][0] or 0.0
-        acc["current_balance"] = round(flt(bal), 2)
-
-    total_liquid = sum(a["current_balance"] for a in accounts_list)
-
-    # Determine active selected account
-    valid_names = [a["name"] for a in accounts_list]
-    if not account or account not in valid_names:
-        # Default to Shift Main Cash or first cash account
-        shift_cash = [a["name"] for a in accounts_list if "Shift Main Cash" in a["name"]]
-        if shift_cash:
-            account = shift_cash[0]
-        elif accounts_list:
-            account = accounts_list[0]["name"]
+    # Determine default account if not supplied
+    if not account:
+        if is_supp:
+            account = "GALANA A/C - KIL" if frappe.db.exists("Account", "GALANA A/C - KIL") else "RUBIS A/C - KIL"
         else:
             account = "Shift Main Cash - KIL"
 
@@ -2142,23 +2182,23 @@ def get_cash_accounts_overview(account=None, from_date=None, to_date=None, searc
         t["date_formatted"] = formatdate(t["posting_date"])
         t["time_formatted"] = str(t.get("creation") or "")[11:19]
 
-
     # Reverse to show most recent first in UI
     txns.reverse()
 
     return {
         "account": account,
-        "accounts_list": accounts_list,
-        "total_liquid": round(total_liquid, 2),
         "from_date": from_date,
         "to_date": to_date,
         "opening_balance": opening_bal,
         "total_inflows": total_in,
         "total_outflows": total_out,
+        "total_debits": total_in,      # Payments Made
+        "total_credits": total_out,    # Deliveries / Invoices
         "net_change": net_change,
         "closing_balance": closing_bal,
         "total_txns": len(txns),
-        "transactions": txns
+        "transactions": txns,
+        "is_supplier": is_supp
     }
 
 
