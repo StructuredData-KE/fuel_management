@@ -4340,6 +4340,79 @@ function setup_exec_shorts_events(wrapper) {
         let empName = $(this).attr('data-emp-name');
         show_exec_shortage_breakdown(wrapper, empId, empName);
     });
+
+    // Open Clear Shorts to Salary Deductions Modal (Bulk)
+    $w.on('click', '#btn-exec-clear-shorts-payroll', function(e) {
+        e.preventDefault();
+        open_exec_clear_shorts_modal(wrapper, null);
+    });
+
+    // Open Clear Shorts Modal (Individual Row)
+    $w.on('click', '.btn-exec-single-clear-short', function(e) {
+        e.preventDefault();
+        let empId = $(this).attr('data-emp-id');
+        open_exec_clear_shorts_modal(wrapper, empId);
+    });
+
+    // Clear Modal Close / Cancel
+    $w.on('click', '#exec-clear-shorts-modal-close, #btn-exec-clear-shorts-cancel', function() {
+        $w.find('#exec-clear-shorts-modal').hide();
+    });
+    $w.on('click', '#exec-clear-shorts-modal', function(e) {
+        if (e.target === this) $(this).hide();
+    });
+
+    // Check all checkbox
+    $w.on('change', '#exec-clear-check-all', function() {
+        let isChecked = $(this).is(':checked');
+        $w.find('.exec-clear-check-item').prop('checked', isChecked);
+        recalculate_exec_clear_totals(wrapper);
+    });
+
+    // Individual checkbox change
+    $w.on('change', '.exec-clear-check-item', function() {
+        let totalItems = $w.find('.exec-clear-check-item').length;
+        let checkedItems = $w.find('.exec-clear-check-item:checked').length;
+        $w.find('#exec-clear-check-all').prop('checked', totalItems > 0 && totalItems === checkedItems);
+        recalculate_exec_clear_totals(wrapper);
+    });
+
+    // Amount input change
+    $w.on('input change', '.exec-clear-amt-input', function() {
+        let $row = $(this).closest('tr');
+        let orig = flt($(this).attr('data-orig-shortage') || 0);
+        let val = flt($(this).val() || 0);
+        if (val < 0) val = 0;
+        let rem = Math.max(0, orig - val);
+        $row.find('.exec-clear-rem-bal').text(format_currency(rem, ''));
+        recalculate_exec_clear_totals(wrapper);
+    });
+
+    // Submit Clear Shorts to Deductions
+    $w.on('click', '#btn-exec-submit-clear-shorts', function(e) {
+        e.preventDefault();
+        submit_exec_clear_shorts(wrapper);
+    });
+
+    // Deductions Schedule Modal Close
+    $w.on('click', '#exec-deductions-schedule-modal-close, #btn-exec-deductions-sched-done', function() {
+        $w.find('#exec-deductions-schedule-modal').hide();
+    });
+    $w.on('click', '#exec-deductions-schedule-modal', function(e) {
+        if (e.target === this) $(this).hide();
+    });
+
+    // Print Deductions Schedule
+    $w.on('click', '#btn-exec-print-deductions-sched', function(e) {
+        e.preventDefault();
+        print_exec_deductions_schedule(window.LAST_CLEARED_DEDUCTIONS);
+    });
+
+    // CSV Export Deductions Schedule
+    $w.on('click', '#btn-exec-csv-deductions-sched', function(e) {
+        e.preventDefault();
+        export_exec_deductions_csv(window.LAST_CLEARED_DEDUCTIONS);
+    });
 }
 
 function load_exec_shortage_balances(wrapper) {
@@ -4476,10 +4549,14 @@ function render_exec_shortage_table(wrapper) {
                 <td style="text-align: right; color: ${netColor}; font-weight: 600; font-family: monospace;">${netPrefix}${format_currency(pNet, '')}</td>
                 <td style="text-align: right; font-weight: 800; color: ${closeBal > 0 ? '#0f172a' : (closeBal < 0 ? '#2563eb' : '#059669')}; font-family: monospace; font-size: 13.5px;">${format_currency(closeBal, '')}</td>
                 <td style="text-align: center;">${statusBadge}</td>
-                <td style="text-align: center;">
+                <td style="text-align: center; white-space: nowrap;">
                     <button type="button" class="btn btn-xs btn-default btn-exec-statement-breakdown" data-emp-id="${row.employee}" data-emp-name="${frappe.utils.escape_html(row.employee_name || row.employee)}" style="padding: 3px 8px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
                         <span class="material-symbols-outlined" style="font-size: 14px;">receipt_long</span> Statement
                     </button>
+                    ${closeBal > 0.01 ? `
+                    <button type="button" class="btn btn-xs btn-primary btn-exec-single-clear-short" data-emp-id="${row.employee}" data-emp-name="${frappe.utils.escape_html(row.employee_name || row.employee)}" data-balance="${closeBal}" style="padding: 3px 8px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; background: #0284c7; border-color: #0284c7; color: #fff; margin-left: 4px;" title="Clear to Salary Deduction">
+                        <span class="material-symbols-outlined" style="font-size: 14px;">lock_clock</span> Deduct
+                    </button>` : ''}
                 </td>
             </tr>
         `;
@@ -4913,6 +4990,337 @@ function export_exec_shorts_csv(wrapper) {
     let link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     link.setAttribute("download", `Staff_Shorts_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+window.LAST_CLEARED_DEDUCTIONS = null;
+
+function open_exec_clear_shorts_modal(wrapper, prefilterEmpId) {
+    let $w = $(wrapper);
+    let allRows = window.EXEC_SHORTS_DATA || [];
+    let outstanding = allRows.filter(r => (r.closing_balance || r.outstanding_balance || 0) > 0.01);
+    
+    if (prefilterEmpId) {
+        outstanding = outstanding.filter(r => r.employee === prefilterEmpId);
+    }
+    
+    if (outstanding.length === 0) {
+        frappe.msgprint({
+            title: __('No Outstanding Shortages'),
+            indicator: 'orange',
+            message: __('There are no attendants with an outstanding shortage balance in this period to clear.')
+        });
+        return;
+    }
+    
+    let station = window.ACTIVE_STATION || frappe.defaults.get_user_default("station") || "RUBIS POA PLACE";
+    $w.find('#exec-clear-station-display').text(station);
+    
+    let endDate = $w.find('#exec-shorts-report-end').val() || frappe.datetime.get_today();
+    $w.find('#exec-clear-date').val(endDate);
+    
+    // Guess human month name for memo
+    let dateObj = new Date(endDate);
+    let monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+    $w.find('#exec-clear-reason').val(`Salary Deduction - ${monthName}`);
+    $w.find('#exec-clear-post-journal').prop('checked', false);
+    $w.find('#exec-clear-check-all').prop('checked', true);
+    
+    let tbodyHtml = '';
+    outstanding.forEach((r, idx) => {
+        let bal = r.closing_balance != null ? r.closing_balance : (r.outstanding_balance || 0);
+        tbodyHtml += `
+            <tr data-emp-id="${r.employee}" data-emp-name="${frappe.utils.escape_html(r.employee_name || r.employee)}">
+                <td style="text-align: center; vertical-align: middle;">
+                    <input type="checkbox" class="exec-clear-check-item" checked style="cursor: pointer;">
+                </td>
+                <td style="vertical-align: middle;">
+                    <div style="font-weight: 700; color: #0f172a;">${frappe.utils.escape_html(r.employee_name || r.employee)}</div>
+                    <div style="font-size: 11px; color: #64748b; font-family: monospace;">${r.employee}</div>
+                </td>
+                <td style="text-align: right; font-weight: 700; font-family: monospace; color: #b91c1c; vertical-align: middle;">
+                    ${format_currency(bal, '')}
+                </td>
+                <td style="text-align: right; vertical-align: middle;">
+                    <input type="number" step="0.01" class="form-control exec-clear-amt-input" 
+                        data-orig-shortage="${bal}" 
+                        value="${bal.toFixed(2)}" 
+                        style="height: 30px; font-size: 12px; font-weight: 700; text-align: right; font-family: monospace; color: #0f172a;">
+                </td>
+                <td style="text-align: right; font-weight: 700; font-family: monospace; color: #16a34a; vertical-align: middle;" class="exec-clear-rem-bal">
+                    0.00
+                </td>
+            </tr>
+        `;
+    });
+    
+    $w.find('#exec-clear-staff-tbody').html(tbodyHtml);
+    recalculate_exec_clear_totals(wrapper);
+    $w.find('#exec-clear-shorts-modal').css('display', 'flex').show();
+}
+
+function recalculate_exec_clear_totals(wrapper) {
+    let $w = $(wrapper);
+    let totalDeductions = 0.0;
+    let selectedCount = 0;
+    
+    $w.find('#exec-clear-staff-tbody tr').each(function() {
+        let $row = $(this);
+        let isChecked = $row.find('.exec-clear-check-item').is(':checked');
+        if (isChecked) {
+            selectedCount++;
+            let amt = flt($row.find('.exec-clear-amt-input').val() || 0);
+            totalDeductions += amt;
+        }
+    });
+    
+    $w.find('#exec-clear-total-display').text(format_currency(totalDeductions, 'KES'));
+    $w.find('#exec-clear-count-display').text(`${selectedCount} attendant${selectedCount === 1 ? '' : 's'} selected`);
+}
+
+function submit_exec_clear_shorts(wrapper) {
+    let $w = $(wrapper);
+    let station = window.ACTIVE_STATION || $w.find('#exec-clear-station-display').text() || "RUBIS POA PLACE";
+    let clearanceDate = $w.find('#exec-clear-date').val();
+    let reason = $w.find('#exec-clear-reason').val() || "Salary Deduction";
+    let postJournal = $w.find('#exec-clear-post-journal').is(':checked') ? 1 : 0;
+    
+    let deductions = [];
+    $w.find('#exec-clear-staff-tbody tr').each(function() {
+        let $row = $(this);
+        let isChecked = $row.find('.exec-clear-check-item').is(':checked');
+        if (isChecked) {
+            let empId = $row.attr('data-emp-id');
+            let amt = flt($row.find('.exec-clear-amt-input').val() || 0);
+            if (empId && amt > 0) {
+                deductions.push({ employee: empId, amount: amt });
+            }
+        }
+    });
+    
+    if (deductions.length === 0) {
+        frappe.msgprint(__('Please select at least one attendant with an amount greater than 0 to clear.'));
+        return;
+    }
+    
+    let $btn = $w.find('#btn-exec-submit-clear-shorts');
+    $btn.prop('disabled', true);
+    $btn.find('.spinner-border').removeClass('hidden');
+    
+    frappe.call({
+        method: 'fuel_management.fuel_management.api.clear_staff_shorts_to_deductions',
+        args: {
+            station: station,
+            clearance_date: clearanceDate,
+            reason: reason,
+            deductions: JSON.stringify(deductions),
+            post_journal: postJournal
+        },
+        callback: function(r) {
+            $btn.prop('disabled', false);
+            $btn.find('.spinner-border').addClass('hidden');
+            
+            if (r.message && r.message.success) {
+                let res = r.message;
+                frappe.show_alert({
+                    message: `Successfully cleared ${format_currency(res.total_cleared, 'KES')} for ${res.count} staff to salary deductions!`,
+                    indicator: 'green'
+                }, 7);
+                
+                $w.find('#exec-clear-shorts-modal').hide();
+                load_exec_shortage_balances(wrapper);
+                
+                // Show Confirmed Salary Deductions Schedule
+                window.LAST_CLEARED_DEDUCTIONS = res;
+                render_exec_deductions_schedule(wrapper, res);
+            }
+        },
+        error: function(err) {
+            $btn.prop('disabled', false);
+            $btn.find('.spinner-border').addClass('hidden');
+            frappe.msgprint({
+                title: __('Clearance Failed'),
+                indicator: 'red',
+                message: err.message || __('Failed to clear staff shortages. Please check error logs.')
+            });
+        }
+    });
+}
+
+function render_exec_deductions_schedule(wrapper, result) {
+    let $w = $(wrapper);
+    let entries = result.entries || [];
+    let station = result.station || 'RUBIS POA PLACE';
+    let dateStr = frappe.datetime.str_to_user(result.clearance_date);
+    
+    let rowsHtml = '';
+    entries.forEach((e, idx) => {
+        rowsHtml += `
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="text-align: center; color: #94a3b8; font-weight: 600;">${idx + 1}</td>
+                <td>
+                    <div style="font-weight: 700; color: #0f172a;">${frappe.utils.escape_html(e.employee_name)}</div>
+                    <div style="font-size: 11px; color: #64748b; font-family: monospace;">${e.employee}</div>
+                </td>
+                <td style="text-align: right; font-weight: 800; font-family: monospace; color: #b91c1c; font-size: 13px;">
+                    ${format_currency(e.amount, '')}
+                </td>
+                <td style="font-size: 11.5px; color: #475569;">
+                    ${frappe.utils.escape_html(e.reason)}
+                </td>
+            </tr>
+        `;
+    });
+    
+    let html = `
+        <div style="background: #fff; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                <div>
+                    <h4 style="margin: 0; font-size: 1.05rem; font-weight: 800; color: #0f172a;">${frappe.utils.escape_html(station)}</h4>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Memo: <b>${frappe.utils.escape_html(result.reason)}</b> &bull; Effective Date: <b>${dateStr}</b></div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Total Deductions</div>
+                    <div style="font-size: 16px; font-weight: 800; color: #1e3a8a; font-family: monospace;">${format_currency(result.total_cleared, 'KES')}</div>
+                </div>
+            </div>
+            ${result.journal_entry ? `<div style="font-size: 11.5px; color: #059669; font-weight: 600;">Linked Accounting Journal Entry: <b>${result.journal_entry}</b></div>` : ''}
+        </div>
+        
+        <table class="table table-bordered" style="width: 100%; margin: 0; background: #fff; font-size: 12px;">
+            <thead>
+                <tr style="background: #f1f5f9;">
+                    <th style="width: 36px; text-align: center;">#</th>
+                    <th>Attendant</th>
+                    <th style="text-align: right; width: 150px;">Confirmed Deduction (KES)</th>
+                    <th>Clearance Memo</th>
+                </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot style="background: #f8fafc; font-weight: 800;">
+                <tr>
+                    <td colspan="2" style="text-align: right;">TOTAL CONFIRMED DEDUCTIONS:</td>
+                    <td style="text-align: right; font-family: monospace; color: #b91c1c;">${format_currency(result.total_cleared, 'KES')}</td>
+                    <td>Across ${result.count} attendants</td>
+                </tr>
+            </tfoot>
+        </table>
+    `;
+    
+    $w.find('#exec-deductions-schedule-content').html(html);
+    $w.find('#exec-deductions-schedule-modal').css('display', 'flex').show();
+}
+
+function print_exec_deductions_schedule(result) {
+    if (!result || !result.entries) return;
+    let companyName = frappe.defaults.get_user_default("Company") || "KILIBET INVESTMENT LTD";
+    let station = result.station || "RUBIS POA PLACE";
+    let dateStr = frappe.datetime.str_to_user(result.clearance_date);
+    
+    let rowsHtml = '';
+    result.entries.forEach((e, idx) => {
+        rowsHtml += `
+            <tr>
+                <td style="text-align: center;">${idx + 1}</td>
+                <td><b>${frappe.utils.escape_html(e.employee_name)}</b></td>
+                <td style="font-family: monospace;">${e.employee}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: 800;">${Number(e.amount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td>${frappe.utils.escape_html(e.reason)}</td>
+            </tr>
+        `;
+    });
+    
+    let printHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Staff Salary Deduction Schedule - ${station}</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; color: #1e293b; padding: 25px; margin: 0; }
+                .header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+                .title { font-size: 18px; font-weight: 800; text-transform: uppercase; margin: 0; color: #0f172a; }
+                .subtitle { font-size: 13px; color: #475569; margin-top: 4px; font-weight: 600; }
+                .meta { display: flex; justify-content: space-between; margin-bottom: 16px; font-size: 11px; background: #f8fafc; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11.5px; }
+                th, td { border: 1px solid #cbd5e1; padding: 7px 10px; text-align: left; }
+                th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; font-size: 10.5px; }
+                .sign-section { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11px; }
+                .sign-box { width: 28%; border-top: 1px solid #64748b; padding-top: 6px; text-align: center; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="title">${companyName}</div>
+                <div class="subtitle">STAFF SALARY DEDUCTIONS SCHEDULE — ${station.toUpperCase()}</div>
+            </div>
+            <div class="meta">
+                <div>
+                    <div><b>Station:</b> ${station}</div>
+                    <div><b>Clearance Memo:</b> ${result.reason}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div><b>Effective Date:</b> ${dateStr}</div>
+                    <div><b>Date Printed:</b> ${new Date().toLocaleString()}</div>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 30px; text-align: center;">#</th>
+                        <th>Attendant / Staff Name</th>
+                        <th style="width: 120px;">Staff ID</th>
+                        <th style="text-align: right; width: 140px;">Confirmed Deduction (KES)</th>
+                        <th>Remarks / Reason</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+                <tfoot>
+                    <tr style="font-weight: 800; background: #f8fafc;">
+                        <td colspan="3" style="text-align: right; text-transform: uppercase;">TOTAL CONFIRMED DEDUCTIONS:</td>
+                        <td style="text-align: right; font-family: monospace;">KES ${Number(result.total_cleared).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>Total Staff: ${result.count}</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <div class="sign-section">
+                <div class="sign-box">Prepared By (Station Manager)<br><br>Sign: _______________________</div>
+                <div class="sign-box">Verified By (Accountant)<br><br>Sign: _______________________</div>
+                <div class="sign-box">Approved By (Director)<br><br>Sign: _______________________</div>
+            </div>
+            <script>window.onload = function() { window.print(); };</script>
+        </body>
+        </html>
+    `;
+    
+    let printWindow = window.open('', '_blank');
+    printWindow.document.write(printHtml);
+    printWindow.document.close();
+}
+
+function export_exec_deductions_csv(result) {
+    if (!result || !result.entries || result.entries.length === 0) {
+        frappe.msgprint("No deduction entries to export.");
+        return;
+    }
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Row,Employee ID,Staff Name,Station,Clearance Date,Deduction Amount (KES),Reason\n";
+    
+    result.entries.forEach((e, idx) => {
+        let name = (e.employee_name || '').replace(/"/g, '""');
+        let id = e.employee || '';
+        let st = result.station || '';
+        let dt = result.clearance_date || '';
+        let amt = flt(e.amount).toFixed(2);
+        let rsn = (e.reason || '').replace(/"/g, '""');
+        csvContent += `${idx + 1},"${id}","${name}","${st}","${dt}",${amt},"${rsn}"\n`;
+    });
+    
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Salary_Deductions_Schedule_${result.clearance_date || 'clearance'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

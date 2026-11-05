@@ -2425,6 +2425,9 @@
                 <button class="btn btn-sm btn-primary" id="btn-exec-filter-shorts" style="height: 36px; padding: 0 16px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
                     <span class="material-symbols-outlined" style="font-size: 18px;">filter_alt</span> Filter
                 </button>
+                <button class="btn btn-sm" id="btn-exec-clear-shorts-payroll" style="height: 36px; padding: 0 15px; font-weight: 700; background: #0284c7; color: #fff; border: 1px solid #0284c7; border-radius: 6px; display: flex; align-items: center; gap: 6px; cursor: pointer; box-shadow: 0 1px 3px rgba(2,132,199,0.3);">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">lock_clock</span> Clear to Salary Deductions
+                </button>
                 <button class="btn btn-sm btn-secondary" id="btn-exec-print-shorts-report" style="height: 36px; padding: 0 14px; font-weight: 600; border: 1px solid #cbd5e1; background: #fff; color: #334155; display: flex; align-items: center; gap: 6px;">
                     <span class="material-symbols-outlined" style="font-size: 18px;">print</span> Print
                 </button>
@@ -2570,6 +2573,117 @@
             </div>
 
             <div id="exec-breakdown-modal-body" style="overflow-y:auto; flex-grow:1; border: 1px solid #e2e8f0; border-radius: 8px;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Clearing Month-End Shorts to Salary Deductions -->
+    <div id="exec-clear-shorts-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+        <div style="background:#fff; width:94%; max-width:880px; border-radius:12px; padding:24px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); max-height:90vh; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:14px;">
+                <div>
+                    <h3 style="margin:0; font-size: 1.25rem; font-weight: 800; color:#0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span class="material-symbols-outlined" style="color: #0284c7; font-size: 24px;">lock_clock</span>
+                        Clear Month-End Shorts to Salary Deductions
+                    </h3>
+                    <div style="font-size: 0.82rem; color: #64748b; margin-top: 3px;">
+                        Converts confirmed staff shortage balances for the ended month into salary deductions and sets attendant closing balances to <b>0.00</b>.
+                    </div>
+                </div>
+                <button id="exec-clear-shorts-modal-close" style="background:#f1f5f9; border:none; width: 32px; height: 32px; border-radius: 6px; font-size:1.25rem; cursor:pointer; color:#64748b; display: flex; align-items: center; justify-content: center;">&times;</button>
+            </div>
+
+            <!-- Parameters Bar -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Operating Station</label>
+                    <div id="exec-clear-station-display" style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 3px;">RUBIS POA PLACE</div>
+                </div>
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Clearance / Effective Date</label>
+                    <input type="date" id="exec-clear-date" class="form-control" style="height: 34px; font-size: 12px; margin-top: 2px;">
+                </div>
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase;">Deduction Reason / Memo</label>
+                    <input type="text" id="exec-clear-reason" class="form-control" style="height: 34px; font-size: 12px; margin-top: 2px;" placeholder="e.g. Salary Deduction - October 2026">
+                </div>
+            </div>
+
+            <!-- Staff Shortages Table -->
+            <div style="overflow-y:auto; flex-grow:1; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 14px;">
+                <table class="table table-bordered" style="width: 100%; margin: 0; font-size: 12.5px;">
+                    <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2;">
+                        <tr>
+                            <th style="width: 36px; text-align: center;">
+                                <input type="checkbox" id="exec-clear-check-all" checked style="cursor: pointer;">
+                            </th>
+                            <th>Attendant / Staff</th>
+                            <th style="text-align: right; width: 140px;">Current Shortage</th>
+                            <th style="text-align: right; width: 160px;">Deduction Amount (KES)</th>
+                            <th style="text-align: right; width: 130px;">Remaining Bal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exec-clear-staff-tbody">
+                        <tr><td colspan="5" style="text-align: center; padding: 20px; color: #94a3b8;">Loading staff with outstanding balances...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Summary KPI & Accounting Toggle -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: #1e40af; text-transform: uppercase;">Total Deductions to Lock In</div>
+                    <div style="font-size: 18px; font-weight: 800; color: #1e3a8a; font-family: monospace;" id="exec-clear-total-display">KES 0.00</div>
+                    <div style="font-size: 11px; color: #3b82f6;" id="exec-clear-count-display">0 attendants selected</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="exec-clear-post-journal" style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="exec-clear-post-journal" style="font-size: 12px; font-weight: 600; color: #1e3a8a; margin: 0; cursor: pointer;">
+                        Also post Accounting Journal Entry (Debit Salary Expense, Credit CSA Shortfalls)
+                    </label>
+                </div>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn btn-secondary" id="btn-exec-clear-shorts-cancel" style="padding: 7px 18px; font-weight: 600; border-radius: 6px;">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-exec-submit-clear-shorts" style="padding: 7px 22px; font-weight: 700; background: #0284c7; border: 1px solid #0284c7; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;">
+                    <span class="spinner-border spinner-border-sm hidden" style="width: 14px; height: 14px; border-width: 2px;"></span>
+                    <span class="material-symbols-outlined" style="font-size: 18px;">check_circle</span> Confirm & Clear to Deductions
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Confirmed Salary Deductions Schedule (Print / Export) -->
+    <div id="exec-deductions-schedule-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:10000; justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+        <div style="background:#fff; width:94%; max-width:800px; border-radius:12px; padding:24px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); max-height:90vh; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+                <div>
+                    <h3 style="margin:0; font-size: 1.2rem; font-weight: 800; color:#0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span class="material-symbols-outlined" style="color: #16a34a; font-size: 24px;">verified</span>
+                        Confirmed Salary Deductions Schedule
+                    </h3>
+                    <div style="font-size: 0.82rem; color: #64748b; margin-top: 3px;">
+                        Staff shortage deductions have been applied and balances reset to <b>0.00</b>.
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="button" id="btn-exec-print-deductions-sched" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-weight: 600; font-size: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">print</span> Print Schedule
+                    </button>
+                    <button type="button" id="btn-exec-csv-deductions-sched" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-weight: 600; font-size: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">download</span> Export CSV
+                    </button>
+                    <button id="exec-deductions-schedule-modal-close" style="background:#f1f5f9; border:none; width: 32px; height: 32px; border-radius: 6px; font-size:1.25rem; cursor:pointer; color:#64748b; display: flex; align-items: center; justify-content: center;">&times;</button>
+                </div>
+            </div>
+
+            <div id="exec-deductions-schedule-content" style="overflow-y:auto; flex-grow:1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; background: #fafafa;">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top: 14px;">
+                <button type="button" class="btn btn-primary" id="btn-exec-deductions-sched-done" style="padding: 7px 22px; font-weight: 700; border-radius: 6px;">Done</button>
             </div>
         </div>
     </div>
