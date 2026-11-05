@@ -628,14 +628,19 @@ function load_dashboard_data(wrapper) {
                 // Update Live M-Pesa Tills Balance Card
                 if (f.mpesa_live) {
                     let mpl = f.mpesa_live;
-                    $(wrapper).find('#exec-mpesa-live-balance').text(format_currency(mpl.total_live_balance || 0, "KES"));
-                    $(wrapper).find('#exec-mpesa-tills-count').text((mpl.active_tills_count || 0) + " Active Tills");
+                    let totalBal = mpl.total_balance !== undefined ? mpl.total_balance : (mpl.total_live_balance || 0);
+                    let tillsCount = mpl.tills_count !== undefined ? mpl.tills_count : (mpl.active_tills_count || 0);
+                    $(wrapper).find('#exec-mpesa-live-balance').text(format_currency(totalBal, "KES"));
+                    $(wrapper).find('#exec-mpesa-tills-count').text(tillsCount + " Active Tills");
                     
                     let pills_html = "";
-                    if (mpl.tills_breakdown && mpl.tills_breakdown.length) {
-                        mpl.tills_breakdown.forEach(tb => {
+                    let tillsList = mpl.tills || mpl.tills_breakdown || [];
+                    if (tillsList.length) {
+                        tillsList.forEach(tb => {
+                            let tName = tb.till || tb.till_name || 'Till';
+                            let tBal = tb.balance !== undefined ? tb.balance : (tb.current_balance || 0);
                             pills_html += `<span style="font-size:10.5px; padding:2px 7px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; color:#166534; font-weight:600;" title="${frappe.utils.escape_html(tb.station || '')}">
-                                ${frappe.utils.escape_html(tb.till_name)}: ${format_currency(tb.current_balance, "KES")}
+                                ${frappe.utils.escape_html(tName)}: ${format_currency(tBal, "KES")}
                             </span>`;
                         });
                     }
