@@ -272,6 +272,13 @@ function init_spa_ui(wrapper) {
         $(wrapper).find('#exec-debtors-station-badge').text(debtorsBadgeText);
         $(wrapper).find('#exec-aging-station-badge').text(debtorsBadgeText);
 
+        // Synchronize Top Ups Holding Account station badge
+        let topupsBadgeText = selectedStation ? (selectedStation === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : selectedStation) : 'All Stations (Consolidated)';
+        $(wrapper).find('#exec-topups-station-badge').text(topupsBadgeText);
+        if (window.TOPUPS_STATE) {
+            window.TOPUPS_STATE.selected_items.clear();
+        }
+
         // Invalidate cached debtors state on station change so switching views always reflects the current station
         if (window.DEBTORS_STATE) {
             window.DEBTORS_STATE.debtors = null;
@@ -353,71 +360,8 @@ function init_spa_ui(wrapper) {
     // Initialize Supplier Transfer / Invoices Reconciliation Modal
     init_supplier_payment_modal(wrapper);
 
-    $(wrapper).find('#btn-reconcile-topups').off('click').on('click', function() {
-        let d = new frappe.ui.Dialog({
-            title: 'Enter Top-Up Deduction (Rubis Charge)',
-            fields: [
-                {
-                    label: 'Station',
-                    fieldname: 'station',
-                    fieldtype: 'Link',
-                    options: 'Fuel Station',
-                    reqd: 1
-                },
-                {
-                    label: 'Amount Charged by Rubis',
-                    fieldname: 'amount',
-                    fieldtype: 'Currency',
-                    reqd: 1
-                },
-                {
-                    label: 'Rubis/Bank Account (Credit Account)',
-                    fieldname: 'credit_account',
-                    fieldtype: 'Link',
-                    options: 'Account',
-                    get_query: function() {
-                        return { filters: { is_group: 0 } };
-                    },
-                    reqd: 1
-                },
-                {
-                    label: 'Date',
-                    fieldname: 'date',
-                    fieldtype: 'Date',
-                    default: frappe.datetime.get_today(),
-                    reqd: 1
-                },
-                {
-                    label: 'Reference / Invoice No',
-                    fieldname: 'reference',
-                    fieldtype: 'Data',
-                    reqd: 1
-                }
-            ],
-            primary_action_label: 'Submit Deduction',
-            primary_action(values) {
-                frappe.call({
-                    method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.create_topup_deduction',
-                    args: {
-                        station: values.station,
-                        amount: values.amount,
-                        credit_account: values.credit_account,
-                        date: values.date,
-                        reference: values.reference
-                    },
-                    callback: function(r) {
-                        if (!r.exc) {
-                            frappe.show_alert({message: 'Deduction logged successfully', indicator: 'green'});
-                            d.hide();
-                            load_topups_statement(wrapper);
-                            load_dashboard_data(wrapper);
-                        }
-                    }
-                });
-            }
-        });
-        d.show();
-    });
+    // Initialize Top-Ups Holding Account & Statement Reconciliation
+    init_topups_holding_tab(wrapper);
 
     // Load Employees (window.USERS_LIST for receipts and CSAs)
     if (!window.USERS_LIST || window.USERS_LIST.length === 0) {
@@ -3725,51 +3669,408 @@ function fetch_inventory_report($wrapper) {
 
 
 // =========================================================
-// WAREHOUSE INVENTORY MODULE
+// TOP-UPS HOLDING ACCOUNT & STATEMENT RECONCILIATION MODULE
 // =========================================================
 
+window.TOPUPS_STATE = {
+    status: 'all', // 'all', 'pending', 'reconciled'
+    search: '',
+    selected_items: new Set(),
+    statement: []
+};
+
+function init_topups_holding_tab(wrapper) {
+    if (!window.TOPUPS_STATE) {
+        window.TOPUPS_STATE = {
+            status: 'all',
+            search: '',
+            selected_items: new Set(),
+            statement: []
+        };
+    }
+
+    // Status filter buttons
+    $(wrapper).off('click', '.topup-status-filter').on('click', '.topup-status-filter', function(e) {
+        e.preventDefault();
+        $(wrapper).find('.topup-status-filter').removeClass('active').css({
+            'background': 'transparent',
+            'color': '#64748b',
+            'box-shadow': 'none'
+        });
+        let filter = $(this).data('filter') || 'all';
+        let activeColor = filter === 'pending' ? '#b45309' : (filter === 'reconciled' ? '#15803d' : '#1e293b');
+        $(this).addClass('active').css({
+            'background': '#ffffff',
+            'color': activeColor,
+            'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'
+        });
+        window.TOPUPS_STATE.status = filter;
+        load_topups_statement(wrapper);
+    });
+
+    // Search input (debounced)
+    let searchTimeout = null;
+    $(wrapper).off('input', '#topup-search-input').on('input', '#topup-search-input', function() {
+        clearTimeout(searchTimeout);
+        let val = $(this).val();
+        searchTimeout = setTimeout(function() {
+            window.TOPUPS_STATE.search = val;
+            load_topups_statement(wrapper);
+        }, 300);
+    });
+
+    // Refresh button
+    $(wrapper).off('click', '#btn-refresh-topups').on('click', '#btn-refresh-topups', function(e) {
+        e.preventDefault();
+        load_topups_statement(wrapper);
+    });
+
+    // Select-all checkbox
+    $(wrapper).off('change', '#topups-select-all').on('change', '#topups-select-all', function() {
+        let checked = $(this).is(':checked');
+        let state = window.TOPUPS_STATE;
+        $(wrapper).find('.topup-row-check').each(function() {
+            let name = $(this).data('name');
+            $(this).prop('checked', checked);
+            if (name) {
+                if (checked) state.selected_items.add(name);
+                else state.selected_items.delete(name);
+            }
+        });
+        update_topups_selection_ui(wrapper);
+    });
+
+    // Individual row checkbox
+    $(wrapper).off('change', '.topup-row-check').on('change', '.topup-row-check', function() {
+        let name = $(this).data('name');
+        let state = window.TOPUPS_STATE;
+        if (name) {
+            if ($(this).is(':checked')) state.selected_items.add(name);
+            else state.selected_items.delete(name);
+        }
+        update_topups_selection_ui(wrapper);
+    });
+
+    // Row-level reconcile button
+    $(wrapper).off('click', '.btn-reconcile-single-topup').on('click', '.btn-reconcile-single-topup', function(e) {
+        e.preventDefault();
+        let name = $(this).data('name');
+        let state = window.TOPUPS_STATE;
+        let row = (state.statement || []).find(r => (r.entry_name || r.name) === name);
+        if (row) {
+            open_topup_reconciliation_modal(wrapper, [row]);
+        }
+    });
+
+    // Batch reconcile selected
+    $(wrapper).off('click', '#btn-reconcile-selected-topups').on('click', '#btn-reconcile-selected-topups', function(e) {
+        e.preventDefault();
+        let state = window.TOPUPS_STATE;
+        let selectedNames = Array.from(state.selected_items);
+        if (!selectedNames.length) {
+            frappe.msgprint(__('Please select at least one pending top-up to reconcile.'));
+            return;
+        }
+        let selectedRows = (state.statement || []).filter(r => selectedNames.includes(r.entry_name || r.name));
+        open_topup_reconciliation_modal(wrapper, selectedRows);
+    });
+
+    // Main KPI card reconcile button
+    $(wrapper).off('click', '#btn-reconcile-topups').on('click', '#btn-reconcile-topups', function(e) {
+        e.preventDefault();
+        let state = window.TOPUPS_STATE;
+        let pendingRows = (state.statement || []).filter(r => !r.is_opening && r.supplier !== 'RECONCILIATION' && !r.is_reconciled);
+        open_topup_reconciliation_modal(wrapper, pendingRows);
+    });
+}
+
+function update_topups_selection_ui(wrapper) {
+    let state = window.TOPUPS_STATE;
+    if (!state) return;
+
+    let selectedCount = state.selected_items.size;
+    $(wrapper).find('#topups-selected-count').text(selectedCount);
+
+    if (selectedCount > 0) {
+        $(wrapper).find('#btn-reconcile-selected-topups').css('display', 'inline-flex');
+    } else {
+        $(wrapper).find('#btn-reconcile-selected-topups').hide();
+    }
+
+    let checkableRows = $(wrapper).find('.topup-row-check');
+    if (checkableRows.length > 0 && checkableRows.filter(':checked').length === checkableRows.length) {
+        $(wrapper).find('#topups-select-all').prop('checked', true);
+    } else {
+        $(wrapper).find('#topups-select-all').prop('checked', false);
+    }
+}
+
 function load_topups_statement(wrapper) {
+    if (!window.TOPUPS_STATE) {
+        window.TOPUPS_STATE = {
+            status: 'all',
+            search: '',
+            selected_items: new Set(),
+            statement: []
+        };
+    }
+    let state = window.TOPUPS_STATE;
     let filters = get_date_filters(wrapper);
-    
-    $(wrapper).find('#exec-topups-table tbody').html('<tr><td colspan="8" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>');
-    
+    filters.status = state.status;
+    filters.search = state.search;
+
+    $(wrapper).find('#exec-topups-table tbody').html('<tr><td colspan="11" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>');
+
     frappe.call({
         method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_topup_statement",
         args: filters,
         callback: function(r) {
+            let res = r.message || {};
+            let stmt = Array.isArray(res) ? res : (res.statement || []);
+            let pending_amount = res.pending_amount !== undefined ? res.pending_amount : 0;
+            let pending_count = res.pending_count !== undefined ? res.pending_count : 0;
+            let period_topups_sum = res.period_topups_sum !== undefined ? res.period_topups_sum : 0;
+            state.statement = stmt;
+
+            // Update KPI and badges
+            $(wrapper).find('#exec-holding-balance').text(format_currency(pending_amount, "KES"));
+            $(wrapper).find('#exec-holding-subtitle').html(`<strong>${pending_count}</strong> Pending Top-up(s) awaiting reconciliation`);
+            $(wrapper).find('#topup-filter-pending-count').text(pending_count);
+            $(wrapper).find('#exec-topups-total').text(format_currency(period_topups_sum, "KES"));
+
             let html = '';
-            let total = 0;
-            
-            if(r.message && r.message.length > 0) {
-                r.message.forEach(row => {
+            if (stmt && stmt.length > 0) {
+                stmt.forEach(row => {
                     let amount = parseFloat(row.amount) || 0;
                     let run_bal = parseFloat(row.running_balance) || 0;
-                    if(!row.is_opening) total += amount;
-                    
-                    let link = row.is_opening ? row.entry_name : `<a href="/app/${row.entry_name.startsWith('JV-') ? 'journal-entry' : 'station-supplier-top-up'}/${row.entry_name}" style="color: #0ea5e9; font-weight: 500; text-decoration: none;">${row.entry_name}</a>`;
-                    
-                    let amountColor = amount < 0 ? '#ef4444' : '#10b981';
-                    if(row.is_opening) amountColor = '#64748b';
-                    
-                    html += `<tr style="border-bottom: 1px solid #f1f5f9; ${row.is_opening ? 'background: #f8fafc; font-style: italic;' : ''}">
-                        <td style="padding: 12px 16px;">${frappe.datetime.str_to_user(row.date)}</td>
-                        <td style="padding: 12px 16px;">${link}</td>
-                        <td style="padding: 12px 16px;">${row.station || '-'}</td>
-                        <td style="padding: 12px 16px;">${row.supplier || '-'}</td>
-                        <td style="padding: 12px 16px;">${row.mode || '-'}</td>
-                        <td style="padding: 12px 16px;">${row.ref || '-'}</td>
-                        <td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600; color: ${amountColor};">${format_currency(amount, "KES")}</td>
-                        <td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600; color: #f59e0b;">${format_currency(run_bal, "KES")}</td>
+                    let isReconciled = Boolean(row.is_reconciled);
+                    let isDeduction = row.supplier === 'RECONCILIATION' || amount < 0;
+                    let isOpening = Boolean(row.is_opening);
+
+                    let entryName = row.entry_name || row.name || '';
+                    let isCheckable = !isOpening && !isDeduction && !isReconciled;
+                    let isChecked = isCheckable && state.selected_items.has(entryName);
+
+                    let checkboxHtml = isCheckable ?
+                        `<input type="checkbox" class="topup-row-check" data-name="${frappe.utils.escape_html(entryName)}" ${isChecked ? 'checked' : ''} style="cursor: pointer;">` :
+                        '';
+
+                    let link = '';
+                    if (isOpening) {
+                        link = `<span style="font-weight: 700; color: #64748b;">${entryName}</span>`;
+                    } else if (entryName.startsWith('JV-')) {
+                        link = `<a href="/app/journal-entry/${entryName}" target="_blank" style="color: #0284c7; font-weight: 600; text-decoration: none;">${entryName}</a>`;
+                    } else {
+                        link = `<a href="/app/station-supplier-top-up/${entryName}" target="_blank" style="color: #0ea5e9; font-weight: 600; text-decoration: none;">${entryName}</a>`;
+                    }
+
+                    let amountColor = isOpening ? '#64748b' : (amount < 0 ? '#dc2626' : '#16a34a');
+
+                    // Status Badge
+                    let statusBadge = '';
+                    if (isOpening) {
+                        statusBadge = '<span style="color: #94a3b8; font-size: 11px;">-</span>';
+                    } else if (isDeduction) {
+                        statusBadge = '<span style="background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">Reconciliation JV</span>';
+                    } else if (isReconciled) {
+                        statusBadge = `<span style="background: #dcfce7; color: #15803d; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;" title="Reconciled by ${frappe.utils.escape_html(row.reconciled_by || '')} on ${row.reconciled_date || ''}">🟢 Reconciled</span>`;
+                    } else {
+                        statusBadge = '<span style="background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">🟡 Pending</span>';
+                    }
+
+                    // Action Button
+                    let actionHtml = '';
+                    if (isOpening) {
+                        actionHtml = '-';
+                    } else if (isReconciled && row.reconciled_jv) {
+                        actionHtml = `<a href="/app/journal-entry/${row.reconciled_jv}" target="_blank" class="btn btn-xs" style="padding: 2px 8px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #0284c7; text-decoration: none; display: inline-flex; align-items: center; gap: 3px;" title="View Journal Entry">📄 View JV</a>`;
+                    } else if (!isReconciled && !isDeduction) {
+                        actionHtml = `<button type="button" class="btn btn-xs btn-reconcile-single-topup" data-name="${frappe.utils.escape_html(entryName)}" style="padding: 3px 10px; font-size: 11px; font-weight: 700; border-radius: 4px; background: #f59e0b; color: #fff; border: none; cursor: pointer;" title="Reconcile and post to supplier account">⚡ Reconcile</button>`;
+                    } else {
+                        actionHtml = '-';
+                    }
+
+                    html += `<tr style="border-bottom: 1px solid #f1f5f9; ${isOpening ? 'background: #f8fafc; font-style: italic;' : ''}">
+                        <td style="padding: 10px 12px; text-align: center;">${checkboxHtml}</td>
+                        <td style="padding: 10px 12px; white-space: nowrap;">${row.date ? frappe.datetime.str_to_user(row.date) : '-'}</td>
+                        <td style="padding: 10px 12px; white-space: nowrap;">${link}</td>
+                        <td style="padding: 10px 12px; font-weight: 500;">${row.station || '-'}</td>
+                        <td style="padding: 10px 12px;">${row.supplier || '-'}</td>
+                        <td style="padding: 10px 12px; font-size: 11px; color: #64748b;">${row.mode || '-'}</td>
+                        <td style="padding: 10px 12px; font-family: monospace; font-size: 11px;">${row.ref || '-'}</td>
+                        <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 600; color: ${amountColor};">${format_currency(amount, "KES")}</td>
+                        <td style="padding: 10px 12px; text-align: center;">${statusBadge}</td>
+                        <td style="padding: 10px 12px; text-align: center;">${actionHtml}</td>
+                        <td style="padding: 10px 12px; text-align: right; font-family: monospace; font-weight: 600; color: #0284c7;">${format_currency(run_bal, "KES")}</td>
                     </tr>`;
                 });
             } else {
-                html = '<tr><td colspan="8" style="text-align: center; padding: 24px; color: #64748b;">No top-ups found in this period.</td></tr>';
+                html = '<tr><td colspan="11" style="text-align: center; padding: 24px; color: #64748b;">No top-up entries found matching criteria.</td></tr>';
             }
-            
+
             $(wrapper).find('#exec-topups-table tbody').html(html);
-            $(wrapper).find('#exec-topups-total, #exec-holding-balance').text(format_currency(total, "KES"));
+            update_topups_selection_ui(wrapper);
         }
     });
+}
+
+function open_topup_reconciliation_modal(wrapper, topup_records) {
+    topup_records = topup_records || [];
+    let state = window.TOPUPS_STATE;
+
+    let defaultStation = '';
+    if (topup_records.length > 0 && topup_records[0].station) {
+        defaultStation = topup_records[0].station;
+    } else if (window.ACTIVE_STATION && window.ACTIVE_STATION !== 'ALL') {
+        defaultStation = window.ACTIVE_STATION;
+    }
+
+    let defaultSupplier = 'RUBIS KENYA';
+    if (topup_records.length > 0 && topup_records[0].supplier && topup_records[0].supplier !== 'RECONCILIATION') {
+        defaultSupplier = topup_records[0].supplier;
+    }
+
+    let totalAmount = topup_records.reduce((acc, r) => acc + (parseFloat(r.amount) || 0), 0);
+    if (totalAmount <= 0 && state && state.statement) {
+        let pending = state.statement.filter(r => !r.is_opening && r.supplier !== 'RECONCILIATION' && !r.is_reconciled);
+        if (pending.length > 0) {
+            topup_records = pending;
+            totalAmount = pending.reduce((acc, r) => acc + (parseFloat(r.amount) || 0), 0);
+            if (!defaultStation && pending[0].station) defaultStation = pending[0].station;
+            if (pending[0].supplier && pending[0].supplier !== 'RECONCILIATION') defaultSupplier = pending[0].supplier;
+        }
+    }
+
+    let defaultRef = '';
+    if (topup_records.length > 0) {
+        let refs = topup_records.map(r => r.ref).filter(Boolean);
+        defaultRef = refs.length > 0 ? refs.join(', ').substring(0, 80) : `STMT-RECON-${frappe.datetime.get_today()}`;
+    } else {
+        defaultRef = `STMT-RECON-${frappe.datetime.get_today()}`;
+    }
+
+    let summaryHtml = `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                <span style="color: #64748b;">Station:</span>
+                <strong style="color: #0f172a;">${defaultStation || 'All / Selected Station'}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                <span style="color: #64748b;">Supplier:</span>
+                <strong style="color: #0f172a;">${defaultSupplier}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                <span style="color: #64748b;">Top-ups Selected:</span>
+                <span style="font-weight: 700; color: #b45309;">${topup_records.length} entry(ies)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 800; border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 8px;">
+                <span style="color: #0f172a;">Total Holding to Clear:</span>
+                <span style="font-family: monospace; color: #16a34a; font-size: 15px;">${format_currency(totalAmount, "KES")}</span>
+            </div>
+            <div style="margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: #eff6ff; border: 1px solid #bfdbfe; font-size: 11px; color: #1e40af; line-height: 1.4;">
+                <strong>Accounting Posting:</strong><br>
+                • <strong>Debit:</strong> Station Top-Up Holding Account (Clears Holding Asset balance)<br>
+                • <strong>Credit:</strong> Creditors / Supplier Account (Party: ${defaultSupplier})
+            </div>
+        </div>
+    `;
+
+    let d = new frappe.ui.Dialog({
+        title: __('Reconcile Top-Up with Supplier Statement'),
+        fields: [
+            {
+                fieldname: 'summary_html',
+                fieldtype: 'HTML',
+                options: summaryHtml
+            },
+            {
+                label: __('Station'),
+                fieldname: 'station',
+                fieldtype: 'Link',
+                options: 'Fuel Station',
+                default: defaultStation,
+                reqd: 1
+            },
+            {
+                label: __('Supplier'),
+                fieldname: 'supplier',
+                fieldtype: 'Link',
+                options: 'Supplier',
+                default: defaultSupplier,
+                reqd: 1
+            },
+            {
+                label: __('Supplier Account (Credit Account)'),
+                fieldname: 'credit_account',
+                fieldtype: 'Link',
+                options: 'Account',
+                default: 'Creditors - KIL',
+                get_query: function() {
+                    return { filters: { is_group: 0 } };
+                },
+                reqd: 1,
+                description: __('Supplier Payable Account (e.g. Creditors - KIL) or Bank Account')
+            },
+            {
+                label: __('Amount Credited / Confirmed on Statement (KES)'),
+                fieldname: 'amount',
+                fieldtype: 'Currency',
+                default: totalAmount,
+                reqd: 1
+            },
+            {
+                label: __('Statement Reconciliation Date'),
+                fieldname: 'date',
+                fieldtype: 'Date',
+                default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                label: __('Statement Reference / RRN / Batch #'),
+                fieldname: 'reference',
+                fieldtype: 'Data',
+                default: defaultRef,
+                reqd: 1
+            }
+        ],
+        primary_action_label: __('Confirm & Post to Supplier Account'),
+        primary_action: function(vals) {
+            let topup_names = (topup_records || []).map(r => r.entry_name || r.name).filter(Boolean);
+            frappe.call({
+                method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.create_topup_deduction",
+                args: {
+                    station: vals.station,
+                    amount: vals.amount,
+                    supplier: vals.supplier,
+                    credit_account: vals.credit_account,
+                    date: vals.date,
+                    reference: vals.reference,
+                    topup_names: JSON.stringify(topup_names)
+                },
+                freeze: true,
+                freeze_message: __("Reconciling & posting to supplier account..."),
+                callback: function(r) {
+                    if (!r.exc && r.message && (r.message.status === 'success' || r.message.jv)) {
+                        frappe.show_alert({
+                            message: (r.message.message || 'Top-up reconciled successfully') + ` (${r.message.jv})`,
+                            indicator: 'green'
+                        }, 7);
+                        d.hide();
+                        if (window.TOPUPS_STATE) {
+                            topup_names.forEach(n => window.TOPUPS_STATE.selected_items.delete(n));
+                        }
+                        load_topups_statement(wrapper);
+                        load_dashboard_data(wrapper);
+                    } else {
+                        let msg = (r && r.message && r.message.message) ? r.message.message : 'Failed to reconcile top-up.';
+                        frappe.msgprint(__('Reconciliation failed: ') + msg);
+                    }
+                }
+            });
+        }
+    });
+
+    d.show();
 }
 
 /* =========================================================================

@@ -1476,7 +1476,7 @@ def get_sales_analytics(from_date=None, to_date=None, station=None):
 
 
 @frappe.whitelist()
-def get_topup_statement(from_date, to_date, station=None):
+def get_topup_statement(from_date, to_date, station=None, status="all", search=None):
     station_topup_clause = ""
     station_args = []
     if station and station not in ("ALL", "All Stations", ""):
@@ -1493,8 +1493,8 @@ def get_topup_statement(from_date, to_date, station=None):
     op_topups = frappe.db.sql(op_topup_sql, [from_date] + station_args, as_dict=1)
     op_topup_amt = op_topups[0].amt if op_topups and op_topups[0].amt else 0.0
     
-    deduct_where = "je.docstatus = 1 AND je.user_remark LIKE %s AND jea.debit > 0 AND je.posting_date < %s"
-    deduct_params = ['[TOP-UP DEDUCTION]%', from_date]
+    deduct_where = "je.docstatus = 1 AND (je.user_remark LIKE %s OR je.user_remark LIKE %s) AND jea.debit > 0 AND je.posting_date < %s"
+    deduct_params = ['[TOP-UP DEDUCTION]%', '[TOP-UP RECONCILIATION]%', from_date]
     if station and station not in ("ALL", "All Stations", ""):
         deduct_where += " AND je.user_remark LIKE %s"
         deduct_params.append(f"%for {station}%")
@@ -1509,34 +1509,81 @@ def get_topup_statement(from_date, to_date, station=None):
     
     running_balance = op_topup_amt - op_deduct_amt
 
-    # 2. Fetch Period Data
+    # 2. Fetch Period Topups
+    status_filter = ""
+    if status == "pending":
+        status_filter = " AND COALESCE(t.is_reconciled, 0) = 0"
+    elif status == "reconciled":
+        status_filter = " AND COALESCE(t.is_reconciled, 0) = 1"
+
+    search_filter = ""
+    search_params = []
+    if search and search.strip():
+        s_term = f"%{search.strip()}%"
+        search_filter = " AND (t.name LIKE %s OR t.rrn_number LIKE %s OR t.card LIKE %s OR sc.supplier LIKE %s)"
+        search_params = [s_term, s_term, s_term, s_term]
+
     topups = frappe.db.sql(f"""
         SELECT 
-            t.name as entry_name, t.date, t.shift, t.card as supplier, t.mode_of_payment as mode, t.rrn_number as ref, t.amount,
-            s.station, t.creation
+            t.name as entry_name, t.date, t.shift, t.card,
+            COALESCE(sc.supplier, 'RUBIS KENYA') as supplier,
+            COALESCE(sc.card_name, t.card) as card_name,
+            t.mode_of_payment as mode, t.rrn_number as ref, t.amount,
+            s.station, t.creation,
+            COALESCE(t.is_reconciled, 0) as is_reconciled,
+            t.reconciled_date, t.reconciled_by, t.reconciled_jv, t.reconciled_ref
         FROM `tabStation Supplier Top Up` t
         LEFT JOIN `tabShift` s ON t.shift = s.name
-        WHERE t.date BETWEEN %s AND %s {station_topup_clause}
-    """, [from_date, to_date] + station_args, as_dict=True)
+        LEFT JOIN `tabSupplier Card` sc ON t.card = sc.name
+        WHERE t.date BETWEEN %s AND %s {station_topup_clause} {status_filter} {search_filter}
+    """, [from_date, to_date] + station_args + search_params, as_dict=True)
     
-    period_deduct_where = "je.docstatus = 1 AND je.user_remark LIKE %s AND jea.debit > 0 AND je.posting_date BETWEEN %s AND %s"
-    period_deduct_params = ['[TOP-UP DEDUCTION]%', from_date, to_date]
-    if station and station not in ("ALL", "All Stations", ""):
-        period_deduct_where += " AND je.user_remark LIKE %s"
-        period_deduct_params.append(f"%for {station}%")
+    # 3. Deductions (only include in statement if status is 'all' or 'reconciled')
+    deductions = []
+    if status != "pending":
+        period_deduct_where = "je.docstatus = 1 AND (je.user_remark LIKE %s OR je.user_remark LIKE %s) AND jea.debit > 0 AND je.posting_date BETWEEN %s AND %s"
+        period_deduct_params = ['[TOP-UP DEDUCTION]%', '[TOP-UP RECONCILIATION]%', from_date, to_date]
+        if station and station not in ("ALL", "All Stations", ""):
+            period_deduct_where += " AND je.user_remark LIKE %s"
+            period_deduct_params.append(f"%for {station}%")
 
-    deductions = frappe.db.sql(f"""
-        SELECT 
-            je.name as entry_name, je.posting_date as date, '' as shift, 'RECONCILIATION' as supplier, '' as mode, je.cheque_no as ref, (jea.debit * -1) as amount,
-            '' as station, je.creation
-        FROM `tabJournal Entry` je
-        JOIN `tabJournal Entry Account` jea ON je.name = jea.parent
-        WHERE {period_deduct_where}
-    """, period_deduct_params, as_dict=True)
+        deductions = frappe.db.sql(f"""
+            SELECT 
+                je.name as entry_name, je.posting_date as date, '' as shift, 'RECONCILIATION' as supplier,
+                'RECONCILIATION' as card_name, '' as mode, je.cheque_no as ref, (jea.debit * -1) as amount,
+                '' as station, je.creation, 1 as is_reconciled, je.posting_date as reconciled_date,
+                '' as reconciled_by, je.name as reconciled_jv, je.cheque_no as reconciled_ref
+            FROM `tabJournal Entry` je
+            JOIN `tabJournal Entry Account` jea ON je.name = jea.parent
+            WHERE {period_deduct_where}
+        """, period_deduct_params, as_dict=True)
     
+    # 4. Summary counts & pending amount for station
+    unrecon_where = "COALESCE(t.is_reconciled, 0) = 0"
+    unrecon_params = []
+    if station and station not in ("ALL", "All Stations", ""):
+        unrecon_where += " AND s.station = %s"
+        unrecon_params.append(station)
+
+    pending_summary = frappe.db.sql(f"""
+        SELECT 
+            COUNT(*) as pending_count,
+            COALESCE(SUM(t.amount), 0) as pending_amount
+        FROM `tabStation Supplier Top Up` t
+        LEFT JOIN `tabShift` s ON t.shift = s.name
+        WHERE {unrecon_where}
+    """, unrecon_params, as_dict=True)
+    
+    pending_count = pending_summary[0].pending_count if pending_summary else 0
+    pending_amount = flt(pending_summary[0].pending_amount) if pending_summary else 0.0
+
+    # Period totals
+    period_topups_sum = sum(flt(t.get('amount', 0)) for t in topups)
+    period_reconciled_sum = sum(flt(t.get('amount', 0)) for t in topups if t.get('is_reconciled') == 1)
+
     data = topups + deductions
     # Sort by date, then creation
-    data.sort(key=lambda x: (x.get('date'), x.get('creation')))
+    data.sort(key=lambda x: (str(x.get('date')), str(x.get('creation'))))
     
     result = []
     # Insert opening balance row
@@ -1546,48 +1593,146 @@ def get_topup_statement(from_date, to_date, station=None):
         "shift": "",
         "station": "",
         "supplier": "",
+        "card_name": "",
         "mode": "",
         "ref": "",
         "amount": 0.0,
         "running_balance": running_balance,
-        "is_opening": True
+        "is_opening": True,
+        "is_reconciled": 0
     })
     
     for d in data:
-        running_balance += d.get('amount', 0.0)
+        running_balance += flt(d.get('amount', 0.0))
         d['running_balance'] = running_balance
         result.append(d)
         
-    return result
+    return {
+        "statement": result,
+        "pending_amount": pending_amount,
+        "pending_count": pending_count,
+        "running_balance": running_balance,
+        "period_topups_sum": period_topups_sum,
+        "period_reconciled_sum": period_reconciled_sum
+    }
+
 
 @frappe.whitelist()
-def create_topup_deduction(station, amount, credit_account, date, reference):
+def create_topup_deduction(station, amount=None, credit_account=None, date=None, reference=None, supplier=None, topup_names=None):
+    from frappe.utils import flt, today
+    import json
+    
+    if not station or station in ("ALL", "All Stations", ""):
+        frappe.throw("Please select a specific Fuel Station to reconcile.")
+        
     holding_account = frappe.db.get_value("Fuel Station", station, "top_up_holding_account")
     if not holding_account:
-        frappe.throw(f"No Top Up Holding Account configured for Station: {station}")
+        cand = f"Top Up Holding Account - {station} - KIL"
+        if frappe.db.exists("Account", cand):
+            holding_account = cand
+            frappe.db.set_value("Fuel Station", station, "top_up_holding_account", cand)
+        else:
+            frappe.throw(f"No Top Up Holding Account configured for Station: {station}")
         
+    company = frappe.db.get_value("Fuel Station", station, "company") or frappe.db.get_single_value("Global Defaults", "default_company") or "KILIBET INVESTMENT LTD"
+
+    # Normalize topup_names
+    parsed_topups = []
+    if topup_names:
+        if isinstance(topup_names, str):
+            try:
+                parsed_topups = json.loads(topup_names)
+            except Exception:
+                parsed_topups = [x.strip() for x in topup_names.split(",") if x.strip()]
+        elif isinstance(topup_names, (list, tuple)):
+            parsed_topups = list(topup_names)
+
+    selected_topups = []
+    if parsed_topups:
+        selected_topups = frappe.db.sql("""
+            SELECT t.name, t.amount, t.card, t.rrn_number, sc.supplier
+            FROM `tabStation Supplier Top Up` t
+            LEFT JOIN `tabSupplier Card` sc ON t.card = sc.name
+            WHERE t.name IN %s
+        """, (tuple(parsed_topups),), as_dict=True)
+        if not amount or flt(amount) <= 0:
+            amount = sum(flt(t.amount) for t in selected_topups)
+        if not supplier and selected_topups:
+            supplier = selected_topups[0].supplier or "RUBIS KENYA"
+        if not reference and selected_topups:
+            rrns = [t.rrn_number for t in selected_topups if t.rrn_number]
+            reference = ", ".join(rrns)[:100]
+
+    amount = flt(amount)
+    if amount <= 0:
+        frappe.throw("Amount to reconcile must be greater than zero.")
+        
+    if not supplier:
+        supplier = "RUBIS KENYA"
+        
+    if not credit_account:
+        credit_account = frappe.get_cached_value("Company", company, "default_payable_account") or "Creditors - KIL"
+        
+    if not date:
+        date = today()
+        
+    if not reference:
+        reference = f"RECON-{frappe.utils.nowdate()}"
+
     je = frappe.new_doc("Journal Entry")
     je.voucher_type = "Journal Entry"
+    je.company = company
     je.posting_date = date
     je.cheque_no = reference
-    je.user_remark = f"[TOP-UP DEDUCTION] Reconciled to {credit_account} for {station}"
+    topups_tag = f" (Topups: {', '.join(parsed_topups)})" if parsed_topups else ""
+    je.user_remark = f"[TOP-UP DEDUCTION] Reconciled to {credit_account} for {station}{topups_tag}"
     
-    # Debit the holding account (reduce liability/balance)
+    # 1. Debit the holding account (clears the holding balance)
     je.append("accounts", {
         "account": holding_account,
-        "debit_in_account_currency": amount
+        "debit_in_account_currency": amount,
+        "user_remark": f"Clear Top-Up Holding for {station}"
     })
     
-    # Credit the target account (Rubis bank/supplier)
-    je.append("accounts", {
+    # 2. Credit the target account (Supplier Account / Creditors or Bank)
+    acc_type = frappe.db.get_value("Account", credit_account, "account_type")
+    credit_row = {
         "account": credit_account,
-        "credit_in_account_currency": amount
-    })
-    
+        "credit_in_account_currency": amount,
+        "user_remark": f"Top-Up posted to {supplier or credit_account} (Ref: {reference})"
+    }
+    if acc_type == "Payable":
+        credit_row["party_type"] = "Supplier"
+        credit_row["party"] = supplier
+        
+    je.append("accounts", credit_row)
     je.flags.ignore_permissions = True
     je.insert()
     je.submit()
-    return je.name
+
+    # 3. Mark selected top-ups as reconciled
+    if parsed_topups:
+        user = frappe.session.user
+        user_fullname = frappe.get_cached_value("User", user, "full_name") or user
+        by_name = f"{user_fullname} ({user})"
+        now_dt = frappe.utils.now_datetime()
+        frappe.db.sql("""
+            UPDATE `tabStation Supplier Top Up`
+            SET is_reconciled = 1,
+                reconciled_date = %s,
+                reconciled_by = %s,
+                reconciled_jv = %s,
+                reconciled_ref = %s
+            WHERE name IN %s
+        """, (now_dt, by_name, je.name, reference, tuple(parsed_topups)))
+        frappe.db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Successfully reconciled KES {amount:,.2f} and posted to {credit_account} ({supplier})",
+        "jv": je.name,
+        "amount": amount
+    }
 
 
 @frappe.whitelist()

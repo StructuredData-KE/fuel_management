@@ -1755,8 +1755,11 @@
 
         <div class="exec-header">
             <div>
-                <h1 class="exec-header-title">Top Ups Holding Account</h1>
-                <p class="exec-header-subtitle">Supplier top-ups holding account & reconciliation.</p>
+                <h1 class="exec-header-title" style="display: flex; align-items: center; gap: 8px;">
+                    <span>Top Ups Holding Account</span>
+                    <span id="exec-topups-station-badge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; background: #fef3c7; color: #b45309; font-weight: 700;">All Stations</span>
+                </h1>
+                <p class="exec-header-subtitle">Supplier top-ups holding account & reconciliation with supplier statement.</p>
             </div>
         </div>
         <div class="exec-kpi-grid" style="margin-top: 24px;">
@@ -1766,39 +1769,60 @@
                     <span class="material-symbols-outlined" style="color:#f59e0b; font-size:18px;">payments</span>
                 </div>
                 <div class="exec-card-value" id="exec-holding-balance">Loading...</div>
-                <div class="exec-progress-text" style="color: #64748b; margin-top: 8px;">
+                <div class="exec-progress-text" id="exec-holding-subtitle" style="color: #64748b; margin-top: 8px;">
                     Unreconciled Top-up Holding Balance
                 </div>
                 <div style="margin-top: 16px;">
-                    <button id="btn-reconcile-topups" class="exec-btn-primary" style="width: 100%; background-color: #f59e0b; border: none;">Reconcile with Statement</button>
+                    <button id="btn-reconcile-topups" class="exec-btn-primary" style="width: 100%; background-color: #f59e0b; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <span>⚡ Reconcile with Statement</span>
+                    </button>
                 </div>
             </div>
         <div class="exec-chart-area" style="margin-top:24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h2 class="exec-chart-title">Top-Up Holding Statement</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <h2 class="exec-chart-title" style="margin: 0;">Top-Up Holding Statement</h2>
+                    <div style="display: flex; gap: 4px; background: #f1f5f9; padding: 2px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <button type="button" class="topup-status-filter active" data-filter="all" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 4px; border: none; background: #ffffff; color: #1e293b; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">All</button>
+                        <button type="button" class="topup-status-filter" data-filter="pending" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 4px; border: none; background: transparent; color: #b45309; font-weight: 600; cursor: pointer;">🟡 Pending (<span id="topup-filter-pending-count">0</span>)</button>
+                        <button type="button" class="topup-status-filter" data-filter="reconciled" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 4px; border: none; background: transparent; color: #15803d; font-weight: 600; cursor: pointer;">🟢 Reconciled</button>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="text" id="topup-search-input" placeholder="🔍 Search entry, RRN, card..." style="padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.75rem; width: 190px;">
+                    <button type="button" id="btn-reconcile-selected-topups" style="display: none; padding: 4px 10px; font-weight: 700; font-size: 0.75rem; border-radius: 6px; background: #f59e0b; color: #fff; border: none; cursor: pointer; align-items: center; gap: 4px;">
+                        <span>⚡ Reconcile Selected (<span id="topups-selected-count">0</span>)</span>
+                    </button>
+                    <button type="button" id="btn-refresh-topups" style="padding: 4px 8px; font-weight: 600; font-size: 0.75rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer;">
+                        <span>🔄 Refresh</span>
+                    </button>
+                </div>
             </div>
             <div style="overflow-x: auto;">
-                <table class="exec-table" id="exec-topups-table" style="width: 100%; border-collapse: collapse;">
+                <table class="exec-table" id="exec-topups-table" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
                     <thead>
-                        <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 12px; color: #64748b; text-transform: uppercase;">
-                            <th style="padding: 12px 16px;">Date</th>
-                            <th style="padding: 12px 16px;">Entry</th>
-                            <th style="padding: 12px 16px;">Station</th>
-                            <th style="padding: 12px 16px;">Supplier</th>
-                            <th style="padding: 12px 16px;">Mode</th>
-                            <th style="padding: 12px 16px;">Ref/RRN</th>
-                            <th style="padding: 12px 16px; text-align: right;">Amount (KES)</th>
-                            <th style="padding: 12px 16px; text-align: right;">Running Bal (KES)</th>
+                        <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">
+                            <th style="padding: 10px 12px; width: 32px; text-align: center;"><input type="checkbox" id="topups-select-all" title="Select all pending"></th>
+                            <th style="padding: 10px 12px;">Date</th>
+                            <th style="padding: 10px 12px;">Entry</th>
+                            <th style="padding: 10px 12px;">Station</th>
+                            <th style="padding: 10px 12px;">Supplier</th>
+                            <th style="padding: 10px 12px;">Mode</th>
+                            <th style="padding: 10px 12px;">Ref/RRN</th>
+                            <th style="padding: 10px 12px; text-align: right;">Amount (KES)</th>
+                            <th style="padding: 10px 12px; text-align: center;">Status</th>
+                            <th style="padding: 10px 12px; text-align: center;">Action</th>
+                            <th style="padding: 10px 12px; text-align: right;">Running Bal (KES)</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td colspan="8" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>
+                        <tr><td colspan="11" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>
                     </tbody>
                     <tfoot>
                         <tr style="background-color: #f8fafc; border-top: 2px solid #e2e8f0; font-weight: bold;">
-                            <td colspan="6" style="padding: 12px 16px; text-align: right;">TOTAL TOP-UPS:</td>
-                            <td id="exec-topups-total" style="padding: 12px 16px; text-align: right; color: #f59e0b;">0.00</td>
-                            <td></td>
+                            <td colspan="7" style="padding: 12px 16px; text-align: right;">TOTAL TOP-UPS:</td>
+                            <td id="exec-topups-total" style="padding: 12px 16px; text-align: right; color: #f59e0b; font-family: monospace;">0.00</td>
+                            <td colspan="3"></td>
                         </tr>
                     </tfoot>
                 </table>

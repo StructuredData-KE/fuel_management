@@ -13,7 +13,12 @@
   "csa",
   "rrn_number",
   "mode_of_payment",
-  "amount"
+  "amount",
+  "is_reconciled",
+  "reconciled_date",
+  "reconciled_by",
+  "reconciled_jv",
+  "reconciled_ref"
  ],
  "fields": [
   {
@@ -77,6 +82,39 @@
    "in_list_view": 1,
    "label": "Amount",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_reconciled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Reconciled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_date",
+   "fieldtype": "Datetime",
+   "label": "Reconciled Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_by",
+   "fieldtype": "Data",
+   "label": "Reconciled By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_jv",
+   "fieldtype": "Link",
+   "label": "Reconciliation Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_ref",
+   "fieldtype": "Data",
+   "label": "Statement Reference",
+   "read_only": 1
   }
  ],
  "links": [],
