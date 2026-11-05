@@ -2412,10 +2412,20 @@
     <main class="exec-main" id="tab-shorts-report" style="display:none;">
         <div class="exec-header">
             <div>
-                <h1 class="exec-header-title">Staff Shorts Report</h1>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <h1 class="exec-header-title">Staff Shorts Report</h1>
+                    <span id="exec-shorts-station-badge" style="background: #e0f2fe; color: #0284c7; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; border: 1px solid #bae6fd;">Consolidated</span>
+                </div>
                 <p class="exec-header-subtitle">Reconciliation of staff shortages, previous month opening balances, period incursions, and recoveries.</p>
             </div>
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <!-- Station Switcher Dropdown in Shorts Report Header -->
+                <div style="display:flex; align-items:center; gap:6px; background:#fff; padding:4px 10px; border:1px solid #cbd5e1; border-radius:8px;">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#0284c7;">local_gas_station</span>
+                    <select id="exec-shorts-station-select" style="font-size:12px; font-weight:600; border:none; outline:none; background:transparent; font-family:inherit; color:#1e293b; cursor:pointer;">
+                        <option value="">All Stations (Consolidated)</option>
+                    </select>
+                </div>
                 <div style="display: flex; align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 2px 8px; gap: 4px;">
                     <label style="font-size: 11px; font-weight: 700; color: #64748b; margin: 0;">FROM:</label>
                     <input type="date" id="exec-shorts-report-start" style="border: none; background: transparent; font-size: 12px; height: 32px; width: 130px; outline: none;">

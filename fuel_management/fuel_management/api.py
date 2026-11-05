@@ -3771,8 +3771,14 @@ def delete_shortage_record(doctype, name):
 @frappe.whitelist()
 def get_csa_shorts_balances(start_date=None, end_date=None, employee=None, station=None):
     from frappe.utils import nowdate, getdate, flt
-    if not station:
-        station = frappe.defaults.get_user_default("station")
+    if station in ("ALL", "All Stations", "All Stations (Consolidated)", "", "None", "null", None):
+        user_roles = frappe.get_roles()
+        if "System Manager" not in user_roles and "Executive" not in user_roles and "Director" not in user_roles:
+            station = frappe.defaults.get_user_default("station")
+        else:
+            station = None
+    else:
+        station = str(station).strip()
     
     if not start_date or not end_date:
         today = getdate(nowdate())
@@ -3826,6 +3832,7 @@ def get_csa_shorts_balances(start_date=None, end_date=None, employee=None, stati
             l.employee,
             e.employee_name,
             e.status as employee_status,
+            e.station,
             SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END) as lifetime_shortage,
             SUM(CASE WHEN l.amount < 0 THEN ABS(l.amount) ELSE 0 END) as lifetime_paid,
             SUM(l.amount) as lifetime_balance
@@ -3873,6 +3880,7 @@ def get_csa_shorts_balances(start_date=None, end_date=None, employee=None, stati
             'employee': emp_id,
             'employee_name': r.employee_name or emp_id,
             'employee_status': r.employee_status or "Active",
+            'station': r.station or "",
             'opening_balance': op_bal,
             'period_shortage': p_short,
             'period_paid': p_paid,

@@ -231,15 +231,18 @@ function init_spa_ui(wrapper) {
                 $(wrapper).find('#exec-global-station-select').html(optionsHtml);
                 $(wrapper).find('#exec-header-station-select').html(optionsHtml);
                 $(wrapper).find('#inventory-station-select').html(optionsHtml);
+                $(wrapper).find('#exec-shorts-station-select').html(optionsHtml);
             }
         }
     });
 
     function handle_exec_station_change(selectedStation) {
         selectedStation = selectedStation || "";
+        window.ACTIVE_STATION = selectedStation;
         $(wrapper).find('#exec-global-station-select').val(selectedStation);
         $(wrapper).find('#exec-header-station-select').val(selectedStation);
         $(wrapper).find('#inventory-station-select').val(selectedStation);
+        $(wrapper).find('#exec-shorts-station-select').val(selectedStation);
 
         // Synchronize P&L station pills
         $(wrapper).find('#exec-pnl-station-tabs .exec-pnl-station-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
@@ -259,6 +262,10 @@ function init_spa_ui(wrapper) {
         }
         $bsPill.addClass('active').css({'background': '#fff', 'color': '#0284c7', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.06)'});
         $(wrapper).find('#exec-bs-station-badge').text(labelText);
+
+        // Synchronize Shorts Report station badge
+        let shortsBadgeText = selectedStation ? (selectedStation === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : selectedStation) : 'All Stations (Consolidated)';
+        $(wrapper).find('#exec-shorts-station-badge').text(shortsBadgeText);
 
         load_tank_levels(wrapper, selectedStation);
         if (typeof fetch_inventory_report === 'function') {
@@ -284,6 +291,8 @@ function init_spa_ui(wrapper) {
         } else if (activeTab === 'tab-reconciliations') {
             if (window.RECON_STATE) window.RECON_STATE.page = 1;
             load_reconciliation_data(wrapper, true);
+        } else if (activeTab === 'tab-shorts-report') {
+            load_exec_shortage_balances(wrapper);
         } else if (activeTab === 'tab-topups') {
             load_topups_statement(wrapper);
         } else if (activeTab === 'tab-cards-holding') {
@@ -301,6 +310,10 @@ function init_spa_ui(wrapper) {
     });
 
     $(wrapper).find('#exec-header-station-select').off('change').on('change', function() {
+        handle_exec_station_change($(this).val());
+    });
+
+    $(wrapper).find('#exec-shorts-station-select').off('change').on('change', function() {
         handle_exec_station_change($(this).val());
     });
 
@@ -4424,10 +4437,18 @@ function load_exec_shortage_balances(wrapper) {
 
     let start_date = $w.find('#exec-shorts-report-start').val();
     let end_date = $w.find('#exec-shorts-report-end').val();
+    let station = $w.find('#exec-shorts-station-select').val() 
+        || $w.find('#exec-header-station-select').val() 
+        || $w.find('#exec-global-station-select').val() 
+        || window.ACTIVE_STATION 
+        || "";
+
+    let stationBadge = station ? (station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : station) : 'All Stations (Consolidated)';
+    $w.find('#exec-shorts-station-badge').text(stationBadge);
 
     frappe.call({
         method: "fuel_management.fuel_management.api.get_csa_shorts_balances",
-        args: { start_date: start_date, end_date: end_date },
+        args: { start_date: start_date, end_date: end_date, station: station },
         callback: function(r) {
             $btn.prop('disabled', false);
 
@@ -4541,7 +4562,7 @@ function render_exec_shortage_table(wrapper) {
                 <td style="text-align: center; color: #94a3b8; font-weight: 600;">${idx + 1}</td>
                 <td>
                     <div style="font-weight: 700; color: #0f172a;">${row.employee_name || row.employee}</div>
-                    <div style="font-size: 11px; color: #64748b; font-family: monospace;">${row.employee}</div>
+                    <div style="font-size: 11px; color: #64748b; font-family: monospace;">${row.employee}${row.station ? ` &bull; <span style="color:#0284c7; font-weight:600;">${row.station}</span>` : ''}</div>
                 </td>
                 <td style="text-align: right; font-weight: 700; font-family: monospace;">${format_currency(openBal, '')}</td>
                 <td style="text-align: right; color: ${pShort > 0 ? '#dc2626' : '#94a3b8'}; font-weight: 700; font-family: monospace;">${format_currency(pShort, '')}</td>
@@ -5015,7 +5036,15 @@ function open_exec_clear_shorts_modal(wrapper, prefilterEmpId) {
         return;
     }
     
-    let station = window.ACTIVE_STATION || frappe.defaults.get_user_default("station") || "RUBIS POA PLACE";
+    let station = $w.find('#exec-shorts-station-select').val() 
+        || $w.find('#exec-header-station-select').val() 
+        || $w.find('#exec-global-station-select').val() 
+        || window.ACTIVE_STATION 
+        || frappe.defaults.get_user_default("station") 
+        || "";
+    if (!station || station === "ALL" || station === "All Stations" || station === "All Stations (Consolidated)") {
+        station = outstanding.length > 0 && outstanding[0].station ? outstanding[0].station : "RUBIS POA PLACE";
+    }
     $w.find('#exec-clear-station-display').text(station);
     
     let endDate = $w.find('#exec-shorts-report-end').val() || frappe.datetime.get_today();
@@ -5038,7 +5067,7 @@ function open_exec_clear_shorts_modal(wrapper, prefilterEmpId) {
                 </td>
                 <td style="vertical-align: middle;">
                     <div style="font-weight: 700; color: #0f172a;">${frappe.utils.escape_html(r.employee_name || r.employee)}</div>
-                    <div style="font-size: 11px; color: #64748b; font-family: monospace;">${r.employee}</div>
+                    <div style="font-size: 11px; color: #64748b; font-family: monospace;">${r.employee}${r.station ? ` &bull; <span style="color:#0284c7; font-weight:600;">${r.station}</span>` : ''}</div>
                 </td>
                 <td style="text-align: right; font-weight: 700; font-family: monospace; color: #b91c1c; vertical-align: middle;">
                     ${format_currency(bal, '')}
@@ -5082,7 +5111,7 @@ function recalculate_exec_clear_totals(wrapper) {
 
 function submit_exec_clear_shorts(wrapper) {
     let $w = $(wrapper);
-    let station = window.ACTIVE_STATION || $w.find('#exec-clear-station-display').text() || "RUBIS POA PLACE";
+    let station = $w.find('#exec-clear-station-display').text() || $w.find('#exec-shorts-station-select').val() || $w.find('#exec-header-station-select').val() || window.ACTIVE_STATION || "RUBIS POA PLACE";
     let clearanceDate = $w.find('#exec-clear-date').val();
     let reason = $w.find('#exec-clear-reason').val() || "Salary Deduction";
     let postJournal = $w.find('#exec-clear-post-journal').is(':checked') ? 1 : 0;
