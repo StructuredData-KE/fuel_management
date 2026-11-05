@@ -3251,8 +3251,20 @@ def get_mpesa_reconciliation_data(from_date=None, to_date=None, station=None, ti
             elif status != "Flagged":
                 total_pending += 1
 
+            math_diff = (recorded_amount - calc_collections) if math_discrepancy else 0.0
+
+            row["row_name"] = row.name
+            row["shift"] = row.shift_id
+            row["till_name"] = row.mpesa_till
+            row["cashier_name"] = row.csa_name
+            row["collections"] = recorded_amount
+            row["transfers_out"] = transfers
+            row["math_status"] = "Discrepancy" if math_discrepancy else "OK"
+            row["math_discrepancy"] = math_diff
+            row["carryover_status"] = "Mismatch" if carryover_mismatch else ("Match" if prev_closing is not None else "Initial")
+            row["expected_opening"] = prev_closing if prev_closing is not None else opening
+            row["is_flagged"] = is_discrepancy
             row["carryover_mismatch"] = carryover_mismatch
-            row["math_discrepancy"] = math_discrepancy
             row["audit_flags"] = flags
             row["is_discrepancy"] = is_discrepancy
             row["calculated_closing"] = expected_closing
@@ -3282,8 +3294,8 @@ def get_mpesa_reconciliation_data(from_date=None, to_date=None, station=None, ti
             audit_status, audit_note
         FROM `tabStation Cash Transfer`
         WHERE {sct_where} AND (
-            source_account LIKE '%MPESA%' OR source_account LIKE '%TILL%' OR
-            destination_account LIKE '%MPESA%' OR destination_account LIKE '%TILL%'
+            source_account LIKE '%%MPESA%%' OR source_account LIKE '%%TILL%%' OR
+            destination_account LIKE '%%MPESA%%' OR destination_account LIKE '%%TILL%%'
         )
         ORDER BY date DESC, creation DESC
     """, sct_params, as_dict=True)
@@ -3291,16 +3303,24 @@ def get_mpesa_reconciliation_data(from_date=None, to_date=None, station=None, ti
     shift_transfers = []
     for r in shift_rows:
         if flt(r.transfers_made) > 0:
+            dest = r.destination_account or r.bank_name or "Mapped Bank Account"
             shift_transfers.append({
                 "type": "Shift Sweep",
+                "transfer_type": "Shift Sweep",
                 "transfer_id": r.name,
                 "shift_id": r.shift_id,
+                "shift": r.shift_id,
                 "date": str(r.shift_date),
+                "transfer_date": str(r.shift_date),
+                "transfer_time": "",
                 "date_formatted": formatdate(r.shift_date),
                 "station": r.station,
                 "source": r.mpesa_till,
-                "destination": r.destination_account or r.bank_name or "Mapped Bank Account",
+                "source_account": r.mpesa_till,
+                "destination": dest,
+                "destination_account": dest,
                 "ref": r.statement_ref or f"Shift {r.shift_id}",
+                "slip_ref": r.statement_ref or f"Shift {r.shift_id}",
                 "amount": flt(r.transfers_made),
                 "entered_by": r.csa_name or "CSA",
                 "audit_status": r.audit_status or "Pending",
@@ -3309,14 +3329,21 @@ def get_mpesa_reconciliation_data(from_date=None, to_date=None, station=None, ti
 
     all_transfers = shift_transfers + [{
         "type": "Direct Transfer",
+        "transfer_type": "Station Cash Transfer",
         "transfer_id": s.name,
         "shift_id": "-",
+        "shift": "-",
         "date": str(s.date),
+        "transfer_date": str(s.date),
+        "transfer_time": "",
         "date_formatted": formatdate(s.date),
         "station": s.station or station or "Station",
         "source": s.source_account or "M-Pesa Till",
+        "source_account": s.source_account or "M-Pesa Till",
         "destination": s.destination_account,
+        "destination_account": s.destination_account,
         "ref": s.transaction_number,
+        "slip_ref": s.transaction_number,
         "amount": flt(s.amount),
         "entered_by": s.entered_by or "Manager",
         "audit_status": s.audit_status or "Pending",
@@ -3357,22 +3384,35 @@ def get_mpesa_reconciliation_data(from_date=None, to_date=None, station=None, ti
         total_live_balance += bal
         tills_balance_list.append({
             "till": t.name,
+            "till_name": t.till_name,
             "station": t.station,
             "balance": bal,
+            "current_balance": bal,
             "last_date": str(ld) if ld else "",
             "account": t.default_account or "",
             "bank_account": t.bank_account or ""
         })
 
     # Apply status filter if provided
-    if status_filter == "discrepancies":
-        audited_shifts = [r for r in audited_shifts if r.get("is_discrepancy")]
-    elif status_filter == "verified":
+    if status_filter in ("discrepancies", "flagged"):
+        audited_shifts = [r for r in audited_shifts if r.get("is_flagged")]
+    elif status_filter in ("verified", "Verified"):
         audited_shifts = [r for r in audited_shifts if r.get("audit_status") == "Verified"]
-    elif status_filter == "pending":
+    elif status_filter in ("pending", "Pending"):
         audited_shifts = [r for r in audited_shifts if r.get("audit_status") != "Verified"]
 
     return {
+        "summary": {
+            "live_balance": total_live_balance,
+            "total_collections": total_collections,
+            "total_transfers": total_transfers,
+            "net_movement": total_collections - total_transfers,
+            "flagged_count": total_discrepancies,
+            "verified_count": total_verified,
+            "pending_count": total_pending,
+            "total_shifts_count": len(shift_rows),
+            "total_transfers_count": len(all_transfers)
+        },
         "kpis": {
             "live_balance": total_live_balance,
             "total_collections": total_collections,
@@ -3385,6 +3425,8 @@ def get_mpesa_reconciliation_data(from_date=None, to_date=None, station=None, ti
         },
         "shifts": audited_shifts,
         "transfers": all_transfers,
+        "tills_list": live_tills,
+        "live_tills": tills_balance_list,
         "tills": tills_balance_list,
         "from_date": from_date,
         "to_date": to_date,
