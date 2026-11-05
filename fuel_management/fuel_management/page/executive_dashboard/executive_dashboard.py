@@ -2045,7 +2045,7 @@ def get_executive_accounts(station=None):
         SELECT name, account_name, account_type, parent_account
         FROM `tabAccount`
         WHERE is_group = 0 
-          AND (account_type IN ('Cash', 'Bank') OR name LIKE '%A/C%' OR name LIKE '%GALANA%' OR name LIKE '%RUBIS%')
+          AND (account_type IN ('Cash', 'Bank') OR LOCATE('A/C', name) > 0 OR LOCATE('GALANA', name) > 0 OR LOCATE('RUBIS', name) > 0)
           AND company = %s
           AND docstatus < 2
         ORDER BY FIELD(account_type, 'Cash', 'Bank'), name
