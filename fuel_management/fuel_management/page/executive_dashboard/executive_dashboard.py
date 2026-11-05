@@ -2733,16 +2733,31 @@ def undo_station_cards_posting(card_names):
 
 
 @frappe.whitelist()
-def get_supplier_payment_form_data(supplier=None):
+def get_supplier_payment_form_data(supplier=None, station=None, account=None):
     """
     Returns data needed for the Transfer to Supplier & Invoices Reconcile modal:
-    - active Bank Accounts with live balance
+    - active Bank Accounts with live balance (prioritized / filtered by station)
     - active Card Accounts with live balance
-    - suppliers list
-    - outstanding Purchase Invoices for the selected supplier
+    - suppliers list (prioritized by station)
+    - outstanding Purchase Invoices filtered by selected station and supplier
     """
     from frappe.utils import formatdate, flt
     company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+
+    # Infer station if not explicitly provided
+    if not station or station in ("ALL", "All Stations", ""):
+        if account:
+            acc_u = account.upper()
+            if "GALANA" in acc_u:
+                station = "Galana Annex"
+            elif "RUBIS" in acc_u or "SHIFT MAIN CASH" in acc_u:
+                station = "RUBIS POA PLACE"
+        elif supplier:
+            sup_u = supplier.upper()
+            if "GALANA" in sup_u:
+                station = "Galana Annex"
+            elif "RUBIS" in sup_u:
+                station = "RUBIS POA PLACE"
 
     bank_accs = frappe.db.sql("""
         SELECT name, account_name, account_type
@@ -2764,36 +2779,97 @@ def get_supplier_payment_form_data(supplier=None):
         acc["balance"] = round(flt(bal), 2)
         
         acc_upper = acc["name"].upper()
-        if "RUBIS A/C" in acc_upper or "GALANA A/C" in acc_upper or "CARD" in acc_upper:
-            card_accounts.append(acc)
+        # Tag account station
+        if "GALANA" in acc_upper:
+            acc["station"] = "Galana Annex"
+        elif "RUBIS" in acc_upper or "SHIFT MAIN CASH" in acc_upper:
+            acc["station"] = "RUBIS POA PLACE"
         else:
-            bank_accounts.append(acc)
+            acc["station"] = "" # Shared / General
+
+        if "RUBIS A/C" in acc_upper or "GALANA A/C" in acc_upper or "CARD" in acc_upper:
+            if not station or not acc["station"] or acc["station"].lower() == station.lower():
+                card_accounts.append(acc)
+        else:
+            if not station or not acc["station"] or acc["station"].lower() == station.lower():
+                bank_accounts.append(acc)
+
+    # Sort so accounts specifically belonging to the active station appear on top
+    if station:
+        bank_accounts.sort(key=lambda a: (0 if a.get("station", "").lower() == station.lower() else 1, a["name"]))
+        card_accounts.sort(key=lambda a: (0 if a.get("station", "").lower() == station.lower() else 1, a["name"]))
 
     suppliers = frappe.get_all("Supplier", fields=["name", "supplier_name"], order_by="supplier_name asc")
-    default_supplier = "RUBIS KENYA" if any(s["name"] == "RUBIS KENYA" for s in suppliers) else (suppliers[0]["name"] if suppliers else "")
+    
+    # Determine default supplier based on station context
+    default_supplier = ""
+    if station:
+        if "galana" in station.lower():
+            galana_sup = next((s["name"] for s in suppliers if "galana" in s["name"].lower()), "")
+            if galana_sup:
+                default_supplier = galana_sup
+        elif "rubis" in station.lower():
+            rubis_sup = next((s["name"] for s in suppliers if "rubis" in s["name"].lower()), "")
+            if rubis_sup:
+                default_supplier = rubis_sup
+
+    if not default_supplier:
+        default_supplier = "RUBIS KENYA" if any(s["name"] == "RUBIS KENYA" for s in suppliers) else (suppliers[0]["name"] if suppliers else "")
+
     active_supplier = supplier or default_supplier
 
     invoices = []
     total_outstanding = 0.0
+
+    where_clauses = ["pi.docstatus = 1", "pi.outstanding_amount > 0"]
+    params = []
+
     if active_supplier:
-        inv_rows = frappe.db.sql("""
-            SELECT name, posting_date, due_date, grand_total, outstanding_amount, bill_no
-            FROM `tabPurchase Invoice`
-            WHERE supplier = %s AND docstatus = 1 AND outstanding_amount > 0
-            ORDER BY posting_date ASC, name ASC
-        """, (active_supplier,), as_dict=True)
-        for r in inv_rows:
-            r["grand_total"] = round(flt(r["grand_total"]), 2)
-            r["outstanding_amount"] = round(flt(r["outstanding_amount"]), 2)
-            r["posting_date_formatted"] = formatdate(r["posting_date"])
-            r["due_date_formatted"] = formatdate(r["due_date"]) if r.get("due_date") else ""
-            total_outstanding += r["outstanding_amount"]
-        invoices = inv_rows
+        where_clauses.append("pi.supplier = %s")
+        params.append(active_supplier)
+
+    if station and station not in ("ALL", "All Stations", ""):
+        if "galana" in station.lower():
+            where_clauses.append("(LOCATE('Galana', pi.supplier) > 0 OR LOCATE('Galana', pii.warehouse) > 0)")
+        elif "rubis" in station.lower():
+            where_clauses.append("(LOCATE('RUBIS', pi.supplier) > 0 OR LOCATE('Rubis', pii.warehouse) > 0)")
+
+    where_str = " AND ".join(where_clauses)
+    inv_sql = f"""
+        SELECT pi.name, pi.supplier, pi.posting_date, pi.due_date, pi.grand_total, pi.outstanding_amount, pi.bill_no,
+               GROUP_CONCAT(DISTINCT pii.warehouse) as warehouses
+        FROM `tabPurchase Invoice` pi
+        LEFT JOIN `tabPurchase Invoice Item` pii ON pii.parent = pi.name
+        WHERE {where_str}
+        GROUP BY pi.name
+        ORDER BY pi.posting_date ASC, pi.name ASC
+    """
+    inv_rows = frappe.db.sql(inv_sql, tuple(params), as_dict=True)
+
+    for r in inv_rows:
+        r["grand_total"] = round(flt(r["grand_total"]), 2)
+        r["outstanding_amount"] = round(flt(r["outstanding_amount"]), 2)
+        r["posting_date_formatted"] = formatdate(r["posting_date"])
+        r["due_date_formatted"] = formatdate(r["due_date"]) if r.get("due_date") else ""
+        
+        # Tag invoice station
+        wh = str(r.get("warehouses") or "")
+        sup = str(r.get("supplier") or "")
+        if "galana" in wh.lower() or "galana" in sup.lower():
+            r["station"] = "Galana Annex"
+        elif "rubis" in wh.lower() or "rubis" in sup.lower():
+            r["station"] = "RUBIS POA PLACE"
+        else:
+            r["station"] = "Consolidated"
+
+        total_outstanding += r["outstanding_amount"]
+    invoices = inv_rows
 
     return {
         "bank_accounts": bank_accounts,
         "card_accounts": card_accounts,
         "suppliers": suppliers,
+        "station": station or "",
         "default_supplier": active_supplier,
         "invoices": invoices,
         "total_outstanding": round(total_outstanding, 2)

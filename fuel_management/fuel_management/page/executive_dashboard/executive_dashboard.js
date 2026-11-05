@@ -5921,7 +5921,7 @@ function init_exec_cash_accounts(wrapper) {
         export_exec_ca_csv(wrapper);
     });
     $(wrapper).find('#btn-exec-transfer-supplier').off('click').on('click', function() {
-        open_supplier_payment_modal(wrapper, 'bank_transfer');
+        open_supplier_payment_modal(wrapper, 'bank_transfer', window.EXEC_CA_STATE ? window.EXEC_CA_STATE.active_account : null, window.ACTIVE_STATION);
     });
 
     load_exec_cash_accounts(wrapper);
@@ -6236,7 +6236,7 @@ function init_exec_supplier_accounts(wrapper) {
         export_exec_supp_csv(wrapper);
     });
     $(wrapper).find('#btn-exec-supp-record-payment').off('click').on('click', function() {
-        open_supplier_payment_modal(wrapper, 'bank_transfer');
+        open_supplier_payment_modal(wrapper, 'bank_transfer', window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.active_account : null, window.ACTIVE_STATION);
     });
 
     load_exec_supplier_account(wrapper);
@@ -6560,7 +6560,7 @@ function init_exec_expenses(wrapper) {
         open_director_expense_modal(wrapper);
     });
     $(wrapper).find('#btn-exec-open-supplier-pay').off('click').on('click', function() {
-        open_supplier_payment_modal(wrapper, 'bank_transfer');
+        open_supplier_payment_modal(wrapper, 'bank_transfer', null, window.ACTIVE_STATION);
     });
     $(wrapper).find('#exec-expense-modal-close, #btn-exec-modal-exp-cancel').off('click').on('click', function() {
         $(wrapper).find('#exec-expense-modal').hide();
@@ -7602,7 +7602,7 @@ function init_cards_holding(wrapper) {
         // Reconcile Fuel Invoices Button
         $(wrapper).find('#btn-cards-reconcile-fuel').off('click').on('click', function(e) {
             e.preventDefault();
-            open_supplier_payment_modal(wrapper, 'card_offset');
+            open_supplier_payment_modal(wrapper, 'card_offset', null, window.ACTIVE_STATION);
         });
 
         // Pagination Previous
@@ -8116,10 +8116,21 @@ function init_supplier_payment_modal(wrapper) {
         switch_supplier_modal_mode(wrapper, mode);
     });
 
+    // Station Context Dropdown Change
+    $(wrapper).find('#exec-modal-supp-station').off('change').on('change', function() {
+        let newStation = $(this).val();
+        window.EXEC_SUPP_STATE = window.EXEC_SUPP_STATE || {};
+        window.EXEC_SUPP_STATE.station = newStation;
+        let stBadgeText = newStation ? (newStation === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : newStation) : 'All Stations (Consolidated)';
+        $(wrapper).find('#exec-modal-supp-station-badge').text(stBadgeText);
+        load_supplier_payment_modal_data(wrapper, newStation, null, window.EXEC_SUPP_STATE.account);
+    });
+
     // Supplier Dropdown Change
     $(wrapper).find('#exec-modal-supp-supplier').off('change').on('change', function() {
         let supp = $(this).val();
-        load_supplier_invoices_for_modal(wrapper, supp);
+        let currStation = $(wrapper).find('#exec-modal-supp-station').val();
+        load_supplier_invoices_for_modal(wrapper, supp, currStation);
     });
 
     // Source Account Change
@@ -8161,25 +8172,57 @@ function init_supplier_payment_modal(wrapper) {
     });
 }
 
-function open_supplier_payment_modal(wrapper, default_mode) {
+function open_supplier_payment_modal(wrapper, default_mode, default_account, default_station) {
     default_mode = default_mode || 'bank_transfer';
-    let state = window.EXEC_SUPP_STATE;
+    let state = window.EXEC_SUPP_STATE = window.EXEC_SUPP_STATE || {};
     state.mode = default_mode;
     
+    // Determine active station from arguments or application state
+    let station = default_station || window.ACTIVE_STATION || '';
+    let account = default_account || (window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.active_account : (window.EXEC_CA_STATE ? window.EXEC_CA_STATE.active_account : ''));
+
+    if (!station && account) {
+        let accU = account.toUpperCase();
+        if (accU.includes('GALANA')) {
+            station = 'Galana Annex';
+        } else if (accU.includes('RUBIS') || accU.includes('SHIFT MAIN CASH')) {
+            station = 'RUBIS POA PLACE';
+        }
+    }
+
+    state.station = station;
+    state.account = account;
+
     // Reset form
     $(wrapper).find('#exec-supplier-payment-form')[0].reset();
     $(wrapper).find('#exec-modal-supp-date').val(frappe.datetime.get_today());
     $(wrapper).find('#exec-modal-supp-alert').hide().removeClass('alert-danger alert-success');
     $(wrapper).find('#exec-modal-supp-spinner').addClass('hidden');
     $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', false);
-    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 12px;">Loading invoices...</td></tr>');
+    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 20px;"><span class="spinner"></span> Loading invoices...</td></tr>');
 
-    // Open modal immediately with loading state
+    // Set station dropdown in modal
+    $(wrapper).find('#exec-modal-supp-station').val(station);
+
+    // Update modal header station badge
+    let stBadgeText = station ? (station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : station) : 'All Stations (Consolidated)';
+    $(wrapper).find('#exec-modal-supp-station-badge').text(stBadgeText);
+
+    // Open modal immediately with backdrop
     $(wrapper).find('#exec-supplier-payment-modal').css('display', 'flex');
 
-    // Fetch live options & suppliers
+    load_supplier_payment_modal_data(wrapper, station, null, account);
+}
+
+function load_supplier_payment_modal_data(wrapper, station, supplier, account) {
+    let state = window.EXEC_SUPP_STATE;
     frappe.call({
         method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_supplier_payment_form_data',
+        args: {
+            station: station || '',
+            supplier: supplier || '',
+            account: account || ''
+        },
         callback: function(r) {
             if (r.message) {
                 state.form_data = r.message;
@@ -8241,9 +8284,17 @@ function switch_supplier_modal_mode(wrapper, mode) {
     }
 
     let accHtml = '<option value="">Select Account...</option>';
+    let matchedAccountFound = false;
     accountsList.forEach((acc, idx) => {
-        let isFirst = idx === 0 ? 'selected' : '';
-        accHtml += `<option value="${acc.name}" data-balance="${acc.balance}" ${isFirst}>${acc.name} (KES ${format_currency(acc.balance, '')})</option>`;
+        let isSelected = false;
+        if (state.account && acc.name === state.account) {
+            isSelected = true;
+            matchedAccountFound = true;
+        } else if (!state.account && idx === 0) {
+            isSelected = true;
+        }
+        let selAttr = isSelected ? 'selected' : '';
+        accHtml += `<option value="${acc.name}" data-balance="${acc.balance}" ${selAttr}>${acc.name} (KES ${format_currency(acc.balance, '')})</option>`;
     });
     accSelect.html(accHtml);
 
@@ -8263,13 +8314,16 @@ function update_supplier_source_balance(wrapper) {
     }
 }
 
-function load_supplier_invoices_for_modal(wrapper, supplier) {
+function load_supplier_invoices_for_modal(wrapper, supplier, station) {
     if (!supplier) return;
-    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 12px;">Loading invoices for ' + supplier + '...</td></tr>');
+    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 20px;"><span class="spinner"></span> Loading invoices for ' + supplier + '...</td></tr>');
 
     frappe.call({
         method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_supplier_payment_form_data',
-        args: { supplier: supplier },
+        args: {
+            supplier: supplier,
+            station: station || ''
+        },
         callback: function(r) {
             if (r.message) {
                 render_supplier_modal_invoices(wrapper, r.message.invoices || [], r.message.total_outstanding || 0);
@@ -8284,7 +8338,7 @@ function render_supplier_modal_invoices(wrapper, invoices, totalOutstanding) {
 
     let tbody = $(wrapper).find('#exec-modal-supp-invs-body');
     if (!invoices || invoices.length === 0) {
-        tbody.html('<tr><td colspan="6" style="text-align: center; color: #16a34a; font-weight: 700; padding: 16px;">✓ No outstanding fuel purchase invoices found for this supplier!</td></tr>');
+        tbody.html('<tr><td colspan="7" style="text-align: center; color: #16a34a; font-weight: 700; padding: 20px;">✓ No outstanding fuel purchase invoices found for this station & supplier!</td></tr>');
         $(wrapper).find('#exec-modal-supp-selected-invs-total').text('KES 0.00');
         $(wrapper).find('#btn-supp-fill-amount').data('total', 0);
         return;
@@ -8292,18 +8346,25 @@ function render_supplier_modal_invoices(wrapper, invoices, totalOutstanding) {
 
     let rowsHtml = '';
     invoices.forEach(inv => {
+        let stBadge = inv.station === 'Galana Annex'
+            ? `<span style="font-size: 11px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px;">Galana Annex</span>`
+            : (inv.station === 'RUBIS POA PLACE'
+                ? `<span style="font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px;">Rubis Poa Place</span>`
+                : `<span style="font-size: 11px; font-weight: 600; background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 4px;">General</span>`);
+
         rowsHtml += `
             <tr>
-                <td style="text-align: center;">
+                <td style="text-align: center; vertical-align: middle;">
                     <input type="checkbox" class="exec-supp-inv-check" value="${inv.name}" data-outstanding="${inv.outstanding_amount}" checked>
                 </td>
-                <td style="font-weight: 700; color: #0284c7;">
+                <td style="font-weight: 700; color: #0284c7; vertical-align: middle;">
                     <a href="/app/purchase-invoice/${inv.name}" target="_blank" style="text-decoration: underline; color: inherit;">${inv.name}</a>
                 </td>
-                <td>${inv.posting_date_formatted || inv.posting_date}</td>
-                <td>${inv.bill_no || '-'}</td>
-                <td style="text-align: right; font-family: monospace;">${format_currency(inv.grand_total, 'KES')}</td>
-                <td style="text-align: right; font-family: monospace; font-weight: 700; color: #dc2626;">${format_currency(inv.outstanding_amount, 'KES')}</td>
+                <td style="vertical-align: middle;">${stBadge}</td>
+                <td style="vertical-align: middle; white-space: nowrap;">${inv.posting_date_formatted || inv.posting_date}</td>
+                <td style="vertical-align: middle; font-family: monospace;">${inv.bill_no || '-'}</td>
+                <td style="text-align: right; font-family: monospace; vertical-align: middle;">${format_currency(inv.grand_total, 'KES')}</td>
+                <td style="text-align: right; font-family: monospace; font-weight: 700; color: #dc2626; vertical-align: middle;">${format_currency(inv.outstanding_amount, 'KES')}</td>
             </tr>
         `;
     });
