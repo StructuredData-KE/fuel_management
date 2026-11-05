@@ -12788,11 +12788,19 @@ window.open_bp_return_modal = function(docname, counterparty) {
         callback: function(r) {
             if (r.message) {
                 let d = r.message;
+                let isOut = d.type === 'Borrowed Out';
                 let directionDesc = "";
+                let typeBadge = "";
+
                 if (d.is_inter_station == 1) {
-                    directionDesc = `Returning these items records an internal <b>Material Transfer</b> from <b>${frappe.utils.escape_html(d.borrowing_station)}</b> Store back to <b>${frappe.utils.escape_html(d.lending_station)}</b> Store warehouse.`;
+                    typeBadge = `<span style="background: #e0e7ff; color: #4338ca; font-weight: 700; font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;">
+                        🔄 Inter-Station (${frappe.utils.escape_html(d.lending_station || '')})
+                    </span>`;
+                    directionDesc = `Returning these items records an internal <b>Material Transfer</b> from <b>${frappe.utils.escape_html(d.borrowing_station || '')}</b> Store back to <b>${frappe.utils.escape_html(d.lending_station || '')}</b> Store warehouse.`;
                 } else {
-                    let isOut = d.type === 'Borrowed Out';
+                    typeBadge = `<span style="background: ${isOut ? '#fee2e2' : '#dcfce7'}; color: ${isOut ? '#991b1b' : '#166534'}; font-weight: 700; font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;">
+                        ${isOut ? '🔻 Lent Out' : '🔺 Borrowed In'}
+                    </span>`;
                     directionDesc = isOut
                         ? `Returning these items records a <b>Material Receipt</b> back into the station Store warehouse.`
                         : `Returning these items records a <b>Material Issue</b> out of the station Store warehouse back to ${frappe.utils.escape_html(counterparty || d.counterparty)}.`;
@@ -12802,9 +12810,7 @@ window.open_bp_return_modal = function(docname, counterparty) {
                     <div style="margin-bottom: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                             <span style="font-weight: 800; color: #0f172a; font-size: 1rem; font-family: monospace;">${frappe.utils.escape_html(docname)}</span>
-                            <span style="background: ${isOut ? '#fee2e2' : '#dcfce7'}; color: ${isOut ? '#991b1b' : '#166534'}; font-weight: 700; font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;">
-                                ${isOut ? '🔻 Lent Out' : '🔺 Borrowed In'}
-                            </span>
+                            ${typeBadge}
                         </div>
                         <div style="font-size: 0.85rem; color: #475569;">
                             <b>Counterparty:</b> ${frappe.utils.escape_html(counterparty || d.counterparty)} &bull; 
