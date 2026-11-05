@@ -16,30 +16,49 @@
 }
 
 /* Sidebar */
+/* Sidebar */
 .exec-sidebar {
-    width: 250px;
-    background-color: #f4f7fa;
+    width: 255px;
+    background-color: #f8fafc;
     border-right: 1px solid #e2e8f0;
     display: flex;
     flex-direction: column;
-    padding: 24px 0;
+    padding: 20px 0 0 0;
     flex-shrink: 0;
     position: fixed;
     height: 100vh;
     left: 0;
     top: 0;
     z-index: 100;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.exec-sidebar::-webkit-scrollbar {
+    width: 5px;
+}
+.exec-sidebar::-webkit-scrollbar-track {
+    background: #f8fafc;
+}
+.exec-sidebar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.exec-sidebar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 .exec-brand {
-    padding: 0 24px;
-    margin-bottom: 32px;
+    padding: 0 20px;
+    margin-bottom: 18px;
 }
 
 .exec-brand-title {
     color: #f59e0b; /* Orange */
-    font-size: 22px;
-    font-weight: 700;
+    font-size: 20px;
+    font-weight: 800;
     letter-spacing: -0.5px;
     display: block;
 }
@@ -51,59 +70,116 @@
     text-transform: uppercase;
     letter-spacing: 1px;
     display: block;
-    margin-top: 4px;
+    margin-top: 3px;
 }
 
 .exec-nav {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 0 16px;
+    gap: 3px;
+    padding: 0 10px 20px 10px;
     flex: 1;
 }
 
 .exec-nav-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
+    gap: 10px;
+    padding: 8px 12px;
     border-radius: 8px;
     text-decoration: none;
-    color: #64748b;
-    font-size: 14px;
+    color: #475569;
+    font-size: 13px;
     font-weight: 600;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
     cursor: pointer;
 }
 
 .exec-nav-item:hover {
     background-color: #ffffff;
     color: #0f172a;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .exec-nav-item.active {
     background-color: #f59e0b;
-    color: #ffffff;
-    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+    color: #ffffff !important;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.25);
+    font-weight: 700;
 }
 
 .exec-nav-item .material-symbols-outlined {
-    font-size: 20px;
+    font-size: 19px;
+    flex-shrink: 0;
+}
+
+/* Collapsible Dropdown Section Headers */
+.exec-nav-section-wrapper {
+    margin-top: 6px;
+    margin-bottom: 2px;
+}
+
+.exec-nav-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.exec-nav-section-header:hover {
+    filter: brightness(0.96);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.exec-nav-section-header .section-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.exec-nav-section-header .section-chevron {
+    font-size: 17px;
+    transition: transform 0.2s ease;
+}
+
+.exec-nav-section-header.collapsed .section-chevron {
+    transform: rotate(-90deg);
+}
+
+.exec-nav-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px 0 3px 6px;
+    transition: all 0.2s ease;
+}
+
+.exec-nav-section-body.collapsed {
+    display: none;
 }
 
 .exec-nav-bottom {
-    margin-top: auto;
-    padding: 24px 16px 0;
+    padding: 12px 10px 24px 10px;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 16px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
 }
 
 /* Main Content */
 .exec-main {
     flex: 1;
-    margin-left: 250px;
+    margin-left: 255px;
     padding: 32px;
     display: flex;
     flex-direction: column;
@@ -603,84 +679,140 @@
         </div>
         
         <div class="exec-nav">
+            <!-- CORE EXECUTIVE OVERVIEW -->
             <a class="exec-nav-item active" data-tab="tab-dashboard">
                 <span class="material-symbols-outlined">dashboard</span>
-                Dashboard
+                <span>Dashboard</span>
             </a>
             <a class="exec-nav-item" data-tab="tab-financials">
-                <span class="material-symbols-outlined">payments</span>
-                Financials (P&L)
+                <span class="material-symbols-outlined">monitoring</span>
+                <span>Financials (P&L)</span>
             </a>
             <a class="exec-nav-item" data-tab="tab-balance-sheet">
                 <span class="material-symbols-outlined">balance</span>
-                Balance Sheet
+                <span>Balance Sheet</span>
             </a>
-            <!-- CASH & BANK ACCOUNTS -->
-            <div class="exec-nav-section-title" style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.8px; padding: 12px 16px 4px 16px;">Cash & Bank Accounts</div>
-            <div id="exec-sidebar-cash-accounts" style="display: flex; flex-direction: column; gap: 2px;">
-                <!-- Dynamically populated per station -->
-            </div>
-
-            <!-- SUPPLIER ACCOUNTS -->
-            <div class="exec-nav-section-title" style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.8px; padding: 12px 16px 4px 16px;">Supplier Accounts</div>
-            <div id="exec-sidebar-supplier-accounts" style="display: flex; flex-direction: column; gap: 2px;">
-                <!-- Dynamically populated per station -->
-            </div>
             <a class="exec-nav-item" data-tab="tab-expenses">
                 <span class="material-symbols-outlined">receipt_long</span>
-                Expenses
+                <span>Expenses</span>
             </a>
             <a class="exec-nav-item" data-tab="tab-inventory">
                 <span class="material-symbols-outlined">inventory_2</span>
-                Inventory
+                <span>Inventory</span>
             </a>
-            <a class="exec-nav-item" data-tab="tab-reconciliations">
-                <span class="material-symbols-outlined">account_balance_wallet</span>
-                Reconciliations
-            </a>
-            <a class="exec-nav-item" data-tab="tab-topups">
-                <span class="material-symbols-outlined">payments</span>
-                Top Ups Holding Account
-            </a>
-            <a class="exec-nav-item" data-tab="tab-cards-holding">
-                <span class="material-symbols-outlined">credit_card</span>
-                Cards Holding Account
-            </a>
-            <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.8px; padding: 12px 16px 4px 16px;">Debtors Management</div>
-            <a class="exec-nav-item" data-tab="tab-customers" data-debtors-view="balances">
-                <span class="material-symbols-outlined">account_balance_wallet</span>
-                Debtors Balances
-            </a>
-            <a class="exec-nav-item" data-tab="tab-customers" data-debtors-view="statement">
-                <span class="material-symbols-outlined">receipt_long</span>
-                Debtors Statement
-            </a>
-            <a class="exec-nav-item" data-tab="tab-customers" data-debtors-view="aging">
-                <span class="material-symbols-outlined">schedule</span>
-                Aging Analysis
-            </a>
-            <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.8px; padding: 12px 16px 4px 16px;">Staff</div>
-            <a class="exec-nav-item" data-tab="tab-shorts-report">
-                <span class="material-symbols-outlined">description</span>
-                Shorts Report
-            </a>
-            <a class="exec-nav-item" data-tab="tab-hr">
-                <span class="material-symbols-outlined">badge</span>
-                HR
-            </a>
-        </div>
 
+            <!-- SECTION: CASH & BANK ACCOUNTS (EMERALD THEME) -->
+            <div class="exec-nav-section-wrapper" id="sec-cash-accounts">
+                <div class="exec-nav-section-header" style="background:#ecfdf5; border-color:#a7f3d0; color:#065f46;" data-target="#exec-sidebar-cash-accounts">
+                    <div class="section-left">
+                        <span class="material-symbols-outlined" style="font-size:18px; color:#059669;">account_balance</span>
+                        <span>Cash & Bank</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span id="exec-badge-cash-count" style="font-size:10px; font-weight:700; background:#059669; color:#fff; padding:1px 6px; border-radius:10px;">0</span>
+                        <span class="material-symbols-outlined section-chevron" style="color:#059669;">expand_more</span>
+                    </div>
+                </div>
+                <div id="exec-sidebar-cash-accounts" class="exec-nav-section-body">
+                    <!-- Dynamically populated per station -->
+                </div>
+            </div>
 
+            <!-- SECTION: SUPPLIER ACCOUNTS (AMBER THEME) -->
+            <div class="exec-nav-section-wrapper" id="sec-supplier-accounts">
+                <div class="exec-nav-section-header" style="background:#fffbeb; border-color:#fde68a; color:#92400e;" data-target="#exec-sidebar-supplier-accounts">
+                    <div class="section-left">
+                        <span class="material-symbols-outlined" style="font-size:18px; color:#d97706;">local_shipping</span>
+                        <span>Suppliers</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span id="exec-badge-supp-count" style="font-size:10px; font-weight:700; background:#d97706; color:#fff; padding:1px 6px; border-radius:10px;">0</span>
+                        <span class="material-symbols-outlined section-chevron" style="color:#d97706;">expand_more</span>
+                    </div>
+                </div>
+                <div id="exec-sidebar-supplier-accounts" class="exec-nav-section-body">
+                    <!-- Dynamically populated per station -->
+                </div>
+            </div>
 
-        <div class="exec-nav-bottom">
-            <a class="exec-nav-item">
-                <span class="material-symbols-outlined">help</span>
-                Support
-            </a>
-            <a class="exec-nav-item">
-                <span class="material-symbols-outlined">logout</span>
-                Logout
-            </a>
+            <!-- SECTION: HOLDING & RECONCILIATIONS (SKY BLUE THEME) -->
+            <div class="exec-nav-section-wrapper" id="sec-holding-accounts">
+                <div class="exec-nav-section-header collapsed" style="background:#f0f9ff; border-color:#bae6fd; color:#0369a1;" data-target="#exec-sidebar-holding">
+                    <div class="section-left">
+                        <span class="material-symbols-outlined" style="font-size:18px; color:#0284c7;">credit_score</span>
+                        <span>Holding & Reconcile</span>
+                    </div>
+                    <span class="material-symbols-outlined section-chevron" style="color:#0284c7;">expand_more</span>
+                </div>
+                <div id="exec-sidebar-holding" class="exec-nav-section-body collapsed">
+                    <a class="exec-nav-item" data-tab="tab-topups">
+                        <span class="material-symbols-outlined" style="font-size:18px;">payments</span>
+                        <span>Top Ups Holding</span>
+                    </a>
+                    <a class="exec-nav-item" data-tab="tab-cards-holding">
+                        <span class="material-symbols-outlined" style="font-size:18px;">credit_card</span>
+                        <span>Cards Holding</span>
+                    </a>
+                    <a class="exec-nav-item" data-tab="tab-reconciliations">
+                        <span class="material-symbols-outlined" style="font-size:18px;">account_balance_wallet</span>
+                        <span>Reconciliations</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- SECTION: DEBTORS MANAGEMENT (INDIGO THEME) -->
+            <div class="exec-nav-section-wrapper" id="sec-debtors">
+                <div class="exec-nav-section-header collapsed" style="background:#eef2ff; border-color:#c7d2fe; color:#3730a3;" data-target="#exec-sidebar-debtors">
+                    <div class="section-left">
+                        <span class="material-symbols-outlined" style="font-size:18px; color:#4f46e5;">groups</span>
+                        <span>Debtors</span>
+                    </div>
+                    <span class="material-symbols-outlined section-chevron" style="color:#4f46e5;">expand_more</span>
+                </div>
+                <div id="exec-sidebar-debtors" class="exec-nav-section-body collapsed">
+                    <a class="exec-nav-item" data-tab="tab-customers" data-debtors-view="balances">
+                        <span class="material-symbols-outlined" style="font-size:18px;">account_balance_wallet</span>
+                        <span>Debtors Balances</span>
+                    </a>
+                    <a class="exec-nav-item" data-tab="tab-customers" data-debtors-view="statement">
+                        <span class="material-symbols-outlined" style="font-size:18px;">receipt_long</span>
+                        <span>Debtors Statement</span>
+                    </a>
+                    <a class="exec-nav-item" data-tab="tab-customers" data-debtors-view="aging">
+                        <span class="material-symbols-outlined" style="font-size:18px;">schedule</span>
+                        <span>Aging Analysis</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- SECTION: STAFF & HR (ROSE THEME) -->
+            <div class="exec-nav-section-wrapper" id="sec-staff">
+                <div class="exec-nav-section-header collapsed" style="background:#fff1f2; border-color:#fecdd3; color:#9f1239;" data-target="#exec-sidebar-staff">
+                    <div class="section-left">
+                        <span class="material-symbols-outlined" style="font-size:18px; color:#e11d48;">badge</span>
+                        <span>Staff & CSAs</span>
+                    </div>
+                    <span class="material-symbols-outlined section-chevron" style="color:#e11d48;">expand_more</span>
+                </div>
+                <div id="exec-sidebar-staff" class="exec-nav-section-body collapsed">
+                    <a class="exec-nav-item" data-tab="tab-shorts-report">
+                        <span class="material-symbols-outlined" style="font-size:18px;">description</span>
+                        <span>Shorts Report</span>
+                    </a>
+                    <a class="exec-nav-item" data-tab="tab-hr">
+                        <span class="material-symbols-outlined" style="font-size:18px;">people</span>
+                        <span>HR & Attendance</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Bottom Support / System -->
+            <div class="exec-nav-bottom">
+                <a class="exec-nav-item" href="/app">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                    <span>Back to ERPNext</span>
+                </a>
+            </div>
         </div>
     </nav>
 

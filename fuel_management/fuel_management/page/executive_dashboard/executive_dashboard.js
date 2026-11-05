@@ -64,6 +64,23 @@ frappe.pages['executive_dashboard'].on_page_load = function(wrapper) {
 };
 
 function init_spa_ui(wrapper) {
+    // Collapsible navigation section headers
+    $(wrapper).off('click', '.exec-nav-section-header').on('click', '.exec-nav-section-header', function(e) {
+        e.preventDefault();
+        let targetSelector = $(this).attr('data-target');
+        let targetBody = $(wrapper).find(targetSelector);
+        let isCollapsed = $(this).hasClass('collapsed');
+        if (isCollapsed) {
+            $(this).removeClass('collapsed');
+            targetBody.removeClass('collapsed').stop(true, true).slideDown(180);
+        } else {
+            $(this).addClass('collapsed');
+            targetBody.stop(true, true).slideUp(180, function() {
+                $(this).addClass('collapsed');
+            });
+        }
+    });
+
     // Navigation logic
     $(wrapper).off('click', '.exec-nav-item').on('click', '.exec-nav-item', function(e) {
         if ($(this).attr('data-tab')) {
@@ -72,6 +89,17 @@ function init_spa_ui(wrapper) {
             const target = $(this).data('tab');
             const debtorsView = $(this).attr('data-debtors-view');
             const accountName = $(this).attr('data-account');
+
+            // Ensure parent collapsible section is open
+            let parentSection = $(this).closest('.exec-nav-section-wrapper');
+            if (parentSection.length) {
+                let pHeader = parentSection.find('.exec-nav-section-header');
+                let pBody = parentSection.find('.exec-nav-section-body');
+                if (pHeader.hasClass('collapsed')) {
+                    pHeader.removeClass('collapsed');
+                    pBody.removeClass('collapsed').show();
+                }
+            }
 
             // Remove active class from all nav items
             $(wrapper).find('.exec-nav-item').removeClass('active');
@@ -150,8 +178,14 @@ function init_spa_ui(wrapper) {
     $(wrapper).find('.exec-holding-top-switch').off('click').on('click', function(e) {
         e.preventDefault();
         let targetTab = $(this).data('target-tab');
+        let navItem = $(wrapper).find(`.exec-nav-item[data-tab="${targetTab}"]`);
+        let parentSec = navItem.closest('.exec-nav-section-wrapper');
+        if (parentSec.length) {
+            parentSec.find('.exec-nav-section-header').removeClass('collapsed');
+            parentSec.find('.exec-nav-section-body').removeClass('collapsed').show();
+        }
         $(wrapper).find('.exec-nav-item').removeClass('active');
-        $(wrapper).find(`.exec-nav-item[data-tab="${targetTab}"]`).addClass('active');
+        navItem.addClass('active');
         $(wrapper).find('.exec-main').hide();
         $(wrapper).find('#' + targetTab).show();
         if (targetTab === 'tab-topups') {
@@ -5808,8 +5842,16 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
             }
             $(wrapper).find('#exec-sidebar-supplier-accounts').html(suppHtml);
 
+            // Update section count badges
+            $(wrapper).find('#exec-badge-cash-count').text(cashAccounts.length);
+            $(wrapper).find('#exec-badge-supp-count').text(supplierAccounts.length);
+
             // If user is currently on cash accounts tab and active account is no longer in list, switch to first available
             if (activeTab === 'tab-cash-accounts') {
+                let cashSec = $(wrapper).find('#sec-cash-accounts');
+                cashSec.find('.exec-nav-section-header').removeClass('collapsed');
+                cashSec.find('.exec-nav-section-body').removeClass('collapsed').show();
+
                 if (!validCashFound && cashAccounts.length > 0) {
                     window.EXEC_CA_STATE = window.EXEC_CA_STATE || {};
                     window.EXEC_CA_STATE.active_account = cashAccounts[0].name;
@@ -5817,6 +5859,10 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
                     load_exec_cash_accounts(wrapper);
                 }
             } else if (activeTab === 'tab-supplier-accounts') {
+                let suppSec = $(wrapper).find('#sec-supplier-accounts');
+                suppSec.find('.exec-nav-section-header').removeClass('collapsed');
+                suppSec.find('.exec-nav-section-body').removeClass('collapsed').show();
+
                 if (!validSuppFound && supplierAccounts.length > 0) {
                     window.EXEC_SUPP_ACC_STATE = window.EXEC_SUPP_ACC_STATE || {};
                     window.EXEC_SUPP_ACC_STATE.active_account = supplierAccounts[0].name;
