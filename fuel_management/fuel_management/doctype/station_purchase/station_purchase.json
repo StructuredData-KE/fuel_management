@@ -17,7 +17,13 @@
   "transport_charge",
   "net_total",
   "total_vat",
-  "grand_total"
+  "grand_total",
+  "reconciliation_status",
+  "reconciled_date",
+  "reconciled_by",
+  "reconciled_voucher",
+  "reconciled_account",
+  "reconciliation_note"
  ],
  "fields": [
   {
@@ -97,6 +103,45 @@
    "in_list_view": 1,
    "label": "Grand Total",
    "read_only": 1
+  },
+  {
+   "fieldname": "reconciliation_status",
+   "fieldtype": "Select",
+   "label": "Reconciliation Status",
+   "options": "Pending Reconcile\nReconciled",
+   "default": "Pending Reconcile",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reconciled_date",
+   "fieldtype": "Datetime",
+   "label": "Reconciled Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_by",
+   "fieldtype": "Data",
+   "label": "Reconciled By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_voucher",
+   "fieldtype": "Link",
+   "options": "Journal Entry",
+   "label": "Reconciled Voucher",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_account",
+   "fieldtype": "Link",
+   "options": "Account",
+   "label": "Supplier Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciliation_note",
+   "fieldtype": "Small Text",
+   "label": "Reconciliation Note"
   }
  ],
  "links": [],

@@ -3658,6 +3658,366 @@ def submit_mpesa_statement_audit(station, till, statement_date, statement_openin
     }
 
 
+# ========================================================
+# PURCHASES RECONCILIATION MODULE
+# ========================================================
+
+@frappe.whitelist()
+def get_purchases_reconciliation_data(from_date=None, to_date=None, station=None, supplier=None, status=None, search=None):
+    """
+    Returns fuel/station purchases for executive audit, verification, and ledger posting to supplier accounts.
+    """
+    from frappe.utils import today, add_days, flt, formatdate
+
+    if not to_date:
+        to_date = today()
+    if not from_date:
+        from_date = add_days(to_date, -30)
+
+    conditions = ["sp.docstatus < 2"]
+    params = []
+
+    if from_date and to_date:
+        conditions.append("sp.receiving_date >= %s AND sp.receiving_date <= %s")
+        params.extend([from_date, to_date])
+    elif from_date:
+        conditions.append("sp.receiving_date >= %s")
+        params.append(from_date)
+    elif to_date:
+        conditions.append("sp.receiving_date <= %s")
+        params.append(to_date)
+
+    if station and station not in ("ALL", "All Stations", ""):
+        conditions.append("s.station = %s")
+        params.append(station)
+
+    if supplier and supplier not in ("ALL", "All Suppliers", ""):
+        conditions.append("sp.supplier = %s")
+        params.append(supplier)
+
+    if status and status not in ("ALL", "All", ""):
+        if status.lower() in ("pending", "pending reconcile", "unreconciled"):
+            conditions.append("(sp.reconciliation_status IS NULL OR sp.reconciliation_status = '' OR sp.reconciliation_status = 'Pending Reconcile')")
+        elif status.lower() in ("reconciled", "verified"):
+            conditions.append("sp.reconciliation_status = 'Reconciled'")
+
+    if search and search.strip():
+        s_term = f"%{search.strip()}%"
+        conditions.append("""(
+            sp.name LIKE %s 
+            OR sp.document_invoice_number LIKE %s 
+            OR sp.tax_invoice_number LIKE %s 
+            OR sp.supplier LIKE %s 
+            OR s.station LIKE %s 
+            OR sp.shift LIKE %s
+            OR sp.reconciled_voucher LIKE %s
+        )""")
+        params.extend([s_term] * 7)
+
+    where_clause = " AND ".join(conditions)
+
+    purchases_raw = frappe.db.sql(f"""
+        SELECT 
+            sp.name, sp.creation, sp.receiving_date, sp.document_date,
+            sp.supplier, sp.shift, s.station,
+            sp.tax_invoice_number, sp.document_invoice_number,
+            sp.net_total, sp.total_vat, sp.grand_total,
+            sp.transport_charge,
+            IFNULL(sp.reconciliation_status, 'Pending Reconcile') as reconciliation_status,
+            sp.reconciled_date, sp.reconciled_by, sp.reconciled_voucher,
+            sp.reconciled_account, sp.reconciliation_note
+        FROM `tabStation Purchase` sp
+        LEFT JOIN `tabShift` s ON sp.shift = s.name
+        WHERE {where_clause}
+        ORDER BY sp.receiving_date DESC, sp.creation DESC
+    """, tuple(params), as_dict=True)
+
+    # Fetch child items for all retrieved purchases
+    p_names = [p["name"] for p in purchases_raw]
+    items_by_purchase = {}
+    if p_names:
+        placeholders = ", ".join(["%s"] * len(p_names))
+        child_items = frappe.db.sql(f"""
+            SELECT parent, item, target_location, target_tank, quantity, unit_cost, total_cost, vat_rate, net_total
+            FROM `tabStation Purchase Item`
+            WHERE parent IN ({placeholders})
+            ORDER BY idx ASC
+        """, tuple(p_names), as_dict=True)
+
+        for ci in child_items:
+            items_by_purchase.setdefault(ci["parent"], []).append(ci)
+
+    # Available supplier accounts for matching
+    company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+    supplier_accounts = frappe.db.sql("""
+        SELECT name, account_name, account_type
+        FROM `tabAccount`
+        WHERE is_group = 0 
+          AND (LOCATE('GALANA', name) > 0 OR LOCATE('RUBIS', name) > 0 OR LOCATE('A/C', name) > 0 OR account_type = 'Payable')
+          AND company = %s
+          AND docstatus < 2
+        ORDER BY name ASC
+    """, (company,), as_dict=True)
+
+    total_amount = 0.0
+    reconciled_amount = 0.0
+    pending_amount = 0.0
+    reconciled_count = 0
+    pending_count = 0
+
+    purchases_list = []
+    for p in purchases_raw:
+        gt = flt(p.get("grand_total") or 0.0)
+        status_val = p.get("reconciliation_status") or "Pending Reconcile"
+        is_reconciled = (status_val == "Reconciled")
+
+        total_amount += gt
+        if is_reconciled:
+            reconciled_amount += gt
+            reconciled_count += 1
+        else:
+            pending_amount += gt
+            pending_count += 1
+
+        # Format items breakdown
+        p_items = items_by_purchase.get(p["name"], [])
+        item_summaries = []
+        total_vol = 0.0
+        for item in p_items:
+            qty = flt(item.get("quantity"))
+            total_vol += qty
+            item_name = (item.get("item") or "").replace(" - KIL", "")
+            unit_rate = flt(item.get("unit_cost"))
+            item_summaries.append(f"{qty:,.0f} L {item_name} @ {unit_rate:,.2f}")
+
+        # Target account default mapping
+        target_account = p.get("reconciled_account")
+        if not target_account:
+            supp_upper = (p.get("supplier") or "").upper()
+            if "RUBIS" in supp_upper:
+                target_account = "RUBIS A/C - KIL"
+            elif "GALANA" in supp_upper:
+                target_account = "GALANA A/C - KIL"
+            else:
+                target_account = "RUBIS A/C - KIL" if frappe.db.exists("Account", "RUBIS A/C - KIL") else "GALANA A/C - KIL"
+
+        p_dict = {
+            "name": p["name"],
+            "receiving_date": str(p["receiving_date"]) if p.get("receiving_date") else "",
+            "receiving_date_formatted": formatdate(p["receiving_date"]) if p.get("receiving_date") else "",
+            "document_date": str(p["document_date"]) if p.get("document_date") else "",
+            "document_date_formatted": formatdate(p["document_date"]) if p.get("document_date") else "",
+            "supplier": p.get("supplier") or "",
+            "station": p.get("station") or "Unknown Station",
+            "shift": p.get("shift") or "",
+            "tax_invoice_number": p.get("tax_invoice_number") or "",
+            "document_invoice_number": p.get("document_invoice_number") or "",
+            "invoice_ref": p.get("document_invoice_number") or p.get("tax_invoice_number") or p["name"],
+            "net_total": round(flt(p.get("net_total") or 0.0), 2),
+            "total_vat": round(flt(p.get("total_vat") or 0.0), 2),
+            "grand_total": round(gt, 2),
+            "transport_charge": round(flt(p.get("transport_charge") or 0.0), 2),
+            "reconciliation_status": status_val,
+            "is_reconciled": is_reconciled,
+            "reconciled_date": str(p.get("reconciled_date") or ""),
+            "reconciled_date_formatted": formatdate(str(p.get("reconciled_date") or "")[:10]) if p.get("reconciled_date") else "",
+            "reconciled_by": p.get("reconciled_by") or "",
+            "reconciled_voucher": p.get("reconciled_voucher") or "",
+            "reconciled_account": target_account,
+            "reconciliation_note": p.get("reconciliation_note") or "",
+            "items": p_items,
+            "items_summary": " | ".join(item_summaries) if item_summaries else "Standard Fuel Delivery",
+            "total_volume": round(total_vol, 2)
+        }
+        purchases_list.append(p_dict)
+
+    # Master lists for UI dropdowns
+    all_suppliers = frappe.db.sql("""
+        SELECT DISTINCT supplier FROM `tabStation Purchase` WHERE supplier IS NOT NULL AND supplier != '' ORDER BY supplier ASC
+    """, as_dict=True)
+
+    all_stations = frappe.db.sql("""
+        SELECT name as station FROM `tabFuel Station` ORDER BY name ASC
+    """, as_dict=True)
+
+    total_count = len(purchases_list)
+    match_rate = round((reconciled_amount / total_amount * 100), 1) if total_amount > 0 else 0.0
+
+    return {
+        "purchases": purchases_list,
+        "kpis": {
+            "total_amount": round(total_amount, 2),
+            "total_count": total_count,
+            "reconciled_amount": round(reconciled_amount, 2),
+            "reconciled_count": reconciled_count,
+            "pending_amount": round(pending_amount, 2),
+            "pending_count": pending_count,
+            "match_rate": match_rate
+        },
+        "suppliers": [s["supplier"] for s in all_suppliers],
+        "stations": [s["station"] for s in all_stations],
+        "supplier_accounts": [sa["name"] for sa in supplier_accounts],
+        "from_date": from_date,
+        "to_date": to_date,
+        "station": station or "All Stations",
+        "supplier": supplier or "All Suppliers",
+        "status": status or "Pending Reconcile"
+    }
+
+
+@frappe.whitelist()
+def reconcile_station_purchases(purchase_names, supplier_account=None, posting_date=None, audit_note=None):
+    """
+    Reconciles selected Station Purchases and posts the whole amount directly to the respective Supplier Account.
+    Journal Entry:
+      Debit: Creditors - KIL (party: supplier) for whole amount [grand_total]
+      Credit: supplier_account (e.g. RUBIS A/C - KIL / GALANA A/C - KIL) for whole amount [grand_total]
+    """
+    from frappe.utils import today, now_datetime, flt
+    import json
+
+    if isinstance(purchase_names, str):
+        try:
+            purchase_names = json.loads(purchase_names)
+        except Exception:
+            purchase_names = [n.strip() for n in purchase_names.split(",") if n.strip()]
+
+    if not purchase_names:
+        frappe.throw("No station purchases selected for reconciliation.")
+
+    company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+    payable_account = frappe.get_cached_value('Company', company, 'default_payable_account') or "Creditors - KIL"
+
+    reconciled_records = []
+    total_posted = 0.0
+    now_dt = now_datetime()
+    user_fullname = frappe.get_cached_value("User", frappe.session.user, "full_name") or frappe.session.user
+
+    for p_name in purchase_names:
+        sp = frappe.get_doc("Station Purchase", p_name)
+        if getattr(sp, "reconciliation_status", None) == "Reconciled" and sp.reconciled_voucher:
+            continue
+
+        gt = flt(sp.grand_total)
+        if gt <= 0:
+            frappe.throw(f"Purchase {p_name} has invalid grand total KES {gt}")
+
+        # Determine target supplier account
+        target_account = supplier_account
+        if not target_account:
+            supp_upper = (sp.supplier or "").upper()
+            if "RUBIS" in supp_upper:
+                target_account = "RUBIS A/C - KIL"
+            elif "GALANA" in supp_upper:
+                target_account = "GALANA A/C - KIL"
+            else:
+                target_account = "RUBIS A/C - KIL" if frappe.db.exists("Account", "RUBIS A/C - KIL") else "GALANA A/C - KIL"
+
+        if not frappe.db.exists("Account", target_account):
+            frappe.throw(f"Supplier account '{target_account}' does not exist.")
+
+        # Determine station name for audit note
+        station_name = frappe.db.get_value("Shift", sp.shift, "station") if sp.shift else "Station"
+        inv_ref = sp.document_invoice_number or sp.tax_invoice_number or sp.name
+        posting_dt = posting_date or sp.receiving_date or sp.document_date or today()
+
+        # Create Journal Entry to post whole amount to Supplier Account
+        je = frappe.new_doc("Journal Entry")
+        je.voucher_type = "Journal Entry"
+        je.company = company
+        je.posting_date = posting_dt
+        je.cheque_no = inv_ref
+        je.cheque_date = sp.document_date or sp.receiving_date or today()
+        je.user_remark = (
+            f"[PURCHASE RECONCILIATION] Reconciled {sp.name} | Supplier: {sp.supplier} | "
+            f"Station: {station_name} | Invoice: {inv_ref} | Whole Amount: KES {gt:,.2f} "
+            f"posted to {target_account}. Reconciled by: {user_fullname}. {audit_note or ''}"
+        ).strip()
+
+        # Debit: Creditors - KIL (Supplier) for whole amount
+        je.append("accounts", {
+            "account": payable_account,
+            "party_type": "Supplier",
+            "party": sp.supplier,
+            "debit_in_account_currency": gt,
+            "user_remark": f"Purchase Reconciled: {sp.name} ({inv_ref})"
+        })
+
+        # Credit: Supplier Account (e.g. RUBIS A/C - KIL or GALANA A/C - KIL) for whole amount
+        je.append("accounts", {
+            "account": target_account,
+            "credit_in_account_currency": gt,
+            "user_remark": f"Fuel Delivery {sp.name} ({inv_ref})"
+        })
+
+        je.flags.ignore_permissions = True
+        je.insert()
+        je.submit()
+
+        # Update Station Purchase record
+        frappe.db.set_value("Station Purchase", sp.name, {
+            "reconciliation_status": "Reconciled",
+            "reconciled_date": now_dt,
+            "reconciled_by": frappe.session.user,
+            "reconciled_voucher": je.name,
+            "reconciled_account": target_account,
+            "reconciliation_note": audit_note or ""
+        }, update_modified=False)
+
+        total_posted += gt
+        reconciled_records.append({
+            "purchase": sp.name,
+            "voucher": je.name,
+            "amount": gt,
+            "target_account": target_account
+        })
+
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "reconciled_count": len(reconciled_records),
+        "total_amount": round(total_posted, 2),
+        "records": reconciled_records,
+        "message": f"Successfully reconciled {len(reconciled_records)} purchase(s) totaling KES {total_posted:,.2f} to supplier account(s)."
+    }
+
+
+@frappe.whitelist()
+def undo_purchase_reconciliation(purchase_name):
+    """
+    Reverts a reconciled purchase, cancelling the generated Journal Entry and resetting status to Pending Reconcile.
+    """
+    if not purchase_name:
+        frappe.throw("Purchase Name is required.")
+
+    sp = frappe.get_doc("Station Purchase", purchase_name)
+    voucher_name = getattr(sp, "reconciled_voucher", None)
+
+    if voucher_name and frappe.db.exists("Journal Entry", voucher_name):
+        je = frappe.get_doc("Journal Entry", voucher_name)
+        if je.docstatus == 1:
+            je.flags.ignore_permissions = True
+            je.cancel()
+
+    frappe.db.set_value("Station Purchase", purchase_name, {
+        "reconciliation_status": "Pending Reconcile",
+        "reconciled_date": None,
+        "reconciled_by": None,
+        "reconciled_voucher": None,
+        "reconciled_account": None,
+        "reconciliation_note": None
+    }, update_modified=False)
+
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "message": f"Reconciliation for purchase {purchase_name} reverted successfully."
+    }
+
+
+
 
 
 

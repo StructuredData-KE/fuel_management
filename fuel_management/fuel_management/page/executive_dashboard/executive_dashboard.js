@@ -152,6 +152,8 @@ function init_spa_ui(wrapper) {
                 init_cards_holding(wrapper);
             } else if (target === 'tab-mpesa-reconciliation') {
                 init_exec_mpesa_reconciliation(wrapper);
+            } else if (target === 'tab-purchases-reconciliation') {
+                init_purchases_reconciliation(wrapper);
             }
 
             // Close sidebar on mobile
@@ -196,6 +198,34 @@ function init_spa_ui(wrapper) {
             init_cards_holding(wrapper);
         } else if (targetTab === 'tab-mpesa-reconciliation') {
             init_exec_mpesa_reconciliation(wrapper);
+        }
+    });
+
+    // Top Reconciliations Switcher (Purchases Recon vs Customer Payments Recon vs M-Pesa Recon vs Top Ups vs Cards)
+    $(wrapper).find('.exec-recon-top-switch').off('click').on('click', function(e) {
+        e.preventDefault();
+        let targetTab = $(this).data('target-tab');
+        let navItem = $(wrapper).find(`.exec-nav-item[data-tab="${targetTab}"]`);
+        let parentSec = navItem.closest('.exec-nav-section-wrapper');
+        if (parentSec.length) {
+            parentSec.find('.exec-nav-section-header').removeClass('collapsed');
+            parentSec.find('.exec-nav-section-body').removeClass('collapsed').show();
+        }
+        $(wrapper).find('.exec-nav-item').removeClass('active');
+        navItem.addClass('active');
+        $(wrapper).find('.exec-main').hide();
+        $(wrapper).find('#' + targetTab).show();
+        if (targetTab === 'tab-purchases-reconciliation') {
+            init_purchases_reconciliation(wrapper);
+        } else if (targetTab === 'tab-reconciliations') {
+            init_reconciliation_module(wrapper);
+            load_reconciliation_data(wrapper);
+        } else if (targetTab === 'tab-mpesa-reconciliation') {
+            init_exec_mpesa_reconciliation(wrapper);
+        } else if (targetTab === 'tab-topups') {
+            load_topups_statement(wrapper);
+        } else if (targetTab === 'tab-cards-holding') {
+            init_cards_holding(wrapper);
         }
     });
 
@@ -387,6 +417,8 @@ function init_spa_ui(wrapper) {
             load_cards_holding_data(wrapper);
         } else if (activeTab === 'tab-mpesa-reconciliation') {
             load_mpesa_reconciliation_data(wrapper);
+        } else if (activeTab === 'tab-purchases-reconciliation') {
+            load_purchases_reconciliation_data(wrapper);
         } else if (activeTab === 'tab-cash-accounts') {
             load_exec_cash_accounts(wrapper);
         } else if (activeTab === 'tab-supplier-accounts') {
@@ -9595,5 +9627,629 @@ function export_mpesa_recon_csv(wrapper) {
     link.click();
     document.body.removeChild(link);
 }
+
+
+// ========================================================
+// PURCHASES RECONCILIATION MODULE
+// ========================================================
+window.PURCHASES_RECON_STATE = {
+    from_date: null,
+    to_date: null,
+    station: '',
+    supplier: '',
+    status: 'Pending Reconcile',
+    search: '',
+    purchases: [],
+    selected_items: new Set(),
+    supplier_accounts: []
+};
+
+function init_purchases_reconciliation(wrapper) {
+    let state = window.PURCHASES_RECON_STATE;
+
+    // Default Date Range: This Month if not already set
+    if (!state.from_date || !state.to_date) {
+        let today = frappe.datetime.get_today();
+        state.to_date = today;
+        state.from_date = frappe.datetime.month_start();
+    }
+    $(wrapper).find('#purchases-recon-from-date').val(state.from_date);
+    $(wrapper).find('#purchases-recon-to-date').val(state.to_date);
+
+    // Sync station from global filter if set
+    let execStation = $(wrapper).find('#exec-global-station-select').val() || window.ACTIVE_STATION || '';
+    if (execStation && execStation !== 'all') {
+        state.station = execStation;
+    }
+
+    // Populate Station Select if needed
+    let stSel = $(wrapper).find('#purchases-recon-station-filter');
+    let currentStationOptions = $(wrapper).find('#exec-global-station-select option');
+    if (currentStationOptions.length > 1 && stSel.children().length <= 1) {
+        stSel.empty().append('<option value="">All Stations</option>');
+        currentStationOptions.each(function() {
+            let val = $(this).val();
+            let txt = $(this).text();
+            if (val && val !== 'all') {
+                stSel.append(`<option value="${frappe.utils.escape_html(val)}">${frappe.utils.escape_html(txt)}</option>`);
+            }
+        });
+    }
+    if (state.station) {
+        stSel.val(state.station);
+    }
+
+    // Preset buttons click
+    $(wrapper).find('.purchases-recon-date-preset').off('click').on('click', function() {
+        $(wrapper).find('.purchases-recon-date-preset').removeClass('active').css({
+            'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'
+        });
+        $(this).addClass('active').css({
+            'background': '#fff', 'color': '#0f172a', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'
+        });
+
+        let preset = $(this).data('preset');
+        let today = frappe.datetime.get_today();
+        let start = today;
+        let end = today;
+
+        if (preset === 'today') {
+            start = today;
+            end = today;
+        } else if (preset === 'yesterday') {
+            start = frappe.datetime.add_days(today, -1);
+            end = start;
+        } else if (preset === 'last_7') {
+            start = frappe.datetime.add_days(today, -6);
+            end = today;
+        } else if (preset === 'this_month') {
+            start = frappe.datetime.month_start();
+            end = today;
+        } else if (preset === 'last_month') {
+            let parts = today.split('-');
+            let year = parseInt(parts[0]);
+            let month = parseInt(parts[1]) - 1;
+            if (month === 0) {
+                month = 12;
+                year -= 1;
+            }
+            let monthStr = month < 10 ? '0' + month : '' + month;
+            start = `${year}-${monthStr}-01`;
+            let lastDay = new Date(year, month, 0).getDate();
+            end = `${year}-${monthStr}-${lastDay}`;
+        } else if (preset === 'all') {
+            start = '2024-01-01';
+            end = today;
+        }
+
+        state.from_date = start;
+        state.to_date = end;
+        $(wrapper).find('#purchases-recon-from-date').val(start);
+        $(wrapper).find('#purchases-recon-to-date').val(end);
+        load_purchases_reconciliation_data(wrapper);
+    });
+
+    // Apply button
+    $(wrapper).find('#btn-purchases-recon-apply').off('click').on('click', function() {
+        state.from_date = $(wrapper).find('#purchases-recon-from-date').val();
+        state.to_date = $(wrapper).find('#purchases-recon-to-date').val();
+        load_purchases_reconciliation_data(wrapper);
+    });
+
+    // Refresh button
+    $(wrapper).find('#btn-purchases-recon-refresh').off('click').on('click', function() {
+        load_purchases_reconciliation_data(wrapper);
+    });
+
+    // Export button
+    $(wrapper).find('#btn-purchases-recon-export').off('click').on('click', function() {
+        export_purchases_reconciliation_csv(wrapper);
+    });
+
+    // Station filter dropdown
+    $(wrapper).find('#purchases-recon-station-filter').off('change').on('change', function() {
+        state.station = $(this).val();
+        load_purchases_reconciliation_data(wrapper);
+    });
+
+    // Supplier filter dropdown
+    $(wrapper).find('#purchases-recon-supplier-filter').off('change').on('change', function() {
+        state.supplier = $(this).val();
+        load_purchases_reconciliation_data(wrapper);
+    });
+
+    // Status filter dropdown
+    $(wrapper).find('#purchases-recon-status-filter').off('change').on('change', function() {
+        state.status = $(this).val();
+        load_purchases_reconciliation_data(wrapper);
+    });
+
+    // Search filter input
+    $(wrapper).find('#purchases-recon-search-input').off('input').on('input', function() {
+        state.search = $(this).val().trim().toLowerCase();
+        render_purchases_reconciliation_table(wrapper);
+    });
+
+    // Check All checkbox
+    $(wrapper).find('#purchases-recon-check-all').off('change').on('change', function() {
+        let isChecked = $(this).is(':checked');
+        let $rows = $(wrapper).find('.purchases-recon-row-check:not(:disabled)');
+        $rows.prop('checked', isChecked);
+        state.selected_items.clear();
+        if (isChecked) {
+            $rows.each(function() {
+                state.selected_items.add($(this).data('name'));
+            });
+        }
+        update_purchases_recon_selection_ui(wrapper);
+    });
+
+    // Bulk Reconcile Button
+    $(wrapper).find('#btn-purchases-recon-bulk').off('click').on('click', function() {
+        submit_bulk_purchases_reconcile(wrapper);
+    });
+
+    // Close Modal buttons
+    $(wrapper).find('.btn-close-reconcile-modal').off('click').on('click', function() {
+        $(wrapper).find('#modal-reconcile-purchase').css('display', 'none');
+    });
+
+    load_purchases_reconciliation_data(wrapper);
+}
+
+function load_purchases_reconciliation_data(wrapper) {
+    let state = window.PURCHASES_RECON_STATE;
+    let $tbody = $(wrapper).find('#purchases-recon-table-body');
+    $tbody.html(`
+        <tr>
+            <td colspan="13" style="text-align: center; padding: 3rem; color: #94a3b8;">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <span class="material-symbols-outlined" style="font-size: 32px; color: #7c3aed; animation: spin 1s linear infinite;">sync</span>
+                    <span style="font-weight: 600;">Loading purchases reconciliation data...</span>
+                </div>
+            </td>
+        </tr>
+    `);
+
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_purchases_reconciliation_data",
+        args: {
+            from_date: state.from_date || "",
+            to_date: state.to_date || "",
+            station: state.station || "",
+            supplier: state.supplier || "",
+            status: state.status || "Pending Reconcile",
+            search: state.search || ""
+        },
+        callback: function(r) {
+            if (!r.message) {
+                $tbody.html('<tr><td colspan="13" style="text-align: center; padding: 2rem; color: #ef4444;">Failed to load data.</td></tr>');
+                return;
+            }
+
+            let data = r.message;
+            state.purchases = data.purchases || [];
+            state.supplier_accounts = data.supplier_accounts || [];
+            state.selected_items.clear();
+
+            // Populate Supplier dropdown filter if needed
+            let suppSel = $(wrapper).find('#purchases-recon-supplier-filter');
+            if (suppSel.children().length <= 1 && data.suppliers && data.suppliers.length > 0) {
+                suppSel.empty().append('<option value="">All Suppliers</option>');
+                data.suppliers.forEach(s => {
+                    suppSel.append(`<option value="${frappe.utils.escape_html(s)}">${frappe.utils.escape_html(s)}</option>`);
+                });
+                if (state.supplier) {
+                    suppSel.val(state.supplier);
+                }
+            }
+
+            // Populate Station dropdown if not yet populated
+            let stSel = $(wrapper).find('#purchases-recon-station-filter');
+            if (stSel.children().length <= 1 && data.stations && data.stations.length > 0) {
+                stSel.empty().append('<option value="">All Stations</option>');
+                data.stations.forEach(st => {
+                    stSel.append(`<option value="${frappe.utils.escape_html(st)}">${frappe.utils.escape_html(st)}</option>`);
+                });
+                if (state.station) {
+                    stSel.val(state.station);
+                }
+            }
+
+            // Update KPI Cards
+            let kpi = data.kpis || {};
+            let fmt = val => (val || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            $(wrapper).find('#purchases-recon-kpi-total').text('KES ' + fmt(kpi.total_amount));
+            $(wrapper).find('#purchases-recon-kpi-total-count').text(`${kpi.total_count || 0} Purchases`);
+
+            $(wrapper).find('#purchases-recon-kpi-reconciled').text('KES ' + fmt(kpi.reconciled_amount));
+            $(wrapper).find('#purchases-recon-kpi-reconciled-count').text(`${kpi.reconciled_count || 0} Reconciled`);
+
+            $(wrapper).find('#purchases-recon-kpi-pending').text('KES ' + fmt(kpi.pending_amount));
+            $(wrapper).find('#purchases-recon-kpi-pending-count').text(`${kpi.pending_count || 0} Pending Action`);
+
+            let rate = kpi.match_rate || 0.0;
+            $(wrapper).find('#purchases-recon-kpi-rate').text(rate.toFixed(1) + '%');
+            $(wrapper).find('#purchases-recon-kpi-rate-bar').css('width', Math.min(100, Math.max(0, rate)) + '%');
+
+            render_purchases_reconciliation_table(wrapper);
+        }
+    });
+}
+
+function render_purchases_reconciliation_table(wrapper) {
+    let state = window.PURCHASES_RECON_STATE;
+    let $tbody = $(wrapper).find('#purchases-recon-table-body');
+    let purchases = state.purchases || [];
+
+    // Filter by search term locally if set
+    if (state.search) {
+        let s = state.search.toLowerCase();
+        purchases = purchases.filter(p => {
+            return (p.name || '').toLowerCase().includes(s) ||
+                   (p.document_invoice_number || '').toLowerCase().includes(s) ||
+                   (p.tax_invoice_number || '').toLowerCase().includes(s) ||
+                   (p.supplier || '').toLowerCase().includes(s) ||
+                   (p.station || '').toLowerCase().includes(s) ||
+                   (p.items_summary || '').toLowerCase().includes(s) ||
+                   (p.reconciled_voucher || '').toLowerCase().includes(s);
+        });
+    }
+
+    if (purchases.length === 0) {
+        $tbody.html(`
+            <tr>
+                <td colspan="13" style="text-align: center; padding: 3rem; color: #94a3b8;">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                        <span class="material-symbols-outlined" style="font-size: 36px; color: #cbd5e1;">search_off</span>
+                        <span style="font-weight: 600; font-size: 13px; color: #64748b;">No purchases found matching selected criteria</span>
+                        <span style="font-size: 11px; color: #94a3b8;">Try adjusting date range or switching status filter</span>
+                    </div>
+                </td>
+            </tr>
+        `);
+        update_purchases_recon_selection_ui(wrapper);
+        return;
+    }
+
+    let fmt = val => (val || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let html = '';
+
+    purchases.forEach(p => {
+        let isReconciled = p.is_reconciled;
+        let isChecked = state.selected_items.has(p.name);
+
+        // Checkbox: disabled if reconciled
+        let chkHtml = isReconciled ?
+            `<span class="material-symbols-outlined" style="font-size: 16px; color: #10b981;">check_circle</span>` :
+            `<input type="checkbox" class="purchases-recon-row-check" data-name="${frappe.utils.escape_html(p.name)}" ${isChecked ? 'checked' : ''} style="cursor: pointer; width: 15px; height: 15px;">`;
+
+        // Station Pill
+        let stColor = '#0284c7';
+        let stBg = '#f0f9ff';
+        let stBorder = '#bae6fd';
+        if ((p.station || '').includes('Galana')) {
+            stColor = '#d97706';
+            stBg = '#fffbeb';
+            stBorder = '#fde68a';
+        }
+        let stPill = `<span class="badge" style="background:${stBg}; color:${stColor}; border:1px solid ${stBorder}; font-weight:700; font-size:11px; padding:2px 8px; border-radius:12px;">${frappe.utils.escape_html(p.station)}</span>`;
+
+        // Items Summary Pill(s)
+        let itemsHtml = '';
+        if (p.items && p.items.length > 0) {
+            p.items.forEach(it => {
+                let itName = (it.item || '').replace(' - KIL', '');
+                let qty = (it.quantity || 0).toLocaleString('en-KE', { maximumFractionDigits: 0 });
+                let cost = (it.unit_cost || 0).toFixed(2);
+                itemsHtml += `<span class="badge" style="background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; font-size:11px; padding:2px 6px; margin:2px; display:inline-block; border-radius:4px;">${qty}L ${itName} @ ${cost}</span>`;
+            });
+        } else {
+            itemsHtml = `<span style="color:#94a3b8; font-size:11px;">Standard Fuel Delivery</span>`;
+        }
+
+        // Status Badge
+        let statusBadge = isReconciled ?
+            `<span class="badge" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-weight:700; padding:4px 8px; border-radius:12px; display:inline-flex; align-items:center; gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">task_alt</span> Reconciled</span>` :
+            `<span class="badge" style="background:#fffbeb; color:#92400e; border:1px solid #fde68a; font-weight:700; padding:4px 8px; border-radius:12px; display:inline-flex; align-items:center; gap:3px;"><span class="material-symbols-outlined" style="font-size:13px;">pending</span> Pending</span>`;
+
+        // Target Supplier Account Badge
+        let targetAccLabel = p.reconciled_account || 'RUBIS A/C - KIL';
+        let accClean = targetAccLabel.replace(' - KIL', '');
+        let targetAccBadge = `<span class="badge" style="background:#fffbeb; color:#92400e; border:1px solid #fde68a; font-weight:700; font-size:11px; padding:3px 7px; border-radius:6px;">${accClean}</span>`;
+
+        // Action Column
+        let actionHtml = '';
+        if (isReconciled) {
+            actionHtml = `
+                <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                    <a href="/app/journal-entry/${encodeURIComponent(p.reconciled_voucher)}" target="_blank" style="font-weight:700; color:#2563eb; font-size:11px; text-decoration:none;" title="View Journal Entry">
+                        ${frappe.utils.escape_html(p.reconciled_voucher)}
+                    </a>
+                    <button type="button" class="btn btn-xs btn-link btn-undo-purchase-recon" data-name="${frappe.utils.escape_html(p.name)}" style="padding:0; font-size:11px; color:#ef4444; text-decoration:underline; cursor:pointer; border:none; background:transparent;">Revert</button>
+                </div>
+            `;
+        } else {
+            actionHtml = `
+                <button type="button" class="btn btn-xs btn-reconcile-single" data-name="${frappe.utils.escape_html(p.name)}" style="background:#7c3aed; color:#fff; border:none; font-weight:700; border-radius:6px; padding:4px 10px; font-size:11px; cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:3px;">
+                    <span class="material-symbols-outlined" style="font-size:13px;">task_alt</span> Reconcile
+                </button>
+            `;
+        }
+
+        html += `
+            <tr style="border-bottom: 1px solid #f1f5f9; ${isReconciled ? 'background: #fcfdfd;' : ''}">
+                <td style="text-align: center; vertical-align: middle; padding: 10px 8px;">${chkHtml}</td>
+                <td style="vertical-align: middle; padding: 10px 12px; white-space: nowrap;">
+                    <div style="font-weight: 700; color: #0f172a;">${p.receiving_date_formatted || p.receiving_date}</div>
+                    <div style="font-size: 11px; color: #64748b;">${frappe.utils.escape_html(p.shift)}</div>
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; white-space: nowrap;">
+                    <span style="font-weight: 700; color: #334155;">${frappe.utils.escape_html(p.name)}</span>
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; white-space: nowrap;">
+                    <div style="font-weight: 700; color: #0f172a;">${frappe.utils.escape_html(p.document_invoice_number || 'N/A')}</div>
+                    ${p.tax_invoice_number ? `<div style="font-size: 10px; color: #64748b;">Tax: ${frappe.utils.escape_html(p.tax_invoice_number)}</div>` : ''}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; white-space: nowrap; font-weight: 600; color: #334155;">
+                    ${frappe.utils.escape_html(p.supplier)}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; white-space: nowrap;">
+                    ${stPill}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px;">
+                    ${itemsHtml}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; text-align: right; white-space: nowrap; color: #64748b;">
+                    ${fmt(p.net_total)}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; text-align: right; white-space: nowrap; color: #64748b;">
+                    ${fmt(p.total_vat)}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; text-align: right; white-space: nowrap;">
+                    <span style="font-weight: 800; font-size: 13px; color: #0f172a;">KES ${fmt(p.grand_total)}</span>
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; white-space: nowrap;">
+                    ${targetAccBadge}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; text-align: center; white-space: nowrap;">
+                    ${statusBadge}
+                </td>
+                <td style="vertical-align: middle; padding: 10px 12px; text-align: center; white-space: nowrap;">
+                    ${actionHtml}
+                </td>
+            </tr>
+        `;
+    });
+
+    $tbody.html(html);
+
+    // Row Checkbox change handler
+    $tbody.find('.purchases-recon-row-check').off('change').on('change', function() {
+        let name = $(this).data('name');
+        if ($(this).is(':checked')) {
+            state.selected_items.add(name);
+        } else {
+            state.selected_items.delete(name);
+        }
+        update_purchases_recon_selection_ui(wrapper);
+    });
+
+    // Single Reconcile button handler
+    $tbody.find('.btn-reconcile-single').off('click').on('click', function() {
+        let pName = $(this).data('name');
+        open_reconcile_purchase_modal(wrapper, pName);
+    });
+
+    // Single Undo button handler
+    $tbody.find('.btn-undo-purchase-recon').off('click').on('click', function() {
+        let pName = $(this).data('name');
+        submit_undo_purchase_reconciliation(wrapper, pName);
+    });
+
+    update_purchases_recon_selection_ui(wrapper);
+}
+
+function update_purchases_recon_selection_ui(wrapper) {
+    let state = window.PURCHASES_RECON_STATE;
+    let count = state.selected_items.size;
+    $(wrapper).find('#purchases-recon-selected-count').text(`(${count} selected)`);
+
+    let $btnBulk = $(wrapper).find('#btn-purchases-recon-bulk');
+    if (count > 0) {
+        $btnBulk.prop('disabled', false).css({'opacity': '1', 'cursor': 'pointer'});
+        $btnBulk.html(`<span class="material-symbols-outlined" style="font-size: 16px;">done_all</span> Reconcile Selected (${count})`);
+    } else {
+        $btnBulk.prop('disabled', true).css({'opacity': '0.6', 'cursor': 'not-allowed'});
+        $btnBulk.html(`<span class="material-symbols-outlined" style="font-size: 16px;">done_all</span> Reconcile Selected to Supplier`);
+    }
+}
+
+function open_reconcile_purchase_modal(wrapper, purchaseName) {
+    let state = window.PURCHASES_RECON_STATE;
+    let purchase = (state.purchases || []).find(p => p.name === purchaseName);
+    if (!purchase) return;
+
+    let fmt = val => (val || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let $modal = $(wrapper).find('#modal-reconcile-purchase');
+
+    $modal.find('#modal-recon-ref').text(purchase.name);
+    $modal.find('#modal-recon-supplier').text(`${purchase.supplier} (${purchase.station})`);
+    $modal.find('#modal-recon-invoice').text(purchase.document_invoice_number || purchase.tax_invoice_number || 'N/A');
+    $modal.find('#modal-recon-amount').text('KES ' + fmt(purchase.grand_total));
+    $modal.find('#modal-recon-posting-date').val(purchase.receiving_date || frappe.datetime.get_today());
+    $modal.find('#modal-recon-notes').val('');
+
+    // Populate Destination Supplier Account dropdown
+    let $accSel = $modal.find('#modal-recon-target-account');
+    $accSel.empty();
+
+    let accounts = state.supplier_accounts || [];
+    if (accounts.length === 0) {
+        accounts = ["RUBIS A/C - KIL", "GALANA A/C - KIL"];
+    }
+
+    accounts.forEach(acc => {
+        let isDefault = (acc === purchase.reconciled_account);
+        $accSel.append(`<option value="${frappe.utils.escape_html(acc)}" ${isDefault ? 'selected' : ''}>${frappe.utils.escape_html(acc)}</option>`);
+    });
+
+    // Modal Confirm Button handler
+    $modal.find('#btn-confirm-reconcile-purchase').off('click').on('click', function() {
+        let targetAcc = $modal.find('#modal-recon-target-account').val();
+        let postingDt = $modal.find('#modal-recon-posting-date').val();
+        let note = $modal.find('#modal-recon-notes').val();
+
+        if (!targetAcc) {
+            frappe.msgprint("Please select a destination Supplier Account.");
+            return;
+        }
+
+        let $btn = $(this);
+        $btn.prop('disabled', true).html('<span class="material-symbols-outlined" style="font-size:16px; animation:spin 1s linear infinite;">sync</span> Posting...');
+
+        frappe.call({
+            method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.reconcile_station_purchases",
+            args: {
+                purchase_names: [purchase.name],
+                supplier_account: targetAcc,
+                posting_date: postingDt,
+                audit_note: note
+            },
+            callback: function(r) {
+                $btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Confirm & Post to Supplier');
+                if (r.message && r.message.success) {
+                    $modal.css('display', 'none');
+                    frappe.show_alert({
+                        message: `Purchase ${purchase.name} reconciled! KES ${fmt(purchase.grand_total)} credited to ${targetAcc}.`,
+                        indicator: 'green'
+                    }, 5);
+
+                    load_purchases_reconciliation_data(wrapper);
+                    // Refresh sidebar accounts if loaded
+                    render_sidebar_account_modules(wrapper, window.ACTIVE_STATION);
+                }
+            },
+            error: function(err) {
+                $btn.prop('disabled', false).html('<span class="material-symbols-outlined" style="font-size:16px;">task_alt</span> Confirm & Post to Supplier');
+            }
+        });
+    });
+
+    $modal.css('display', 'flex');
+}
+
+function submit_bulk_purchases_reconcile(wrapper) {
+    let state = window.PURCHASES_RECON_STATE;
+    let selectedNames = Array.from(state.selected_items);
+    if (selectedNames.length === 0) return;
+
+    let selectedPurchases = (state.purchases || []).filter(p => selectedNames.includes(p.name));
+    let totalAmt = selectedPurchases.reduce((sum, p) => sum + (p.grand_total || 0), 0);
+    let fmt = val => (val || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    frappe.confirm(
+        `Are you sure you want to reconcile <strong>${selectedNames.length} selected purchase(s)</strong> totaling <strong>KES ${fmt(totalAmt)}</strong>?<br><br>This will create submitted Journal Entries posting each purchase total to its respective supplier account (RUBIS A/C / GALANA A/C) and debiting Creditors.`,
+        function() {
+            let $btn = $(wrapper).find('#btn-purchases-recon-bulk');
+            $btn.prop('disabled', true).text('Reconciling...');
+
+            frappe.call({
+                method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.reconcile_station_purchases",
+                args: {
+                    purchase_names: selectedNames
+                },
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        state.selected_items.clear();
+                        frappe.show_alert({
+                            message: r.message.message || `Successfully reconciled ${selectedNames.length} purchases!`,
+                            indicator: 'green'
+                        }, 5);
+
+                        load_purchases_reconciliation_data(wrapper);
+                        render_sidebar_account_modules(wrapper, window.ACTIVE_STATION);
+                    }
+                }
+            });
+        }
+    );
+}
+
+function submit_undo_purchase_reconciliation(wrapper, purchaseName) {
+    frappe.confirm(
+        `Are you sure you want to revert reconciliation for purchase <strong>${frappe.utils.escape_html(purchaseName)}</strong>?<br><br>This will cancel the linked Journal Entry and return the purchase to Pending Reconcile.`,
+        function() {
+            frappe.call({
+                method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.undo_purchase_reconciliation",
+                args: {
+                    purchase_name: purchaseName
+                },
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: `Reconciliation for ${purchaseName} reverted.`,
+                            indicator: 'orange'
+                        }, 4);
+
+                        load_purchases_reconciliation_data(wrapper);
+                        render_sidebar_account_modules(wrapper, window.ACTIVE_STATION);
+                    }
+                }
+            });
+        }
+    );
+}
+
+function export_purchases_reconciliation_csv(wrapper) {
+    let state = window.PURCHASES_RECON_STATE;
+    let purchases = state.purchases || [];
+    if (purchases.length === 0) {
+        frappe.msgprint("No purchases to export.");
+        return;
+    }
+
+    let rows = [
+        ["Purchases Reconciliation Report"],
+        ["Export Date", frappe.datetime.now_datetime()],
+        ["Station Filter", state.station || "All Stations"],
+        ["Supplier Filter", state.supplier || "All Suppliers"],
+        ["Status Filter", state.status || "All"],
+        ["Date Range", `${state.from_date} to ${state.to_date}`],
+        [],
+        ["Date", "Shift", "Purchase Ref", "Invoice #", "Tax Invoice #", "Supplier", "Station", "Deliveries / Items", "Net Total (KES)", "VAT (KES)", "Grand Total (KES)", "Target Supplier Account", "Reconciliation Status", "Reconciled Voucher", "Reconciled Date", "Reconciled By"]
+    ];
+
+    purchases.forEach(p => {
+        rows.push([
+            p.receiving_date || "",
+            p.shift || "",
+            p.name || "",
+            p.document_invoice_number || "",
+            p.tax_invoice_number || "",
+            p.supplier || "",
+            p.station || "",
+            (p.items_summary || "").replace(/(\r\n|\n|\r)/gm, " "),
+            (p.net_total || 0).toFixed(2),
+            (p.total_vat || 0).toFixed(2),
+            (p.grand_total || 0).toFixed(2),
+            p.reconciled_account || "",
+            p.reconciliation_status || "",
+            p.reconciled_voucher || "",
+            p.reconciled_date || "",
+            p.reconciled_by || ""
+        ]);
+    });
+
+    let csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `purchases_reconciliation_${state.station || 'all'}_${state.from_date}_to_${state.to_date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 
 
