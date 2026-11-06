@@ -13,7 +13,9 @@
   "source_account",
   "destination_account",
   "amount",
-  "entered_by"
+  "entered_by",
+  "audit_status",
+  "audit_note"
  ],
  "fields": [
   {
@@ -63,6 +65,18 @@
    "fieldname": "entered_by",
    "fieldtype": "Data",
    "label": "Entered By (Head CSA/Owner)"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "audit_status",
+   "fieldtype": "Select",
+   "label": "Audit Status",
+   "options": "Pending\nVerified\nFlagged"
+  },
+  {
+   "fieldname": "audit_note",
+   "fieldtype": "Small Text",
+   "label": "Audit Note"
   }
  ],
  "grid_page_length": 50,
