@@ -151,7 +151,21 @@ function init_spa_ui(wrapper) {
             } else if (target === 'tab-cards-holding') {
                 init_cards_holding(wrapper);
             } else if (target === 'tab-mpesa-reconciliation') {
+                const tillName = $(this).attr('data-till');
+                if (tillName) {
+                    window.MPESA_RECON_STATE = window.MPESA_RECON_STATE || {};
+                    window.MPESA_RECON_STATE.till = tillName;
+                    const tillStation = $(this).attr('data-station');
+                    if (tillStation) {
+                        window.MPESA_RECON_STATE.station = tillStation;
+                        $(wrapper).find('#mpesa-recon-station-filter').val(tillStation);
+                    }
+                    $(wrapper).find('#mpesa-recon-till-filter').val(tillName);
+                }
                 init_exec_mpesa_reconciliation(wrapper);
+                if (tillName && typeof load_mpesa_reconciliation_data === 'function') {
+                    load_mpesa_reconciliation_data(wrapper);
+                }
             } else if (target === 'tab-purchases-reconciliation') {
                 init_purchases_reconciliation(wrapper);
             }
@@ -5846,8 +5860,37 @@ function export_exec_deductions_csv(result) {
 
 
 // ========================================================
-// SIDEBAR ACCOUNT MODULES RENDERING (CASH & BANK & SUPPLIERS)
+// SIDEBAR ACCOUNT MODULES RENDERING (CASH & BANK, M-PESA TILLS, SUPPLIERS)
 // ========================================================
+function format_sidebar_currency(val) {
+    let num = Number(val || 0);
+    let abs = Math.abs(num);
+    let sign = num < 0 ? '-' : '';
+    if (abs >= 1000000) {
+        return sign + (abs / 1000000).toFixed(2) + 'M';
+    } else if (abs >= 10000) {
+        return sign + (abs / 1000).toFixed(1) + 'K';
+    } else if (abs >= 1000) {
+        return sign + (abs / 1000).toFixed(1) + 'K';
+    } else {
+        return sign + Math.round(abs).toLocaleString('en-US');
+    }
+}
+
+function get_sidebar_balance_badge(val) {
+    let num = Number(val || 0);
+    let formatted = format_sidebar_currency(num);
+    let style = '';
+    if (num > 0) {
+        style = 'background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;';
+    } else if (num < 0) {
+        style = 'background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;';
+    } else {
+        style = 'background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0;';
+    }
+    return `<span class="badge" style="font-family: monospace; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 6px; flex-shrink: 0; ${style}">${formatted}</span>`;
+}
+
 function render_sidebar_account_modules(wrapper, selectedStation) {
     frappe.call({
         method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_executive_accounts",
@@ -5858,17 +5901,20 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
             if (!r.message) return;
             let cashAccounts = r.message.cash_bank_accounts || [];
             let supplierAccounts = r.message.supplier_accounts || [];
+            let mpesaTills = r.message.mpesa_tills || [];
 
             window.EXEC_ACCOUNTS_CACHE = {
                 cash_bank: cashAccounts,
-                suppliers: supplierAccounts
+                suppliers: supplierAccounts,
+                mpesa_tills: mpesaTills
             };
 
             let activeTab = $(wrapper).find('.exec-main:visible').attr('id') || 'tab-dashboard';
             let activeCashAcc = window.EXEC_CA_STATE ? window.EXEC_CA_STATE.active_account : null;
             let activeSuppAcc = window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.active_account : null;
+            let activeTill = window.MPESA_RECON_STATE ? window.MPESA_RECON_STATE.till : null;
 
-            // Render Cash & Bank Accounts in sidebar
+            // 1. Render Cash & Bank Accounts in sidebar with live balances
             let cashHtml = '';
             let validCashFound = false;
             cashAccounts.forEach(acc => {
@@ -5877,18 +5923,23 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
 
                 let icon = 'payments';
                 let upper = (acc.name || '').toUpperCase();
-                if (upper.includes('MPESA') || upper.includes('TILL')) {
-                    icon = 'phone_android';
+                if (upper.includes('HOLDING')) {
+                    icon = 'credit_card';
                 } else if (acc.account_type === 'Bank' || upper.includes('EQUITY') || upper.includes('KCB')) {
                     icon = 'account_balance';
                 }
 
                 let shortLabel = acc.label || acc.name.replace(' - KIL', '');
+                let balBadge = get_sidebar_balance_badge(acc.current_balance);
+                let fullBal = Number(acc.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
                 cashHtml += `
-                    <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-cash-accounts" data-account="${acc.name}" title="${acc.name}">
-                        <span class="material-symbols-outlined">${icon}</span>
-                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortLabel}</span>
+                    <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-cash-accounts" data-account="${acc.name}" title="${acc.name}\nLive Balance: KES ${fullBal}" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:7px 10px;">
+                        <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+                            <span class="material-symbols-outlined" style="font-size:17px; flex-shrink:0;">${icon}</span>
+                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600;">${shortLabel}</span>
+                        </div>
+                        ${balBadge}
                     </a>
                 `;
             });
@@ -5897,7 +5948,46 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
             }
             $(wrapper).find('#exec-sidebar-cash-accounts').html(cashHtml);
 
-            // Render Supplier Accounts in sidebar
+            // 2. Render M-Pesa Tills individually with live balances
+            let mpesaHtml = '';
+            mpesaTills.forEach(t => {
+                let isCurrent = (activeTab === 'tab-mpesa-reconciliation' && (t.name === activeTill || t.till_name === activeTill));
+                let balBadge = get_sidebar_balance_badge(t.current_balance);
+                let fullBal = Number(t.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                let displayName = t.till_name || t.name;
+
+                let stTag = '';
+                if (!selectedStation || selectedStation === '' || selectedStation.toLowerCase() === 'all stations') {
+                    let stShort = (t.station || '').toLowerCase().includes('galana') ? 'Galana' : ((t.station || '').toLowerCase().includes('rubis') ? 'Rubis' : t.station);
+                    if (stShort) {
+                        stTag = `<span style="background:#e2e8f0; color:#475569; padding:0 4px; border-radius:3px; font-size:9px; font-weight:600;">${stShort}</span>`;
+                    }
+                }
+
+                mpesaHtml += `
+                    <a class="exec-nav-item mpesa-till-item ${isCurrent ? 'active' : ''}" data-tab="tab-mpesa-reconciliation" data-till="${t.name}" data-station="${t.station}" title="${t.name} (${t.station || 'Shared'})\nLive Balance: KES ${fullBal}\nLast Shift: ${t.last_date || 'N/A'}" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:7px 10px;">
+                        <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+                            <span class="material-symbols-outlined" style="font-size:17px; color:#16a34a; flex-shrink:0;">point_of_sale</span>
+                            <div style="min-width:0; overflow:hidden;">
+                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600; color:#1e293b;">
+                                    ${displayName}
+                                </div>
+                                <div style="font-size:9.5px; color:#64748b; line-height:1; display:flex; align-items:center; gap:4px; margin-top:2px;">
+                                    <span>#${t.till_number || t.name}</span>
+                                    ${stTag}
+                                </div>
+                            </div>
+                        </div>
+                        ${balBadge}
+                    </a>
+                `;
+            });
+            if (mpesaTills.length === 0) {
+                mpesaHtml = '<div style="font-size: 11px; color: #94a3b8; padding: 6px 16px;">No active tills found</div>';
+            }
+            $(wrapper).find('#exec-sidebar-mpesa-tills').html(mpesaHtml);
+
+            // 3. Render Supplier Accounts in sidebar with live balances
             let suppHtml = '';
             let validSuppFound = false;
             supplierAccounts.forEach(acc => {
@@ -5905,11 +5995,16 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
                 if (acc.name === activeSuppAcc) validSuppFound = true;
 
                 let shortLabel = acc.label || acc.name.replace(' - KIL', '');
+                let balBadge = get_sidebar_balance_badge(acc.current_balance);
+                let fullBal = Number(acc.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
                 suppHtml += `
-                    <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-supplier-accounts" data-account="${acc.name}" title="${acc.name}">
-                        <span class="material-symbols-outlined">local_shipping</span>
-                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortLabel}</span>
+                    <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-supplier-accounts" data-account="${acc.name}" title="${acc.name}\nLive Balance: KES ${fullBal}" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:7px 10px;">
+                        <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+                            <span class="material-symbols-outlined" style="font-size:17px; color:#d97706; flex-shrink:0;">local_shipping</span>
+                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600;">${shortLabel}</span>
+                        </div>
+                        ${balBadge}
                     </a>
                 `;
             });
@@ -5920,6 +6015,7 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
 
             // Update section count badges
             $(wrapper).find('#exec-badge-cash-count').text(cashAccounts.length);
+            $(wrapper).find('#exec-badge-mpesa-count').text(mpesaTills.length);
             $(wrapper).find('#exec-badge-supp-count').text(supplierAccounts.length);
 
             // If user is currently on cash accounts tab and active account is no longer in list, switch to first available
@@ -8957,7 +9053,9 @@ function load_mpesa_reconciliation_data(wrapper) {
                 let optText = t.till_name + (t.station ? ` (${t.station})` : '');
                 tillSel.append(`<option value="${frappe.utils.escape_html(t.till_name)}">${frappe.utils.escape_html(optText)}</option>`);
             });
-            if (currentTillVal) {
+            if (state.till) {
+                tillSel.val(state.till);
+            } else if (currentTillVal) {
                 tillSel.val(currentTillVal);
             }
 

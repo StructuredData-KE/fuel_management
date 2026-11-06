@@ -18,7 +18,7 @@
 /* Sidebar */
 /* Sidebar */
 .exec-sidebar {
-    width: 255px;
+    width: 275px;
     background-color: #f8fafc;
     border-right: 1px solid #e2e8f0;
     display: flex;
@@ -179,7 +179,7 @@
 /* Main Content */
 .exec-main {
     flex: 1;
-    margin-left: 255px;
+    margin-left: 275px;
     padding: 32px;
     display: flex;
     flex-direction: column;
@@ -715,6 +715,23 @@
                 </div>
                 <div id="exec-sidebar-cash-accounts" class="exec-nav-section-body">
                     <!-- Dynamically populated per station -->
+                </div>
+            </div>
+
+            <!-- SECTION: M-PESA TILLS (LIVE) (TEAL / MPESA GREEN THEME) -->
+            <div class="exec-nav-section-wrapper" id="sec-mpesa-tills">
+                <div class="exec-nav-section-header" style="background:#f0fdf4; border-color:#86efac; color:#14532d;" data-target="#exec-sidebar-mpesa-tills">
+                    <div class="section-left">
+                        <span class="material-symbols-outlined" style="font-size:18px; color:#16a34a;">phone_android</span>
+                        <span>M-Pesa Tills</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span id="exec-badge-mpesa-count" style="font-size:10px; font-weight:700; background:#16a34a; color:#fff; padding:1px 6px; border-radius:10px;">0</span>
+                        <span class="material-symbols-outlined section-chevron" style="color:#16a34a;">expand_more</span>
+                    </div>
+                </div>
+                <div id="exec-sidebar-mpesa-tills" class="exec-nav-section-body">
+                    <!-- Dynamically populated per station (each till separately with live balance) -->
                 </div>
             </div>
 

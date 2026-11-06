@@ -2162,9 +2162,63 @@ def get_executive_accounts(station=None):
         elif acc_type in ("Cash", "Bank") or "HOLDING" in upper_name:
             cash_bank.append(item)
 
+    # 3. Query M-Pesa Tills individually with live operational balances
+    mpesa_station_filter = ""
+    mpesa_station_args = []
+    if station and station not in ("ALL", "All Stations", ""):
+        mpesa_station_filter = " AND station = %s"
+        mpesa_station_args.append(station)
+
+    active_tills = frappe.db.sql(f"""
+        SELECT name, till_name, till_number, station, default_account, bank_account
+        FROM `tabM-Pesa Till`
+        WHERE is_active = 1 {mpesa_station_filter}
+        ORDER BY station ASC, till_name ASC
+    """, mpesa_station_args, as_dict=True)
+
+    tills_list = []
+    total_mpesa_balance = 0.0
+
+    for t in active_tills:
+        latest_reading = frappe.db.sql("""
+            SELECT mp.closing_balance, mp.opening_balance, mp.amount, s.shift_date, s.status
+            FROM `tabShift M-Pesa Payment` mp
+            JOIN `tabShift` s ON s.name = mp.parent
+            WHERE mp.mpesa_till = %s AND s.docstatus < 2
+            ORDER BY s.shift_date DESC, s.creation DESC
+            LIMIT 1
+        """, (t.name,), as_dict=True)
+
+        till_balance = 0.0
+        last_date = None
+        if latest_reading:
+            r = latest_reading[0]
+            last_date = r.shift_date
+            if r.status == "Closed" or flt(r.closing_balance) > 0:
+                till_balance = flt(r.closing_balance)
+            else:
+                till_balance = flt(r.opening_balance)
+
+        till_balance = round(flt(till_balance), 2)
+        total_mpesa_balance += till_balance
+
+        tills_list.append({
+            "name": t.name,
+            "till_name": t.till_name or t.name,
+            "till_number": t.till_number or "",
+            "station": t.station or "",
+            "current_balance": till_balance,
+            "last_date": str(last_date) if last_date else "",
+            "default_account": t.default_account or "",
+            "bank_account": t.bank_account or ""
+        })
+
     return {
         "cash_bank_accounts": cash_bank,
-        "supplier_accounts": suppliers
+        "supplier_accounts": suppliers,
+        "mpesa_tills": tills_list,
+        "total_mpesa_balance": round(flt(total_mpesa_balance), 2),
+        "total_cash_balance": round(sum(flt(a["current_balance"]) for a in cash_bank), 2)
     }
 
 
