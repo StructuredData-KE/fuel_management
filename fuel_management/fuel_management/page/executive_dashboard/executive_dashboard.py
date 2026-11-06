@@ -4506,37 +4506,58 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
             return {"label": "High Variance (> 1.0%)", "status": "danger", "color": "#dc2626"}
 
     if not shifts:
+        empty_period = {
+            "station": station_label,
+            "from_date": str(from_date),
+            "to_date": str(to_date),
+            "month_label": month_label,
+            "total_shifts": 0,
+            "closed_shifts": 0,
+            "open_shifts": 0,
+            "first_shift": "—",
+            "first_shift_name": "—",
+            "first_shift_date": "—",
+            "last_shift": "—",
+            "last_shift_name": "—",
+            "last_shift_date": "—"
+        }
+        empty_kpis = {
+            "total_dispensed": 0.0,
+            "total_net_meter_litres": 0.0,
+            "total_tank_sales_litres": 0.0,
+            "tank_depletion": 0.0,
+            "total_purchases_litres": 0.0,
+            "purchases_litres": 0.0,
+            "purchases_count": 0,
+            "total_variance_litres": 0.0,
+            "station_variance": 0.0,
+            "total_variance_percent": 0.0,
+            "variance_pct": 0.0,
+            "pms_dispensed": 0.0,
+            "pms_net_litres": 0.0,
+            "ago_dispensed": 0.0,
+            "ago_net_litres": 0.0,
+            "pms_variance_litres": 0.0,
+            "ago_variance_litres": 0.0,
+            "total_shifts": 0,
+            "audit_status": "No Data",
+            "audit_status_detail": {"label": "No Data", "status": "normal", "color": "#64748b"}
+        }
         return {
-            "period_info": {
-                "station": station_label,
-                "from_date": str(from_date),
-                "to_date": str(to_date),
-                "month_label": month_label,
-                "total_shifts": 0,
-                "first_shift_name": "",
-                "first_shift_date": "",
-                "last_shift_name": "",
-                "last_shift_date": ""
-            },
-            "kpis": {
-                "total_net_meter_litres": 0.0,
-                "total_tank_sales_litres": 0.0,
-                "total_purchases_litres": 0.0,
-                "purchases_count": 0,
-                "total_variance_litres": 0.0,
-                "total_variance_percent": 0.0,
-                "pms_net_litres": 0.0,
-                "ago_net_litres": 0.0,
-                "pms_variance_litres": 0.0,
-                "ago_variance_litres": 0.0,
-                "total_shifts": 0,
-                "audit_status": {"label": "No Data", "status": "normal", "color": "#64748b"}
-            },
+            "station": station_label,
+            "period": empty_period,
+            "period_info": empty_period,
+            "kpis": empty_kpis,
             "products": [],
+            "daily": [],
             "daily_records": [],
+            "weekly": [],
             "weekly_records": [],
+            "shifts": [],
             "shift_records": [],
+            "pumps_by_group": [],
             "pump_groups": [],
+            "purchases": [],
             "purchases_ledger": []
         }
 
@@ -4638,16 +4659,20 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
             purchases_by_date[rec_date] = purchases_by_date.get(rec_date, 0.0) + qty
 
         purchases_ledger.append({
+            "name": item.parent,
             "purchase_name": item.parent,
             "shift": p_doc.get("shift"),
             "supplier": p_doc.get("supplier"),
+            "receiving_date": rec_date,
             "date": rec_date,
             "invoice_number": p_doc.get("document_invoice_number") or p_doc.get("name"),
             "item": it_name,
+            "product": ftype,
             "product_type": ftype,
             "target_tank": ttank,
             "quantity": round(qty, 2),
             "unit_cost": round(flt(item.unit_cost), 2),
+            "grand_total": round(flt(item.total_cost), 2),
             "total_cost": round(flt(item.total_cost), 2)
         })
 
@@ -4726,14 +4751,26 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         b["opening_dip"] = round(op_dips, 1)
         b["closing_dip"] = round(cl_dips, 1)
 
+        b["shifts_count"] = len(s_list)
+        b["purchases_litres"] = pur
+
         if last_s:
             depletion = op_dips + pur - cl_dips
             b["tank_depletion"] = round(depletion, 1)
             var_l = b["total_dispensed"] - depletion
             b["variance_litres"] = round(var_l, 2)
+            b["variance"] = round(var_l, 2)
             var_pct = (var_l / b["total_dispensed"] * 100) if b["total_dispensed"] > 0 else 0.0
             b["variance_percent"] = round(var_pct, 2)
+            b["variance_pct"] = round(var_pct, 2)
             b["status"] = calc_status(var_pct)
+            b["audit_status"] = "Normal" if abs(var_pct) <= 0.5 else ("Gain Alert" if var_pct > 0.5 else "Loss Alert")
+        else:
+            b["variance"] = 0.0
+            b["variance_litres"] = 0.0
+            b["variance_pct"] = 0.0
+            b["variance_percent"] = 0.0
+            b["audit_status"] = "Normal"
 
     # 8. Product Level Summary (PMS & AGO)
     pms_rtt = sum(v for k, v in nozzle_rtt_map.items() if classify_fuel(k) == "PMS")
@@ -4775,31 +4812,47 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
 
     products_summary = [
         {
+            "product": "PMS",
             "product_type": "PMS",
             "product_label": "Petrol (PMS - Super)",
             "opening_dip": round(pms_open, 2),
             "purchases": round(pms_eval_purchases, 2),
             "closing_dip": round(pms_close, 2),
+            "tank_depletion": round(pms_depletion, 2),
             "tank_sales": round(pms_depletion, 2),
+            "gross_metre": round(pms_total_gross, 2),
             "gross_meter_litres": round(pms_total_gross, 2),
+            "rtt": round(pms_rtt, 2),
             "rtt_litres": round(pms_rtt, 2),
+            "net_metre": round(pms_net, 2),
             "net_meter_litres": round(pms_net, 2),
+            "variance": round(pms_variance, 2),
             "variance_litres": round(pms_variance, 2),
+            "variance_pct": round(pms_var_pct, 2),
             "variance_percent": round(pms_var_pct, 2),
+            "audit_status": "Normal" if abs(pms_var_pct) <= 0.5 else ("Gain Alert" if pms_var_pct > 0.5 else "Loss Alert"),
             "status": calc_status(pms_var_pct)
         },
         {
+            "product": "AGO",
             "product_type": "AGO",
             "product_label": "Diesel (AGO)",
             "opening_dip": round(ago_open, 2),
             "purchases": round(ago_eval_purchases, 2),
             "closing_dip": round(ago_close, 2),
+            "tank_depletion": round(ago_depletion, 2),
             "tank_sales": round(ago_depletion, 2),
+            "gross_metre": round(ago_total_gross, 2),
             "gross_meter_litres": round(ago_total_gross, 2),
+            "rtt": round(ago_rtt, 2),
             "rtt_litres": round(ago_rtt, 2),
+            "net_metre": round(ago_net, 2),
             "net_meter_litres": round(ago_net, 2),
+            "variance": round(ago_variance, 2),
             "variance_litres": round(ago_variance, 2),
+            "variance_pct": round(ago_var_pct, 2),
             "variance_percent": round(ago_var_pct, 2),
+            "audit_status": "Normal" if abs(ago_var_pct) <= 0.5 else ("Gain Alert" if ago_var_pct > 0.5 else "Loss Alert"),
             "status": calc_status(ago_var_pct)
         }
     ]
@@ -4850,10 +4903,14 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         wk["ago_dispensed"] = round(wk["ago_dispensed"], 2)
         wk["total_dispensed"] = round(wk["total_dispensed"], 2)
         wk["purchases"] = round(wk["purchases"], 2)
+        wk["purchases_litres"] = round(wk["purchases"], 2)
         wk["tank_depletion"] = round(wk["tank_depletion"], 1)
         wk["variance_litres"] = round(v_l, 2)
+        wk["variance"] = round(v_l, 2)
         wk["variance_percent"] = round(v_pct, 2)
+        wk["variance_pct"] = round(v_pct, 2)
         wk["status"] = calc_status(v_pct)
+        wk["audit_status"] = "Normal" if abs(v_pct) <= 0.5 else ("Gain Alert" if v_pct > 0.5 else "Loss Alert")
         weekly_records.append(wk)
 
     # 10. Shift Records
@@ -4882,7 +4939,9 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
             "ago_dispensed": round(s_ago, 2),
             "total_dispensed": round(s_tot, 2),
             "purchases": round(s_pur, 2),
+            "purchases_litres": round(s_pur, 2),
             "closing_dip": round(s_cl_dips, 1),
+            "shift_variance": round(s_var, 2),
             "variance_litres": round(s_var, 2)
         })
 
@@ -4897,6 +4956,7 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         pg = n.pump_group or "Ungrouped"
         if pg not in pump_groups_dict:
             pump_groups_dict[pg] = {
+                "group": pg,
                 "group_name": pg,
                 "nozzles": [],
                 "total_net_litres": 0.0
@@ -4920,18 +4980,29 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         ftype = classify_fuel(n.name + " " + p_name)
 
         pump_groups_dict[pg]["nozzles"].append({
+            "nozzle": n.nozzle_name or n.name,
             "nozzle_id": n.name,
             "nozzle_name": n.nozzle_name or n.name,
             "fuel_product": p_name or ("Petrol (PMS)" if ftype == "PMS" else "Diesel (AGO)"),
+            "product": ftype,
             "product_type": ftype,
+            "opening_meter_electronic": op_elec,
             "opening_electronic": op_elec,
+            "closing_meter_electronic": cl_elec,
             "closing_electronic": cl_elec,
+            "electronic_litres": round(diff_elec, 2),
             "electronic_volume": round(diff_elec, 2),
+            "opening_meter_manual": op_man,
             "opening_manual": op_man,
+            "closing_meter_manual": cl_man,
             "closing_manual": cl_man,
+            "manual_litres": round(diff_man, 2),
             "manual_volume": round(diff_man, 2),
+            "rtt": round(noz_rtt, 2),
             "rtt_litres": round(noz_rtt, 2),
+            "net_litres": round(net_l, 2),
             "net_volume": round(net_l, 2),
+            "share_pct": round((net_l / total_net_all * 100), 1) if total_net_all > 0 else 0.0,
             "share_percent": round((net_l / total_net_all * 100), 1) if total_net_all > 0 else 0.0
         })
         pump_groups_dict[pg]["total_net_litres"] += net_l
@@ -4940,18 +5011,28 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
 
     # 12. Final KPIs
     kpis = {
+        "total_dispensed": round(total_net_all, 2),
         "total_net_meter_litres": round(total_net_all, 2),
         "total_tank_sales_litres": round(total_tank_depletion, 2),
+        "tank_depletion": round(total_tank_depletion, 2),
         "total_purchases_litres": round(total_purchases_all, 2),
+        "purchases_litres": round(total_purchases_all, 2),
         "purchases_count": len(purchases_ledger),
         "total_variance_litres": round(total_var_all, 2),
+        "station_variance": round(total_var_all, 2),
         "total_variance_percent": round(total_var_pct, 2),
+        "variance_pct": round(total_var_pct, 2),
         "total_shifts": len(shifts),
+        "closed_shifts": len([s for s in shifts if s.status == "Closed"]),
+        "open_shifts": len([s for s in shifts if s.status != "Closed"]),
+        "pms_dispensed": round(pms_net, 2),
         "pms_net_litres": round(pms_net, 2),
+        "ago_dispensed": round(ago_net, 2),
         "ago_net_litres": round(ago_net, 2),
         "pms_variance_litres": round(pms_variance, 2),
         "ago_variance_litres": round(ago_variance, 2),
-        "audit_status": calc_status(total_var_pct)
+        "audit_status": "Normal" if abs(total_var_pct) <= 0.5 else ("Gain Alert" if total_var_pct > 0.5 else "Loss Alert"),
+        "audit_status_detail": calc_status(total_var_pct)
     }
 
     daily_list = []
@@ -4962,24 +5043,37 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         db["total_dispensed"] = round(db["total_dispensed"], 2)
         daily_list.append(db)
 
+    period_dict = {
+        "station": station_label,
+        "from_date": str(from_date),
+        "to_date": str(to_date),
+        "month_label": month_label,
+        "total_shifts": len(shifts),
+        "closed_shifts": len([s for s in shifts if s.status == "Closed"]),
+        "open_shifts": len([s for s in shifts if s.status != "Closed"]),
+        "first_shift_name": first_shift.name,
+        "first_shift_date": str(first_shift.shift_date),
+        "first_shift": first_shift.name,
+        "last_shift_name": last_closed_doc.name if last_closed_doc else last_shift.name,
+        "last_shift_date": str(last_closed_doc.shift_date if last_closed_doc else last_shift.shift_date),
+        "last_shift": last_closed_doc.name if last_closed_doc else last_shift.name,
+    }
+
     return {
-        "period_info": {
-            "station": station_label,
-            "from_date": str(from_date),
-            "to_date": str(to_date),
-            "month_label": month_label,
-            "total_shifts": len(shifts),
-            "first_shift_name": first_shift.name,
-            "first_shift_date": str(first_shift.shift_date),
-            "last_shift_name": last_closed_doc.name if last_closed_doc else last_shift.name,
-            "last_shift_date": str(last_closed_doc.shift_date if last_closed_doc else last_shift.shift_date)
-        },
+        "station": station_label,
+        "period": period_dict,
+        "period_info": period_dict,
         "kpis": kpis,
         "products": products_summary,
+        "daily": daily_list,
         "daily_records": daily_list,
+        "weekly": weekly_records,
         "weekly_records": weekly_records,
+        "shifts": shift_records,
         "shift_records": shift_records,
+        "pumps_by_group": sorted_groups,
         "pump_groups": sorted_groups,
+        "purchases": purchases_ledger,
         "purchases_ledger": purchases_ledger
     }
 
