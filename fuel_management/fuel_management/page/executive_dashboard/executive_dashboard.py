@@ -2110,7 +2110,7 @@ def get_executive_accounts(station=None):
         SELECT name, account_name, account_type, parent_account
         FROM `tabAccount`
         WHERE is_group = 0 
-          AND (account_type IN ('Cash', 'Bank') OR LOCATE('A/C', name) > 0 OR LOCATE('GALANA', name) > 0 OR LOCATE('RUBIS', name) > 0)
+          AND (account_type IN ('Cash', 'Bank') OR LOCATE('A/C', name) > 0 OR LOCATE('GALANA', name) > 0 OR LOCATE('RUBIS', name) > 0 OR LOCATE('Holding', name) > 0)
           AND company = %s
           AND docstatus < 2
         ORDER BY FIELD(account_type, 'Cash', 'Bank'), name
@@ -2159,7 +2159,7 @@ def get_executive_accounts(station=None):
         # Separate Supplier Accounts from Cash & Bank
         if "GALANA A/C" in upper_name or "RUBIS A/C" in upper_name or "SUPPLIER" in upper_name or acc_type == "Payable":
             suppliers.append(item)
-        elif acc_type in ("Cash", "Bank"):
+        elif acc_type in ("Cash", "Bank") or "HOLDING" in upper_name:
             cash_bank.append(item)
 
     return {
@@ -2697,6 +2697,20 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
     for k in ["total_amount", "posted_amount", "pending_amount"]:
         summary[k] = round(float(summary.get(k) or 0.0), 2)
 
+    # Live holding balances per card brand
+    holding_bals = {}
+    for h_name, h_key in [
+        ("Rubis Cards Holding Account - KIL", "rubis_bal"),
+        ("KCB Cards Holding Account - KIL", "kcb_bal"),
+        ("Galana Cards Holding Account - KIL", "galana_bal"),
+        ("Equity Cards Holding Account - KIL", "equity_bal")
+    ]:
+        b = frappe.db.sql("""
+            SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account = %s AND is_cancelled = 0
+        """, (h_name,))[0][0] or 0.0
+        holding_bals[h_key] = round(float(b), 2)
+    summary["holding_balances"] = holding_bals
+
     # 2. Paginated rows
     rows = frappe.db.sql(f"""
         SELECT 
@@ -2844,12 +2858,34 @@ def post_station_cards_to_supplier(card_names, supplier_account, posting_date=No
                 "user_remark": "Supplier Bonus / Overage"
             })
 
-        # Credit: Source Card Account with cards total
-        je.append("accounts", {
-            "account": source_account,
-            "credit_in_account_currency": cards_total,
-            "user_remark": f"Clear Holding: {len(cards)} cards"
-        })
+        # Credit: Source Card Holding Accounts (specific to card brand)
+        company_abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
+        holding_map = {}
+        for c in cards:
+            c_name = c.get("card") or ""
+            c_upper = c_name.upper()
+            if "RUBIS" in c_upper:
+                acc = f"Rubis Cards Holding Account - {company_abbr}"
+            elif "GALANA" in c_upper:
+                acc = f"Galana Cards Holding Account - {company_abbr}"
+            elif "KCB" in c_upper:
+                acc = f"KCB Cards Holding Account - {company_abbr}"
+            elif "EQUITY" in c_upper:
+                acc = f"Equity Cards Holding Account - {company_abbr}"
+            else:
+                acc = f"Cards Holding Account - {company_abbr}"
+
+            if not frappe.db.exists("Account", acc):
+                acc = "Cards Holding Account - KIL" if frappe.db.exists("Account", "Cards Holding Account - KIL") else "Shift Control Account - KIL"
+
+            holding_map[acc] = round(holding_map.get(acc, 0.0) + flt(c.get("amount")), 2)
+
+        for h_acc, h_amt in holding_map.items():
+            je.append("accounts", {
+                "account": h_acc,
+                "credit_in_account_currency": h_amt,
+                "user_remark": f"Clear Holding: {h_acc} ({len(cards)} cards)"
+            })
 
         je.flags.ignore_permissions = True
         je.insert()
@@ -3215,6 +3251,173 @@ def get_supplier_payment_form_data(supplier=None, station=None, account=None):
         "default_supplier": active_supplier,
         "invoices": invoices,
         "total_outstanding": round(total_outstanding, 2)
+    }
+
+
+@frappe.whitelist()
+def get_account_transfer_form_data(source_account=None, station=None):
+    """
+    Returns available source and destination accounts for the Account Transfer / Payment modal:
+    - Bank to Bank
+    - Cash to Bank
+    - Bank to Cash
+    - Bank to Supplier (RUBIS A/C, GALANA A/C, Creditors, etc.)
+    - Cash to Supplier
+    - Bank/Cash to Expense
+    """
+    from frappe.utils import flt
+    company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+
+    # All active non-group accounts in company
+    accounts = frappe.db.sql("""
+        SELECT name, account_name, account_type, parent_account
+        FROM `tabAccount`
+        WHERE is_group = 0 AND company = %s AND docstatus < 2
+        ORDER BY account_name ASC
+    """, (company,), as_dict=True)
+
+    # Live balance map for quick balance display
+    bal_rows = frappe.db.sql("""
+        SELECT account, SUM(debit - credit) as balance
+        FROM `tabGL Entry`
+        WHERE is_cancelled = 0
+        GROUP BY account
+    """, as_dict=True)
+    bal_map = {b["account"]: round(flt(b["balance"]), 2) for b in bal_rows}
+
+    source_accounts = []
+    bank_accounts = []
+    cash_accounts = []
+    supplier_accounts = []
+    expense_accounts = []
+
+    for a in accounts:
+        acc_name = a["name"]
+        a_type = a["account_type"]
+        a_upper = acc_name.upper()
+        bal = bal_map.get(acc_name, 0.0)
+        item = {
+            "name": acc_name,
+            "label": a["account_name"] or acc_name.replace(" - KIL", ""),
+            "account_type": a_type,
+            "balance": bal
+        }
+
+        # Source Accounts: Bank & Cash
+        if a_type in ("Bank", "Cash") or "MAIN CASH" in a_upper or a["parent_account"] in ("Bank Accounts - KIL", "Cash In Hand - KIL"):
+            source_accounts.append(item)
+
+        # Categorize destination accounts
+        if a_type == "Bank" or "BANK" in a_upper or a["parent_account"] == "Bank Accounts - KIL":
+            bank_accounts.append(item)
+        elif a_type == "Cash" or "CASH" in a_upper or a["parent_account"] == "Cash In Hand - KIL":
+            cash_accounts.append(item)
+        elif a_type == "Payable" or "RUBIS A/C" in a_upper or "GALANA A/C" in a_upper or "CREDITOR" in a_upper or "SUPPLIER" in a_upper:
+            supplier_accounts.append(item)
+        elif a_type in ("Expense", "Direct Expense", "Indirect Expense") or "EXPENSE" in a_upper:
+            expense_accounts.append(item)
+
+    selected_source = source_account or (source_accounts[0]["name"] if source_accounts else "")
+    selected_source_bal = bal_map.get(selected_source, 0.0)
+
+    return {
+        "source_accounts": source_accounts,
+        "grouped_targets": {
+            "Bank Accounts": bank_accounts,
+            "Cash Accounts": cash_accounts,
+            "Supplier Accounts": supplier_accounts,
+            "Expense Accounts": expense_accounts
+        },
+        "selected_source": selected_source,
+        "selected_source_balance": selected_source_bal
+    }
+
+
+@frappe.whitelist()
+def submit_account_transfer(paid_from_account, paid_to_account, amount, posting_date=None, reference=None, remarks=None):
+    """
+    Direct account-to-account transfer or payment:
+    - Bank to Bank
+    - Cash to Bank
+    - Bank to Cash
+    - Bank to Supplier (e.g. RUBIS A/C - KIL, Creditors - KIL)
+    - Cash to Supplier
+    - Bank/Cash to Expense
+    Creates and submits an official Journal Entry.
+    """
+    from frappe.utils import flt, today, formatdate, now_datetime
+
+    val_amount = flt(amount)
+    if not val_amount or val_amount <= 0:
+        frappe.throw("Please enter a valid transfer amount greater than 0.")
+    if not paid_from_account:
+        frappe.throw("Please select the Source Account (Paid From).")
+    if not paid_to_account:
+        frappe.throw("Please select the Target Account (Transfer To).")
+    if paid_from_account == paid_to_account:
+        frappe.throw("Source and Target accounts cannot be the same.")
+
+    company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+    posting_date = posting_date or today()
+    ref_no = (reference or "").strip()
+    memo = (remarks or "").strip()
+
+    full_remark = f"[ACCOUNT TRANSFER] Transfer KES {val_amount:,.2f} from {paid_from_account} to {paid_to_account}."
+    if ref_no:
+        full_remark += f" Ref: {ref_no}."
+    if memo:
+        full_remark += f" Notes: {memo}."
+
+    je = frappe.new_doc("Journal Entry")
+    je.voucher_type = "Journal Entry"
+    je.company = company
+    je.posting_date = posting_date
+    je.cheque_no = ref_no
+    je.cheque_date = posting_date
+    je.user_remark = full_remark
+
+    # Row 1: Debit Target Account
+    target_row = {
+        "account": paid_to_account,
+        "debit_in_account_currency": val_amount,
+        "credit_in_account_currency": 0.0,
+        "user_remark": memo or f"Received from {paid_from_account}"
+    }
+    target_acc_type = frappe.db.get_value("Account", paid_to_account, "account_type")
+    if target_acc_type == "Payable":
+        target_row["party_type"] = "Supplier"
+        if "RUBIS" in paid_to_account.upper():
+            target_row["party"] = "RUBIS KENYA" if frappe.db.exists("Supplier", "RUBIS KENYA") else None
+        elif "GALANA" in paid_to_account.upper():
+            target_row["party"] = "GALANA OIL KENYA LTD" if frappe.db.exists("Supplier", "GALANA OIL KENYA LTD") else None
+        if not target_row.get("party"):
+            first_sup = frappe.get_all("Supplier", limit=1)
+            if first_sup:
+                target_row["party"] = first_sup[0].name
+    je.append("accounts", target_row)
+
+    # Row 2: Credit Source Account
+    source_row = {
+        "account": paid_from_account,
+        "debit_in_account_currency": 0.0,
+        "credit_in_account_currency": val_amount,
+        "user_remark": memo or f"Transferred to {paid_to_account}"
+    }
+    source_acc_type = frappe.db.get_value("Account", paid_from_account, "account_type")
+    if source_acc_type == "Receivable":
+        source_row["party_type"] = "Customer"
+    je.append("accounts", source_row)
+
+    je.flags.ignore_permissions = True
+    je.insert()
+    je.submit()
+
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "journal_entry": je.name,
+        "message": f"Transfer of KES {val_amount:,.2f} from {paid_from_account} to {paid_to_account} posted successfully ({je.name})!"
     }
 
 

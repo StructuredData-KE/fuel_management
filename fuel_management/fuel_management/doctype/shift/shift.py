@@ -723,9 +723,26 @@ class Shift(Document):
                 if not mop_account:
                     mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": "Card", "company": company}, "default_account")
                     
-                # Cards must be held in Cards Holding Account awaiting executive audit & posting to supplier accounts
-                if not mop_account or "RUBIS A/C" in (mop_account or "").upper() or "GALANA A/C" in (mop_account or "").upper():
-                    mop_account = "Cards Holding Account - KIL" if frappe.db.exists("Account", "Cards Holding Account - KIL") else mop_account
+                # Each card brand must be held in its respective Card Holding Account awaiting executive audit & posting
+                company_abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
+                card_upper = (card_name or "").upper()
+                holding_acc = None
+                if "RUBIS" in card_upper:
+                    holding_acc = f"Rubis Cards Holding Account - {company_abbr}"
+                elif "GALANA" in card_upper:
+                    holding_acc = f"Galana Cards Holding Account - {company_abbr}"
+                elif "KCB" in card_upper:
+                    holding_acc = f"KCB Cards Holding Account - {company_abbr}"
+                elif "EQUITY" in card_upper:
+                    holding_acc = f"Equity Cards Holding Account - {company_abbr}"
+                else:
+                    holding_acc = f"Cards Holding Account - {company_abbr}"
+
+                if not mop_account or "RUBIS A/C" in (mop_account or "").upper() or "GALANA A/C" in (mop_account or "").upper() or "EQUITY (" in (mop_account or "").upper() or "KCB(" in (mop_account or "").upper() or "KCB (" in (mop_account or "").upper():
+                    if frappe.db.exists("Account", holding_acc):
+                        mop_account = holding_acc
+                    elif frappe.db.exists("Account", f"Cards Holding Account - {company_abbr}"):
+                        mop_account = f"Cards Holding Account - {company_abbr}"
 
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for Card '{card_name or 'Card'}' at Station '{self.station}'. Please configure the Account in Station Card Type '{card_name}'.")

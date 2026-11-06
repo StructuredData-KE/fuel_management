@@ -8150,6 +8150,14 @@ function load_cards_holding_data(wrapper) {
 
                     $(wrapper).find('#cards-kpi-total-amt').text(format_currency(s.total_amount || 0, "KES"));
                     $(wrapper).find('#cards-kpi-total-count').text((s.total_count || 0).toLocaleString());
+
+                    if (s.holding_balances) {
+                        let hb = s.holding_balances;
+                        $(wrapper).find('#holding-bal-rubis').text(format_currency(hb.rubis_bal || 0, "KES"));
+                        $(wrapper).find('#holding-bal-kcb').text(format_currency(hb.kcb_bal || 0, "KES"));
+                        $(wrapper).find('#holding-bal-galana').text(format_currency(hb.galana_bal || 0, "KES"));
+                        $(wrapper).find('#holding-bal-equity').text(format_currency(hb.equity_bal || 0, "KES"));
+                    }
                 }
 
                 // Render Table rows
@@ -8495,10 +8503,7 @@ function undo_cards_posting_action(wrapper, card_names) {
 // SUPPLIER TRANSFER & FUEL INVOICES RECONCILIATION MODAL
 // ==============================================================================
 window.EXEC_SUPP_STATE = {
-    mode: 'bank_transfer', // 'bank_transfer' or 'card_offset'
-    form_data: null,
-    invoices: [],
-    selected_invoices: new Set()
+    form_data: null
 };
 
 function init_supplier_payment_modal(wrapper) {
@@ -8509,202 +8514,84 @@ function init_supplier_payment_modal(wrapper) {
         modal.hide();
     });
 
-    // Mode Buttons
-    $(wrapper).find('.exec-supp-mode-btn').off('click').on('click', function() {
-        let mode = $(this).data('mode');
-        switch_supplier_modal_mode(wrapper, mode);
-    });
-
-    // Station Context Dropdown Change
-    $(wrapper).find('#exec-modal-supp-station').off('change').on('change', function() {
-        let newStation = $(this).val();
-        window.EXEC_SUPP_STATE = window.EXEC_SUPP_STATE || {};
-        window.EXEC_SUPP_STATE.station = newStation;
-        let stBadgeText = newStation ? (newStation === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : newStation) : 'All Stations (Consolidated)';
-        $(wrapper).find('#exec-modal-supp-station-badge').text(stBadgeText);
-        load_supplier_payment_modal_data(wrapper, newStation, null, window.EXEC_SUPP_STATE.account);
-    });
-
-    // Supplier Dropdown Change
-    $(wrapper).find('#exec-modal-supp-supplier').off('change').on('change', function() {
-        let supp = $(this).val();
-        let currStation = $(wrapper).find('#exec-modal-supp-station').val();
-        load_supplier_invoices_for_modal(wrapper, supp, currStation);
-    });
-
     // Source Account Change
     $(wrapper).find('#exec-modal-supp-source-account').off('change').on('change', function() {
-        update_supplier_source_balance(wrapper);
-    });
-
-    // Master Invoice Checkbox
-    $(wrapper).find('#exec-supp-master-inv-check').off('change').on('change', function() {
-        let isChecked = $(this).prop('checked');
-        $(wrapper).find('.exec-supp-inv-check').prop('checked', isChecked);
-        recalc_selected_invoices(wrapper);
-    });
-
-    // Single Invoice Checkbox Delegation
-    $(wrapper).find('#exec-modal-supp-invs-body').off('change', '.exec-supp-inv-check').on('change', '.exec-supp-inv-check', function() {
-        recalc_selected_invoices(wrapper);
-    });
-
-    // "Select All" Button
-    $(wrapper).find('#btn-supp-inv-check-all').off('click').on('click', function() {
-        let allChecked = $(wrapper).find('.exec-supp-inv-check').length === $(wrapper).find('.exec-supp-inv-check:checked').length;
-        $(wrapper).find('.exec-supp-inv-check, #exec-supp-master-inv-check').prop('checked', !allChecked);
-        recalc_selected_invoices(wrapper);
-    });
-
-    // "Match Selected Invoices" Button
-    $(wrapper).find('#btn-supp-fill-amount').off('click').on('click', function(e) {
-        e.preventDefault();
-        let total = parseFloat($(this).data('total')) || 0;
-        if (total > 0) {
-            $(wrapper).find('#exec-modal-supp-amount').val(total.toFixed(2));
-        }
+        update_transfer_source_balance(wrapper);
     });
 
     // Submit Form Button
-    $(wrapper).find('#btn-exec-modal-supp-submit').off('click').on('click', function() {
-        submit_supplier_payment_form(wrapper);
+    $(wrapper).find('#btn-exec-modal-supp-submit').off('click').on('click', function(e) {
+        e.preventDefault();
+        submit_account_transfer_form(wrapper);
     });
 }
 
 function open_supplier_payment_modal(wrapper, default_mode, default_account, default_station) {
-    default_mode = default_mode || 'bank_transfer';
-    let state = window.EXEC_SUPP_STATE = window.EXEC_SUPP_STATE || {};
-    state.mode = default_mode;
-    
-    // Determine active station from arguments or application state
-    let station = default_station || window.ACTIVE_STATION || '';
-    let account = default_account || (window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.active_account : (window.EXEC_CA_STATE ? window.EXEC_CA_STATE.active_account : ''));
+    let modal = $(wrapper).find('#exec-supplier-payment-modal');
+    let form = $(wrapper).find('#exec-supplier-payment-form');
+    if (form.length > 0 && form[0].reset) form[0].reset();
 
-    if (!station && account) {
-        let accU = account.toUpperCase();
-        if (accU.includes('GALANA')) {
-            station = 'Galana Annex';
-        } else if (accU.includes('RUBIS') || accU.includes('SHIFT MAIN CASH')) {
-            station = 'RUBIS POA PLACE';
-        }
-    }
-
-    state.station = station;
-    state.account = account;
-
-    // Reset form
-    $(wrapper).find('#exec-supplier-payment-form')[0].reset();
     $(wrapper).find('#exec-modal-supp-date').val(frappe.datetime.get_today());
-    $(wrapper).find('#exec-modal-supp-alert').hide().removeClass('alert-danger alert-success');
+    $(wrapper).find('#exec-modal-supp-alert').hide().text('');
     $(wrapper).find('#exec-modal-supp-spinner').addClass('hidden');
     $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', false);
-    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 20px;"><span class="spinner"></span> Loading invoices...</td></tr>');
 
-    // Set station dropdown in modal
-    $(wrapper).find('#exec-modal-supp-station').val(station);
+    modal.css('display', 'flex');
 
-    // Update modal header station badge
-    let stBadgeText = station ? (station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : station) : 'All Stations (Consolidated)';
-    $(wrapper).find('#exec-modal-supp-station-badge').text(stBadgeText);
+    let currentAcc = default_account || (window.EXEC_CA_STATE ? window.EXEC_CA_STATE.active_account : (window.EXEC_SUPP_ACC_STATE ? window.EXEC_SUPP_ACC_STATE.active_account : ''));
 
-    // Open modal immediately with backdrop
-    $(wrapper).find('#exec-supplier-payment-modal').css('display', 'flex');
-
-    load_supplier_payment_modal_data(wrapper, station, null, account);
+    load_account_transfer_modal_data(wrapper, currentAcc);
 }
 
-function load_supplier_payment_modal_data(wrapper, station, supplier, account) {
-    let state = window.EXEC_SUPP_STATE;
+function load_account_transfer_modal_data(wrapper, active_account) {
     frappe.call({
-        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_supplier_payment_form_data',
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_account_transfer_form_data',
         args: {
-            station: station || '',
-            supplier: supplier || '',
-            account: account || ''
+            source_account: active_account || ''
         },
         callback: function(r) {
-            if (r.message) {
-                state.form_data = r.message;
-                populate_supplier_modal_dropdowns(wrapper);
-                switch_supplier_modal_mode(wrapper, state.mode);
+            if (r && r.message) {
+                let data = r.message;
+                window.EXEC_SUPP_STATE.form_data = data;
+
+                // 1. Populate Source Accounts (Bank & Cash)
+                let sourceSelect = $(wrapper).find('#exec-modal-supp-source-account');
+                let srcHtml = '';
+                (data.source_accounts || []).forEach(acc => {
+                    let isSel = (acc.name === data.selected_source) ? 'selected' : '';
+                    srcHtml += `<option value="${acc.name}" data-balance="${acc.balance}" ${isSel}>${acc.name} (${acc.account_type})</option>`;
+                });
+                sourceSelect.html(srcHtml);
+
+                // Update source balance badge
+                update_transfer_source_balance(wrapper);
+
+                // 2. Populate Destination Accounts grouped by category
+                let targetSelect = $(wrapper).find('#exec-modal-supp-target-account');
+                let tgtHtml = '<option value="">Select Destination Account...</option>';
+
+                let grouped = data.grouped_targets || {};
+                for (let groupName in grouped) {
+                    let groupAccounts = grouped[groupName] || [];
+                    if (groupAccounts.length > 0) {
+                        tgtHtml += `<optgroup label="${groupName}">`;
+                        groupAccounts.forEach(acc => {
+                            let balStr = format_currency(acc.balance, 'KES');
+                            tgtHtml += `<option value="${acc.name}">${acc.name} (Bal: ${balStr})</option>`;
+                        });
+                        tgtHtml += `</optgroup>`;
+                    }
+                }
+                targetSelect.html(tgtHtml);
             }
         }
     });
 }
 
-function populate_supplier_modal_dropdowns(wrapper) {
-    let data = window.EXEC_SUPP_STATE.form_data;
-    if (!data) return;
-
-    // Populate Suppliers
-    let suppHtml = '';
-    (data.suppliers || []).forEach(s => {
-        let selected = s.name === data.default_supplier ? 'selected' : '';
-        suppHtml += `<option value="${s.name}" ${selected}>${s.supplier_name || s.name}</option>`;
-    });
-    $(wrapper).find('#exec-modal-supp-supplier').html(suppHtml);
-
-    // Initial render of invoices
-    render_supplier_modal_invoices(wrapper, data.invoices || [], data.total_outstanding || 0);
-}
-
-function switch_supplier_modal_mode(wrapper, mode) {
-    let state = window.EXEC_SUPP_STATE;
-    state.mode = mode;
-
-    // Update active tab button style
-    $(wrapper).find('.exec-supp-mode-btn').removeClass('active').css({
-        'background': 'transparent',
-        'color': '#64748b',
-        'box-shadow': 'none'
-    });
-    $(wrapper).find(`.exec-supp-mode-btn[data-mode="${mode}"]`).addClass('active').css({
-        'background': '#fff',
-        'color': '#0f172a',
-        'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'
-    });
-
-    let data = state.form_data;
-    let accSelect = $(wrapper).find('#exec-modal-supp-source-account');
-    let accountsList = [];
-
-    if (mode === 'bank_transfer') {
-        $(wrapper).find('#exec-modal-supp-title').text('Transfer to Fuel Supplier (Bank Payment)');
-        $(wrapper).find('#exec-modal-supp-source-label').text('Paid From (Bank Account)');
-        $(wrapper).find('#exec-modal-supp-submit-text').text('Confirm & Post Bank Transfer');
-        $(wrapper).find('#exec-modal-supp-remarks').attr('placeholder', 'e.g. Fuel tanker RTGS transfer');
-        accountsList = (data && data.bank_accounts) || [];
-    } else {
-        $(wrapper).find('#exec-modal-supp-title').text('Station Card Offset (Reconcile Invoices)');
-        $(wrapper).find('#exec-modal-supp-source-label').text('Paid From (Card Holding Account)');
-        $(wrapper).find('#exec-modal-supp-submit-text').text('Confirm & Offset Fuel Invoices');
-        $(wrapper).find('#exec-modal-supp-remarks').attr('placeholder', 'e.g. Rubis card sales settlement offset');
-        accountsList = (data && data.card_accounts) || [];
-    }
-
-    let accHtml = '<option value="">Select Account...</option>';
-    let matchedAccountFound = false;
-    accountsList.forEach((acc, idx) => {
-        let isSelected = false;
-        if (state.account && acc.name === state.account) {
-            isSelected = true;
-            matchedAccountFound = true;
-        } else if (!state.account && idx === 0) {
-            isSelected = true;
-        }
-        let selAttr = isSelected ? 'selected' : '';
-        accHtml += `<option value="${acc.name}" data-balance="${acc.balance}" ${selAttr}>${acc.name} (KES ${format_currency(acc.balance, '')})</option>`;
-    });
-    accSelect.html(accHtml);
-
-    update_supplier_source_balance(wrapper);
-}
-
-function update_supplier_source_balance(wrapper) {
-    let selectedOpt = $(wrapper).find('#exec-modal-supp-source-account option:selected');
-    let bal = parseFloat(selectedOpt.data('balance')) || 0;
+function update_transfer_source_balance(wrapper) {
+    let opt = $(wrapper).find('#exec-modal-supp-source-account option:selected');
+    let bal = parseFloat(opt.data('balance')) || 0;
     let badge = $(wrapper).find('#exec-modal-supp-source-bal-badge');
-
     badge.text('Bal: ' + format_currency(bal, 'KES'));
     if (bal >= 0) {
         badge.css({'background': '#dcfce7', 'color': '#166534'});
@@ -8713,149 +8600,66 @@ function update_supplier_source_balance(wrapper) {
     }
 }
 
-function load_supplier_invoices_for_modal(wrapper, supplier, station) {
-    if (!supplier) return;
-    $(wrapper).find('#exec-modal-supp-invs-body').html('<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 20px;"><span class="spinner"></span> Loading invoices for ' + supplier + '...</td></tr>');
-
-    frappe.call({
-        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_supplier_payment_form_data',
-        args: {
-            supplier: supplier,
-            station: station || ''
-        },
-        callback: function(r) {
-            if (r.message) {
-                render_supplier_modal_invoices(wrapper, r.message.invoices || [], r.message.total_outstanding || 0);
-            }
-        }
-    });
-}
-
-function render_supplier_modal_invoices(wrapper, invoices, totalOutstanding) {
-    window.EXEC_SUPP_STATE.invoices = invoices;
-    $(wrapper).find('#exec-modal-supp-total-invs').text(format_currency(totalOutstanding, 'KES'));
-
-    let tbody = $(wrapper).find('#exec-modal-supp-invs-body');
-    if (!invoices || invoices.length === 0) {
-        tbody.html('<tr><td colspan="7" style="text-align: center; color: #16a34a; font-weight: 700; padding: 20px;">✓ No outstanding fuel purchase invoices found for this station & supplier!</td></tr>');
-        $(wrapper).find('#exec-modal-supp-selected-invs-total').text('KES 0.00');
-        $(wrapper).find('#btn-supp-fill-amount').data('total', 0);
-        return;
-    }
-
-    let rowsHtml = '';
-    invoices.forEach(inv => {
-        let stBadge = inv.station === 'Galana Annex'
-            ? `<span style="font-size: 11px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px;">Galana Annex</span>`
-            : (inv.station === 'RUBIS POA PLACE'
-                ? `<span style="font-size: 11px; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px;">Rubis Poa Place</span>`
-                : `<span style="font-size: 11px; font-weight: 600; background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 4px;">General</span>`);
-
-        rowsHtml += `
-            <tr>
-                <td style="text-align: center; vertical-align: middle;">
-                    <input type="checkbox" class="exec-supp-inv-check" value="${inv.name}" data-outstanding="${inv.outstanding_amount}" checked>
-                </td>
-                <td style="font-weight: 700; color: #0284c7; vertical-align: middle;">
-                    <a href="/app/purchase-invoice/${inv.name}" target="_blank" style="text-decoration: underline; color: inherit;">${inv.name}</a>
-                </td>
-                <td style="vertical-align: middle;">${stBadge}</td>
-                <td style="vertical-align: middle; white-space: nowrap;">${inv.posting_date_formatted || inv.posting_date}</td>
-                <td style="vertical-align: middle; font-family: monospace;">${inv.bill_no || '-'}</td>
-                <td style="text-align: right; font-family: monospace; vertical-align: middle;">${format_currency(inv.grand_total, 'KES')}</td>
-                <td style="text-align: right; font-family: monospace; font-weight: 700; color: #dc2626; vertical-align: middle;">${format_currency(inv.outstanding_amount, 'KES')}</td>
-            </tr>
-        `;
-    });
-    tbody.html(rowsHtml);
-
-    recalc_selected_invoices(wrapper);
-}
-
-function recalc_selected_invoices(wrapper) {
-    let total = 0;
-    let count = 0;
-    $(wrapper).find('.exec-supp-inv-check:checked').each(function() {
-        total += parseFloat($(this).data('outstanding')) || 0;
-        count++;
-    });
-
-    $(wrapper).find('#exec-modal-supp-selected-invs-total').text(format_currency(total, 'KES'));
-    $(wrapper).find('#btn-supp-fill-amount').data('total', total);
-
-    // If payment amount input is currently empty or 0, auto-fill with selected total
-    let currentAmt = parseFloat($(wrapper).find('#exec-modal-supp-amount').val()) || 0;
-    if (currentAmt === 0 && total > 0) {
-        $(wrapper).find('#exec-modal-supp-amount').val(total.toFixed(2));
-    }
-}
-
-function submit_supplier_payment_form(wrapper) {
-    let state = window.EXEC_SUPP_STATE;
-    let supplier = $(wrapper).find('#exec-modal-supp-supplier').val();
+function submit_account_transfer_form(wrapper) {
     let source_acc = $(wrapper).find('#exec-modal-supp-source-account').val();
+    let target_acc = $(wrapper).find('#exec-modal-supp-target-account').val();
     let amount = parseFloat($(wrapper).find('#exec-modal-supp-amount').val());
     let posting_date = $(wrapper).find('#exec-modal-supp-date').val();
-    let ref = $(wrapper).find('#exec-modal-supp-ref').val().trim();
-    let remarks = $(wrapper).find('#exec-modal-supp-remarks').val().trim();
+    let ref = ($(wrapper).find('#exec-modal-supp-ref').val() || '').trim();
+    let remarks = ($(wrapper).find('#exec-modal-supp-remarks').val() || '').trim();
 
     let alertBox = $(wrapper).find('#exec-modal-supp-alert');
-    alertBox.hide();
+    alertBox.hide().text('');
 
-    if (!supplier) {
-        alertBox.text("Please select a supplier.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+    if (!source_acc) {
+        alertBox.text("Please select a Source Account (Paid From).").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
         return;
     }
-    if (!source_acc) {
-        alertBox.text("Please select the source payment account.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+    if (!target_acc) {
+        alertBox.text("Please select a Destination Account (Transfer To).").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        return;
+    }
+    if (source_acc === target_acc) {
+        alertBox.text("Source Account and Destination Account cannot be the same account.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
         return;
     }
     if (isNaN(amount) || amount <= 0) {
-        alertBox.text("Please enter a valid payment amount greater than 0.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        alertBox.text("Please enter a valid transfer amount greater than 0.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
         return;
     }
     if (!posting_date) {
-        alertBox.text("Please specify payment date.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+        alertBox.text("Please select a transfer/posting date.").css({'background': '#fee2e2', 'color': '#991b1b'}).show();
         return;
     }
 
-    // Collect checked invoices
-    let checkedInvoices = [];
-    $(wrapper).find('.exec-supp-inv-check:checked').each(function() {
-        checkedInvoices.push($(this).val());
-    });
-
-    // UI Loading state
     $(wrapper).find('#exec-modal-supp-spinner').removeClass('hidden');
     $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', true);
 
     frappe.call({
-        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.submit_supplier_bank_transfer',
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.submit_account_transfer',
         args: {
             paid_from_account: source_acc,
-            supplier: supplier,
+            paid_to_account: target_acc,
             amount: amount,
             posting_date: posting_date,
             reference: ref,
-            invoice_names: JSON.stringify(checkedInvoices),
-            remarks: remarks,
-            payment_type_mode: state.mode
+            remarks: remarks
         },
         freeze: true,
-        freeze_message: state.mode === 'bank_transfer' ? __("Posting Bank Transfer to Supplier...") : __("Reconciling Fuel Invoices with Station Cards..."),
+        freeze_message: __("Recording account transfer..."),
         callback: function(r) {
             $(wrapper).find('#exec-modal-supp-spinner').addClass('hidden');
             $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', false);
 
             if (r && r.message && r.message.success) {
                 frappe.show_alert({
-                    message: `<span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">check_circle</span> ${r.message.message} (<a href="/app/payment-entry/${r.message.payment_entry}" target="_blank" style="color: #fff; text-decoration: underline;">View Entry</a>)`,
+                    message: `<span class="material-symbols-outlined" style="font-size: 16px; vertical-align: middle;">check_circle</span> ${r.message.message} (<a href="/app/journal-entry/${r.message.journal_entry}" target="_blank" style="color: #fff; text-decoration: underline;">View JV</a>)`,
                     indicator: 'green'
                 }, 8);
 
                 $(wrapper).find('#exec-supplier-payment-modal').hide();
 
-                // Refresh affected views
+                // Refresh affected ledgers
                 if (typeof load_exec_cash_accounts === 'function') {
                     load_exec_cash_accounts(wrapper);
                 }
@@ -8865,15 +8669,18 @@ function submit_supplier_payment_form(wrapper) {
                 if (typeof load_dashboard_data === 'function') {
                     load_dashboard_data(wrapper);
                 }
+                if (typeof load_exec_supplier_account === 'function') {
+                    load_exec_supplier_account(wrapper);
+                }
             } else {
-                let err = (r && r.message && r.message.message) ? r.message.message : 'Failed to post payment entry.';
+                let err = (r && r.message && r.message.message) ? r.message.message : 'Failed to record transfer.';
                 alertBox.text(err).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
             }
         },
         error: function(err) {
             $(wrapper).find('#exec-modal-supp-spinner').addClass('hidden');
             $(wrapper).find('#btn-exec-modal-supp-submit').prop('disabled', false);
-            alertBox.text("Server Error: " + (err.message || JSON.stringify(err))).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+            alertBox.text("Error: " + (err.message || JSON.stringify(err))).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
         }
     });
 }
