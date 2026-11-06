@@ -6561,6 +6561,7 @@ function init_exec_expenses(wrapper) {
             category_filter: '',
             account_filter: '',
             search: '',
+            active_quick_filter: 'all',
             raw_data: null,
             form_options_loaded: false
         };
@@ -6637,6 +6638,18 @@ function init_exec_expenses(wrapper) {
         load_exec_expenses(wrapper);
     });
 
+    // KPI Cards Clickable Quick Filters
+    $(wrapper).find('.exec-exp-kpi-card').off('click').on('click', function() {
+        let filter = $(this).data('filter');
+        if (window.EXEC_EXP_STATE.active_quick_filter === filter && filter !== 'all') {
+            window.EXEC_EXP_STATE.active_quick_filter = 'all';
+        } else {
+            window.EXEC_EXP_STATE.active_quick_filter = filter;
+        }
+        update_exec_kpi_card_styles(wrapper);
+        render_exec_exp_table(wrapper);
+    });
+
     // Print & Export
     $(wrapper).find('#btn-exec-exp-print').off('click').on('click', function() {
         print_exec_exp_register(wrapper);
@@ -6649,9 +6662,6 @@ function init_exec_expenses(wrapper) {
     $(wrapper).find('#btn-exec-open-add-expense').off('click').on('click', function() {
         open_director_expense_modal(wrapper);
     });
-    $(wrapper).find('#btn-exec-open-supplier-pay').off('click').on('click', function() {
-        open_supplier_payment_modal(wrapper, 'bank_transfer', null, window.ACTIVE_STATION);
-    });
     $(wrapper).find('#exec-expense-modal-close, #btn-exec-modal-exp-cancel').off('click').on('click', function() {
         $(wrapper).find('#exec-expense-modal').hide();
     });
@@ -6661,6 +6671,37 @@ function init_exec_expenses(wrapper) {
 
     load_exec_exp_options(wrapper);
     load_exec_expenses(wrapper);
+}
+
+function update_exec_kpi_card_styles(wrapper) {
+    let current = (window.EXEC_EXP_STATE && window.EXEC_EXP_STATE.active_quick_filter) || 'all';
+    let configs = {
+        'all': { color: '#ef4444', shadow: 'rgba(239, 68, 68, 0.22)' },
+        'cash': { color: '#f59e0b', shadow: 'rgba(245, 158, 11, 0.22)' },
+        'bank': { color: '#3b82f6', shadow: 'rgba(59, 130, 246, 0.22)' },
+        'top_cat': { color: '#10b981', shadow: 'rgba(16, 185, 129, 0.22)' }
+    };
+
+    $(wrapper).find('.exec-exp-kpi-card').each(function() {
+        let f = $(this).data('filter');
+        let cfg = configs[f] || configs['all'];
+        if (f === current) {
+            $(this).css({
+                'border': `2px solid ${cfg.color}`,
+                'box-shadow': `0 4px 12px ${cfg.shadow}`,
+                'background': '#f8fafc',
+                'transform': 'translateY(-1px)'
+            });
+        } else {
+            $(this).css({
+                'border': '1px solid #e2e8f0',
+                'border-left': `4px solid ${cfg.color}`,
+                'box-shadow': '0 1px 3px rgba(0,0,0,0.03)',
+                'background': '#ffffff',
+                'transform': 'none'
+            });
+        }
+    });
 }
 
 function load_exec_exp_options(wrapper) {
@@ -6898,6 +6939,7 @@ function load_exec_expenses(wrapper) {
                 // Update Footer
                 $(wrapper).find('#exec-exp-foot-total').text(`KES ${Number(data.summary.total_expense || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 
+                update_exec_kpi_card_styles(wrapper);
                 render_exec_exp_table(wrapper);
             }
         }
@@ -6910,8 +6952,23 @@ function render_exec_exp_table(wrapper) {
 
     let records = data.records;
     let search = (window.EXEC_EXP_STATE.search || '').toLowerCase();
+    let active_quick_filter = (window.EXEC_EXP_STATE && window.EXEC_EXP_STATE.active_quick_filter) || 'all';
 
     let filtered = records.filter(r => {
+        if (active_quick_filter === 'cash') {
+            let paid = (r.paid_from_account || '').toLowerCase();
+            if (!paid.includes('cash')) return false;
+        } else if (active_quick_filter === 'bank') {
+            let paid = (r.paid_from_account || '').toLowerCase();
+            if (paid.includes('cash')) return false;
+        } else if (active_quick_filter === 'top_cat') {
+            let topCat = window.EXEC_EXP_STATE.raw_data && window.EXEC_EXP_STATE.raw_data.summary && window.EXEC_EXP_STATE.raw_data.summary.top_category;
+            if (topCat && topCat !== 'None') {
+                let cat = (r.expense_account || '').replace(' - KIL', '').trim();
+                if (cat !== topCat && r.expense_account !== topCat) return false;
+            }
+        }
+
         if (search) {
             let text = `${r.voucher_no || ''} ${r.payee || ''} ${r.description || ''} ${r.reference_no || ''} ${r.expense_account || ''}`.toLowerCase();
             if (!text.includes(search)) return false;
@@ -6919,8 +6976,11 @@ function render_exec_exp_table(wrapper) {
         return true;
     });
 
+    let filteredTotal = filtered.reduce((acc, cur) => acc + (parseFloat(cur.amount) || 0), 0);
+    $(wrapper).find('#exec-exp-foot-total').text(`KES ${filteredTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+
     if (filtered.length === 0) {
-        $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="10" style="text-align: center; padding: 30px; color: #94a3b8;">No executive expenses recorded in this period.</td></tr>');
+        $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="10" style="text-align: center; padding: 30px; color: #94a3b8;">No executive expenses matching the selected filter.</td></tr>');
         return;
     }
 

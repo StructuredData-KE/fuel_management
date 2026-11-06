@@ -3491,9 +3491,6 @@
                 <button type="button" id="btn-exec-open-add-expense" class="btn btn-sm btn-primary" style="height: 42px; padding: 0 20px; font-weight: 800; font-size: 14px; border-radius: 8px; background: #f59e0b; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.3);">
                     <span class="material-symbols-outlined" style="font-size: 20px;">add_circle</span> Record Director Expense
                 </button>
-                <button type="button" id="btn-exec-open-supplier-pay" class="btn btn-sm" style="height: 34px; padding: 0 16px; font-weight: 700; font-size: 13px; border-radius: 6px; background: #0284c7; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">payments</span> Transfer to Supplier
-                </button>
                 <div style="display: flex; gap: 6px; align-items: center;">
                     <input type="date" id="exec-exp-from" class="form-control input-sm" style="height: 32px; font-size: 12px; width: 130px; border-radius: 6px;">
                     <span style="color: #94a3b8; font-size: 12px;">to</span>
@@ -3519,42 +3516,54 @@
             <button type="button" class="btn btn-xs exec-exp-preset" data-preset="today" style="font-size: 11px; padding: 3px 12px; border-radius: 14px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; font-weight: 600; cursor: pointer;">Today</button>
         </div>
 
-        <!-- 4 KPI Cards -->
-        <div class="exec-metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-            <div class="exec-card" style="border-left: 4px solid #ef4444;">
-                <div class="exec-card-header">
-                    <span class="exec-card-title">Total Corporate Expenses</span>
-                    <span class="material-symbols-outlined" style="color: #ef4444; font-size: 20px;">payments</span>
+        <!-- 4 KPI Cards (Compact Row Across Top, Clickable Filters) -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; margin-bottom: 16px;">
+            <div class="exec-exp-kpi-card" data-filter="all" title="Click to view all corporate expenses" style="background: #ffffff; border: 1.5px solid #ef4444; border-radius: 10px; padding: 10px 14px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.12); position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Total Expenses</span>
+                    <span class="material-symbols-outlined" style="color: #ef4444; font-size: 18px;">payments</span>
                 </div>
-                <div class="exec-card-value" id="exec-exp-kpi-total" style="font-size: 20px; font-family: monospace; color: #dc2626;">KES 0.00</div>
-                <div style="font-size: 11px; color: #ef4444; margin-top: 4px;"><span id="exec-exp-kpi-count">0</span> transactions recorded</div>
+                <div class="exec-card-value" id="exec-exp-kpi-total" style="font-size: 18px; font-weight: 800; font-family: monospace; color: #dc2626; margin: 3px 0 2px 0;">KES 0.00</div>
+                <div style="font-size: 10.5px; color: #ef4444; display: flex; justify-content: space-between; align-items: center;">
+                    <span><span id="exec-exp-kpi-count">0</span> transactions</span>
+                    <span style="font-size: 9.5px; font-weight: 700; background: #fee2e2; color: #991b1b; padding: 1px 5px; border-radius: 3px;">All</span>
+                </div>
             </div>
 
-            <div class="exec-card" style="border-left: 4px solid #f59e0b;">
-                <div class="exec-card-header">
-                    <span class="exec-card-title">Disbursed via Cash</span>
-                    <span class="material-symbols-outlined" style="color: #f59e0b; font-size: 20px;">account_balance_wallet</span>
+            <div class="exec-exp-kpi-card" data-filter="cash" title="Click to filter by Cash payments only" style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; border-radius: 10px; padding: 10px 14px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.03); position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Paid via Cash</span>
+                    <span class="material-symbols-outlined" style="color: #f59e0b; font-size: 18px;">account_balance_wallet</span>
                 </div>
-                <div class="exec-card-value" id="exec-exp-kpi-cash" style="font-size: 20px; font-family: monospace; color: #d97706;">KES 0.00</div>
-                <div style="font-size: 11px; color: #f59e0b; margin-top: 4px;">Main Cash / Station Drawers</div>
+                <div class="exec-card-value" id="exec-exp-kpi-cash" style="font-size: 18px; font-weight: 800; font-family: monospace; color: #d97706; margin: 3px 0 2px 0;">KES 0.00</div>
+                <div style="font-size: 10.5px; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
+                    <span>Drawers & Shift Cash</span>
+                    <span style="font-size: 9.5px; font-weight: 700; background: #fef3c7; color: #92400e; padding: 1px 5px; border-radius: 3px;">Filter</span>
+                </div>
             </div>
 
-            <div class="exec-card" style="border-left: 4px solid #3b82f6;">
-                <div class="exec-card-header">
-                    <span class="exec-card-title">Disbursed via Bank / Till</span>
-                    <span class="material-symbols-outlined" style="color: #3b82f6; font-size: 20px;">account_balance</span>
+            <div class="exec-exp-kpi-card" data-filter="bank" title="Click to filter by Bank & Till payments only" style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; border-radius: 10px; padding: 10px 14px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.03); position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Paid via Bank / Till</span>
+                    <span class="material-symbols-outlined" style="color: #3b82f6; font-size: 18px;">account_balance</span>
                 </div>
-                <div class="exec-card-value" id="exec-exp-kpi-bank" style="font-size: 20px; font-family: monospace; color: #2563eb;">KES 0.00</div>
-                <div style="font-size: 11px; color: #3b82f6; margin-top: 4px;">Equity, KCB, M-Pesa Till</div>
+                <div class="exec-card-value" id="exec-exp-kpi-bank" style="font-size: 18px; font-weight: 800; font-family: monospace; color: #2563eb; margin: 3px 0 2px 0;">KES 0.00</div>
+                <div style="font-size: 10.5px; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
+                    <span>Equity, KCB, Till</span>
+                    <span style="font-size: 9.5px; font-weight: 700; background: #dbeafe; color: #1e40af; padding: 1px 5px; border-radius: 3px;">Filter</span>
+                </div>
             </div>
 
-            <div class="exec-card" style="border-left: 4px solid #10b981;">
-                <div class="exec-card-header">
-                    <span class="exec-card-title">Top Expense Category</span>
-                    <span class="material-symbols-outlined" style="color: #10b981; font-size: 20px;">category</span>
+            <div class="exec-exp-kpi-card" data-filter="top_cat" title="Click to filter by top expense category" style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #10b981; border-radius: 10px; padding: 10px 14px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.03); position: relative;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Top Category</span>
+                    <span class="material-symbols-outlined" style="color: #10b981; font-size: 18px;">category</span>
                 </div>
-                <div class="exec-card-value" id="exec-exp-kpi-top-category" style="font-size: 16px; font-weight: 700; color: #047857; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">None</div>
-                <div style="font-size: 11px; color: #10b981; margin-top: 4px;" id="exec-exp-kpi-top-amount">KES 0.00</div>
+                <div class="exec-card-value" id="exec-exp-kpi-top-category" style="font-size: 15px; font-weight: 800; color: #047857; margin: 3px 0 2px 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">None</div>
+                <div style="font-size: 10.5px; color: #10b981; display: flex; justify-content: space-between; align-items: center;">
+                    <span id="exec-exp-kpi-top-amount" style="font-weight: 600;">KES 0.00</span>
+                    <span style="font-size: 9.5px; font-weight: 700; background: #d1fae5; color: #065f46; padding: 1px 5px; border-radius: 3px;">Filter</span>
+                </div>
             </div>
         </div>
 
