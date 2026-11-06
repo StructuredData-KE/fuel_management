@@ -4632,6 +4632,8 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
     ago_purchases = 0.0
     tank_purchases_map = {}
     purchases_by_date = {}
+    pms_purchases_by_date = {}
+    ago_purchases_by_date = {}
 
     for item in p_items:
         p_doc = p_map.get(item.parent, {})
@@ -4649,8 +4651,12 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
 
         if ftype == "PMS":
             pms_purchases += qty
+            if rec_date:
+                pms_purchases_by_date[rec_date] = pms_purchases_by_date.get(rec_date, 0.0) + qty
         elif ftype == "AGO":
             ago_purchases += qty
+            if rec_date:
+                ago_purchases_by_date[rec_date] = ago_purchases_by_date.get(rec_date, 0.0) + qty
 
         if ttank:
             tank_purchases_map[ttank] = tank_purchases_map.get(ttank, 0.0) + qty
@@ -4694,12 +4700,34 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
                 "ago_dispensed": 0.0,
                 "total_dispensed": 0.0,
                 "purchases": purchases_by_date.get(d_str, 0.0),
+                "purchases_litres": purchases_by_date.get(d_str, 0.0),
+                "pms_purchases": pms_purchases_by_date.get(d_str, 0.0),
+                "ago_purchases": ago_purchases_by_date.get(d_str, 0.0),
                 "opening_dip": 0.0,
                 "closing_dip": 0.0,
                 "tank_depletion": 0.0,
                 "variance_litres": 0.0,
+                "variance": 0.0,
                 "variance_percent": 0.0,
-                "status": calc_status(0.0)
+                "variance_pct": 0.0,
+                "status": calc_status(0.0),
+                "audit_status": "Normal",
+                # PMS Specific
+                "pms_opening_dip": 0.0,
+                "pms_closing_dip": 0.0,
+                "pms_tank_depletion": 0.0,
+                "pms_variance": 0.0,
+                "pms_variance_litres": 0.0,
+                "pms_variance_pct": 0.0,
+                "pms_audit_status": "Normal",
+                # AGO Specific
+                "ago_opening_dip": 0.0,
+                "ago_closing_dip": 0.0,
+                "ago_tank_depletion": 0.0,
+                "ago_variance": 0.0,
+                "ago_variance_litres": 0.0,
+                "ago_variance_pct": 0.0,
+                "ago_audit_status": "Normal"
             }
         daily_buckets[d_str]["shifts"].append(s.name)
 
@@ -4730,7 +4758,7 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         if s_date and s_date in daily_buckets:
             daily_buckets[s_date]["total_dispensed"] += qty
 
-    # 7. Tank Dips Opening & Closing per day
+    # 7. Tank Dips Opening & Closing per day (Total, PMS & AGO)
     shifts_by_date = {}
     for s in shifts:
         shifts_by_date.setdefault(str(s.shift_date), []).append(s)
@@ -4745,12 +4773,12 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
                 last_s = s_doc
                 break
 
+        # Total Consolidated
         op_dips = sum(flt(d.opening_dip) for d in (first_s.dip_stick_readings or []))
         cl_dips = sum(flt(d.closing_dip) for d in (last_s.dip_stick_readings or [])) if last_s else op_dips
         pur = b["purchases"]
         b["opening_dip"] = round(op_dips, 1)
         b["closing_dip"] = round(cl_dips, 1)
-
         b["shifts_count"] = len(s_list)
         b["purchases_litres"] = pur
 
@@ -4766,11 +4794,62 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
             b["status"] = calc_status(var_pct)
             b["audit_status"] = "Normal" if abs(var_pct) <= 0.5 else ("Gain Alert" if var_pct > 0.5 else "Loss Alert")
         else:
+            b["tank_depletion"] = 0.0
             b["variance"] = 0.0
             b["variance_litres"] = 0.0
             b["variance_pct"] = 0.0
             b["variance_percent"] = 0.0
             b["audit_status"] = "Normal"
+
+        # Product-Specific Breakdown: PMS
+        pms_op = sum(flt(d.opening_dip) for d in (first_s.dip_stick_readings or []) if classify_fuel(tank_prod_map.get(d.fuel_tank, d.fuel_tank)) == "PMS")
+        pms_cl = sum(flt(d.closing_dip) for d in (last_s.dip_stick_readings or []) if classify_fuel(tank_prod_map.get(d.fuel_tank, d.fuel_tank)) == "PMS") if last_s else pms_op
+        pms_pur = pms_purchases_by_date.get(d_str, 0.0)
+        pms_sold = b["pms_dispensed"]
+        b["pms_opening_dip"] = round(pms_op, 1)
+        b["pms_closing_dip"] = round(pms_cl, 1)
+        b["pms_purchases"] = round(pms_pur, 2)
+        b["pms_purchases_litres"] = round(pms_pur, 2)
+        if last_s and (pms_cl > 0 or pms_op > 0):
+            pms_dep = pms_op + pms_pur - pms_cl
+            b["pms_tank_depletion"] = round(pms_dep, 1)
+            pms_var = pms_sold - pms_dep
+            b["pms_variance"] = round(pms_var, 2)
+            b["pms_variance_litres"] = round(pms_var, 2)
+            pms_var_pct = (pms_var / pms_sold * 100) if pms_sold > 0 else 0.0
+            b["pms_variance_pct"] = round(pms_var_pct, 2)
+            b["pms_audit_status"] = "Normal" if abs(pms_var_pct) <= 0.5 else ("Gain Alert" if pms_var_pct > 0.5 else "Loss Alert")
+        else:
+            b["pms_tank_depletion"] = 0.0
+            b["pms_variance"] = 0.0
+            b["pms_variance_litres"] = 0.0
+            b["pms_variance_pct"] = 0.0
+            b["pms_audit_status"] = "Normal"
+
+        # Product-Specific Breakdown: AGO
+        ago_op = sum(flt(d.opening_dip) for d in (first_s.dip_stick_readings or []) if classify_fuel(tank_prod_map.get(d.fuel_tank, d.fuel_tank)) == "AGO")
+        ago_cl = sum(flt(d.closing_dip) for d in (last_s.dip_stick_readings or []) if classify_fuel(tank_prod_map.get(d.fuel_tank, d.fuel_tank)) == "AGO") if last_s else ago_op
+        ago_pur = ago_purchases_by_date.get(d_str, 0.0)
+        ago_sold = b["ago_dispensed"]
+        b["ago_opening_dip"] = round(ago_op, 1)
+        b["ago_closing_dip"] = round(ago_cl, 1)
+        b["ago_purchases"] = round(ago_pur, 2)
+        b["ago_purchases_litres"] = round(ago_pur, 2)
+        if last_s and (ago_cl > 0 or ago_op > 0):
+            ago_dep = ago_op + ago_pur - ago_cl
+            b["ago_tank_depletion"] = round(ago_dep, 1)
+            ago_var = ago_sold - ago_dep
+            b["ago_variance"] = round(ago_var, 2)
+            b["ago_variance_litres"] = round(ago_var, 2)
+            ago_var_pct = (ago_var / ago_sold * 100) if ago_sold > 0 else 0.0
+            b["ago_variance_pct"] = round(ago_var_pct, 2)
+            b["ago_audit_status"] = "Normal" if abs(ago_var_pct) <= 0.5 else ("Gain Alert" if ago_var_pct > 0.5 else "Loss Alert")
+        else:
+            b["ago_tank_depletion"] = 0.0
+            b["ago_variance"] = 0.0
+            b["ago_variance_litres"] = 0.0
+            b["ago_variance_pct"] = 0.0
+            b["ago_audit_status"] = "Normal"
 
     # 8. Product Level Summary (PMS & AGO)
     pms_rtt = sum(v for k, v in nozzle_rtt_map.items() if classify_fuel(k) == "PMS")
@@ -4863,7 +4942,7 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
     total_var_all = total_net_all - total_tank_depletion
     total_var_pct = (total_var_all / total_net_all * 100) if total_net_all > 0 else 0.0
 
-    # 9. Weekly Aggregation
+    # 9. Weekly Aggregation (Total, PMS & AGO)
     weekly_buckets = {}
     for d_str, b in sorted(daily_buckets.items()):
         d_obj = getdate(d_str)
@@ -4877,14 +4956,28 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
                 "week_label": f"Week {w} ({format_date(str(start_of_week))} - {format_date(str(end_of_week))})",
                 "days_count": 0,
                 "shifts_count": 0,
+                # Total
                 "pms_dispensed": 0.0,
                 "ago_dispensed": 0.0,
                 "total_dispensed": 0.0,
                 "purchases": 0.0,
+                "purchases_litres": 0.0,
                 "tank_depletion": 0.0,
                 "variance_litres": 0.0,
+                "variance": 0.0,
                 "variance_percent": 0.0,
-                "status": calc_status(0.0)
+                "variance_pct": 0.0,
+                "status": calc_status(0.0),
+                # PMS Specific
+                "pms_purchases": 0.0,
+                "pms_tank_depletion": 0.0,
+                "pms_variance": 0.0,
+                "pms_variance_pct": 0.0,
+                # AGO Specific
+                "ago_purchases": 0.0,
+                "ago_tank_depletion": 0.0,
+                "ago_variance": 0.0,
+                "ago_variance_pct": 0.0
             }
         wk = weekly_buckets[wk_key]
         wk["days_count"] += 1
@@ -4894,6 +4987,10 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         wk["total_dispensed"] += b["total_dispensed"]
         wk["purchases"] += b["purchases"]
         wk["tank_depletion"] += b["tank_depletion"]
+        wk["pms_purchases"] += b.get("pms_purchases", 0.0)
+        wk["pms_tank_depletion"] += b.get("pms_tank_depletion", 0.0)
+        wk["ago_purchases"] += b.get("ago_purchases", 0.0)
+        wk["ago_tank_depletion"] += b.get("ago_tank_depletion", 0.0)
 
     weekly_records = []
     for wk_key, wk in sorted(weekly_buckets.items()):
@@ -4911,6 +5008,25 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         wk["variance_pct"] = round(v_pct, 2)
         wk["status"] = calc_status(v_pct)
         wk["audit_status"] = "Normal" if abs(v_pct) <= 0.5 else ("Gain Alert" if v_pct > 0.5 else "Loss Alert")
+
+        # PMS weekly variance
+        pms_v_l = wk["pms_dispensed"] - wk["pms_tank_depletion"]
+        pms_v_pct = (pms_v_l / wk["pms_dispensed"] * 100) if wk["pms_dispensed"] > 0 else 0.0
+        wk["pms_purchases"] = round(wk["pms_purchases"], 2)
+        wk["pms_tank_depletion"] = round(wk["pms_tank_depletion"], 1)
+        wk["pms_variance"] = round(pms_v_l, 2)
+        wk["pms_variance_pct"] = round(pms_v_pct, 2)
+        wk["pms_audit_status"] = "Normal" if abs(pms_v_pct) <= 0.5 else ("Gain Alert" if pms_v_pct > 0.5 else "Loss Alert")
+
+        # AGO weekly variance
+        ago_v_l = wk["ago_dispensed"] - wk["ago_tank_depletion"]
+        ago_v_pct = (ago_v_l / wk["ago_dispensed"] * 100) if wk["ago_dispensed"] > 0 else 0.0
+        wk["ago_purchases"] = round(wk["ago_purchases"], 2)
+        wk["ago_tank_depletion"] = round(wk["ago_tank_depletion"], 1)
+        wk["ago_variance"] = round(ago_v_l, 2)
+        wk["ago_variance_pct"] = round(ago_v_pct, 2)
+        wk["ago_audit_status"] = "Normal" if abs(ago_v_pct) <= 0.5 else ("Gain Alert" if ago_v_pct > 0.5 else "Loss Alert")
+
         weekly_records.append(wk)
 
     # 10. Shift Records
@@ -5027,10 +5143,18 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
         "open_shifts": len([s for s in shifts if s.status != "Closed"]),
         "pms_dispensed": round(pms_net, 2),
         "pms_net_litres": round(pms_net, 2),
+        "pms_purchases": round(pms_eval_purchases, 2),
+        "pms_tank_depletion": round(pms_depletion, 2),
+        "pms_variance": round(pms_variance, 2),
+        "pms_variance_litres": round(pms_variance, 2),
+        "pms_variance_pct": round(pms_var_pct, 2),
         "ago_dispensed": round(ago_net, 2),
         "ago_net_litres": round(ago_net, 2),
-        "pms_variance_litres": round(pms_variance, 2),
+        "ago_purchases": round(ago_eval_purchases, 2),
+        "ago_tank_depletion": round(ago_depletion, 2),
+        "ago_variance": round(ago_variance, 2),
         "ago_variance_litres": round(ago_variance, 2),
+        "ago_variance_pct": round(ago_var_pct, 2),
         "audit_status": "Normal" if abs(total_var_pct) <= 0.5 else ("Gain Alert" if total_var_pct > 0.5 else "Loss Alert"),
         "audit_status_detail": calc_status(total_var_pct)
     }

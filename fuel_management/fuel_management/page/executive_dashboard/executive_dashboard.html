@@ -4057,7 +4057,7 @@
                     <span class="material-symbols-outlined" style="font-size:18px; color:#8b5cf6;">water_drop</span>
                 </div>
                 <div style="font-size:20px; font-weight:900; font-family:monospace; color:#0f172a;" id="mvr-kpi-depletion">0.00 L</div>
-                <div style="font-size:10.5px; color:#64748b; margin-top:4px;">Opening + Purchases - Closing</div>
+                <div style="font-size:10.5px; color:#64748b; margin-top:4px;" id="mvr-kpi-depletion-sub">Opening + Purchases - Closing</div>
             </div>
 
             <!-- KPI 4: STATION NET VARIANCE -->
@@ -4070,6 +4070,7 @@
                 <div style="font-size:10.5px; margin-top:4px;" id="mvr-kpi-variance-status">
                     <span class="badge" style="background:#f0fdf4; color:#166534; font-weight:700; padding:1px 6px; border-radius:4px; border:1px solid #bbf7d0;">0.00% • Normal (Within ±0.5%)</span>
                 </div>
+                <div style="font-size:10.5px; color:#64748b; margin-top:4px;" id="mvr-kpi-variance-detail"></div>
             </div>
 
             <!-- KPI 5: PHYSICAL DIPS AUDIT -->
@@ -4120,10 +4121,104 @@
 
         <!-- PANE 1: DAILY BREAKDOWN ("By the day") -->
         <div id="mvr-pane-daily" class="mvr-pane" style="display:block;">
-            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-size:13px; font-weight:800; color:#0f172a;">Daily Volumes, Tank Dips & Variance Tracking</span>
-                    <span style="font-size:11px; color:#64748b;">Daily fuel throughput vs physical tank depletion audit</span>
+            <!-- Product Scope Filter Switcher -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:12px; font-weight:700; color:#475569;">Scope:</span>
+                    <div style="display:inline-flex; background:#f1f5f9; padding:2px; border-radius:6px; border:1px solid #e2e8f0; gap:2px;">
+                        <button type="button" class="mvr-daily-scope-btn active" data-scope="all" style="border:none; background:#fff; color:#0f172a; font-weight:700; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                            Show All (PMS, AGO & Grand Total)
+                        </button>
+                        <button type="button" class="mvr-daily-scope-btn" data-scope="pms" style="border:none; background:transparent; color:#0369a1; font-weight:600; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer;">
+                            ⛽ PMS (Super Petrol) Only
+                        </button>
+                        <button type="button" class="mvr-daily-scope-btn" data-scope="ago" style="border:none; background:transparent; color:#15803d; font-weight:600; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer;">
+                            🛢️ AGO (Diesel) Only
+                        </button>
+                        <button type="button" class="mvr-daily-scope-btn" data-scope="grand" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer;">
+                            📊 Grand Total Only
+                        </button>
+                    </div>
+                </div>
+                <span style="font-size:11px; color:#64748b; font-style:italic;">Individual physical tank dips & depletion per product grade</span>
+            </div>
+
+            <!-- SECTION 1: PMS DAILY TABLE -->
+            <div id="mvr-daily-section-pms" class="mvr-daily-section" style="background:#fff; border:1px solid #bae6fd; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03); margin-bottom:18px;">
+                <div style="padding:12px 18px; border-bottom:1px solid #e0f2fe; background:#f0f9ff; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#0284c7;"></span>
+                        <span style="font-size:13px; font-weight:800; color:#0369a1;">PMS (Super Petrol) — Daily Volumes, Tank Dips & Variance Tracking</span>
+                    </div>
+                    <span style="font-size:11px; color:#0284c7; font-weight:600;">Super Petrol Underground Tanks Physical Audit</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f8fafc; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Date</th>
+                                <th style="padding:10px 10px; text-align:left;">Day</th>
+                                <th style="padding:10px 10px; text-align:center;">Shifts</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; color:#0284c7;">PMS Sold (L)</th>
+                                <th style="padding:10px 12px; text-align:right; color:#059669;">+ Deliveries (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Opening Dip (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Closing Dip (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc;">= Depletion (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800;">Variance (L)</th>
+                                <th style="padding:10px 10px; text-align:right;">Var %</th>
+                                <th style="padding:10px 14px; text-align:center;">Audit Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-daily-pms-body">
+                            <tr><td colspan="11" style="text-align:center; padding:24px; color:#94a3b8;">Loading PMS daily volume tracking...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-daily-pms-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #bae6fd;"></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION 2: AGO DAILY TABLE -->
+            <div id="mvr-daily-section-ago" class="mvr-daily-section" style="background:#fff; border:1px solid #bbf7d0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03); margin-bottom:18px;">
+                <div style="padding:12px 18px; border-bottom:1px solid #dcfce7; background:#f0fdf4; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#16a34a;"></span>
+                        <span style="font-size:13px; font-weight:800; color:#15803d;">AGO (Automotive Diesel) — Daily Volumes, Tank Dips & Variance Tracking</span>
+                    </div>
+                    <span style="font-size:11px; color:#16a34a; font-weight:600;">Diesel Underground Tanks Physical Audit</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f8fafc; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Date</th>
+                                <th style="padding:10px 10px; text-align:left;">Day</th>
+                                <th style="padding:10px 10px; text-align:center;">Shifts</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; color:#15803d;">AGO Sold (L)</th>
+                                <th style="padding:10px 12px; text-align:right; color:#059669;">+ Deliveries (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Opening Dip (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Closing Dip (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc;">= Depletion (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800;">Variance (L)</th>
+                                <th style="padding:10px 10px; text-align:right;">Var %</th>
+                                <th style="padding:10px 14px; text-align:center;">Audit Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-daily-ago-body">
+                            <tr><td colspan="11" style="text-align:center; padding:24px; color:#94a3b8;">Loading AGO daily volume tracking...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-daily-ago-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #bbf7d0;"></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION 3: GRAND TOTAL CONSOLIDATED DAILY TABLE -->
+            <div id="mvr-daily-section-grand" class="mvr-daily-section" style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:12px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#475569;"></span>
+                        <span style="font-size:13px; font-weight:800; color:#0f172a;">Station Consolidated (Grand Total) — Daily Volumes & Dips Audit</span>
+                    </div>
+                    <span style="font-size:11px; color:#64748b;">All Fuel Grades Consolidated Throughput</span>
                 </div>
                 <div style="overflow-x:auto;">
                     <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
@@ -4155,9 +4250,99 @@
 
         <!-- PANE 2: WEEKLY BREAKDOWN ("or week etc") -->
         <div id="mvr-pane-weekly" class="mvr-pane" style="display:none;">
-            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-size:13px; font-weight:800; color:#0f172a;">Weekly Consolidated Volumes & Variance Summary</span>
+            <!-- Weekly Scope Filter Switcher -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:12px; font-weight:700; color:#475569;">Scope:</span>
+                    <div style="display:inline-flex; background:#f1f5f9; padding:2px; border-radius:6px; border:1px solid #e2e8f0; gap:2px;">
+                        <button type="button" class="mvr-weekly-scope-btn active" data-scope="all" style="border:none; background:#fff; color:#0f172a; font-weight:700; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                            Show All (PMS, AGO & Grand Total)
+                        </button>
+                        <button type="button" class="mvr-weekly-scope-btn" data-scope="pms" style="border:none; background:transparent; color:#0369a1; font-weight:600; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer;">
+                            ⛽ PMS (Super Petrol) Only
+                        </button>
+                        <button type="button" class="mvr-weekly-scope-btn" data-scope="ago" style="border:none; background:transparent; color:#15803d; font-weight:600; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer;">
+                            🛢️ AGO (Diesel) Only
+                        </button>
+                        <button type="button" class="mvr-weekly-scope-btn" data-scope="grand" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:11.5px; padding:4px 12px; border-radius:5px; cursor:pointer;">
+                            📊 Grand Total Only
+                        </button>
+                    </div>
+                </div>
+                <span style="font-size:11px; color:#64748b; font-style:italic;">Consolidated weekly throughput vs physical depletion</span>
+            </div>
+
+            <!-- SECTION 1: PMS WEEKLY TABLE -->
+            <div id="mvr-weekly-section-pms" class="mvr-weekly-section" style="background:#fff; border:1px solid #bae6fd; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03); margin-bottom:18px;">
+                <div style="padding:12px 18px; border-bottom:1px solid #e0f2fe; background:#f0f9ff; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#0284c7;"></span>
+                        <span style="font-size:13px; font-weight:800; color:#0369a1;">PMS (Super Petrol) — Weekly Volumes & Variance Summary</span>
+                    </div>
+                    <span style="font-size:11px; color:#0284c7; font-weight:600;">Super Petrol Weekly Performance</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f8fafc; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Week Period</th>
+                                <th style="padding:10px 10px; text-align:center;">Days</th>
+                                <th style="padding:10px 10px; text-align:center;">Shifts</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800; color:#0284c7;">PMS Dispensed (L)</th>
+                                <th style="padding:10px 14px; text-align:right; color:#059669;">+ Deliveries (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800; background:#f8fafc;">= Depletion (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800;">Variance (L)</th>
+                                <th style="padding:10px 10px; text-align:right;">Var %</th>
+                                <th style="padding:10px 14px; text-align:center;">Audit Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-weekly-pms-body">
+                            <tr><td colspan="9" style="text-align:center; padding:24px; color:#94a3b8;">Loading PMS weekly volume tracking...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-weekly-pms-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #bae6fd;"></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION 2: AGO WEEKLY TABLE -->
+            <div id="mvr-weekly-section-ago" class="mvr-weekly-section" style="background:#fff; border:1px solid #bbf7d0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03); margin-bottom:18px;">
+                <div style="padding:12px 18px; border-bottom:1px solid #dcfce7; background:#f0fdf4; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#16a34a;"></span>
+                        <span style="font-size:13px; font-weight:800; color:#15803d;">AGO (Automotive Diesel) — Weekly Volumes & Variance Summary</span>
+                    </div>
+                    <span style="font-size:11px; color:#16a34a; font-weight:600;">Diesel Weekly Performance</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f8fafc; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Week Period</th>
+                                <th style="padding:10px 10px; text-align:center;">Days</th>
+                                <th style="padding:10px 10px; text-align:center;">Shifts</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800; color:#15803d;">AGO Dispensed (L)</th>
+                                <th style="padding:10px 14px; text-align:right; color:#059669;">+ Deliveries (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800; background:#f8fafc;">= Depletion (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800;">Variance (L)</th>
+                                <th style="padding:10px 10px; text-align:right;">Var %</th>
+                                <th style="padding:10px 14px; text-align:center;">Audit Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-weekly-ago-body">
+                            <tr><td colspan="9" style="text-align:center; padding:24px; color:#94a3b8;">Loading AGO weekly volume tracking...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-weekly-ago-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #bbf7d0;"></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SECTION 3: GRAND TOTAL CONSOLIDATED WEEKLY TABLE -->
+            <div id="mvr-weekly-section-grand" class="mvr-weekly-section" style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:12px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#475569;"></span>
+                        <span style="font-size:13px; font-weight:800; color:#0f172a;">Weekly Consolidated Volumes & Variance Summary (Grand Total)</span>
+                    </div>
                     <span style="font-size:11px; color:#64748b;">Consolidated volume trends by calendar week</span>
                 </div>
                 <div style="overflow-x:auto;">

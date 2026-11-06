@@ -10405,6 +10405,32 @@ function init_exec_volume_tracker(wrapper) {
             $(wrapper).find(`#mvr-pane-${view}`).show();
         });
 
+        // Scope Switcher for Daily (All, PMS Only, AGO Only, Grand Total Only)
+        $(wrapper).find('.mvr-daily-scope-btn').off('click').on('click', function() {
+            let scope = $(this).data('scope');
+            $(wrapper).find('.mvr-daily-scope-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
+            $(this).addClass('active').css({'background': '#fff', 'color': '#0f172a', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'});
+            if (scope === 'all') {
+                $(wrapper).find('.mvr-daily-section').show();
+            } else {
+                $(wrapper).find('.mvr-daily-section').hide();
+                $(wrapper).find(`#mvr-daily-section-${scope}`).show();
+            }
+        });
+
+        // Scope Switcher for Weekly (All, PMS Only, AGO Only, Grand Total Only)
+        $(wrapper).find('.mvr-weekly-scope-btn').off('click').on('click', function() {
+            let scope = $(this).data('scope');
+            $(wrapper).find('.mvr-weekly-scope-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
+            $(this).addClass('active').css({'background': '#fff', 'color': '#0f172a', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'});
+            if (scope === 'all') {
+                $(wrapper).find('.mvr-weekly-section').show();
+            } else {
+                $(wrapper).find('.mvr-weekly-section').hide();
+                $(wrapper).find(`#mvr-weekly-section-${scope}`).show();
+            }
+        });
+
         // Refresh / Load Button
         $(wrapper).find('#btn-mvr-tracker-refresh').off('click').on('click', function() {
             state.from_date = $(wrapper).find('#mvr-tracker-from-date').val();
@@ -10443,7 +10469,11 @@ function load_exec_volume_tracker_data(wrapper) {
         </div>
     </td></tr>`;
 
+    $(wrapper).find('#mvr-table-daily-pms-body').html(loadingRow(11));
+    $(wrapper).find('#mvr-table-daily-ago-body').html(loadingRow(11));
     $(wrapper).find('#mvr-table-daily-body').html(loadingRow(13));
+    $(wrapper).find('#mvr-table-weekly-pms-body').html(loadingRow(9));
+    $(wrapper).find('#mvr-table-weekly-ago-body').html(loadingRow(9));
     $(wrapper).find('#mvr-table-weekly-body').html(loadingRow(11));
     $(wrapper).find('#mvr-table-shifts-body').html(loadingRow(11));
     $(wrapper).find('#mvr-table-products-body').html(loadingRow(11));
@@ -10491,11 +10521,16 @@ function load_exec_volume_tracker_data(wrapper) {
             $(wrapper).find('#mvr-kpi-dispensed-sub').html(`<span>PMS: <strong>${fmtL(pmsDisp)} L</strong></span> <span>AGO: <strong>${fmtL(agoDisp)} L</strong></span>`);
 
             let purchasesLitres = kpis.purchases_litres !== undefined ? kpis.purchases_litres : (kpis.total_purchases_litres || 0);
+            let pmsPurch = kpis.pms_purchases !== undefined ? kpis.pms_purchases : 0;
+            let agoPurch = kpis.ago_purchases !== undefined ? kpis.ago_purchases : 0;
             $(wrapper).find('#mvr-kpi-purchases').text(fmtL(purchasesLitres) + ' L');
-            $(wrapper).find('#mvr-kpi-purchases-sub').text(`${kpis.purchases_count || 0} Fuel Deliveries Received`);
+            $(wrapper).find('#mvr-kpi-purchases-sub').html(`<span>PMS: <strong>${fmtL(pmsPurch)} L</strong></span> <span>• AGO: <strong>${fmtL(agoPurch)} L</strong></span> <span style="color:#94a3b8;">(${kpis.purchases_count || 0} Deliveries)</span>`);
 
             let depletionLitres = kpis.tank_depletion !== undefined ? kpis.tank_depletion : (kpis.total_tank_sales_litres || 0);
+            let pmsDepl = kpis.pms_tank_depletion !== undefined ? kpis.pms_tank_depletion : 0;
+            let agoDepl = kpis.ago_tank_depletion !== undefined ? kpis.ago_tank_depletion : 0;
             $(wrapper).find('#mvr-kpi-depletion').text(fmtL(depletionLitres) + ' L');
+            $(wrapper).find('#mvr-kpi-depletion-sub').html(`<span>PMS: <strong>${fmtL(pmsDepl)} L</strong></span> <span>• AGO: <strong>${fmtL(agoDepl)} L</strong></span>`);
 
             let stationVar = kpis.station_variance !== undefined ? kpis.station_variance : (kpis.total_variance_litres || 0);
             let varPct = kpis.variance_pct !== undefined ? kpis.variance_pct : (kpis.total_variance_percent || 0);
@@ -10503,8 +10538,19 @@ function load_exec_volume_tracker_data(wrapper) {
             let varText = `${varSign}${fmtL(stationVar)} L`;
             let varColor = stationVar >= 0 ? '#15803d' : '#b91c1c';
             $(wrapper).find('#mvr-kpi-variance').text(varText).css('color', varColor);
-
             $(wrapper).find('#mvr-kpi-variance-status').html(get_mvr_status_badge(kpis.audit_status, varPct));
+
+            let pmsVar = kpis.pms_variance !== undefined ? kpis.pms_variance : (kpis.pms_variance_litres || 0);
+            let pmsVarPct = kpis.pms_variance_pct !== undefined ? kpis.pms_variance_pct : 0;
+            let pmsVarSign = pmsVar >= 0 ? '+' : '';
+            let pmsVarColor = pmsVar >= 0 ? '#15803d' : '#b91c1c';
+
+            let agoVar = kpis.ago_variance !== undefined ? kpis.ago_variance : (kpis.ago_variance_litres || 0);
+            let agoVarPct = kpis.ago_variance_pct !== undefined ? kpis.ago_variance_pct : 0;
+            let agoVarSign = agoVar >= 0 ? '+' : '';
+            let agoVarColor = agoVar >= 0 ? '#15803d' : '#b91c1c';
+
+            $(wrapper).find('#mvr-kpi-variance-detail').html(`PMS: <strong style="color:${pmsVarColor};">${pmsVarSign}${fmtL(pmsVar)} L (${pmsVarSign}${pmsVarPct.toFixed(2)}%)</strong> • AGO: <strong style="color:${agoVarColor};">${agoVarSign}${fmtL(agoVar)} L (${agoVarSign}${agoVarPct.toFixed(2)}%)</strong>`);
 
             let auditText = "Reconciled";
             if (typeof kpis.audit_status === 'object' && kpis.audit_status !== null) {
@@ -10529,35 +10575,120 @@ function load_exec_volume_tracker_data(wrapper) {
 function render_mvr_daily_table(wrapper, data) {
     let daily = data.daily || data.daily_records || [];
     let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
-    let $tbody = $(wrapper).find('#mvr-table-daily-body');
-    let $tfoot = $(wrapper).find('#mvr-table-daily-foot');
+    let $tbodyGrand = $(wrapper).find('#mvr-table-daily-body');
+    let $tfootGrand = $(wrapper).find('#mvr-table-daily-foot');
+    let $tbodyPms = $(wrapper).find('#mvr-table-daily-pms-body');
+    let $tfootPms = $(wrapper).find('#mvr-table-daily-pms-foot');
+    let $tbodyAgo = $(wrapper).find('#mvr-table-daily-ago-body');
+    let $tfootAgo = $(wrapper).find('#mvr-table-daily-ago-foot');
 
     if (daily.length === 0) {
-        $tbody.html('<tr><td colspan="13" style="text-align:center; padding:32px; color:#94a3b8;">No closed shift operations found for this date range.</td></tr>');
-        $tfoot.empty();
+        let emptyRow = (cols) => `<tr><td colspan="${cols}" style="text-align:center; padding:32px; color:#94a3b8;">No closed shift operations found for this date range.</td></tr>`;
+        $tbodyGrand.html(emptyRow(13));
+        $tfootGrand.empty();
+        $tbodyPms.html(emptyRow(11));
+        $tfootPms.empty();
+        $tbodyAgo.html(emptyRow(11));
+        $tfootAgo.empty();
         return;
     }
 
-    let rowsHtml = '';
-    let totPms = 0, totAgo = 0, totDisp = 0, totPurch = 0, totDepl = 0, totVar = 0;
+    let pmsRows = '', agoRows = '', grandRows = '';
+    let totPmsSold = 0, totPmsPurch = 0, totPmsDepl = 0, totPmsVar = 0;
+    let totAgoSold = 0, totAgoPurch = 0, totAgoDepl = 0, totAgoVar = 0;
+    let totDispAll = 0, totPurchAll = 0, totDeplAll = 0, totVarAll = 0;
 
     daily.forEach(d => {
-        let pms = d.pms_dispensed || 0;
-        let ago = d.ago_dispensed || 0;
-        let disp = d.total_dispensed || (pms + ago);
+        let shiftsCount = d.shifts_count !== undefined ? d.shifts_count : (d.shifts ? d.shifts.length : 1);
+        let dateLabel = d.date || d.formatted_date;
+        let dayName = d.day_name || '';
+
+        // 1. PMS Specific
+        let pmsSold = d.pms_dispensed || 0;
+        let pmsPurch = d.pms_purchases !== undefined ? d.pms_purchases : 0;
+        let pmsOpen = d.pms_opening_dip || 0;
+        let pmsClose = d.pms_closing_dip || 0;
+        let pmsDepl = d.pms_tank_depletion || 0;
+        let pmsVr = d.pms_variance !== undefined ? d.pms_variance : 0;
+        let pmsVrPct = d.pms_variance_pct !== undefined ? Number(d.pms_variance_pct) : 0;
+        let pmsStatus = d.pms_audit_status || "Normal";
+
+        totPmsSold += pmsSold;
+        totPmsPurch += pmsPurch;
+        totPmsDepl += pmsDepl;
+        totPmsVar += pmsVr;
+
+        let pmsVarColor = pmsVr >= 0 ? '#15803d' : '#b91c1c';
+        let pmsVarSign = pmsVr >= 0 ? '+' : '';
+        let pmsPurchHtml = pmsPurch > 0 
+            ? `<span style="color:#059669; font-weight:700;">+${fmtL(pmsPurch)}</span>` 
+            : '<span style="color:#94a3b8;">—</span>';
+
+        pmsRows += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 14px; font-weight:700; color:#0f172a; font-family:monospace;">${dateLabel}</td>
+                <td style="padding:10px 10px; color:#64748b;">${dayName}</td>
+                <td style="padding:10px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">${shiftsCount}</span></td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f0f9ff; font-family:monospace; color:#0369a1;">${fmtL(pmsSold)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${pmsPurchHtml}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(pmsOpen)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(pmsClose)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(pmsDepl)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; font-family:monospace; color:${pmsVarColor};">${pmsVarSign}${fmtL(pmsVr)}</td>
+                <td style="padding:10px 10px; text-align:right; font-family:monospace; color:${pmsVarColor};">${pmsVarSign}${pmsVrPct.toFixed(2)}%</td>
+                <td style="padding:10px 14px; text-align:center;">${get_mvr_status_badge(pmsStatus, pmsVrPct)}</td>
+            </tr>
+        `;
+
+        // 2. AGO Specific
+        let agoSold = d.ago_dispensed || 0;
+        let agoPurch = d.ago_purchases !== undefined ? d.ago_purchases : 0;
+        let agoOpen = d.ago_opening_dip || 0;
+        let agoClose = d.ago_closing_dip || 0;
+        let agoDepl = d.ago_tank_depletion || 0;
+        let agoVr = d.ago_variance !== undefined ? d.ago_variance : 0;
+        let agoVrPct = d.ago_variance_pct !== undefined ? Number(d.ago_variance_pct) : 0;
+        let agoStatus = d.ago_audit_status || "Normal";
+
+        totAgoSold += agoSold;
+        totAgoPurch += agoPurch;
+        totAgoDepl += agoDepl;
+        totAgoVar += agoVr;
+
+        let agoVarColor = agoVr >= 0 ? '#15803d' : '#b91c1c';
+        let agoVarSign = agoVr >= 0 ? '+' : '';
+        let agoPurchHtml = agoPurch > 0 
+            ? `<span style="color:#059669; font-weight:700;">+${fmtL(agoPurch)}</span>` 
+            : '<span style="color:#94a3b8;">—</span>';
+
+        agoRows += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 14px; font-weight:700; color:#0f172a; font-family:monospace;">${dateLabel}</td>
+                <td style="padding:10px 10px; color:#64748b;">${dayName}</td>
+                <td style="padding:10px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">${shiftsCount}</span></td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f0fdf4; font-family:monospace; color:#15803d;">${fmtL(agoSold)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${agoPurchHtml}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(agoOpen)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(agoClose)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(agoDepl)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; font-family:monospace; color:${agoVarColor};">${agoVarSign}${fmtL(agoVr)}</td>
+                <td style="padding:10px 10px; text-align:right; font-family:monospace; color:${agoVarColor};">${agoVarSign}${agoVrPct.toFixed(2)}%</td>
+                <td style="padding:10px 14px; text-align:center;">${get_mvr_status_badge(agoStatus, agoVrPct)}</td>
+            </tr>
+        `;
+
+        // 3. Consolidated Grand Total
+        let disp = d.total_dispensed || (pmsSold + agoSold);
         let purch = d.purchases_litres !== undefined ? d.purchases_litres : (d.purchases || 0);
         let depl = d.tank_depletion || 0;
         let vr = d.variance !== undefined ? d.variance : (d.variance_litres || 0);
         let vrPct = d.variance_pct !== undefined ? d.variance_pct : (d.variance_percent || 0);
-        let shiftsCount = d.shifts_count !== undefined ? d.shifts_count : (d.shifts ? d.shifts.length : 1);
         let statusObj = d.status || d.audit_status;
 
-        totPms += pms;
-        totAgo += ago;
-        totDisp += disp;
-        totPurch += purch;
-        totDepl += depl;
-        totVar += vr;
+        totDispAll += disp;
+        totPurchAll += purch;
+        totDeplAll += depl;
+        totVarAll += vr;
 
         let varColor = vr >= 0 ? '#15803d' : '#b91c1c';
         let varSign = vr >= 0 ? '+' : '';
@@ -10565,13 +10696,13 @@ function render_mvr_daily_table(wrapper, data) {
             ? `<span style="color:#059669; font-weight:700;">+${fmtL(purch)}</span>`
             : '<span style="color:#94a3b8;">—</span>';
 
-        rowsHtml += `
+        grandRows += `
             <tr style="border-bottom:1px solid #f1f5f9;">
-                <td style="padding:10px 14px; font-weight:700; color:#0f172a; font-family:monospace;">${d.date || d.formatted_date}</td>
-                <td style="padding:10px 10px; color:#64748b;">${d.day_name}</td>
+                <td style="padding:10px 14px; font-weight:700; color:#0f172a; font-family:monospace;">${dateLabel}</td>
+                <td style="padding:10px 10px; color:#64748b;">${dayName}</td>
                 <td style="padding:10px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">${shiftsCount}</span></td>
-                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(pms)}</td>
-                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(ago)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(pmsSold)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(agoSold)}</td>
                 <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(disp)}</td>
                 <td style="padding:10px 12px; text-align:right; font-family:monospace;">${purchHtml}</td>
                 <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(d.opening_dip)}</td>
@@ -10584,23 +10715,58 @@ function render_mvr_daily_table(wrapper, data) {
         `;
     });
 
-    $tbody.html(rowsHtml);
-
-    let totVarPct = totDepl > 0 ? ((totVar / totDepl) * 100) : 0;
-    let totVarColor = totVar >= 0 ? '#15803d' : '#b91c1c';
-    let totVarSign = totVar >= 0 ? '+' : '';
-
-    $tfoot.html(`
+    // Populate PMS
+    $tbodyPms.html(pmsRows);
+    let totPmsPct = totPmsSold > 0 ? ((totPmsVar / totPmsSold) * 100) : 0;
+    let totPmsVarColor = totPmsVar >= 0 ? '#15803d' : '#b91c1c';
+    let totPmsVarSign = totPmsVar >= 0 ? '+' : '';
+    $tfootPms.html(`
         <tr>
-            <td colspan="3" style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">TOTALS (${daily.length} DAYS)</td>
-            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totPms)}</td>
-            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totAgo)}</td>
-            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDisp)}</td>
-            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669;">+${fmtL(totPurch)}</td>
+            <td colspan="3" style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">PMS TOTALS (${daily.length} DAYS)</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#e0f2fe; color:#0369a1; font-weight:900;">${fmtL(totPmsSold)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669; font-weight:800;">+${fmtL(totPmsPurch)}</td>
+            <td colspan="2" style="padding:12px 12px; text-align:center; color:#64748b;">—</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:800;">${fmtL(totPmsDepl)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:${totPmsVarColor}; font-weight:800;">${totPmsVarSign}${fmtL(totPmsVar)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totPmsVarColor}; font-weight:800;">${totPmsVarSign}${totPmsPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis && data.kpis.pms_audit_status ? data.kpis.pms_audit_status : 'Normal', totPmsPct)}</td>
+        </tr>
+    `);
+
+    // Populate AGO
+    $tbodyAgo.html(agoRows);
+    let totAgoPct = totAgoSold > 0 ? ((totAgoVar / totAgoSold) * 100) : 0;
+    let totAgoVarColor = totAgoVar >= 0 ? '#15803d' : '#b91c1c';
+    let totAgoVarSign = totAgoVar >= 0 ? '+' : '';
+    $tfootAgo.html(`
+        <tr>
+            <td colspan="3" style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">AGO TOTALS (${daily.length} DAYS)</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#dcfce7; color:#15803d; font-weight:900;">${fmtL(totAgoSold)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669; font-weight:800;">+${fmtL(totAgoPurch)}</td>
+            <td colspan="2" style="padding:12px 12px; text-align:center; color:#64748b;">—</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:800;">${fmtL(totAgoDepl)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:${totAgoVarColor}; font-weight:800;">${totAgoVarSign}${fmtL(totAgoVar)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totAgoVarColor}; font-weight:800;">${totAgoVarSign}${totAgoPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis && data.kpis.ago_audit_status ? data.kpis.ago_audit_status : 'Normal', totAgoPct)}</td>
+        </tr>
+    `);
+
+    // Populate Grand Total
+    $tbodyGrand.html(grandRows);
+    let totVarPct = totDeplAll > 0 ? ((totVarAll / totDeplAll) * 100) : 0;
+    let totVarColor = totVarAll >= 0 ? '#15803d' : '#b91c1c';
+    let totVarSign = totVarAll >= 0 ? '+' : '';
+    $tfootGrand.html(`
+        <tr>
+            <td colspan="3" style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px; font-weight:900;">GRAND TOTALS (${daily.length} DAYS)</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#0369a1; font-weight:800;">${fmtL(totPmsSold)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#15803d; font-weight:800;">${fmtL(totAgoSold)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:900;">${fmtL(totDispAll)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669; font-weight:800;">+${fmtL(totPurchAll)}</td>
             <td colspan="2" style="padding:12px 12px; text-align:center; color:#64748b; font-weight:500;">—</td>
-            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDepl)}</td>
-            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${fmtL(totVar)}</td>
-            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${totVarPct.toFixed(2)}%</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:900;">${fmtL(totDeplAll)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:${totVarColor}; font-weight:900;">${totVarSign}${fmtL(totVarAll)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totVarColor}; font-weight:900;">${totVarSign}${totVarPct.toFixed(2)}%</td>
             <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis ? data.kpis.audit_status : 'Normal', totVarPct)}</td>
         </tr>
     `);
@@ -10609,35 +10775,113 @@ function render_mvr_daily_table(wrapper, data) {
 function render_mvr_weekly_table(wrapper, data) {
     let weekly = data.weekly || data.weekly_records || [];
     let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
-    let $tbody = $(wrapper).find('#mvr-table-weekly-body');
-    let $tfoot = $(wrapper).find('#mvr-table-weekly-foot');
+    let $tbodyGrand = $(wrapper).find('#mvr-table-weekly-body');
+    let $tfootGrand = $(wrapper).find('#mvr-table-weekly-foot');
+    let $tbodyPms = $(wrapper).find('#mvr-table-weekly-pms-body');
+    let $tfootPms = $(wrapper).find('#mvr-table-weekly-pms-foot');
+    let $tbodyAgo = $(wrapper).find('#mvr-table-weekly-ago-body');
+    let $tfootAgo = $(wrapper).find('#mvr-table-weekly-ago-foot');
 
     if (weekly.length === 0) {
-        $tbody.html('<tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No weekly records found for this period.</td></tr>');
-        $tfoot.empty();
+        let emptyRow = (cols) => `<tr><td colspan="${cols}" style="text-align:center; padding:32px; color:#94a3b8;">No weekly records found for this period.</td></tr>`;
+        $tbodyGrand.html(emptyRow(11));
+        $tfootGrand.empty();
+        $tbodyPms.html(emptyRow(9));
+        $tfootPms.empty();
+        $tbodyAgo.html(emptyRow(9));
+        $tfootAgo.empty();
         return;
     }
 
-    let rowsHtml = '';
-    let totDays = 0, totShifts = 0, totPms = 0, totAgo = 0, totDisp = 0, totPurch = 0, totDepl = 0, totVar = 0;
+    let pmsRows = '', agoRows = '', grandRows = '';
+    let totDays = 0, totShifts = 0;
+    let totPmsSold = 0, totPmsPurch = 0, totPmsDepl = 0, totPmsVar = 0;
+    let totAgoSold = 0, totAgoPurch = 0, totAgoDepl = 0, totAgoVar = 0;
+    let totDispAll = 0, totPurchAll = 0, totDeplAll = 0, totVarAll = 0;
 
     weekly.forEach(w => {
-        let pms = w.pms_dispensed || 0;
-        let ago = w.ago_dispensed || 0;
-        let disp = w.total_dispensed || (pms + ago);
+        let days = w.days_count || 0;
+        let shifts = w.shifts_count || 0;
+        totDays += days;
+        totShifts += shifts;
+
+        // PMS
+        let pmsSold = w.pms_dispensed || 0;
+        let pmsPurch = w.pms_purchases !== undefined ? w.pms_purchases : 0;
+        let pmsDepl = w.pms_tank_depletion || 0;
+        let pmsVr = w.pms_variance !== undefined ? w.pms_variance : (pmsSold - pmsDepl);
+        let pmsVrPct = w.pms_variance_pct !== undefined ? Number(w.pms_variance_pct) : 0;
+        let pmsStatus = w.pms_audit_status || w.audit_status || 'Normal';
+
+        totPmsSold += pmsSold;
+        totPmsPurch += pmsPurch;
+        totPmsDepl += pmsDepl;
+        totPmsVar += pmsVr;
+
+        let pmsVarColor = pmsVr >= 0 ? '#15803d' : '#b91c1c';
+        let pmsVarSign = pmsVr >= 0 ? '+' : '';
+        let pmsPurchHtml = pmsPurch > 0 
+            ? `<span style="color:#059669; font-weight:700;">+${fmtL(pmsPurch)}</span>` 
+            : '<span style="color:#94a3b8;">—</span>';
+
+        pmsRows += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:12px 14px; font-weight:700; color:#0f172a;">${w.week_label}</td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${days} Days</span></td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${shifts} Shifts</span></td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f0f9ff; color:#0369a1; font-family:monospace;">${fmtL(pmsSold)}</td>
+                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${pmsPurchHtml}</td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(pmsDepl)}</td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; font-family:monospace; color:${pmsVarColor};">${pmsVarSign}${fmtL(pmsVr)}</td>
+                <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${pmsVarColor};">${pmsVarSign}${pmsVrPct.toFixed(2)}%</td>
+                <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(pmsStatus, pmsVrPct)}</td>
+            </tr>
+        `;
+
+        // AGO
+        let agoSold = w.ago_dispensed || 0;
+        let agoPurch = w.ago_purchases !== undefined ? w.ago_purchases : 0;
+        let agoDepl = w.ago_tank_depletion || 0;
+        let agoVr = w.ago_variance !== undefined ? w.ago_variance : (agoSold - agoDepl);
+        let agoVrPct = w.ago_variance_pct !== undefined ? Number(w.ago_variance_pct) : 0;
+        let agoStatus = w.ago_audit_status || w.audit_status || 'Normal';
+
+        totAgoSold += agoSold;
+        totAgoPurch += agoPurch;
+        totAgoDepl += agoDepl;
+        totAgoVar += agoVr;
+
+        let agoVarColor = agoVr >= 0 ? '#15803d' : '#b91c1c';
+        let agoVarSign = agoVr >= 0 ? '+' : '';
+        let agoPurchHtml = agoPurch > 0 
+            ? `<span style="color:#059669; font-weight:700;">+${fmtL(agoPurch)}</span>` 
+            : '<span style="color:#94a3b8;">—</span>';
+
+        agoRows += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:12px 14px; font-weight:700; color:#0f172a;">${w.week_label}</td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${days} Days</span></td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${shifts} Shifts</span></td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f0fdf4; color:#15803d; font-family:monospace;">${fmtL(agoSold)}</td>
+                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${agoPurchHtml}</td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(agoDepl)}</td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; font-family:monospace; color:${agoVarColor};">${agoVarSign}${fmtL(agoVr)}</td>
+                <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${agoVarColor};">${agoVarSign}${agoVrPct.toFixed(2)}%</td>
+                <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(agoStatus, agoVrPct)}</td>
+            </tr>
+        `;
+
+        // Grand Total
+        let disp = w.total_dispensed || (pmsSold + agoSold);
         let purch = w.purchases_litres !== undefined ? w.purchases_litres : (w.purchases || 0);
         let depl = w.tank_depletion || 0;
         let vr = w.variance !== undefined ? w.variance : 0;
         let vrPct = w.variance_pct !== undefined ? Number(w.variance_pct) : 0;
 
-        totDays += w.days_count || 0;
-        totShifts += w.shifts_count || 0;
-        totPms += pms;
-        totAgo += ago;
-        totDisp += disp;
-        totPurch += purch;
-        totDepl += depl;
-        totVar += vr;
+        totDispAll += disp;
+        totPurchAll += purch;
+        totDeplAll += depl;
+        totVarAll += vr;
 
         let varColor = vr >= 0 ? '#15803d' : '#b91c1c';
         let varSign = vr >= 0 ? '+' : '';
@@ -10645,13 +10889,13 @@ function render_mvr_weekly_table(wrapper, data) {
             ? `<span style="color:#059669; font-weight:700;">+${fmtL(purch)}</span>`
             : '<span style="color:#94a3b8;">—</span>';
 
-        rowsHtml += `
+        grandRows += `
             <tr style="border-bottom:1px solid #f1f5f9;">
                 <td style="padding:12px 14px; font-weight:700; color:#0f172a;">${w.week_label}</td>
-                <td style="padding:12px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${w.days_count} Days</span></td>
-                <td style="padding:12px 10px; text-align:center;"><span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${w.shifts_count} Shifts</span></td>
-                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(pms)}</td>
-                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(ago)}</td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${days} Days</span></td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${shifts} Shifts</span></td>
+                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(pmsSold)}</td>
+                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(agoSold)}</td>
                 <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(disp)}</td>
                 <td style="padding:12px 14px; text-align:right; font-family:monospace;">${purchHtml}</td>
                 <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(depl)}</td>
@@ -10662,24 +10906,61 @@ function render_mvr_weekly_table(wrapper, data) {
         `;
     });
 
-    $tbody.html(rowsHtml);
-
-    let totVarPct = totDepl > 0 ? ((totVar / totDepl) * 100) : 0;
-    let totVarColor = totVar >= 0 ? '#15803d' : '#b91c1c';
-    let totVarSign = totVar >= 0 ? '+' : '';
-
-    $tfoot.html(`
+    // Populate Weekly PMS
+    $tbodyPms.html(pmsRows);
+    let totPmsPct = totPmsSold > 0 ? ((totPmsVar / totPmsSold) * 100) : 0;
+    let totPmsVarColor = totPmsVar >= 0 ? '#15803d' : '#b91c1c';
+    let totPmsVarSign = totPmsVar >= 0 ? '+' : '';
+    $tfootPms.html(`
         <tr>
-            <td style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">TOTALS (${weekly.length} WEEKS)</td>
+            <td style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px; font-weight:800;">PMS TOTALS (${weekly.length} WEEKS)</td>
             <td style="padding:12px 10px; text-align:center;">${totDays} Days</td>
             <td style="padding:12px 10px; text-align:center;">${totShifts} Shifts</td>
-            <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(totPms)}</td>
-            <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(totAgo)}</td>
-            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDisp)}</td>
-            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#059669;">+${fmtL(totPurch)}</td>
-            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDepl)}</td>
-            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${fmtL(totVar)}</td>
-            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${totVarPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#e0f2fe; color:#0369a1; font-weight:900;">${fmtL(totPmsSold)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#059669; font-weight:800;">+${fmtL(totPmsPurch)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:800;">${fmtL(totPmsDepl)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:${totPmsVarColor}; font-weight:800;">${totPmsVarSign}${fmtL(totPmsVar)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totPmsVarColor}; font-weight:800;">${totPmsVarSign}${totPmsPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis && data.kpis.pms_audit_status ? data.kpis.pms_audit_status : 'Normal', totPmsPct)}</td>
+        </tr>
+    `);
+
+    // Populate Weekly AGO
+    $tbodyAgo.html(agoRows);
+    let totAgoPct = totAgoSold > 0 ? ((totAgoVar / totAgoSold) * 100) : 0;
+    let totAgoVarColor = totAgoVar >= 0 ? '#15803d' : '#b91c1c';
+    let totAgoVarSign = totAgoVar >= 0 ? '+' : '';
+    $tfootAgo.html(`
+        <tr>
+            <td style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px; font-weight:800;">AGO TOTALS (${weekly.length} WEEKS)</td>
+            <td style="padding:12px 10px; text-align:center;">${totDays} Days</td>
+            <td style="padding:12px 10px; text-align:center;">${totShifts} Shifts</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#dcfce7; color:#15803d; font-weight:900;">${fmtL(totAgoSold)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#059669; font-weight:800;">+${fmtL(totAgoPurch)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:800;">${fmtL(totAgoDepl)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:${totAgoVarColor}; font-weight:800;">${totAgoVarSign}${fmtL(totAgoVar)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totAgoVarColor}; font-weight:800;">${totAgoVarSign}${totAgoPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis && data.kpis.ago_audit_status ? data.kpis.ago_audit_status : 'Normal', totAgoPct)}</td>
+        </tr>
+    `);
+
+    // Populate Weekly Grand Total
+    $tbodyGrand.html(grandRows);
+    let totVarPct = totDeplAll > 0 ? ((totVarAll / totDeplAll) * 100) : 0;
+    let totVarColor = totVarAll >= 0 ? '#15803d' : '#b91c1c';
+    let totVarSign = totVarAll >= 0 ? '+' : '';
+    $tfootGrand.html(`
+        <tr>
+            <td style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px; font-weight:900;">GRAND TOTALS (${weekly.length} WEEKS)</td>
+            <td style="padding:12px 10px; text-align:center;">${totDays} Days</td>
+            <td style="padding:12px 10px; text-align:center;">${totShifts} Shifts</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#0369a1; font-weight:800;">${fmtL(totPmsSold)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#15803d; font-weight:800;">${fmtL(totAgoSold)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:900;">${fmtL(totDispAll)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#059669; font-weight:800;">+${fmtL(totPurchAll)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a; font-weight:900;">${fmtL(totDeplAll)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:${totVarColor}; font-weight:900;">${totVarSign}${fmtL(totVarAll)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totVarColor}; font-weight:900;">${totVarSign}${totVarPct.toFixed(2)}%</td>
             <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis ? data.kpis.audit_status : 'Normal', totVarPct)}</td>
         </tr>
     `);
@@ -11019,7 +11300,47 @@ function export_mvr_tracker_csv(wrapper) {
     });
 
     rows.push([]);
-    rows.push(["DAILY VOLUMES & VARIANCES BREAKDOWN"]);
+    rows.push(["PMS (SUPER PETROL) DAILY VOLUMES & VARIANCES BREAKDOWN"]);
+    rows.push(["Date", "Day", "Shifts Count", "PMS Dispensed (L)", "+ PMS Deliveries (L)", "PMS Opening Dip (L)", "PMS Closing Dip (L)", "= PMS Depletion (L)", "Variance (L)", "Var %", "Audit Status"]);
+
+    (data.daily || []).forEach(d => {
+        rows.push([
+            d.date,
+            d.day_name,
+            d.shifts_count,
+            (d.pms_dispensed || 0).toFixed(2),
+            (d.pms_purchases || 0).toFixed(2),
+            (d.pms_opening_dip || 0).toFixed(2),
+            (d.pms_closing_dip || 0).toFixed(2),
+            (d.pms_tank_depletion || 0).toFixed(2),
+            (d.pms_variance || 0).toFixed(2),
+            (d.pms_variance_pct || 0).toFixed(2) + "%",
+            d.pms_audit_status || "Normal"
+        ]);
+    });
+
+    rows.push([]);
+    rows.push(["AGO (DIESEL) DAILY VOLUMES & VARIANCES BREAKDOWN"]);
+    rows.push(["Date", "Day", "Shifts Count", "AGO Dispensed (L)", "+ AGO Deliveries (L)", "AGO Opening Dip (L)", "AGO Closing Dip (L)", "= AGO Depletion (L)", "Variance (L)", "Var %", "Audit Status"]);
+
+    (data.daily || []).forEach(d => {
+        rows.push([
+            d.date,
+            d.day_name,
+            d.shifts_count,
+            (d.ago_dispensed || 0).toFixed(2),
+            (d.ago_purchases || 0).toFixed(2),
+            (d.ago_opening_dip || 0).toFixed(2),
+            (d.ago_closing_dip || 0).toFixed(2),
+            (d.ago_tank_depletion || 0).toFixed(2),
+            (d.ago_variance || 0).toFixed(2),
+            (d.ago_variance_pct || 0).toFixed(2) + "%",
+            d.ago_audit_status || "Normal"
+        ]);
+    });
+
+    rows.push([]);
+    rows.push(["GRAND TOTAL CONSOLIDATED DAILY VOLUMES & VARIANCES BREAKDOWN"]);
     rows.push(["Date", "Day", "Shifts Count", "PMS Sold (L)", "AGO Sold (L)", "Total Dispensed (L)", "+ Deliveries (L)", "Opening Dip (L)", "Closing Dip (L)", "= Depletion (L)", "Variance (L)", "Var %", "Audit Status"]);
 
     (data.daily || []).forEach(d => {
