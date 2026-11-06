@@ -6990,6 +6990,7 @@ function render_exec_exp_table(wrapper) {
         let vLink = `<a href="/app/journal-entry/${r.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">${r.voucher_no}</a>`;
         let catShort = (r.expense_account || '').replace(' - KIL', '');
         let paidShort = (r.paid_from_account || '').replace(' - KIL', '');
+        let escapedPayee = frappe.utils.escape_html(r.payee || '');
         let rawDesc = r.description || '';
         let escapedDesc = frappe.utils.escape_html(rawDesc);
 
