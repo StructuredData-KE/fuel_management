@@ -2382,7 +2382,7 @@ def delete_director_expense(voucher_no):
         je.cancel()
 
     # Delete the Journal Entry record
-    frappe.delete_doc("Journal Entry", voucher_no, ignore_permissions=True)
+    frappe.delete_doc("Journal Entry", voucher_no, force=1, ignore_permissions=True)
     frappe.db.commit()
 
     return {
@@ -2421,7 +2421,7 @@ def update_director_expense(voucher_no, date, paid_from_account, expense_account
     # Cancel and delete old Journal Entry
     if old_je.docstatus == 1:
         old_je.cancel()
-    frappe.delete_doc("Journal Entry", voucher_no, ignore_permissions=True)
+    frappe.delete_doc("Journal Entry", voucher_no, force=1, ignore_permissions=True)
 
     # Post new updated Journal Entry
     posting_date = date or today()
