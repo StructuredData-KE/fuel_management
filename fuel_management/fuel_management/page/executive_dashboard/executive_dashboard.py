@@ -4447,6 +4447,540 @@ def undo_purchase_reconciliation(purchase_name):
     }
 
 
+@frappe.whitelist()
+def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None, group_by="day"):
+    """
+    Computes automated Monthly Fuel Volume Analysis, Daily/Weekly Variance Tracker,
+    Tank Dip Stock Audit, and Pump/Nozzle Meter Throughput for the Executive Panel.
+    Supports station context, custom date ranges, and grouping by day or week.
+    """
+    import calendar
+    from datetime import datetime, date, timedelta
+    from frappe.utils import flt, getdate, format_date
+
+    today = date.today()
+    if not to_date:
+        to_date = str(today)
+    if not from_date:
+        f_dt = getdate(to_date).replace(day=1)
+        from_date = str(f_dt)
+
+    station_clause = ""
+    station_params = []
+    is_consolidated = not station or station in ("ALL", "All Stations", "")
+    if not is_consolidated:
+        station_clause = " AND s.station = %s"
+        station_params.append(station)
+
+    # 1. Retrieve all shifts in date range
+    shifts = frappe.db.sql(f"""
+        SELECT s.name, s.station, s.shift_date, s.shift_template, s.status, s.creation
+        FROM `tabShift` s
+        WHERE s.docstatus < 2 {station_clause}
+          AND s.shift_date BETWEEN %s AND %s
+        ORDER BY s.shift_date ASC, s.creation ASC
+    """, tuple(station_params + [from_date, to_date]), as_dict=True)
+
+    try:
+        f_obj = getdate(from_date)
+        t_obj = getdate(to_date)
+        if f_obj.year == t_obj.year and f_obj.month == t_obj.month and f_obj.day == 1:
+            month_label = f"{calendar.month_name[f_obj.month]} {f_obj.year}"
+        else:
+            month_label = f"{format_date(from_date)} to {format_date(to_date)}"
+    except Exception:
+        month_label = f"{from_date} to {to_date}"
+
+    station_label = "All Stations (Consolidated)" if is_consolidated else station
+
+    def calc_status(vp):
+        av = abs(vp)
+        if av <= 0.5:
+            return {"label": "Normal (Within ±0.5%)", "status": "normal", "color": "#16a34a"}
+        elif av <= 1.0:
+            return {"label": "Watchlist (±0.5% - 1.0%)", "status": "warning", "color": "#f59e0b"}
+        else:
+            return {"label": "High Variance (> 1.0%)", "status": "danger", "color": "#dc2626"}
+
+    if not shifts:
+        return {
+            "period_info": {
+                "station": station_label,
+                "from_date": str(from_date),
+                "to_date": str(to_date),
+                "month_label": month_label,
+                "total_shifts": 0,
+                "first_shift_name": "",
+                "first_shift_date": "",
+                "last_shift_name": "",
+                "last_shift_date": ""
+            },
+            "kpis": {
+                "total_net_meter_litres": 0.0,
+                "total_tank_sales_litres": 0.0,
+                "total_purchases_litres": 0.0,
+                "purchases_count": 0,
+                "total_variance_litres": 0.0,
+                "total_variance_percent": 0.0,
+                "pms_net_litres": 0.0,
+                "ago_net_litres": 0.0,
+                "pms_variance_litres": 0.0,
+                "ago_variance_litres": 0.0,
+                "total_shifts": 0,
+                "audit_status": {"label": "No Data", "status": "normal", "color": "#64748b"}
+            },
+            "products": [],
+            "daily_records": [],
+            "weekly_records": [],
+            "shift_records": [],
+            "pump_groups": [],
+            "purchases_ledger": []
+        }
+
+    shift_names = [s.name for s in shifts]
+    first_shift = shifts[0]
+    last_shift = shifts[-1]
+
+    # 2. Fuel Tanks and Product Classification
+    tank_filters = {}
+    if not is_consolidated:
+        tank_filters["station"] = station
+    tanks = frappe.get_all("Fuel Tank", filters=tank_filters, fields=["name", "tank_name", "fuel_product", "station"])
+    tank_prod_map = {t.name: (t.fuel_product or t.name) for t in tanks}
+
+    def classify_fuel(text):
+        s = (text or "").upper()
+        if "PMS" in s or "PETROL" in s or "SUPER" in s or "GASOLINE" in s:
+            return "PMS"
+        if "AGO" in s or "DIESEL" in s:
+            return "AGO"
+        return "OTHER"
+
+    # 3. Nozzles & Meter Readings
+    nozzles = frappe.get_all("Pump Nozzle", fields=["name", "nozzle_name", "pump_group", "fuel_tank"])
+    nozzle_tank_map = {n.name: n.fuel_tank for n in nozzles}
+
+    all_readings = frappe.get_all(
+        "Pump Meter Reading",
+        filters={"parent": ["in", shift_names]},
+        fields=["parent", "pump_nozzle", "sales_quantity_electronic", "sales_quantity_manual", "opening_electronic_meter", "closing_electronic_meter", "opening_manual_meter", "closing_manual_meter"]
+    )
+
+    # 4. Return to Tank (RTT)
+    nozzle_rtt_map = {}
+    nozzle_names_list = list(nozzle_tank_map.keys())
+    if nozzle_names_list:
+        st_rtts = frappe.db.sql("""
+            SELECT DISTINCT name, pump_nozzle, volume_returned, shift, date
+            FROM `tabStation Return To Tank`
+            WHERE (shift IN %s OR (pump_nozzle IN %s AND date BETWEEN %s AND %s))
+        """, (tuple(shift_names), tuple(nozzle_names_list), from_date, to_date), as_dict=True)
+
+        for r in st_rtts:
+            vol = flt(r.volume_returned)
+            if r.pump_nozzle:
+                nozzle_rtt_map[r.pump_nozzle] = nozzle_rtt_map.get(r.pump_nozzle, 0.0) + vol
+
+        child_rtts = frappe.get_all(
+            "Shift Return To Tank",
+            filters={"parent": ["in", shift_names]},
+            fields=["pump_nozzle", "quantity"]
+        )
+        for cr in child_rtts:
+            if cr.pump_nozzle:
+                nozzle_rtt_map[cr.pump_nozzle] = nozzle_rtt_map.get(cr.pump_nozzle, 0.0) + flt(cr.quantity)
+
+    # 5. Purchases (Deliveries)
+    purchases = frappe.get_all(
+        "Station Purchase",
+        filters={"shift": ["in", shift_names], "docstatus": ["<", 2]},
+        fields=["name", "shift", "supplier", "receiving_date", "document_invoice_number", "grand_total"]
+    )
+    p_map = {p.name: p for p in purchases}
+    p_items = frappe.get_all(
+        "Station Purchase Item",
+        filters={"parent": ["in", [p.name for p in purchases]]},
+        fields=["parent", "item", "quantity", "unit_cost", "total_cost", "target_tank"]
+    ) if purchases else []
+
+    purchases_ledger = []
+    pms_purchases = 0.0
+    ago_purchases = 0.0
+    tank_purchases_map = {}
+    purchases_by_date = {}
+
+    for item in p_items:
+        p_doc = p_map.get(item.parent, {})
+        it_name = item.item or ""
+        ftype = classify_fuel(it_name)
+        qty = flt(item.quantity)
+        rec_date = str(p_doc.get("receiving_date") or "")
+
+        ttank = item.target_tank
+        if not ttank:
+            for t in tanks:
+                if classify_fuel(t.fuel_product or t.name) == ftype:
+                    ttank = t.name
+                    break
+
+        if ftype == "PMS":
+            pms_purchases += qty
+        elif ftype == "AGO":
+            ago_purchases += qty
+
+        if ttank:
+            tank_purchases_map[ttank] = tank_purchases_map.get(ttank, 0.0) + qty
+
+        if rec_date:
+            purchases_by_date[rec_date] = purchases_by_date.get(rec_date, 0.0) + qty
+
+        purchases_ledger.append({
+            "purchase_name": item.parent,
+            "shift": p_doc.get("shift"),
+            "supplier": p_doc.get("supplier"),
+            "date": rec_date,
+            "invoice_number": p_doc.get("document_invoice_number") or p_doc.get("name"),
+            "item": it_name,
+            "product_type": ftype,
+            "target_tank": ttank,
+            "quantity": round(qty, 2),
+            "unit_cost": round(flt(item.unit_cost), 2),
+            "total_cost": round(flt(item.total_cost), 2)
+        })
+
+    purchases_ledger.sort(key=lambda x: (x.get("date") or "", x.get("purchase_name") or ""))
+
+    # 6. Map Shifts to Daily Buckets & Dispensed Volumes
+    shift_date_map = {s.name: str(s.shift_date) for s in shifts}
+    daily_buckets = {}
+    for s in shifts:
+        d_str = str(s.shift_date)
+        if d_str not in daily_buckets:
+            d_obj = getdate(s.shift_date)
+            daily_buckets[d_str] = {
+                "date": d_str,
+                "day_name": d_obj.strftime("%A"),
+                "formatted_date": format_date(d_str),
+                "shifts": [],
+                "pms_dispensed": 0.0,
+                "ago_dispensed": 0.0,
+                "total_dispensed": 0.0,
+                "purchases": purchases_by_date.get(d_str, 0.0),
+                "opening_dip": 0.0,
+                "closing_dip": 0.0,
+                "tank_depletion": 0.0,
+                "variance_litres": 0.0,
+                "variance_percent": 0.0,
+                "status": calc_status(0.0)
+            }
+        daily_buckets[d_str]["shifts"].append(s.name)
+
+    nozzle_period_elec = {}
+    nozzle_period_man = {}
+    pms_total_gross = 0.0
+    ago_total_gross = 0.0
+
+    for r in all_readings:
+        s_date = shift_date_map.get(r.parent)
+        t_name = nozzle_tank_map.get(r.pump_nozzle, "")
+        ftype = classify_fuel(r.pump_nozzle + " " + tank_prod_map.get(t_name, ""))
+        qty = flt(r.sales_quantity_electronic)
+        qty_man = flt(r.sales_quantity_manual)
+
+        nozzle_period_elec[r.pump_nozzle] = nozzle_period_elec.get(r.pump_nozzle, 0.0) + qty
+        nozzle_period_man[r.pump_nozzle] = nozzle_period_man.get(r.pump_nozzle, 0.0) + qty_man
+
+        if ftype == "PMS":
+            pms_total_gross += qty
+            if s_date and s_date in daily_buckets:
+                daily_buckets[s_date]["pms_dispensed"] += qty
+        elif ftype == "AGO":
+            ago_total_gross += qty
+            if s_date and s_date in daily_buckets:
+                daily_buckets[s_date]["ago_dispensed"] += qty
+
+        if s_date and s_date in daily_buckets:
+            daily_buckets[s_date]["total_dispensed"] += qty
+
+    # 7. Tank Dips Opening & Closing per day
+    shifts_by_date = {}
+    for s in shifts:
+        shifts_by_date.setdefault(str(s.shift_date), []).append(s)
+
+    for d_str, s_list in sorted(shifts_by_date.items()):
+        b = daily_buckets[d_str]
+        first_s = frappe.get_doc("Shift", s_list[0].name)
+        last_s = None
+        for s_meta in reversed(s_list):
+            s_doc = frappe.get_doc("Shift", s_meta.name)
+            if any(flt(d.closing_dip) > 0 for d in (s_doc.dip_stick_readings or [])):
+                last_s = s_doc
+                break
+
+        op_dips = sum(flt(d.opening_dip) for d in (first_s.dip_stick_readings or []))
+        cl_dips = sum(flt(d.closing_dip) for d in (last_s.dip_stick_readings or [])) if last_s else op_dips
+        pur = b["purchases"]
+        b["opening_dip"] = round(op_dips, 1)
+        b["closing_dip"] = round(cl_dips, 1)
+
+        if last_s:
+            depletion = op_dips + pur - cl_dips
+            b["tank_depletion"] = round(depletion, 1)
+            var_l = b["total_dispensed"] - depletion
+            b["variance_litres"] = round(var_l, 2)
+            var_pct = (var_l / b["total_dispensed"] * 100) if b["total_dispensed"] > 0 else 0.0
+            b["variance_percent"] = round(var_pct, 2)
+            b["status"] = calc_status(var_pct)
+
+    # 8. Product Level Summary (PMS & AGO)
+    pms_rtt = sum(v for k, v in nozzle_rtt_map.items() if classify_fuel(k) == "PMS")
+    ago_rtt = sum(v for k, v in nozzle_rtt_map.items() if classify_fuel(k) == "AGO")
+
+    pms_net = pms_total_gross - pms_rtt
+    ago_net = ago_total_gross - ago_rtt
+
+    first_shift_doc = frappe.get_doc("Shift", first_shift.name)
+    first_shift_dips = {d.fuel_tank: flt(d.opening_dip) for d in (first_shift_doc.dip_stick_readings or [])}
+
+    last_closed_doc = None
+    for s in reversed(shifts):
+        s_doc = frappe.get_doc("Shift", s.name)
+        if any(flt(d.closing_dip) > 0 for d in (s_doc.dip_stick_readings or [])):
+            last_closed_doc = s_doc
+            break
+    if not last_closed_doc:
+        last_closed_doc = first_shift_doc
+
+    last_shift_dips = {d.fuel_tank: flt(d.closing_dip) for d in (last_closed_doc.dip_stick_readings or [])}
+
+    # Only include purchases up to the last closed shift for exact dip reconciliation
+    closed_shift_creations = last_closed_doc.creation
+    pms_eval_purchases = sum(flt(it.quantity) for it in p_items if classify_fuel(it.item) == "PMS" and p_map.get(it.parent, {}).get("receiving_date") and getdate(p_map.get(it.parent, {}).get("receiving_date")) <= getdate(last_closed_doc.shift_date))
+    ago_eval_purchases = sum(flt(it.quantity) for it in p_items if classify_fuel(it.item) == "AGO" and p_map.get(it.parent, {}).get("receiving_date") and getdate(p_map.get(it.parent, {}).get("receiving_date")) <= getdate(last_closed_doc.shift_date))
+
+    pms_open = sum(first_shift_dips.get(t.name, 0.0) for t in tanks if classify_fuel(t.fuel_product or t.name) == "PMS")
+    pms_close = sum(last_shift_dips.get(t.name, 0.0) for t in tanks if classify_fuel(t.fuel_product or t.name) == "PMS")
+    pms_depletion = pms_open + pms_eval_purchases - pms_close
+    pms_variance = pms_net - pms_depletion
+    pms_var_pct = (pms_variance / pms_net * 100) if pms_net > 0 else 0.0
+
+    ago_open = sum(first_shift_dips.get(t.name, 0.0) for t in tanks if classify_fuel(t.fuel_product or t.name) == "AGO")
+    ago_close = sum(last_shift_dips.get(t.name, 0.0) for t in tanks if classify_fuel(t.fuel_product or t.name) == "AGO")
+    ago_depletion = ago_open + ago_eval_purchases - ago_close
+    ago_variance = ago_net - ago_depletion
+    ago_var_pct = (ago_variance / ago_net * 100) if ago_net > 0 else 0.0
+
+    products_summary = [
+        {
+            "product_type": "PMS",
+            "product_label": "Petrol (PMS - Super)",
+            "opening_dip": round(pms_open, 2),
+            "purchases": round(pms_eval_purchases, 2),
+            "closing_dip": round(pms_close, 2),
+            "tank_sales": round(pms_depletion, 2),
+            "gross_meter_litres": round(pms_total_gross, 2),
+            "rtt_litres": round(pms_rtt, 2),
+            "net_meter_litres": round(pms_net, 2),
+            "variance_litres": round(pms_variance, 2),
+            "variance_percent": round(pms_var_pct, 2),
+            "status": calc_status(pms_var_pct)
+        },
+        {
+            "product_type": "AGO",
+            "product_label": "Diesel (AGO)",
+            "opening_dip": round(ago_open, 2),
+            "purchases": round(ago_eval_purchases, 2),
+            "closing_dip": round(ago_close, 2),
+            "tank_sales": round(ago_depletion, 2),
+            "gross_meter_litres": round(ago_total_gross, 2),
+            "rtt_litres": round(ago_rtt, 2),
+            "net_meter_litres": round(ago_net, 2),
+            "variance_litres": round(ago_variance, 2),
+            "variance_percent": round(ago_var_pct, 2),
+            "status": calc_status(ago_var_pct)
+        }
+    ]
+
+    total_net_all = pms_net + ago_net
+    total_tank_depletion = pms_depletion + ago_depletion
+    total_purchases_all = pms_eval_purchases + ago_eval_purchases
+    total_var_all = total_net_all - total_tank_depletion
+    total_var_pct = (total_var_all / total_net_all * 100) if total_net_all > 0 else 0.0
+
+    # 9. Weekly Aggregation
+    weekly_buckets = {}
+    for d_str, b in sorted(daily_buckets.items()):
+        d_obj = getdate(d_str)
+        y, w, _ = d_obj.isocalendar()
+        wk_key = f"{y}-W{w:02d}"
+        if wk_key not in weekly_buckets:
+            start_of_week = d_obj - timedelta(days=d_obj.weekday())
+            end_of_week = start_of_week + timedelta(days=6)
+            weekly_buckets[wk_key] = {
+                "week_key": wk_key,
+                "week_label": f"Week {w} ({format_date(str(start_of_week))} - {format_date(str(end_of_week))})",
+                "days_count": 0,
+                "shifts_count": 0,
+                "pms_dispensed": 0.0,
+                "ago_dispensed": 0.0,
+                "total_dispensed": 0.0,
+                "purchases": 0.0,
+                "tank_depletion": 0.0,
+                "variance_litres": 0.0,
+                "variance_percent": 0.0,
+                "status": calc_status(0.0)
+            }
+        wk = weekly_buckets[wk_key]
+        wk["days_count"] += 1
+        wk["shifts_count"] += len(b["shifts"])
+        wk["pms_dispensed"] += b["pms_dispensed"]
+        wk["ago_dispensed"] += b["ago_dispensed"]
+        wk["total_dispensed"] += b["total_dispensed"]
+        wk["purchases"] += b["purchases"]
+        wk["tank_depletion"] += b["tank_depletion"]
+
+    weekly_records = []
+    for wk_key, wk in sorted(weekly_buckets.items()):
+        v_l = wk["total_dispensed"] - wk["tank_depletion"]
+        v_pct = (v_l / wk["total_dispensed"] * 100) if wk["total_dispensed"] > 0 else 0.0
+        wk["pms_dispensed"] = round(wk["pms_dispensed"], 2)
+        wk["ago_dispensed"] = round(wk["ago_dispensed"], 2)
+        wk["total_dispensed"] = round(wk["total_dispensed"], 2)
+        wk["purchases"] = round(wk["purchases"], 2)
+        wk["tank_depletion"] = round(wk["tank_depletion"], 1)
+        wk["variance_litres"] = round(v_l, 2)
+        wk["variance_percent"] = round(v_pct, 2)
+        wk["status"] = calc_status(v_pct)
+        weekly_records.append(wk)
+
+    # 10. Shift Records
+    shift_records = []
+    for s in shifts:
+        s_doc = frappe.get_doc("Shift", s.name)
+        s_pmr = s_doc.pump_meter_readings or []
+        s_pms = sum(flt(r.sales_quantity_electronic) for r in s_pmr if classify_fuel(r.pump_nozzle) == "PMS")
+        s_ago = sum(flt(r.sales_quantity_electronic) for r in s_pmr if classify_fuel(r.pump_nozzle) == "AGO")
+        s_tot = s_pms + s_ago
+
+        s_op_dips = sum(flt(d.opening_dip) for d in (s_doc.dip_stick_readings or []))
+        s_cl_dips = sum(flt(d.closing_dip) for d in (s_doc.dip_stick_readings or []))
+        s_pur = sum(flt(it.quantity) for it in p_items if p_map.get(it.parent, {}).get("shift") == s.name)
+        s_depl = s_op_dips + s_pur - s_cl_dips if s_cl_dips > 0 else 0.0
+        s_var = s_tot - s_depl if s_cl_dips > 0 else 0.0
+
+        shift_records.append({
+            "shift_id": s.name,
+            "shift_date": str(s.shift_date),
+            "formatted_date": format_date(str(s.shift_date)),
+            "template": s.shift_template or "Shift",
+            "station": s.station,
+            "status": s.status,
+            "pms_dispensed": round(s_pms, 2),
+            "ago_dispensed": round(s_ago, 2),
+            "total_dispensed": round(s_tot, 2),
+            "purchases": round(s_pur, 2),
+            "closing_dip": round(s_cl_dips, 1),
+            "variance_litres": round(s_var, 2)
+        })
+
+    # 11. Pump Islands & Nozzle Breakdown
+    first_nozzle_readings = {r.pump_nozzle: r for r in (first_shift_doc.pump_meter_readings or [])}
+    last_nozzle_readings = {r.pump_nozzle: r for r in (last_closed_doc.pump_meter_readings or [])}
+
+    pump_groups_dict = {}
+    station_nozzles = [n for n in nozzles if n.fuel_tank in tank_prod_map] if not is_consolidated else nozzles
+
+    for n in station_nozzles:
+        pg = n.pump_group or "Ungrouped"
+        if pg not in pump_groups_dict:
+            pump_groups_dict[pg] = {
+                "group_name": pg,
+                "nozzles": [],
+                "total_net_litres": 0.0
+            }
+
+        fr = first_nozzle_readings.get(n.name)
+        lr = last_nozzle_readings.get(n.name)
+
+        op_elec = flt(fr.opening_electronic_meter) if fr else 0.0
+        cl_elec = flt(lr.closing_electronic_meter) if lr and flt(lr.closing_electronic_meter) > 0 else op_elec
+        diff_elec = nozzle_period_elec.get(n.name, 0.0)
+
+        op_man = flt(fr.opening_manual_meter) if fr else 0.0
+        cl_man = flt(lr.closing_manual_meter) if lr and flt(lr.closing_manual_meter) > 0 else op_man
+        diff_man = nozzle_period_man.get(n.name, 0.0)
+
+        noz_rtt = nozzle_rtt_map.get(n.name, 0.0)
+        net_l = max(0.0, diff_elec - noz_rtt)
+
+        p_name = tank_prod_map.get(n.fuel_tank, "")
+        ftype = classify_fuel(n.name + " " + p_name)
+
+        pump_groups_dict[pg]["nozzles"].append({
+            "nozzle_id": n.name,
+            "nozzle_name": n.nozzle_name or n.name,
+            "fuel_product": p_name or ("Petrol (PMS)" if ftype == "PMS" else "Diesel (AGO)"),
+            "product_type": ftype,
+            "opening_electronic": op_elec,
+            "closing_electronic": cl_elec,
+            "electronic_volume": round(diff_elec, 2),
+            "opening_manual": op_man,
+            "closing_manual": cl_man,
+            "manual_volume": round(diff_man, 2),
+            "rtt_litres": round(noz_rtt, 2),
+            "net_volume": round(net_l, 2),
+            "share_percent": round((net_l / total_net_all * 100), 1) if total_net_all > 0 else 0.0
+        })
+        pump_groups_dict[pg]["total_net_litres"] += net_l
+
+    sorted_groups = sorted(pump_groups_dict.values(), key=lambda g: g["group_name"])
+
+    # 12. Final KPIs
+    kpis = {
+        "total_net_meter_litres": round(total_net_all, 2),
+        "total_tank_sales_litres": round(total_tank_depletion, 2),
+        "total_purchases_litres": round(total_purchases_all, 2),
+        "purchases_count": len(purchases_ledger),
+        "total_variance_litres": round(total_var_all, 2),
+        "total_variance_percent": round(total_var_pct, 2),
+        "total_shifts": len(shifts),
+        "pms_net_litres": round(pms_net, 2),
+        "ago_net_litres": round(ago_net, 2),
+        "pms_variance_litres": round(pms_variance, 2),
+        "ago_variance_litres": round(ago_variance, 2),
+        "audit_status": calc_status(total_var_pct)
+    }
+
+    daily_list = []
+    for k in sorted(daily_buckets.keys()):
+        db = daily_buckets[k]
+        db["pms_dispensed"] = round(db["pms_dispensed"], 2)
+        db["ago_dispensed"] = round(db["ago_dispensed"], 2)
+        db["total_dispensed"] = round(db["total_dispensed"], 2)
+        daily_list.append(db)
+
+    return {
+        "period_info": {
+            "station": station_label,
+            "from_date": str(from_date),
+            "to_date": str(to_date),
+            "month_label": month_label,
+            "total_shifts": len(shifts),
+            "first_shift_name": first_shift.name,
+            "first_shift_date": str(first_shift.shift_date),
+            "last_shift_name": last_closed_doc.name if last_closed_doc else last_shift.name,
+            "last_shift_date": str(last_closed_doc.shift_date if last_closed_doc else last_shift.shift_date)
+        },
+        "kpis": kpis,
+        "products": products_summary,
+        "daily_records": daily_list,
+        "weekly_records": weekly_records,
+        "shift_records": shift_records,
+        "pump_groups": sorted_groups,
+        "purchases_ledger": purchases_ledger
+    }
+
+
 
 
 

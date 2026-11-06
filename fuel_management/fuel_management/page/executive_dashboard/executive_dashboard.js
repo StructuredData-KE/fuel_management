@@ -168,6 +168,8 @@ function init_spa_ui(wrapper) {
                 }
             } else if (target === 'tab-purchases-reconciliation') {
                 init_purchases_reconciliation(wrapper);
+            } else if (target === 'tab-volume-tracker') {
+                init_exec_volume_tracker(wrapper);
             }
 
             // Close sidebar on mobile
@@ -240,6 +242,8 @@ function init_spa_ui(wrapper) {
             load_topups_statement(wrapper);
         } else if (targetTab === 'tab-cards-holding') {
             init_cards_holding(wrapper);
+        } else if (targetTab === 'tab-volume-tracker') {
+            init_exec_volume_tracker(wrapper);
         }
     });
 
@@ -342,6 +346,7 @@ function init_spa_ui(wrapper) {
                 $(wrapper).find('#exec-header-station-select').html(optionsHtml);
                 $(wrapper).find('#inventory-station-select').html(optionsHtml);
                 $(wrapper).find('#exec-shorts-station-select').html(optionsHtml);
+                $(wrapper).find('#mvr-tracker-station-select').html(optionsHtml);
             }
         }
     });
@@ -353,6 +358,7 @@ function init_spa_ui(wrapper) {
         $(wrapper).find('#exec-header-station-select').val(selectedStation);
         $(wrapper).find('#inventory-station-select').val(selectedStation);
         $(wrapper).find('#exec-shorts-station-select').val(selectedStation);
+        $(wrapper).find('#mvr-tracker-station-select').val(selectedStation);
 
         // Synchronize P&L station pills
         $(wrapper).find('#exec-pnl-station-tabs .exec-pnl-station-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
@@ -433,6 +439,8 @@ function init_spa_ui(wrapper) {
             load_mpesa_reconciliation_data(wrapper);
         } else if (activeTab === 'tab-purchases-reconciliation') {
             load_purchases_reconciliation_data(wrapper);
+        } else if (activeTab === 'tab-volume-tracker') {
+            load_exec_volume_tracker_data(wrapper);
         } else if (activeTab === 'tab-cash-accounts') {
             load_exec_cash_accounts(wrapper);
         } else if (activeTab === 'tab-supplier-accounts') {
@@ -10242,6 +10250,769 @@ function export_purchases_reconciliation_csv(wrapper) {
     link.click();
     document.body.removeChild(link);
 }
+
+// =========================================================================
+// MONTHLY VOLUMES AND VARIANCES TRACKER (ADMIN AUDIT)
+// =========================================================================
+
+function get_mvr_preset_dates(preset) {
+    let now = new Date();
+    let fmt = d => {
+        let year = d.getFullYear();
+        let month = String(d.getMonth() + 1).padStart(2, '0');
+        let day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+    let to_date = fmt(now);
+    let from_date = to_date;
+
+    if (preset === 'month') {
+        let firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        from_date = fmt(firstDay);
+    } else if (preset === 'last_month') {
+        let firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        let lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        from_date = fmt(firstDayLastMonth);
+        to_date = fmt(lastDayLastMonth);
+    } else if (preset === 'week') {
+        let day = now.getDay();
+        let diff = now.getDate() - day + (day === 0 ? -6 : 1); // Monday
+        let monday = new Date(now.getFullYear(), now.getMonth(), diff);
+        from_date = fmt(monday);
+    } else if (preset === 'last_7_days') {
+        let past = new Date();
+        past.setDate(past.getDate() - 6);
+        from_date = fmt(past);
+    }
+    return { from_date, to_date };
+}
+
+function get_mvr_status_badge(status, variancePct) {
+    status = status || 'Normal';
+    let pctText = (variancePct !== undefined && variancePct !== null && !isNaN(variancePct)) 
+        ? ` (${variancePct >= 0 ? '+' : ''}${variancePct.toFixed(2)}%)` : '';
+    if (status === 'Normal') {
+        return `<span style="background:#f0fdf4; color:#166534; font-weight:700; font-size:11px; padding:2px 8px; border-radius:6px; border:1px solid #bbf7d0; display:inline-flex; align-items:center; gap:4px;">
+            <span style="font-size:8px;">●</span> Normal${pctText}
+        </span>`;
+    } else if (status === 'Gain Alert') {
+        return `<span style="background:#eff6ff; color:#1e40af; font-weight:700; font-size:11px; padding:2px 8px; border-radius:6px; border:1px solid #bfdbfe; display:inline-flex; align-items:center; gap:4px;">
+            <span style="font-size:8px;">▲</span> Gain Alert${pctText}
+        </span>`;
+    } else if (status === 'Loss Alert') {
+        return `<span style="background:#fef2f2; color:#991b1b; font-weight:700; font-size:11px; padding:2px 8px; border-radius:6px; border:1px solid #fecaca; display:inline-flex; align-items:center; gap:4px;">
+            <span style="font-size:8px;">▼</span> Loss Alert${pctText}
+        </span>`;
+    } else {
+        return `<span style="background:#f1f5f9; color:#64748b; font-weight:600; font-size:11px; padding:2px 8px; border-radius:6px; border:1px solid #e2e8f0;">${status}</span>`;
+    }
+}
+
+function init_exec_volume_tracker(wrapper) {
+    window.VOL_TRACKER_STATE = window.VOL_TRACKER_STATE || {
+        station: window.ACTIVE_STATION || '',
+        from_date: '',
+        to_date: '',
+        view: 'daily',
+        preset: 'month',
+        data: null,
+        initialized: false
+    };
+
+    let state = window.VOL_TRACKER_STATE;
+
+    // Set dates if empty
+    if (!state.from_date || !state.to_date) {
+        let dates = get_mvr_preset_dates(state.preset || 'month');
+        state.from_date = dates.from_date;
+        state.to_date = dates.to_date;
+    }
+
+    $(wrapper).find('#mvr-tracker-from-date').val(state.from_date);
+    $(wrapper).find('#mvr-tracker-to-date').val(state.to_date);
+
+    // Sync station select options if empty
+    let stSel = $(wrapper).find('#mvr-tracker-station-select');
+    if (stSel.children().length <= 1) {
+        let globalOpts = $(wrapper).find('#exec-global-station-select').html();
+        if (globalOpts && globalOpts.trim().length > 0) {
+            stSel.html(globalOpts);
+        }
+    }
+    if (window.ACTIVE_STATION) {
+        state.station = window.ACTIVE_STATION;
+        stSel.val(window.ACTIVE_STATION);
+    }
+
+    if (!state.initialized) {
+        state.initialized = true;
+
+        // Presets Buttons Click
+        $(wrapper).find('.mvr-preset-btn').off('click').on('click', function() {
+            let preset = $(this).data('preset');
+            state.preset = preset;
+            $(wrapper).find('.mvr-preset-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
+            $(this).addClass('active').css({'background': '#fff', 'color': '#0f172a', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'});
+
+            if (preset !== 'custom') {
+                let dates = get_mvr_preset_dates(preset);
+                state.from_date = dates.from_date;
+                state.to_date = dates.to_date;
+                $(wrapper).find('#mvr-tracker-from-date').val(state.from_date);
+                $(wrapper).find('#mvr-tracker-to-date').val(state.to_date);
+                load_exec_volume_tracker_data(wrapper);
+            } else {
+                $(wrapper).find('#mvr-tracker-from-date').focus();
+            }
+        });
+
+        // Date Inputs Change
+        $(wrapper).find('#mvr-tracker-from-date, #mvr-tracker-to-date').off('change').on('change', function() {
+            state.from_date = $(wrapper).find('#mvr-tracker-from-date').val();
+            state.to_date = $(wrapper).find('#mvr-tracker-to-date').val();
+            state.preset = 'custom';
+            $(wrapper).find('.mvr-preset-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
+            $(wrapper).find('.mvr-preset-btn[data-preset="custom"]').addClass('active').css({'background': '#fff', 'color': '#0f172a', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.05)'});
+        });
+
+        // Station Select Change
+        $(wrapper).find('#mvr-tracker-station-select').off('change').on('change', function() {
+            let selectedStation = $(this).val();
+            state.station = selectedStation;
+            window.ACTIVE_STATION = selectedStation;
+            $(wrapper).find('#exec-global-station-select').val(selectedStation);
+            load_exec_volume_tracker_data(wrapper);
+        });
+
+        // View Mode Switcher
+        $(wrapper).find('.mvr-view-btn').off('click').on('click', function() {
+            let view = $(this).data('view');
+            state.view = view;
+            $(wrapper).find('.mvr-view-btn').removeClass('active').css({'background': 'transparent', 'color': '#64748b', 'font-weight': '600', 'box-shadow': 'none'});
+            $(this).addClass('active').css({'background': '#fff', 'color': '#0f172a', 'font-weight': '700', 'box-shadow': '0 1px 2px rgba(0,0,0,0.06)'});
+
+            $(wrapper).find('.mvr-pane').hide();
+            $(wrapper).find(`#mvr-pane-${view}`).show();
+        });
+
+        // Refresh / Load Button
+        $(wrapper).find('#btn-mvr-tracker-refresh').off('click').on('click', function() {
+            state.from_date = $(wrapper).find('#mvr-tracker-from-date').val();
+            state.to_date = $(wrapper).find('#mvr-tracker-to-date').val();
+            state.station = $(wrapper).find('#mvr-tracker-station-select').val();
+            load_exec_volume_tracker_data(wrapper);
+        });
+
+        // CSV Export Button
+        $(wrapper).find('#btn-mvr-tracker-csv').off('click').on('click', function() {
+            export_mvr_tracker_csv(wrapper);
+        });
+
+        // Print Button
+        $(wrapper).find('#btn-mvr-tracker-print').off('click').on('click', function() {
+            window.print();
+        });
+    }
+
+    load_exec_volume_tracker_data(wrapper);
+}
+
+function load_exec_volume_tracker_data(wrapper) {
+    let state = window.VOL_TRACKER_STATE;
+    if (!state) return;
+
+    state.from_date = $(wrapper).find('#mvr-tracker-from-date').val() || state.from_date;
+    state.to_date = $(wrapper).find('#mvr-tracker-to-date').val() || state.to_date;
+    state.station = $(wrapper).find('#mvr-tracker-station-select').val() || '';
+
+    // Show loading indicators
+    let loadingRow = (cols) => `<tr><td colspan="${cols}" style="text-align:center; padding:36px; color:#64748b; font-weight:600;">
+        <div style="display:flex; justify-content:center; align-items:center; gap:8px;">
+            <span class="material-symbols-outlined" style="animation:spin 1s linear infinite; font-size:20px; color:#2563eb;">sync</span>
+            <span>Calculating volumes and dip reconciliation...</span>
+        </div>
+    </td></tr>`;
+
+    $(wrapper).find('#mvr-table-daily-body').html(loadingRow(13));
+    $(wrapper).find('#mvr-table-weekly-body').html(loadingRow(11));
+    $(wrapper).find('#mvr-table-shifts-body').html(loadingRow(11));
+    $(wrapper).find('#mvr-table-products-body').html(loadingRow(11));
+    $(wrapper).find('#mvr-table-purchases-body').html(loadingRow(9));
+    $(wrapper).find('#mvr-nozzles-container').html('<div style="text-align:center; padding:36px; color:#64748b;">Loading nozzle readings...</div>');
+
+    frappe.call({
+        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_monthly_volumes_and_variances',
+        args: {
+            station: state.station,
+            from_date: state.from_date,
+            to_date: state.to_date,
+            group_by: state.view || 'daily'
+        },
+        callback: function(r) {
+            if (!r.message) {
+                frappe.msgprint('Could not load volumes and variances data.');
+                return;
+            }
+
+            let data = r.message;
+            state.data = data;
+
+            let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+            let kpis = data.kpis || {};
+            let period = data.period || {};
+
+            // Update Period Overview Banner
+            $(wrapper).find('#mvr-meta-period').text(`Analysis Period: ${period.from_date || state.from_date} to ${period.to_date || state.to_date}`);
+            $(wrapper).find('#mvr-meta-station-name').text(`• ${data.station || 'All Stations (Consolidated)'}`);
+            $(wrapper).find('#mvr-meta-total-shifts').text(`${period.total_shifts || 0} Shifts (${period.closed_shifts || 0} Closed, ${period.open_shifts || 0} Open)`);
+            $(wrapper).find('#mvr-meta-first-shift').text(period.first_shift || '—');
+            $(wrapper).find('#mvr-meta-last-shift').text(period.last_shift || '—');
+
+            // Update Top 5 KPI Cards
+            $(wrapper).find('#mvr-kpi-dispensed').text(fmtL(kpis.total_dispensed) + ' L');
+            $(wrapper).find('#mvr-kpi-dispensed-sub').html(`<span>PMS: <strong>${fmtL(kpis.pms_dispensed)} L</strong></span> <span>AGO: <strong>${fmtL(kpis.ago_dispensed)} L</strong></span>`);
+
+            $(wrapper).find('#mvr-kpi-purchases').text(fmtL(kpis.purchases_litres) + ' L');
+            $(wrapper).find('#mvr-kpi-purchases-sub').text(`${kpis.purchases_count || 0} Fuel Deliveries Received`);
+
+            $(wrapper).find('#mvr-kpi-depletion').text(fmtL(kpis.tank_depletion) + ' L');
+
+            let varSign = kpis.station_variance >= 0 ? '+' : '';
+            let varText = `${varSign}${fmtL(kpis.station_variance)} L`;
+            let varColor = kpis.station_variance >= 0 ? '#15803d' : '#b91c1c';
+            $(wrapper).find('#mvr-kpi-variance').text(varText).css('color', varColor);
+
+            $(wrapper).find('#mvr-kpi-variance-status').html(get_mvr_status_badge(kpis.audit_status, kpis.variance_pct));
+            $(wrapper).find('#mvr-kpi-audit').text(kpis.audit_status === 'Normal' ? 'Reconciled' : kpis.audit_status);
+            $(wrapper).find('#mvr-count-deliveries').text(kpis.purchases_count || 0);
+
+            // Render all panes
+            render_mvr_daily_table(wrapper, data);
+            render_mvr_weekly_table(wrapper, data);
+            render_mvr_shifts_table(wrapper, data);
+            render_mvr_products_table(wrapper, data);
+            render_mvr_nozzles_table(wrapper, data);
+            render_mvr_purchases_table(wrapper, data);
+        }
+    });
+}
+
+function render_mvr_daily_table(wrapper, data) {
+    let daily = data.daily || [];
+    let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    let $tbody = $(wrapper).find('#mvr-table-daily-body');
+    let $tfoot = $(wrapper).find('#mvr-table-daily-foot');
+
+    if (daily.length === 0) {
+        $tbody.html('<tr><td colspan="13" style="text-align:center; padding:32px; color:#94a3b8;">No closed shift operations found for this date range.</td></tr>');
+        $tfoot.empty();
+        return;
+    }
+
+    let rowsHtml = '';
+    let totPms = 0, totAgo = 0, totDisp = 0, totPurch = 0, totDepl = 0, totVar = 0;
+
+    daily.forEach(d => {
+        totPms += d.pms_dispensed || 0;
+        totAgo += d.ago_dispensed || 0;
+        totDisp += d.total_dispensed || 0;
+        totPurch += d.purchases_litres || 0;
+        totDepl += d.tank_depletion || 0;
+        totVar += d.variance || 0;
+
+        let varColor = d.variance >= 0 ? '#15803d' : '#b91c1c';
+        let varSign = d.variance >= 0 ? '+' : '';
+        let purchHtml = d.purchases_litres > 0 
+            ? `<span style="color:#059669; font-weight:700;">+${fmtL(d.purchases_litres)}</span>`
+            : '<span style="color:#94a3b8;">—</span>';
+
+        rowsHtml += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 14px; font-weight:700; color:#0f172a; font-family:monospace;">${d.date}</td>
+                <td style="padding:10px 10px; color:#64748b;">${d.day_name}</td>
+                <td style="padding:10px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">${d.shifts_count}</span></td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(d.pms_dispensed)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(d.ago_dispensed)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(d.total_dispensed)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${purchHtml}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(d.opening_dip)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(d.closing_dip)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(d.tank_depletion)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; font-family:monospace; color:${varColor};">${varSign}${fmtL(d.variance)}</td>
+                <td style="padding:10px 10px; text-align:right; font-family:monospace; color:${varColor};">${varSign}${d.variance_pct.toFixed(2)}%</td>
+                <td style="padding:10px 14px; text-align:center;">${get_mvr_status_badge(d.audit_status, d.variance_pct)}</td>
+            </tr>
+        `;
+    });
+
+    $tbody.html(rowsHtml);
+
+    let totVarPct = totDepl > 0 ? ((totVar / totDepl) * 100) : 0;
+    let totVarColor = totVar >= 0 ? '#15803d' : '#b91c1c';
+    let totVarSign = totVar >= 0 ? '+' : '';
+
+    $tfoot.html(`
+        <tr>
+            <td colspan="3" style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">TOTALS (${daily.length} DAYS)</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totPms)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totAgo)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDisp)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669;">+${fmtL(totPurch)}</td>
+            <td colspan="2" style="padding:12px 12px; text-align:center; color:#64748b; font-weight:500;">—</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDepl)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${fmtL(totVar)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${totVarPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis ? data.kpis.audit_status : 'Normal', totVarPct)}</td>
+        </tr>
+    `);
+}
+
+function render_mvr_weekly_table(wrapper, data) {
+    let weekly = data.weekly || [];
+    let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    let $tbody = $(wrapper).find('#mvr-table-weekly-body');
+    let $tfoot = $(wrapper).find('#mvr-table-weekly-foot');
+
+    if (weekly.length === 0) {
+        $tbody.html('<tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No weekly records found for this period.</td></tr>');
+        $tfoot.empty();
+        return;
+    }
+
+    let rowsHtml = '';
+    let totDays = 0, totShifts = 0, totPms = 0, totAgo = 0, totDisp = 0, totPurch = 0, totDepl = 0, totVar = 0;
+
+    weekly.forEach(w => {
+        totDays += w.days_count || 0;
+        totShifts += w.shifts_count || 0;
+        totPms += w.pms_dispensed || 0;
+        totAgo += w.ago_dispensed || 0;
+        totDisp += w.total_dispensed || 0;
+        totPurch += w.purchases_litres || 0;
+        totDepl += w.tank_depletion || 0;
+        totVar += w.variance || 0;
+
+        let varColor = w.variance >= 0 ? '#15803d' : '#b91c1c';
+        let varSign = w.variance >= 0 ? '+' : '';
+        let purchHtml = w.purchases_litres > 0 
+            ? `<span style="color:#059669; font-weight:700;">+${fmtL(w.purchases_litres)}</span>`
+            : '<span style="color:#94a3b8;">—</span>';
+
+        rowsHtml += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:12px 14px; font-weight:700; color:#0f172a;">${w.week_label}</td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${w.days_count} Days</span></td>
+                <td style="padding:12px 10px; text-align:center;"><span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:700; font-size:11px;">${w.shifts_count} Shifts</span></td>
+                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(w.pms_dispensed)}</td>
+                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(w.ago_dispensed)}</td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(w.total_dispensed)}</td>
+                <td style="padding:12px 14px; text-align:right; font-family:monospace;">${purchHtml}</td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(w.tank_depletion)}</td>
+                <td style="padding:12px 14px; text-align:right; font-weight:800; font-family:monospace; color:${varColor};">${varSign}${fmtL(w.variance)}</td>
+                <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${varColor};">${varSign}${w.variance_pct.toFixed(2)}%</td>
+                <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(w.audit_status, w.variance_pct)}</td>
+            </tr>
+        `;
+    });
+
+    $tbody.html(rowsHtml);
+
+    let totVarPct = totDepl > 0 ? ((totVar / totDepl) * 100) : 0;
+    let totVarColor = totVar >= 0 ? '#15803d' : '#b91c1c';
+    let totVarSign = totVar >= 0 ? '+' : '';
+
+    $tfoot.html(`
+        <tr>
+            <td style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">TOTALS (${weekly.length} WEEKS)</td>
+            <td style="padding:12px 10px; text-align:center;">${totDays} Days</td>
+            <td style="padding:12px 10px; text-align:center;">${totShifts} Shifts</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(totPms)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace;">${fmtL(totAgo)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDisp)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#059669;">+${fmtL(totPurch)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDepl)}</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${fmtL(totVar)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${totVarPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis ? data.kpis.audit_status : 'Normal', totVarPct)}</td>
+        </tr>
+    `);
+}
+
+function render_mvr_shifts_table(wrapper, data) {
+    let shifts = data.shifts || [];
+    let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    let $tbody = $(wrapper).find('#mvr-table-shifts-body');
+    let $tfoot = $(wrapper).find('#mvr-table-shifts-foot');
+
+    if (shifts.length === 0) {
+        $tbody.html('<tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No shift records found for this period.</td></tr>');
+        $tfoot.empty();
+        return;
+    }
+
+    let rowsHtml = '';
+    let totPms = 0, totAgo = 0, totDisp = 0, totPurch = 0, totVar = 0;
+
+    shifts.forEach(s => {
+        totPms += s.pms_dispensed || 0;
+        totAgo += s.ago_dispensed || 0;
+        totDisp += s.total_dispensed || 0;
+        totPurch += s.purchases_litres || 0;
+        totVar += s.shift_variance || 0;
+
+        let statusBadge = s.status === 'Closed'
+            ? '<span style="background:#f0fdf4; color:#166534; font-weight:700; font-size:10.5px; padding:2px 8px; border-radius:4px; border:1px solid #bbf7d0;">Closed</span>'
+            : '<span style="background:#fffbeb; color:#b45309; font-weight:700; font-size:10.5px; padding:2px 8px; border-radius:4px; border:1px solid #fde68a;">Open</span>';
+
+        let varColor = s.shift_variance >= 0 ? '#15803d' : '#b91c1c';
+        let varSign = s.shift_variance >= 0 ? '+' : '';
+        let purchHtml = s.purchases_litres > 0 
+            ? `<span style="color:#059669; font-weight:700;">+${fmtL(s.purchases_litres)}</span>`
+            : '<span style="color:#94a3b8;">—</span>';
+
+        rowsHtml += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 14px; font-weight:700; font-family:monospace;">
+                    <a href="/app/shift-operation/${s.shift_id}" target="_blank" style="color:#2563eb; text-decoration:none;">${s.shift_id}</a>
+                </td>
+                <td style="padding:10px 12px; font-family:monospace; color:#334155;">${s.shift_date}</td>
+                <td style="padding:10px 12px; color:#475569;">${s.template || 'Standard Shift'}</td>
+                <td style="padding:10px 12px; color:#475569;">${s.station}</td>
+                <td style="padding:10px 10px; text-align:center;">${statusBadge}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(s.pms_dispensed)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(s.ago_dispensed)}</td>
+                <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(s.total_dispensed)}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace;">${purchHtml}</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${s.closing_dip > 0 ? fmtL(s.closing_dip) : '—'}</td>
+                <td style="padding:10px 14px; text-align:right; font-weight:800; font-family:monospace; color:${varColor};">${varSign}${fmtL(s.shift_variance)}</td>
+            </tr>
+        `;
+    });
+
+    $tbody.html(rowsHtml);
+
+    let totVarColor = totVar >= 0 ? '#15803d' : '#b91c1c';
+    let totVarSign = totVar >= 0 ? '+' : '';
+
+    $tfoot.html(`
+        <tr>
+            <td colspan="5" style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">TOTALS (${shifts.length} SHIFTS)</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totPms)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totAgo)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDisp)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669;">+${fmtL(totPurch)}</td>
+            <td style="padding:12px 12px; text-align:center; color:#64748b;">—</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:${totVarColor}; font-weight:800;">${totVarSign}${fmtL(totVar)}</td>
+        </tr>
+    `);
+}
+
+function render_mvr_products_table(wrapper, data) {
+    let products = data.products || [];
+    let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    let $tbody = $(wrapper).find('#mvr-table-products-body');
+    let $tfoot = $(wrapper).find('#mvr-table-products-foot');
+
+    if (products.length === 0) {
+        $tbody.html('<tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">No product reconciliation data available.</td></tr>');
+        $tfoot.empty();
+        return;
+    }
+
+    let rowsHtml = '';
+    let totOpen = 0, totPurch = 0, totClose = 0, totDepl = 0, totGross = 0, totRtt = 0, totNet = 0, totVar = 0;
+
+    products.forEach(p => {
+        totOpen += p.opening_dip || 0;
+        totPurch += p.purchases || 0;
+        totClose += p.closing_dip || 0;
+        totDepl += p.tank_depletion || 0;
+        totGross += p.gross_metre || 0;
+        totRtt += p.rtt || 0;
+        totNet += p.net_metre || 0;
+        totVar += p.variance || 0;
+
+        let varColor = p.variance >= 0 ? '#15803d' : '#b91c1c';
+        let varSign = p.variance >= 0 ? '+' : '';
+        let badgeColor = p.product === 'PMS' ? '#0284c7' : '#059669';
+        let labelName = p.product === 'PMS' ? 'PMS (Super Petrol)' : (p.product === 'AGO' ? 'AGO (Automotive Diesel)' : p.product);
+
+        rowsHtml += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:12px 14px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${badgeColor};"></span>
+                    <span>${labelName}</span>
+                </td>
+                <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#334155;">${fmtL(p.opening_dip)}</td>
+                <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669; font-weight:700;">+${fmtL(p.purchases)}</td>
+                <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#334155;">${fmtL(p.closing_dip)}</td>
+                <td style="padding:12px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(p.tank_depletion)}</td>
+                <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#334155;">${fmtL(p.gross_metre)}</td>
+                <td style="padding:12px 10px; text-align:right; font-family:monospace; color:#dc2626;">${p.rtt > 0 ? ('-' + fmtL(p.rtt)) : '0.00'}</td>
+                <td style="padding:12px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0f172a;">${fmtL(p.net_metre)}</td>
+                <td style="padding:12px 12px; text-align:right; font-weight:800; font-family:monospace; color:${varColor};">${varSign}${fmtL(p.variance)}</td>
+                <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${varColor};">${varSign}${p.variance_pct.toFixed(2)}%</td>
+                <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(p.audit_status, p.variance_pct)}</td>
+            </tr>
+        `;
+    });
+
+    $tbody.html(rowsHtml);
+
+    let totVarPct = totDepl > 0 ? ((totVar / totDepl) * 100) : 0;
+    let totVarColor = totVar >= 0 ? '#15803d' : '#b91c1c';
+    let totVarSign = totVar >= 0 ? '+' : '';
+
+    $tfoot.html(`
+        <tr>
+            <td style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">GRAND TOTALS</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totOpen)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:#059669;">+${fmtL(totPurch)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totClose)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totDepl)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace;">${fmtL(totGross)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:#dc2626;">-${fmtL(totRtt)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; background:#f1f5f9; color:#0f172a;">${fmtL(totNet)}</td>
+            <td style="padding:12px 12px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${fmtL(totVar)}</td>
+            <td style="padding:12px 10px; text-align:right; font-family:monospace; color:${totVarColor};">${totVarSign}${totVarPct.toFixed(2)}%</td>
+            <td style="padding:12px 14px; text-align:center;">${get_mvr_status_badge(data.kpis ? data.kpis.audit_status : 'Normal', totVarPct)}</td>
+        </tr>
+    `);
+}
+
+function render_mvr_nozzles_table(wrapper, data) {
+    let pumpGroups = data.pumps_by_group || [];
+    let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    let $container = $(wrapper).find('#mvr-nozzles-container');
+
+    if (pumpGroups.length === 0) {
+        $container.html('<div style="text-align:center; padding:32px; color:#94a3b8;">No pump island nozzle records found for this period.</div>');
+        return;
+    }
+
+    let html = '';
+    pumpGroups.forEach(grp => {
+        let rowsHtml = '';
+        let grpElecTot = 0, grpManTot = 0, grpRttTot = 0, grpNetTot = 0;
+
+        grp.nozzles.forEach(n => {
+            grpElecTot += n.electronic_litres || 0;
+            grpManTot += n.manual_litres || 0;
+            grpRttTot += n.rtt || 0;
+            grpNetTot += n.net_litres || 0;
+
+            let prodBadge = n.product === 'PMS' 
+                ? '<span style="background:#eff6ff; color:#1d4ed8; font-weight:700; font-size:10px; padding:2px 6px; border-radius:4px;">PMS</span>'
+                : '<span style="background:#f0fdf4; color:#15803d; font-weight:700; font-size:10px; padding:2px 6px; border-radius:4px;">AGO</span>';
+
+            rowsHtml += `
+                <tr style="border-bottom:1px solid #f1f5f9;">
+                    <td style="padding:10px 14px; font-weight:700; color:#0f172a;">${n.nozzle}</td>
+                    <td style="padding:10px 10px; text-align:center;">${prodBadge}</td>
+                    <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(n.opening_meter_electronic)}</td>
+                    <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#0f172a; font-weight:600;">${fmtL(n.closing_meter_electronic)}</td>
+                    <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#475569;">${fmtL(n.opening_meter_manual)}</td>
+                    <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#0f172a; font-weight:600;">${fmtL(n.closing_meter_manual)}</td>
+                    <td style="padding:10px 12px; text-align:right; font-weight:700; font-family:monospace; color:#0f172a;">${fmtL(n.electronic_litres)}</td>
+                    <td style="padding:10px 12px; text-align:right; font-weight:600; font-family:monospace; color:#475569;">${fmtL(n.manual_litres)}</td>
+                    <td style="padding:10px 10px; text-align:right; font-family:monospace; color:#dc2626;">${n.rtt > 0 ? ('-' + fmtL(n.rtt)) : '0.00'}</td>
+                    <td style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc; font-family:monospace; color:#0284c7;">${fmtL(n.net_litres)}</td>
+                    <td style="padding:10px 14px; text-align:right; font-family:monospace; font-weight:700; color:#475569;">${n.share_pct.toFixed(2)}%</td>
+                </tr>
+            `;
+        });
+
+        html += `
+            <div style="border:1px solid #e2e8f0; border-radius:8px; margin-bottom:16px; overflow:hidden;">
+                <div style="background:#f1f5f9; padding:8px 14px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0;">
+                    <span style="font-weight:800; font-size:12.5px; color:#1e293b;">${grp.group}</span>
+                    <span style="font-size:11px; color:#64748b;">${grp.nozzles.length} Nozzles</span>
+                </div>
+                <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                    <thead style="background:#fafafa; color:#64748b; font-size:10.5px; text-transform:uppercase;">
+                        <tr>
+                            <th style="padding:8px 14px; text-align:left;">Nozzle Name</th>
+                            <th style="padding:8px 10px; text-align:center;">Product</th>
+                            <th style="padding:8px 12px; text-align:right;">Op Elec Meter</th>
+                            <th style="padding:8px 12px; text-align:right;">Cl Elec Meter</th>
+                            <th style="padding:8px 12px; text-align:right;">Op Man Meter</th>
+                            <th style="padding:8px 12px; text-align:right;">Cl Man Meter</th>
+                            <th style="padding:8px 12px; text-align:right;">Elec Litres</th>
+                            <th style="padding:8px 12px; text-align:right;">Man Litres</th>
+                            <th style="padding:8px 10px; text-align:right; color:#dc2626;">Less RTT</th>
+                            <th style="padding:8px 12px; text-align:right; font-weight:800; background:#f8fafc;">Net Litres</th>
+                            <th style="padding:8px 14px; text-align:right;">Share %</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                    <tfoot style="background:#f8fafc; font-weight:800; border-top:1.5px solid #cbd5e1;">
+                        <tr>
+                            <td colspan="6" style="padding:10px 14px; text-transform:uppercase; font-size:11px;">${grp.group} TOTALS</td>
+                            <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(grpElecTot)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-family:monospace;">${fmtL(grpManTot)}</td>
+                            <td style="padding:10px 10px; text-align:right; font-family:monospace; color:#dc2626;">-${fmtL(grpRttTot)}</td>
+                            <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#0284c7; background:#f1f5f9;">${fmtL(grpNetTot)}</td>
+                            <td style="padding:10px 14px; text-align:right; font-family:monospace;">—</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        `;
+    });
+
+    $container.html(html);
+}
+
+function render_mvr_purchases_table(wrapper, data) {
+    let purchases = data.purchases || [];
+    let fmtL = (val, dec = 2) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    let $tbody = $(wrapper).find('#mvr-table-purchases-body');
+    let $tfoot = $(wrapper).find('#mvr-table-purchases-foot');
+
+    if (purchases.length === 0) {
+        $tbody.html('<tr><td colspan="9" style="text-align:center; padding:32px; color:#94a3b8;">No fuel delivery offloadings found in this period.</td></tr>');
+        $tfoot.empty();
+        return;
+    }
+
+    let rowsHtml = '';
+    let totQty = 0, totAmt = 0;
+
+    purchases.forEach(p => {
+        totQty += p.quantity || 0;
+        totAmt += p.grand_total || 0;
+
+        let prodBadge = p.product === 'PMS' 
+            ? '<span style="background:#eff6ff; color:#1d4ed8; font-weight:700; font-size:10px; padding:2px 6px; border-radius:4px;">PMS</span>'
+            : '<span style="background:#f0fdf4; color:#15803d; font-weight:700; font-size:10px; padding:2px 6px; border-radius:4px;">AGO</span>';
+
+        rowsHtml += `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 14px; font-weight:700; font-family:monospace; color:#0f172a;">${p.name}</td>
+                <td style="padding:10px 12px; font-family:monospace; color:#334155;">${p.receiving_date}</td>
+                <td style="padding:10px 12px; color:#475569; font-weight:600;">${p.supplier}</td>
+                <td style="padding:10px 12px; font-family:monospace; color:#64748b;">${p.shift}</td>
+                <td style="padding:10px 12px;">${prodBadge}</td>
+                <td style="padding:10px 12px; color:#475569;">${p.target_tank || '—'}</td>
+                <td style="padding:10px 14px; text-align:right; font-weight:800; font-family:monospace; color:#059669;">+${fmtL(p.quantity)} L</td>
+                <td style="padding:10px 12px; text-align:right; font-family:monospace; color:#64748b;">${p.unit_cost > 0 ? ('KES ' + fmtL(p.unit_cost)) : '—'}</td>
+                <td style="padding:10px 14px; text-align:right; font-weight:700; font-family:monospace; color:#0f172a;">${p.grand_total > 0 ? ('KES ' + fmtL(p.grand_total)) : '—'}</td>
+            </tr>
+        `;
+    });
+
+    $tbody.html(rowsHtml);
+
+    $tfoot.html(`
+        <tr>
+            <td colspan="6" style="padding:12px 14px; text-transform:uppercase; letter-spacing:0.5px;">TOTAL DELIVERIES (${purchases.length} OFFLOADINGS)</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#059669; font-weight:800;">+${fmtL(totQty)} L</td>
+            <td style="padding:12px 12px; text-align:right; color:#64748b;">—</td>
+            <td style="padding:12px 14px; text-align:right; font-family:monospace; color:#0f172a; font-weight:800;">${totAmt > 0 ? ('KES ' + fmtL(totAmt)) : '—'}</td>
+        </tr>
+    `);
+}
+
+function export_mvr_tracker_csv(wrapper) {
+    let state = window.VOL_TRACKER_STATE;
+    if (!state || !state.data) {
+        frappe.msgprint("No volume tracker data available to export. Please load data first.");
+        return;
+    }
+
+    let data = state.data;
+    let kpis = data.kpis || {};
+    let period = data.period || {};
+
+    let rows = [
+        ["Monthly Volumes and Variances Tracker - Admin Audit Report"],
+        ["Export Date", frappe.datetime.now_datetime()],
+        ["Analysis Period", `${period.from_date} to ${period.to_date}`],
+        ["Station", data.station || "All Stations (Consolidated)"],
+        ["Total Operating Shifts", `${period.total_shifts} (${period.closed_shifts} Closed, ${period.open_shifts} Open)`],
+        [],
+        ["TOP EXECUTIVE SUMMARY KPIS"],
+        ["Total Fuel Dispensed (Net)", (kpis.total_dispensed || 0).toFixed(2), "Litres"],
+        ["PMS Dispensed", (kpis.pms_dispensed || 0).toFixed(2), "Litres"],
+        ["AGO Dispensed", (kpis.ago_dispensed || 0).toFixed(2), "Litres"],
+        ["Fuel Deliveries (Purchases)", (kpis.purchases_litres || 0).toFixed(2), "Litres"],
+        ["Calculated Tank Depletion", (kpis.tank_depletion || 0).toFixed(2), "Litres"],
+        ["Station Net Variance", (kpis.station_variance || 0).toFixed(2), "Litres"],
+        ["Station Net Variance %", (kpis.variance_pct || 0).toFixed(2) + "%"],
+        ["Audit Status", kpis.audit_status || "Normal"],
+        [],
+        ["PRODUCT VOLUME & TANK DIPS RECONCILIATION SUMMARY"],
+        ["Product / Grade", "Stock B/F (Opening Dip)", "+ Purchases (Deliveries)", "- Stock C/F (Closing Dip)", "= Tank Sales (Depletion)", "Gross Metre (Pumps)", "Less RTT", "= Net Metre Sales", "Variance (L)", "Var %", "Audit Status"]
+    ];
+
+    (data.products || []).forEach(p => {
+        rows.push([
+            p.product,
+            (p.opening_dip || 0).toFixed(2),
+            (p.purchases || 0).toFixed(2),
+            (p.closing_dip || 0).toFixed(2),
+            (p.tank_depletion || 0).toFixed(2),
+            (p.gross_metre || 0).toFixed(2),
+            (p.rtt || 0).toFixed(2),
+            (p.net_metre || 0).toFixed(2),
+            (p.variance || 0).toFixed(2),
+            (p.variance_pct || 0).toFixed(2) + "%",
+            p.audit_status
+        ]);
+    });
+
+    rows.push([]);
+    rows.push(["DAILY VOLUMES & VARIANCES BREAKDOWN"]);
+    rows.push(["Date", "Day", "Shifts Count", "PMS Sold (L)", "AGO Sold (L)", "Total Dispensed (L)", "+ Deliveries (L)", "Opening Dip (L)", "Closing Dip (L)", "= Depletion (L)", "Variance (L)", "Var %", "Audit Status"]);
+
+    (data.daily || []).forEach(d => {
+        rows.push([
+            d.date,
+            d.day_name,
+            d.shifts_count,
+            (d.pms_dispensed || 0).toFixed(2),
+            (d.ago_dispensed || 0).toFixed(2),
+            (d.total_dispensed || 0).toFixed(2),
+            (d.purchases_litres || 0).toFixed(2),
+            (d.opening_dip || 0).toFixed(2),
+            (d.closing_dip || 0).toFixed(2),
+            (d.tank_depletion || 0).toFixed(2),
+            (d.variance || 0).toFixed(2),
+            (d.variance_pct || 0).toFixed(2) + "%",
+            d.audit_status
+        ]);
+    });
+
+    rows.push([]);
+    rows.push(["WEEKLY CONSOLIDATED SUMMARY"]);
+    rows.push(["Week Period", "Operating Days", "Shifts Count", "PMS Dispensed (L)", "AGO Dispensed (L)", "Total Dispensed (L)", "+ Deliveries (L)", "= Tank Depletion (L)", "Variance (L)", "Var %", "Audit Status"]);
+
+    (data.weekly || []).forEach(w => {
+        rows.push([
+            w.week_label,
+            w.days_count,
+            w.shifts_count,
+            (w.pms_dispensed || 0).toFixed(2),
+            (w.ago_dispensed || 0).toFixed(2),
+            (w.total_dispensed || 0).toFixed(2),
+            (w.purchases_litres || 0).toFixed(2),
+            (w.tank_depletion || 0).toFixed(2),
+            (w.variance || 0).toFixed(2),
+            (w.variance_pct || 0).toFixed(2) + "%",
+            w.audit_status
+        ]);
+    });
+
+    let csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(",")).join("\n");
+    let encodedUri = encodeURI(csvContent);
+    let link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `monthly_volumes_variances_${state.station || 'all'}_${state.from_date}_to_${state.to_date}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 
 
 

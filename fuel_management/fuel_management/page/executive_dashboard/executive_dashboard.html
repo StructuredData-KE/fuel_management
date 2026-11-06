@@ -700,6 +700,10 @@
                 <span class="material-symbols-outlined">inventory_2</span>
                 <span>Inventory</span>
             </a>
+            <a class="exec-nav-item" data-tab="tab-volume-tracker">
+                <span class="material-symbols-outlined">stacked_bar_chart</span>
+                <span>Volumes & Variances</span>
+            </a>
 
             <!-- SECTION: CASH & BANK ACCOUNTS (EMERALD THEME) -->
             <div class="exec-nav-section-wrapper" id="sec-cash-accounts">
@@ -760,11 +764,15 @@
                         <span>Reconciliations</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:6px;">
-                        <span id="exec-badge-recon-count" style="font-size:10px; font-weight:700; background:#7c3aed; color:#fff; padding:1px 6px; border-radius:10px;">5</span>
+                        <span id="exec-badge-recon-count" style="font-size:10px; font-weight:700; background:#7c3aed; color:#fff; padding:1px 6px; border-radius:10px;">6</span>
                         <span class="material-symbols-outlined section-chevron" style="color:#7c3aed;">expand_more</span>
                     </div>
                 </div>
                 <div id="exec-sidebar-reconciliations" class="exec-nav-section-body collapsed">
+                    <a class="exec-nav-item" data-tab="tab-volume-tracker">
+                        <span class="material-symbols-outlined" style="font-size:18px;">stacked_bar_chart</span>
+                        <span>Volumes & Variances Tracker</span>
+                    </a>
                     <a class="exec-nav-item" data-tab="tab-purchases-reconciliation">
                         <span class="material-symbols-outlined" style="font-size:18px;">local_gas_station</span>
                         <span>Purchases Recon</span>
@@ -3930,6 +3938,367 @@
                         </tr>
                     </tfoot>
                 </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- ======================================================== -->
+    <!-- MONTHLY VOLUMES AND VARIANCES TRACKER MODULE -->
+    <!-- ======================================================== -->
+    <main class="exec-main" id="tab-volume-tracker" style="display:none;">
+        <!-- Header Bar -->
+        <div class="exec-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+            <div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:24px;">📈</span>
+                    <h1 class="exec-header-title" style="margin:0; font-size:24px; font-weight:800; color:#0f172a; letter-spacing:-0.02em;">
+                        Monthly Volumes and Variances Tracker
+                    </h1>
+                    <span style="font-size:11px; background:#fef3c7; color:#b45309; font-weight:800; padding:3px 8px; border-radius:6px; border:1px solid #fde68a;">
+                        ADMIN AUDIT
+                    </span>
+                </div>
+                <div style="font-size:13px; color:#64748b; margin-top:4px;" id="mvr-tracker-subtitle">
+                    Automated meter throughput, physical dips stock audit, deliveries, and sales variance analysis
+                </div>
+            </div>
+
+            <!-- Header Controls: Station, Date Presets, Dates, Actions -->
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <!-- Station Selector -->
+                <div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:2px 8px; display:flex; align-items:center; gap:6px;">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#64748b;">local_gas_station</span>
+                    <select id="mvr-tracker-station-select" style="border:none; background:transparent; font-size:12px; font-weight:600; color:#1e293b; outline:none; cursor:pointer; padding:6px 2px;">
+                        <option value="">All Stations (Consolidated)</option>
+                    </select>
+                </div>
+
+                <!-- Date Range Presets -->
+                <div style="display:flex; background:#f1f5f9; padding:3px; border-radius:8px; border:1px solid #e2e8f0; gap:2px;">
+                    <button type="button" class="mvr-preset-btn active" data-preset="month" style="border:none; background:#fff; color:#0f172a; font-weight:700; font-size:11.5px; padding:5px 10px; border-radius:6px; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05);">This Month</button>
+                    <button type="button" class="mvr-preset-btn" data-preset="last_month" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:11.5px; padding:5px 10px; border-radius:6px; cursor:pointer;">Last Month</button>
+                    <button type="button" class="mvr-preset-btn" data-preset="week" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:11.5px; padding:5px 10px; border-radius:6px; cursor:pointer;">This Week</button>
+                    <button type="button" class="mvr-preset-btn" data-preset="last_7_days" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:11.5px; padding:5px 10px; border-radius:6px; cursor:pointer;">Last 7 Days</button>
+                    <button type="button" class="mvr-preset-btn" data-preset="custom" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:11.5px; padding:5px 10px; border-radius:6px; cursor:pointer;">Custom</button>
+                </div>
+
+                <!-- Date Inputs Container -->
+                <div id="mvr-tracker-date-inputs" style="display:flex; align-items:center; gap:6px; background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:4px 8px;">
+                    <input type="date" id="mvr-tracker-from-date" style="border:none; font-size:12px; font-weight:600; color:#334155; outline:none;">
+                    <span style="font-size:11px; color:#94a3b8;">to</span>
+                    <input type="date" id="mvr-tracker-to-date" style="border:none; font-size:12px; font-weight:600; color:#334155; outline:none;">
+                </div>
+
+                <!-- Load Action -->
+                <button type="button" id="btn-mvr-tracker-refresh" style="background:#2563eb; color:#fff; border:none; padding:7px 14px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 1px 2px rgba(37,99,235,0.2);">
+                    <span class="material-symbols-outlined" style="font-size:16px;">refresh</span>
+                    <span>Load Analysis</span>
+                </button>
+
+                <!-- Export CSV -->
+                <button type="button" id="btn-mvr-tracker-csv" style="background:#fff; color:#334155; border:1px solid #cbd5e1; padding:7px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#059669;">table_view</span>
+                    <span>CSV</span>
+                </button>
+
+                <!-- Print / PDF -->
+                <button type="button" id="btn-mvr-tracker-print" style="background:#fff; color:#334155; border:1px solid #cbd5e1; padding:7px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#475569;">print</span>
+                    <span>Print</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Period Overview Banner -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span class="material-symbols-outlined" style="color:#2563eb; font-size:22px;">event_note</span>
+                <div>
+                    <span style="font-size:12px; font-weight:800; color:#0f172a;" id="mvr-meta-period">Analysis Period: Loading...</span>
+                    <span style="font-size:11px; color:#64748b; margin-left:8px;" id="mvr-meta-station-name">• All Stations</span>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:16px; font-size:11.5px; color:#475569;">
+                <div><strong>Operating Shifts:</strong> <span id="mvr-meta-total-shifts" style="font-family:monospace; font-weight:700; color:#0f172a;">0 Shifts</span></div>
+                <div style="border-left:1px solid #cbd5e1; padding-left:12px;"><strong>First Shift:</strong> <span id="mvr-meta-first-shift" style="font-family:monospace;">—</span></div>
+                <div style="border-left:1px solid #cbd5e1; padding-left:12px;"><strong>Last Shift:</strong> <span id="mvr-meta-last-shift" style="font-family:monospace;">—</span></div>
+            </div>
+        </div>
+
+        <!-- 5 Top Executive KPI Cards (Matching Image) -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:14px;">
+            <!-- KPI 1: TOTAL FUEL DISPENSED -->
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; border-top:4px solid #0284c7; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:10.5px; font-weight:800; color:#0284c7; text-transform:uppercase; letter-spacing:0.5px;">TOTAL FUEL DISPENSED (NET)</span>
+                    <span class="material-symbols-outlined" style="font-size:18px; color:#0284c7;">local_gas_station</span>
+                </div>
+                <div style="font-size:20px; font-weight:900; font-family:monospace; color:#0f172a;" id="mvr-kpi-dispensed">0.00 L</div>
+                <div style="font-size:10.5px; color:#64748b; margin-top:4px; display:flex; gap:8px;" id="mvr-kpi-dispensed-sub">
+                    <span>PMS: 0.00 L</span>
+                    <span>AGO: 0.00 L</span>
+                </div>
+            </div>
+
+            <!-- KPI 2: FUEL DELIVERIES -->
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; border-top:4px solid #10b981; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:10.5px; font-weight:800; color:#10b981; text-transform:uppercase; letter-spacing:0.5px;">FUEL DELIVERIES (PURCHASES)</span>
+                    <span class="material-symbols-outlined" style="font-size:18px; color:#10b981;">local_shipping</span>
+                </div>
+                <div style="font-size:20px; font-weight:900; font-family:monospace; color:#0f172a;" id="mvr-kpi-purchases">0.00 L</div>
+                <div style="font-size:10.5px; color:#64748b; margin-top:4px;" id="mvr-kpi-purchases-sub">0 Fuel Deliveries Received</div>
+            </div>
+
+            <!-- KPI 3: CALCULATED TANK DEPLETION -->
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; border-top:4px solid #8b5cf6; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:10.5px; font-weight:800; color:#8b5cf6; text-transform:uppercase; letter-spacing:0.5px;">CALCULATED TANK DEPLETION</span>
+                    <span class="material-symbols-outlined" style="font-size:18px; color:#8b5cf6;">water_drop</span>
+                </div>
+                <div style="font-size:20px; font-weight:900; font-family:monospace; color:#0f172a;" id="mvr-kpi-depletion">0.00 L</div>
+                <div style="font-size:10.5px; color:#64748b; margin-top:4px;">Opening + Purchases - Closing</div>
+            </div>
+
+            <!-- KPI 4: STATION NET VARIANCE -->
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; border-top:4px solid #f59e0b; box-shadow:0 1px 3px rgba(0,0,0,0.04);" id="mvr-kpi-var-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:10.5px; font-weight:800; color:#d97706; text-transform:uppercase; letter-spacing:0.5px;">STATION NET VARIANCE</span>
+                    <span class="material-symbols-outlined" style="font-size:18px; color:#d97706;">balance</span>
+                </div>
+                <div style="font-size:20px; font-weight:900; font-family:monospace; color:#0f172a;" id="mvr-kpi-variance">0.00 L</div>
+                <div style="font-size:10.5px; margin-top:4px;" id="mvr-kpi-variance-status">
+                    <span class="badge" style="background:#f0fdf4; color:#166534; font-weight:700; padding:1px 6px; border-radius:4px; border:1px solid #bbf7d0;">0.00% • Normal (Within ±0.5%)</span>
+                </div>
+            </div>
+
+            <!-- KPI 5: PHYSICAL DIPS AUDIT -->
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; border-top:4px solid #3b82f6; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:10.5px; font-weight:800; color:#3b82f6; text-transform:uppercase; letter-spacing:0.5px;">PHYSICAL DIPS AUDIT</span>
+                    <span class="material-symbols-outlined" style="font-size:18px; color:#3b82f6;">verified_user</span>
+                </div>
+                <div style="font-size:20px; font-weight:900; color:#16a34a;" id="mvr-kpi-audit">Reconciled</div>
+                <div style="font-size:10.5px; color:#64748b; margin-top:4px;">All Tanks & Pumps Accounted</div>
+            </div>
+        </div>
+
+        <!-- View Mode Navigation / Grouping Selector -->
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:8px; margin-top:8px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; background:#f1f5f9; padding:3px; border-radius:8px; border:1px solid #e2e8f0; gap:3px;">
+                <button type="button" class="mvr-view-btn active" data-view="daily" style="border:none; background:#fff; color:#0f172a; font-weight:700; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 1px 2px rgba(0,0,0,0.06);">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:#2563eb;">calendar_view_day</span>
+                    <span>By Day (Daily Breakdown)</span>
+                </button>
+                <button type="button" class="mvr-view-btn" data-view="weekly" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">calendar_view_week</span>
+                    <span>By Week (Weekly Breakdown)</span>
+                </button>
+                <button type="button" class="mvr-view-btn" data-view="shifts" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">bolt</span>
+                    <span>By Shift</span>
+                </button>
+                <button type="button" class="mvr-view-btn" data-view="products" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">analytics</span>
+                    <span>Product & Tank Dips Summary</span>
+                </button>
+                <button type="button" class="mvr-view-btn" data-view="nozzles" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">tune</span>
+                    <span>Pump Islands & Nozzles</span>
+                </button>
+                <button type="button" class="mvr-view-btn" data-view="purchases" style="border:none; background:transparent; color:#64748b; font-weight:600; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">receipt_long</span>
+                    <span>Deliveries (<span id="mvr-count-deliveries">0</span>)</span>
+                </button>
+            </div>
+
+            <!-- View Formula Hint -->
+            <div style="font-size:11px; color:#64748b; font-style:italic;">
+                Formula: Tank Depletion = (Opening Dip + Purchases - Closing Dip) | Variance = (Dispensed Metres - Depletion)
+            </div>
+        </div>
+
+        <!-- PANE 1: DAILY BREAKDOWN ("By the day") -->
+        <div id="mvr-pane-daily" class="mvr-pane" style="display:block;">
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:13px; font-weight:800; color:#0f172a;">Daily Volumes, Tank Dips & Variance Tracking</span>
+                    <span style="font-size:11px; color:#64748b;">Daily fuel throughput vs physical tank depletion audit</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f1f5f9; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Date</th>
+                                <th style="padding:10px 10px; text-align:left;">Day</th>
+                                <th style="padding:10px 10px; text-align:center;">Shifts</th>
+                                <th style="padding:10px 12px; text-align:right;">PMS Sold (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">AGO Sold (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc;">Total Dispensed (L)</th>
+                                <th style="padding:10px 12px; text-align:right; color:#059669;">+ Deliveries (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Opening Dip (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Closing Dip (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc;">= Depletion (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800;">Variance (L)</th>
+                                <th style="padding:10px 10px; text-align:right;">Var %</th>
+                                <th style="padding:10px 14px; text-align:center;">Audit Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-daily-body">
+                            <tr><td colspan="13" style="text-align:center; padding:32px; color:#94a3b8;">Loading daily volume tracking...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-daily-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1;"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANE 2: WEEKLY BREAKDOWN ("or week etc") -->
+        <div id="mvr-pane-weekly" class="mvr-pane" style="display:none;">
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:13px; font-weight:800; color:#0f172a;">Weekly Consolidated Volumes & Variance Summary</span>
+                    <span style="font-size:11px; color:#64748b;">Consolidated volume trends by calendar week</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f1f5f9; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Week Period</th>
+                                <th style="padding:10px 10px; text-align:center;">Operating Days</th>
+                                <th style="padding:10px 10px; text-align:center;">Shifts</th>
+                                <th style="padding:10px 14px; text-align:right;">PMS Dispensed (L)</th>
+                                <th style="padding:10px 14px; text-align:right;">AGO Dispensed (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800; background:#f8fafc;">Total Dispensed (L)</th>
+                                <th style="padding:10px 14px; text-align:right; color:#059669;">+ Deliveries (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800; background:#f8fafc;">= Tank Depletion (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800;">Variance (L)</th>
+                                <th style="padding:10px 10px; text-align:right;">Var %</th>
+                                <th style="padding:10px 14px; text-align:center;">Audit Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-weekly-body">
+                            <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">Loading weekly volume tracking...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-weekly-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1;"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANE 3: SHIFT BREAKDOWN -->
+        <div id="mvr-pane-shifts" class="mvr-pane" style="display:none;">
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:13px; font-weight:800; color:#0f172a;">Shift-by-Shift Detailed Reconciliation Log</span>
+                    <span style="font-size:11px; color:#64748b;">Every individual day and night shift meter sales</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f1f5f9; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Shift ID</th>
+                                <th style="padding:10px 12px; text-align:left;">Date</th>
+                                <th style="padding:10px 12px; text-align:left;">Template</th>
+                                <th style="padding:10px 12px; text-align:left;">Station</th>
+                                <th style="padding:10px 10px; text-align:center;">Status</th>
+                                <th style="padding:10px 12px; text-align:right;">PMS (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">AGO (L)</th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc;">Total Dispensed (L)</th>
+                                <th style="padding:10px 12px; text-align:right; color:#059669;">Purchases (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Closing Dip (L)</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800;">Shift Variance (L)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-shifts-body">
+                            <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">Loading shift records...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-shifts-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1;"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANE 4: PRODUCT SUMMARY (Matching image Table 1) -->
+        <div id="mvr-pane-products" class="mvr-pane" style="display:none;">
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:16px;">📊</span>
+                        <span style="font-size:13px; font-weight:800; color:#0f172a;">Product Volume & Tank Dips Reconciliation Summary</span>
+                    </div>
+                    <span style="font-size:11px; color:#64748b;">Formula: Tank Sales = (Opening Dip + Purchases - Closing Dip) | Variance = (Net Metre Sales - Tank Sales)</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f1f5f9; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">PRODUCT / FUEL GRADE</th>
+                                <th style="padding:10px 12px; text-align:right;">STOCK B/F<br><span style="font-size:9.5px; text-transform:none; color:#64748b;">(OPENING DIP)</span></th>
+                                <th style="padding:10px 12px; text-align:right; color:#059669;">+ PURCHASES<br><span style="font-size:9.5px; text-transform:none; color:#059669;">(DELIVERIES)</span></th>
+                                <th style="padding:10px 12px; text-align:right;">- STOCK C/F<br><span style="font-size:9.5px; text-transform:none; color:#64748b;">(CLOSING DIP)</span></th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc;">= TANK SALES<br><span style="font-size:9.5px; text-transform:none; color:#64748b;">(DEPLETION)</span></th>
+                                <th style="padding:10px 12px; text-align:right;">GROSS METRE<br><span style="font-size:9.5px; text-transform:none; color:#64748b;">(PUMPS TOTAL)</span></th>
+                                <th style="padding:10px 10px; text-align:right; color:#dc2626;">LESS RTT<br><span style="font-size:9.5px; text-transform:none; color:#dc2626;">(RETURN TANK)</span></th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800; background:#f8fafc;">= NET METRE SALES<br><span style="font-size:9.5px; text-transform:none; color:#64748b;">(ACTUAL SOLD)</span></th>
+                                <th style="padding:10px 12px; text-align:right; font-weight:800;">VARIANCE (L)<br><span style="font-size:9.5px; text-transform:none; color:#64748b;">(GAIN / LOSS)</span></th>
+                                <th style="padding:10px 10px; text-align:right;">VAR %</th>
+                                <th style="padding:10px 14px; text-align:center;">AUDIT STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-products-body">
+                            <tr><td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">Loading product reconciliation summary...</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-products-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1;"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANE 5: PUMP NOZZLES BREAKDOWN (Matching image Table 2) -->
+        <div id="mvr-pane-nozzles" class="mvr-pane" style="display:none;">
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:16px;">⛽</span>
+                        <span style="font-size:13px; font-weight:800; color:#0f172a;">Pump Islands & Nozzle Meter Readings Breakdown</span>
+                    </div>
+                    <span style="font-size:11px; color:#64748b;">Opening Reading (Period Start) vs Closing Reading (Period End) per Nozzle</span>
+                </div>
+                <div style="overflow-x:auto; padding:16px;" id="mvr-nozzles-container">
+                    <!-- Populated dynamically per pump group -->
+                </div>
+            </div>
+        </div>
+
+        <!-- PANE 6: DELIVERIES / PURCHASES LEDGER -->
+        <div id="mvr-pane-purchases" class="mvr-pane" style="display:none;">
+            <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                <div style="padding:14px 18px; border-bottom:1px solid #e2e8f0; background:#f8fafc; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:13px; font-weight:800; color:#0f172a;">Fuel Deliveries (Purchases) Injections Ledger</span>
+                    <span style="font-size:11px; color:#64748b;">Physical tanker offloadings into tanks for this period</span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="table" style="width:100%; margin:0; border-collapse:collapse; font-size:12px;">
+                        <thead style="background:#f1f5f9; color:#475569; font-size:11px; text-transform:uppercase;">
+                            <tr>
+                                <th style="padding:10px 14px; text-align:left;">Invoice / Slip</th>
+                                <th style="padding:10px 12px; text-align:left;">Date</th>
+                                <th style="padding:10px 12px; text-align:left;">Supplier</th>
+                                <th style="padding:10px 12px; text-align:left;">Shift</th>
+                                <th style="padding:10px 12px; text-align:left;">Product</th>
+                                <th style="padding:10px 12px; text-align:left;">Target Tank</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800;">Quantity (L)</th>
+                                <th style="padding:10px 12px; text-align:right;">Unit Cost</th>
+                                <th style="padding:10px 14px; text-align:right; font-weight:800;">Total Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mvr-table-purchases-body">
+                            <tr><td colspan="9" style="text-align:center; padding:32px; color:#94a3b8;">No deliveries found in this period.</td></tr>
+                        </tbody>
+                        <tfoot id="mvr-table-purchases-foot" style="background:#f8fafc; font-weight:800; border-top:2px solid #cbd5e1;"></tfoot>
+                    </table>
+                </div>
             </div>
         </div>
     </main>
