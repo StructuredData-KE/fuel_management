@@ -3416,6 +3416,9 @@ def submit_account_transfer(paid_from_account, paid_to_account, amount, posting_
     ref_no = (reference or "").strip()
     memo = (remarks or "").strip()
 
+    # ERPNext requires cheque_no if cheque_date is provided; fallback to auto-generated ref if blank
+    effective_ref = ref_no or f"TRF-{frappe.utils.now_datetime().strftime('%y%m%d%H%M%S')}"
+
     full_remark = f"[ACCOUNT TRANSFER] Transfer KES {val_amount:,.2f} from {paid_from_account} to {paid_to_account}."
     if ref_no:
         full_remark += f" Ref: {ref_no}."
@@ -3426,7 +3429,7 @@ def submit_account_transfer(paid_from_account, paid_to_account, amount, posting_
     je.voucher_type = "Journal Entry"
     je.company = company
     je.posting_date = posting_date
-    je.cheque_no = ref_no
+    je.cheque_no = effective_ref
     je.cheque_date = posting_date
     je.user_remark = full_remark
 
@@ -3507,7 +3510,7 @@ def submit_supplier_bank_transfer(paid_from_account, supplier, amount, posting_d
     pe.paid_to = payable_account
     pe.paid_amount = val_amount
     pe.received_amount = val_amount
-    pe.reference_no = reference or ""
+    pe.reference_no = reference or f"PAY-{frappe.utils.now_datetime().strftime('%y%m%d%H%M%S')}"
     pe.reference_date = posting_date
     prefix = "[SUPPLIER BANK TRANSFER]" if payment_type_mode == "bank_transfer" else "[CARD HOLDING RECONCILIATION]"
     pe.remarks = f"{prefix} Paid KES {val_amount:,.2f} to {supplier} from {paid_from_account}. {remarks or ''}".strip()
