@@ -6707,8 +6707,11 @@ function load_exec_exp_options(wrapper) {
 }
 
 function open_director_expense_modal(wrapper) {
-    // Reset Form
+    // Reset Form for New Expense
     $(wrapper).find('#exec-expense-form')[0].reset();
+    $(wrapper).find('#exec-modal-exp-voucher-no').val('');
+    $(wrapper).find('#exec-modal-exp-title-text').text("Record Director / Executive Expense");
+    $(wrapper).find('#exec-modal-exp-submit-text').text("Post & Submit Expense");
     $(wrapper).find('#exec-modal-exp-date').val(frappe.datetime.get_today());
     $(wrapper).find('#exec-modal-exp-alert').hide().removeClass('alert-danger alert-success');
     $(wrapper).find('#exec-modal-exp-spinner').addClass('hidden');
@@ -6718,7 +6721,71 @@ function open_director_expense_modal(wrapper) {
     $(wrapper).find('#exec-expense-modal').css('display', 'flex');
 }
 
+function open_edit_director_expense_modal(wrapper, rec) {
+    if (!rec) return;
+    load_exec_exp_options(wrapper);
+
+    // Populate Form with existing expense data
+    $(wrapper).find('#exec-expense-form')[0].reset();
+    $(wrapper).find('#exec-modal-exp-voucher-no').val(rec.voucher_no);
+    $(wrapper).find('#exec-modal-exp-title-text').html(`Edit Director Expense <span style="font-family: monospace; font-size: 14px; color: #2563eb; background: #eff6ff; padding: 2px 8px; border-radius: 4px; border: 1px solid #bfdbfe; margin-left: 6px;">${rec.voucher_no}</span>`);
+    $(wrapper).find('#exec-modal-exp-submit-text').text("Save & Update Expense");
+
+    let pDate = rec.posting_date;
+    if (!pDate && rec.date_formatted) {
+        pDate = rec.date_formatted;
+    }
+    $(wrapper).find('#exec-modal-exp-date').val(pDate);
+    $(wrapper).find('#exec-modal-exp-amount').val(rec.amount);
+    $(wrapper).find('#exec-modal-exp-paid-from').val(rec.paid_from_account);
+    $(wrapper).find('#exec-modal-exp-category').val(rec.expense_account);
+    $(wrapper).find('#exec-modal-exp-payee').val(rec.payee === 'Not specified' ? '' : rec.payee);
+    $(wrapper).find('#exec-modal-exp-ref').val(rec.reference_no === '-' ? '' : rec.reference_no);
+    $(wrapper).find('#exec-modal-exp-desc').val(rec.description);
+
+    $(wrapper).find('#exec-modal-exp-alert').hide().removeClass('alert-danger alert-success');
+    $(wrapper).find('#exec-modal-exp-spinner').addClass('hidden');
+    $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', false);
+
+    $(wrapper).find('#exec-expense-modal').css('display', 'flex');
+}
+
+function handle_delete_director_expense(wrapper, voucher_no, amount, payee) {
+    let amtFormatted = Number(amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    frappe.confirm(
+        `Are you sure you want to permanently <b>DELETE</b> expense voucher <b>${voucher_no}</b> (${frappe.utils.escape_html(payee || 'Expense')} - KES ${amtFormatted})?<br><br><span style="color:#dc2626; font-size:12px;">This will cancel the Journal Entry, reverse all ledger balances, and remove the record.</span>`,
+        function() {
+            frappe.call({
+                method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.delete_director_expense',
+                args: { voucher_no: voucher_no },
+                freeze: true,
+                freeze_message: __("Deleting and reversing expense entry..."),
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: r.message.message || `Expense ${voucher_no} deleted successfully.`,
+                            indicator: 'green'
+                        }, 5);
+                        load_exec_expenses(wrapper);
+                        if (window.EXEC_CA_STATE && window.EXEC_CA_STATE.raw_data) {
+                            load_exec_cash_accounts(wrapper);
+                        }
+                    }
+                },
+                error: function(err) {
+                    frappe.msgprint({
+                        title: __("Deletion Error"),
+                        indicator: 'red',
+                        message: err.message || "Could not delete this expense entry."
+                    });
+                }
+            });
+        }
+    );
+}
+
 function submit_director_expense_form(wrapper) {
+    let voucher_no = $(wrapper).find('#exec-modal-exp-voucher-no').val();
     let date = $(wrapper).find('#exec-modal-exp-date').val();
     let amount = parseFloat($(wrapper).find('#exec-modal-exp-amount').val());
     let paid_from = $(wrapper).find('#exec-modal-exp-paid-from').val();
@@ -6758,17 +6825,26 @@ function submit_director_expense_form(wrapper) {
     $(wrapper).find('#exec-modal-exp-spinner').removeClass('hidden');
     $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', true);
 
+    let method = voucher_no ? 
+        'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.update_director_expense' :
+        'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.submit_director_expense';
+
+    let args = {
+        date: date,
+        amount: amount,
+        paid_from_account: paid_from,
+        expense_account: category,
+        payee: payee,
+        description: desc,
+        reference_no: ref_no
+    };
+    if (voucher_no) {
+        args.voucher_no = voucher_no;
+    }
+
     frappe.call({
-        method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.submit_director_expense',
-        args: {
-            date: date,
-            amount: amount,
-            paid_from_account: paid_from,
-            expense_account: category,
-            payee: payee,
-            description: desc,
-            reference_no: ref_no
-        },
+        method: method,
+        args: args,
         callback: function(r) {
             $(wrapper).find('#exec-modal-exp-spinner').addClass('hidden');
             $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', false);
@@ -6790,13 +6866,13 @@ function submit_director_expense_form(wrapper) {
         error: function(err) {
             $(wrapper).find('#exec-modal-exp-spinner').addClass('hidden');
             $(wrapper).find('#btn-exec-modal-exp-submit').prop('disabled', false);
-            alertBox.text("Failed to post expense: " + (err.message || err.toString())).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
+            alertBox.text("Failed to save expense: " + (err.message || err.toString())).css({'background': '#fee2e2', 'color': '#991b1b'}).show();
         }
     });
 }
 
 function load_exec_expenses(wrapper) {
-    $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="9" style="text-align: center; padding: 30px; color: #94a3b8;"><span class="spinner"></span> Loading executive expenses...</td></tr>');
+    $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="10" style="text-align: center; padding: 30px; color: #94a3b8;"><span class="spinner"></span> Loading executive expenses...</td></tr>');
 
     frappe.call({
         method: 'fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_director_expenses_register',
@@ -6844,7 +6920,7 @@ function render_exec_exp_table(wrapper) {
     });
 
     if (filtered.length === 0) {
-        $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="9" style="text-align: center; padding: 30px; color: #94a3b8;">No executive expenses recorded in this period.</td></tr>');
+        $(wrapper).find('#exec-exp-table-body').html('<tr><td colspan="10" style="text-align: center; padding: 30px; color: #94a3b8;">No executive expenses recorded in this period.</td></tr>');
         return;
     }
 
@@ -6854,6 +6930,7 @@ function render_exec_exp_table(wrapper) {
         let vLink = `<a href="/app/journal-entry/${r.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">${r.voucher_no}</a>`;
         let catShort = (r.expense_account || '').replace(' - KIL', '');
         let paidShort = (r.paid_from_account || '').replace(' - KIL', '');
+        let escapedPayee = frappe.utils.escape_html(r.payee || '');
 
         rowsHtml += `
             <tr style="border-bottom: 1px solid #f1f5f9;">
@@ -6870,11 +6947,38 @@ function render_exec_exp_table(wrapper) {
                 <td style="font-size: 12px; color: #334155; max-width: 280px; word-break: break-word;">${r.description}</td>
                 <td style="text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #dc2626;">${amtStr}</td>
                 <td style="text-align: center; font-size: 11px; color: #64748b;">${r.owner}</td>
+                <td style="text-align: center; white-space: nowrap;">
+                    <button type="button" class="btn btn-xs btn-default btn-edit-exec-expense" data-voucher="${r.voucher_no}" title="Edit Expense" style="padding: 4px 8px; font-size: 11px; font-weight: 700; color: #2563eb; border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 5px; margin-right: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">
+                        <span class="material-symbols-outlined" style="font-size: 13px;">edit</span> Edit
+                    </button>
+                    <button type="button" class="btn btn-xs btn-default btn-delete-exec-expense" data-voucher="${r.voucher_no}" data-amount="${r.amount}" data-payee="${escapedPayee}" title="Delete Expense" style="padding: 4px 8px; font-size: 11px; font-weight: 700; color: #dc2626; border: 1px solid #fecaca; background: #fef2f2; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">
+                        <span class="material-symbols-outlined" style="font-size: 13px;">delete</span> Delete
+                    </button>
+                </td>
             </tr>
         `;
     });
 
     $(wrapper).find('#exec-exp-table-body').html(rowsHtml);
+
+    // Attach Action Handlers
+    $(wrapper).find('.btn-edit-exec-expense').off('click').on('click', function(e) {
+        e.preventDefault();
+        let vNo = $(this).data('voucher');
+        let records = (window.EXEC_EXP_STATE && window.EXEC_EXP_STATE.raw_data && window.EXEC_EXP_STATE.raw_data.records) || [];
+        let rec = records.find(x => x.voucher_no === vNo);
+        if (rec) {
+            open_edit_director_expense_modal(wrapper, rec);
+        }
+    });
+
+    $(wrapper).find('.btn-delete-exec-expense').off('click').on('click', function(e) {
+        e.preventDefault();
+        let vNo = $(this).data('voucher');
+        let amt = $(this).data('amount');
+        let payee = $(this).data('payee');
+        handle_delete_director_expense(wrapper, vNo, amt, payee);
+    });
 }
 
 function print_exec_exp_register(wrapper) {

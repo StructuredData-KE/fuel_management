@@ -3488,8 +3488,8 @@
             </div>
             
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                <button type="button" id="btn-exec-open-add-expense" class="btn btn-sm btn-primary" style="height: 34px; padding: 0 16px; font-weight: 700; font-size: 13px; border-radius: 6px; background: #f59e0b; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.25);">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">add_circle</span> Record Director Expense
+                <button type="button" id="btn-exec-open-add-expense" class="btn btn-sm btn-primary" style="height: 42px; padding: 0 20px; font-weight: 800; font-size: 14px; border-radius: 8px; background: #f59e0b; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.3);">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">add_circle</span> Record Director Expense
                 </button>
                 <button type="button" id="btn-exec-open-supplier-pay" class="btn btn-sm" style="height: 34px; padding: 0 16px; font-weight: 700; font-size: 13px; border-radius: 6px; background: #0284c7; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);">
                     <span class="material-symbols-outlined" style="font-size: 18px;">payments</span> Transfer to Supplier
@@ -3590,16 +3590,17 @@
                             <th>Description / Purpose</th>
                             <th style="text-align: right; width: 130px; color: #dc2626; font-weight: 700;">Amount (KES)</th>
                             <th style="width: 120px; text-align: center;">Recorded By</th>
+                            <th style="width: 150px; text-align: center;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="exec-exp-table-body">
-                        <tr><td colspan="9" style="text-align: center; padding: 30px; color: #94a3b8;">Loading executive expenses...</td></tr>
+                        <tr><td colspan="10" style="text-align: center; padding: 30px; color: #94a3b8;">Loading executive expenses...</td></tr>
                     </tbody>
                     <tfoot style="background: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
                         <tr>
                             <td colspan="7" style="text-align: right;">TOTAL CORPORATE EXPENSES:</td>
                             <td style="text-align: right; font-family: monospace; color: #dc2626; font-size: 14px;" id="exec-exp-foot-total">KES 0.00</td>
-                            <td></td>
+                            <td colspan="2"></td>
                         </tr>
                     </tfoot>
                 </table>
@@ -3607,70 +3608,73 @@
         </div>
     </main>
 
-    <!-- Modal for Recording Director Expense -->
-    <div id="exec-expense-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(3px);">
-        <div style="background:#fff; width:94%; max-width:680px; border-radius:12px; padding:24px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); max-height:90vh; display:flex; flex-direction:column;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:14px;">
+    <!-- Modal for Recording / Editing Director Expense -->
+    <div id="exec-expense-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.7); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+        <div style="background:#fff; width:95%; max-width:840px; border-radius:16px; padding:28px 32px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); max-height:92vh; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; border-bottom:1px solid #e2e8f0; padding-bottom:16px;">
                 <div>
-                    <h3 style="margin:0; font-size: 1.25rem; font-weight: 800; color:#0f172a; display: flex; align-items: center; gap: 8px;">
-                        <span class="material-symbols-outlined" style="color: #f59e0b; font-size: 24px;">receipt_long</span> Record Director / Executive Expense
+                    <h3 style="margin:0; font-size: 1.4rem; font-weight: 800; color:#0f172a; display: flex; align-items: center; gap: 10px;">
+                        <span class="material-symbols-outlined" style="color: #f59e0b; font-size: 28px;">receipt_long</span> 
+                        <span id="exec-modal-exp-title-text">Record Director / Executive Expense</span>
                     </h3>
-                    <div style="font-size: 0.82rem; color: #64748b; margin-top: 3px;">Direct posting to General Ledger & P&L. Completely private & invisible in Shift Operations.</div>
+                    <div style="font-size: 0.88rem; color: #64748b; margin-top: 4px;">Direct corporate posting to General Ledger & P&L. Private and separated from Shift Operations.</div>
                 </div>
-                <button id="exec-expense-modal-close" style="background:#f1f5f9; border:none; width: 32px; height: 32px; border-radius: 6px; font-size:1.25rem; cursor:pointer; color:#64748b; display: flex; align-items: center; justify-content: center;">&times;</button>
+                <button id="exec-expense-modal-close" style="background:#f1f5f9; border:none; width: 36px; height: 36px; border-radius: 8px; font-size:1.4rem; cursor:pointer; color:#64748b; display: flex; align-items: center; justify-content: center; transition: background 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">&times;</button>
             </div>
 
-            <form id="exec-expense-form" style="overflow-y:auto; flex-grow:1; padding-right: 4px;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+            <form id="exec-expense-form" style="overflow-y:auto; flex-grow:1; padding-right: 6px;">
+                <input type="hidden" id="exec-modal-exp-voucher-no" value="">
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px;">
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Expense Date <span style="color:#ef4444;">*</span></label>
-                        <input type="date" id="exec-modal-exp-date" class="form-control" required style="height: 38px; font-size: 13px; border-radius: 6px;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">Expense Date <span style="color:#ef4444;">*</span></label>
+                        <input type="date" id="exec-modal-exp-date" class="form-control" required style="height: 44px; font-size: 14px; border-radius: 8px; border: 1px solid #cbd5e1;">
                     </div>
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Amount (KES) <span style="color:#ef4444;">*</span></label>
-                        <input type="number" id="exec-modal-exp-amount" class="form-control" step="0.01" min="1" placeholder="e.g. 5000.00" required style="height: 38px; font-size: 14px; font-weight: 700; font-family: monospace; border-radius: 6px; color: #0f172a;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">Amount (KES) <span style="color:#ef4444;">*</span></label>
+                        <input type="number" id="exec-modal-exp-amount" class="form-control" step="0.01" min="1" placeholder="e.g. 15000.00" required style="height: 48px; font-size: 18px; font-weight: 800; font-family: monospace; border-radius: 8px; color: #0f172a; border: 1.5px solid #94a3b8; background: #fafafa;">
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px;">
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Paid From (Cash / Bank) <span style="color:#ef4444;">*</span></label>
-                        <select id="exec-modal-exp-paid-from" class="form-control" required style="height: 38px; font-size: 13px; border-radius: 6px;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">Paid From (Cash / Bank Account) <span style="color:#ef4444;">*</span></label>
+                        <select id="exec-modal-exp-paid-from" class="form-control" required style="height: 44px; font-size: 14px; border-radius: 8px; border: 1px solid #cbd5e1;">
                             <option value="">Select Account...</option>
                         </select>
                     </div>
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Expense Category / Account <span style="color:#ef4444;">*</span></label>
-                        <select id="exec-modal-exp-category" class="form-control" required style="height: 38px; font-size: 13px; border-radius: 6px;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">Expense Category / Account <span style="color:#ef4444;">*</span></label>
+                        <select id="exec-modal-exp-category" class="form-control" required style="height: 44px; font-size: 14px; border-radius: 8px; border: 1px solid #cbd5e1;">
                             <option value="">Select Category...</option>
                         </select>
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px;">
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Payee / Beneficiary <span style="color:#ef4444;">*</span></label>
-                        <input type="text" id="exec-modal-exp-payee" class="form-control" placeholder="e.g. Director, Kenya Power, Vendor Name" required style="height: 38px; font-size: 13px; border-radius: 6px;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">Payee / Beneficiary <span style="color:#ef4444;">*</span></label>
+                        <input type="text" id="exec-modal-exp-payee" class="form-control" placeholder="e.g. Director, Kenya Power, Vendor Name" required style="height: 44px; font-size: 14px; border-radius: 8px; border: 1px solid #cbd5e1;">
                     </div>
                     <div>
-                        <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Reference No (Optional)</label>
-                        <input type="text" id="exec-modal-exp-ref" class="form-control" placeholder="e.g. Cheque #, M-Pesa Code, Invoice #" style="height: 38px; font-size: 13px; border-radius: 6px;">
+                        <label style="display: block; font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">Reference No (Optional)</label>
+                        <input type="text" id="exec-modal-exp-ref" class="form-control" placeholder="e.g. Cheque #, M-Pesa Code, Invoice #" style="height: 44px; font-size: 14px; border-radius: 8px; border: 1px solid #cbd5e1;">
                     </div>
                 </div>
 
-                <div style="margin-bottom: 16px;">
-                    <label style="display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 4px;">Business Purpose / Description <span style="color:#ef4444;">*</span></label>
-                    <textarea id="exec-modal-exp-desc" class="form-control" rows="3" placeholder="Explain the business purpose and details of this expenditure..." required style="font-size: 13px; border-radius: 6px; resize: vertical;"></textarea>
+                <div style="margin-bottom: 18px;">
+                    <label style="display: block; font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 6px;">Business Purpose / Description <span style="color:#ef4444;">*</span></label>
+                    <textarea id="exec-modal-exp-desc" class="form-control" rows="4" placeholder="Explain the business purpose, approvals, and details of this expenditure..." required style="font-size: 14px; border-radius: 8px; border: 1px solid #cbd5e1; resize: vertical; line-height: 1.5;"></textarea>
                 </div>
 
-                <div id="exec-modal-exp-alert" style="display:none; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 14px;"></div>
+                <div id="exec-modal-exp-alert" style="display:none; padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; margin-bottom: 16px;"></div>
             </form>
 
-            <div style="display:flex; justify-content:flex-end; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 14px;">
-                <button type="button" id="btn-exec-modal-exp-cancel" class="btn btn-secondary" style="padding: 8px 18px; font-size: 13px; font-weight: 600; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer;">Cancel</button>
-                <button type="button" id="btn-exec-modal-exp-submit" class="btn btn-primary" style="padding: 8px 22px; font-size: 13px; font-weight: 700; border-radius: 6px; background: #2563eb; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+            <div style="display:flex; justify-content:flex-end; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 18px;">
+                <button type="button" id="btn-exec-modal-exp-cancel" class="btn btn-secondary" style="padding: 10px 22px; font-size: 14px; font-weight: 600; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #334155; cursor: pointer;">Cancel</button>
+                <button type="button" id="btn-exec-modal-exp-submit" class="btn btn-primary" style="padding: 10px 28px; font-size: 14px; font-weight: 700; border-radius: 8px; background: #2563eb; color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);">
                     <span id="exec-modal-exp-spinner" class="spinner hidden"></span>
-                    <span>Post & Submit Expense</span>
+                    <span id="exec-modal-exp-submit-text">Post & Submit Expense</span>
                 </button>
             </div>
         </div>

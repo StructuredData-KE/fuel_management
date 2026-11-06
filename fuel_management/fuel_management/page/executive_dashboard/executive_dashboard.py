@@ -2364,6 +2364,110 @@ def submit_director_expense(date=None, paid_from_account=None, expense_account=N
 
 
 @frappe.whitelist()
+def delete_director_expense(voucher_no):
+    """
+    Cancels and deletes an executive director expense Journal Entry,
+    reversing all General Ledger impacts and restoring cash/bank balances.
+    """
+    if not voucher_no:
+        frappe.throw("Voucher No is required.")
+
+    if not frappe.db.exists("Journal Entry", voucher_no):
+        frappe.throw(f"Journal Entry {voucher_no} does not exist.")
+
+    je = frappe.get_doc("Journal Entry", voucher_no)
+
+    # Cancel if submitted to reverse GL entries cleanly
+    if je.docstatus == 1:
+        je.cancel()
+
+    # Delete the Journal Entry record
+    frappe.delete_doc("Journal Entry", voucher_no, ignore_permissions=True)
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "voucher_no": voucher_no,
+        "message": f"Expense voucher {voucher_no} deleted and cancelled successfully."
+    }
+
+
+@frappe.whitelist()
+def update_director_expense(voucher_no, date, paid_from_account, expense_account, amount, payee, description, reference_no=None):
+    """
+    Updates an executive director expense by cancelling & replacing the Journal Entry
+    with updated date, accounts, amount, payee, and description.
+    """
+    if not voucher_no:
+        frappe.throw("Voucher No is required.")
+
+    if not flt(amount) or flt(amount) <= 0:
+        frappe.throw("Amount must be greater than zero.")
+    if not paid_from_account:
+        frappe.throw("Paid From (Cash / Bank) account is required.")
+    if not expense_account:
+        frappe.throw("Expense Category / Account is required.")
+    if not payee or not payee.strip():
+        frappe.throw("Please provide the Payee / Beneficiary.")
+    if not description or not description.strip():
+        frappe.throw("Please provide an Expense Description / Business Purpose.")
+
+    if not frappe.db.exists("Journal Entry", voucher_no):
+        frappe.throw(f"Journal Entry {voucher_no} does not exist.")
+
+    old_je = frappe.get_doc("Journal Entry", voucher_no)
+    company = old_je.company or frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+
+    # Cancel and delete old Journal Entry
+    if old_je.docstatus == 1:
+        old_je.cancel()
+    frappe.delete_doc("Journal Entry", voucher_no, ignore_permissions=True)
+
+    # Post new updated Journal Entry
+    posting_date = date or today()
+    val_amount = flt(amount)
+
+    user_remark = f"[EXECUTIVE EXPENSE] {description.strip()} | Payee: {payee.strip()}"
+    if reference_no and reference_no.strip():
+        user_remark += f" | Ref: {reference_no.strip()}"
+
+    new_je = frappe.new_doc("Journal Entry")
+    new_je.voucher_type = "Journal Entry"
+    new_je.company = company
+    new_je.posting_date = posting_date
+    new_je.user_remark = user_remark
+
+    # Debit line: Expense Account
+    new_je.append("accounts", {
+        "account": expense_account,
+        "debit_in_account_currency": val_amount,
+        "credit_in_account_currency": 0.0,
+        "user_remark": f"{payee} - {description}"
+    })
+
+    # Credit line: Cash / Bank Account
+    new_je.append("accounts", {
+        "account": paid_from_account,
+        "debit_in_account_currency": 0.0,
+        "credit_in_account_currency": val_amount,
+        "user_remark": f"{payee} - {description}"
+    })
+
+    new_je.insert()
+    new_je.submit()
+    frappe.db.commit()
+
+    return {
+        "success": True,
+        "voucher_no": new_je.name,
+        "amount": val_amount,
+        "payee": payee,
+        "posting_date": formatdate(posting_date),
+        "message": f"Director Expense updated and posted successfully ({new_je.name})."
+    }
+
+
+@frappe.whitelist()
 def get_director_expenses_register(from_date=None, to_date=None, expense_account=None, paid_from_account=None, search=None):
     """
     Returns list of director/corporate expenses recorded via Journal Entry.
