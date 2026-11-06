@@ -7816,11 +7816,74 @@ window.CARDS_HOLDING_STATE = {
     total_pages: 1,
     total_records: 0,
     selected_items: new Map(), // name -> { name, amount, card, receipt_no, shift, date }
+    current_records: [],
     supplier_accounts: [],
     card_types: [],
     search_timer: null,
     loading: false
 };
+
+function perform_cards_auto_match(wrapper, target_input_selector) {
+    let state = window.CARDS_HOLDING_STATE;
+    let targetAmt = parseFloat($(wrapper).find(target_input_selector).val()) || 0;
+    if (targetAmt <= 0) {
+        frappe.msgprint(__('Please enter a valid positive statement amount to match.'));
+        return;
+    }
+
+    let selectedNames = Array.from(state.selected_items.keys());
+    let station = $(wrapper).find('#exec-global-station-select').val() || $(wrapper).find('#exec-header-station-select').val() || '';
+
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.auto_match_cards_to_amount",
+        args: {
+            target_amount: targetAmt,
+            selected_card_names: JSON.stringify(selectedNames),
+            from_date: state.from_date || '',
+            to_date: state.to_date || '',
+            card_type: state.card_type || 'ALL',
+            station: station
+        },
+        freeze: true,
+        freeze_message: __("Auto-matching cards to statement amount..."),
+        callback: function(r) {
+            if (r && r.message && r.message.success) {
+                let res = r.message;
+                if (res.selected_records && res.selected_records.length > 0) {
+                    res.selected_records.forEach(rec => {
+                        state.selected_items.set(rec.name, {
+                            name: rec.name,
+                            amount: parseFloat(rec.amount) || 0,
+                            card: rec.card || '',
+                            receipt_no: rec.receipt_no || '',
+                            shift: rec.shift || '',
+                            date: rec.date || ''
+                        });
+                    });
+                }
+
+                // Show feedback in UI
+                let fb = $(wrapper).find('#cards-match-feedback');
+                fb.show().text(res.message);
+                if (res.is_exact) {
+                    fb.css({ color: '#15803d', background: '#dcfce7', padding: '3px 8px', 'border-radius': '4px', border: '1px solid #86efac' });
+                } else {
+                    fb.css({ color: '#b45309', background: '#fef3c7', padding: '3px 8px', 'border-radius': '4px', border: '1px solid #fde68a' });
+                }
+
+                frappe.show_alert({
+                    message: res.message,
+                    indicator: res.is_exact ? 'green' : 'orange'
+                }, 6);
+
+                update_cards_selection_ui(wrapper);
+                render_cards_holding_table(wrapper, state.current_records || []);
+            } else {
+                frappe.msgprint(__('Failed to match cards: ') + ((r && r.message) ? JSON.stringify(r.message) : 'Unknown error'));
+            }
+        }
+    });
+}
 
 function init_cards_holding(wrapper) {
     let state = window.CARDS_HOLDING_STATE;
@@ -7905,16 +7968,33 @@ function init_cards_holding(wrapper) {
             }, 300);
         });
 
+        // Statement Auto-Match buttons and Enter key
+        $(wrapper).find('#btn-match-remaining-cards').off('click').on('click', function(e) {
+            e.preventDefault();
+            perform_cards_auto_match(wrapper, '#cards-target-amount-input');
+        });
+        $(wrapper).find('#cards-target-amount-input').off('keypress').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                perform_cards_auto_match(wrapper, '#cards-target-amount-input');
+            }
+        });
+
+        $(wrapper).find('#btn-cards-bulk-match').off('click').on('click', function(e) {
+            e.preventDefault();
+            perform_cards_auto_match(wrapper, '#cards-bulk-target-input');
+        });
+        $(wrapper).find('#cards-bulk-target-input').off('keypress').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                perform_cards_auto_match(wrapper, '#cards-bulk-target-input');
+            }
+        });
+
         // Refresh Button
         $(wrapper).find('#btn-cards-holding-refresh').off('click').on('click', function(e) {
             e.preventDefault();
             load_cards_holding_data(wrapper);
-        });
-
-        // Reconcile Fuel Invoices Button
-        $(wrapper).find('#btn-cards-reconcile-fuel').off('click').on('click', function(e) {
-            e.preventDefault();
-            open_supplier_payment_modal(wrapper, 'card_offset', null, window.ACTIVE_STATION);
         });
 
         // Pagination Previous
@@ -8044,6 +8124,7 @@ function load_cards_holding_data(wrapper) {
             state.loading = false;
             if (r && r.message) {
                 let data = r.message;
+                state.current_records = data.records || [];
                 state.total_pages = data.total_pages || 1;
                 state.total_records = (data.summary && data.summary.total_count) || 0;
                 state.supplier_accounts = data.supplier_accounts || [];
@@ -8185,12 +8266,18 @@ function update_cards_selection_ui(wrapper) {
     $(wrapper).find('#cards-selected-count').text(count);
     $(wrapper).find('#cards-selected-amt').text(format_currency(totalAmt, "KES"));
 
+    let bulkInput = $(wrapper).find('#cards-bulk-target-input');
+    if (!bulkInput.is(':focus')) {
+        bulkInput.val(totalAmt > 0 ? totalAmt.toFixed(2) : '');
+    }
+
     if (count > 0) {
         $(wrapper).find('#cards-bulk-bar').css('display', 'flex');
         $(wrapper).find('#btn-cards-post-bulk').prop('disabled', false).css('opacity', '1');
     } else {
         $(wrapper).find('#cards-bulk-bar').hide();
         $(wrapper).find('#btn-cards-post-bulk').prop('disabled', true).css('opacity', '0.6');
+        $(wrapper).find('#cards-match-feedback').hide().text('');
     }
 
     // Check master checkbox status on current page
@@ -8309,7 +8396,7 @@ function open_cards_posting_dialog(wrapper, card_records) {
                 label: __('Create Accounting Journal Entry (GL)'),
                 fieldname: 'create_gl_entry',
                 fieldtype: 'Check',
-                default: 0,
+                default: 1,
                 description: __('Generate Journal Entry: Debit Supplier Account & Credit Card Holding Account')
             },
             {

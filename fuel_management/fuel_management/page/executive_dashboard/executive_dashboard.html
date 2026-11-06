@@ -2281,9 +2281,6 @@
                 <p class="exec-header-subtitle">All station cards saved in the SPA awaiting verification and posting to supplier accounts.</p>
             </div>
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <button id="btn-cards-reconcile-fuel" class="btn btn-sm" style="background: #16a34a; color: #fff; border: none; display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 4px rgba(22,163,74,0.25); cursor: pointer;">
-                    <span class="material-symbols-outlined" style="font-size: 18px;">price_check</span> Reconcile Fuel Invoices
-                </button>
                 <button id="btn-cards-post-bulk" class="exec-btn-primary" style="background: #0284c7; border: none; display: flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 4px rgba(2,132,199,0.25);" disabled>
                     <span class="material-symbols-outlined" style="font-size: 18px;">post_add</span> Post to Supplier Account
                 </button>
@@ -2363,17 +2360,35 @@
                         <option value="all">All Records</option>
                     </select>
                     <div style="position: relative;">
-                        <input type="text" id="cards-filter-search" placeholder="Search receipt, shift..." style="padding: 5px 10px 5px 28px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; width: 170px;">
+                        <input type="text" id="cards-filter-search" placeholder="Search receipt, shift..." style="padding: 5px 10px 5px 28px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; width: 150px;">
                         <span class="material-symbols-outlined" style="position: absolute; left: 6px; top: 6px; font-size: 16px; color: #94a3b8;">search</span>
+                    </div>
+
+                    <!-- Statement Matcher in Toolbar -->
+                    <div style="display: flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 6px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px; color: #0284c7;">receipt_long</span>
+                        <span style="font-size: 11px; font-weight: 700; color: #475569;">Statement:</span>
+                        <input type="number" step="0.01" id="cards-target-amount-input" placeholder="Amount (KES)" style="width: 105px; height: 26px; border: 1px solid #e2e8f0; border-radius: 4px; padding: 0 6px; font-size: 12px; font-weight: 700; font-family: monospace; outline: none; background: #fff;">
+                        <button type="button" id="btn-match-remaining-cards" class="btn btn-xs" style="background: #0284c7; color: #fff; font-weight: 700; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 3px;" title="Find and select cards from holding to match this statement amount">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">auto_awesome</span> Match
+                        </button>
                     </div>
                 </div>
             </div>
 
             <!-- Bulk Selection Action Bar -->
-            <div id="cards-bulk-bar" style="display: none; margin-top: 14px; padding: 10px 16px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <div style="font-size: 13px; font-weight: 700; color: #166534; display: flex; align-items: center; gap: 8px;">
+            <div id="cards-bulk-bar" style="display: none; margin-top: 14px; padding: 10px 16px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div style="font-size: 13px; font-weight: 700; color: #166534; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <span class="material-symbols-outlined" style="font-size: 20px; color: #15803d;">check_circle</span>
                     <span><strong id="cards-selected-count">0</strong> card(s) selected &bull; Total: <span style="font-family: monospace; font-size: 15px;" id="cards-selected-amt">KES 0.00</span></span>
+                    <div style="display: flex; align-items: center; gap: 6px; background: #fff; padding: 3px 8px; border: 1px solid #86efac; border-radius: 6px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #15803d;">Edit Statement Amount:</span>
+                        <input type="number" step="0.01" id="cards-bulk-target-input" placeholder="KES Statement Amt" style="width: 120px; height: 26px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0 6px; font-size: 12px; font-weight: 800; font-family: monospace; color: #0f172a; outline: none;">
+                        <button type="button" id="btn-cards-bulk-match" class="btn btn-xs" style="background: #15803d; color: #fff; font-weight: 700; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 3px;" title="Find and select remaining cards from holding to match this statement amount">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">auto_awesome</span> Match Remaining
+                        </button>
+                    </div>
+                    <span id="cards-match-feedback" style="font-size: 11px; font-weight: 700; color: #15803d; display: none;"></span>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <button id="btn-cards-post-selected" class="btn btn-sm" style="background: #15803d; color: #fff; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; display: flex; align-items: center; gap: 5px;">

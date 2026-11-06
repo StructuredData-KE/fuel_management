@@ -2194,21 +2194,28 @@ def get_cash_accounts_overview(account=None, from_date=None, to_date=None, searc
         else:
             account = "Shift Main Cash - KIL"
 
+    # Filter out unposted shift-closure cards for supplier accounts so only posted remittances appear
+    supp_gl_clause = ""
+    if is_supp:
+        supp_gl_clause = " AND NOT (remarks LIKE 'Card Payment: Station Card%%' OR remarks LIKE 'Clear Non-Cash Customer Payment via Rubis Card%%') "
+
     # Opening balance for selected account
-    opening_bal = frappe.db.sql("""
+    opening_bal = frappe.db.sql(f"""
         SELECT SUM(debit - credit)
         FROM `tabGL Entry`
         WHERE account = %s AND posting_date < %s AND is_cancelled = 0
+          {supp_gl_clause}
     """, (account, from_date))[0][0] or 0.0
     opening_bal = round(flt(opening_bal), 2)
 
     # Period totals
-    period_sums = frappe.db.sql("""
+    period_sums = frappe.db.sql(f"""
         SELECT SUM(debit) as total_in, SUM(credit) as total_out, COUNT(name) as total_txns
         FROM `tabGL Entry`
         WHERE account = %s 
           AND posting_date >= %s AND posting_date <= %s 
           AND is_cancelled = 0
+          {supp_gl_clause}
     """, (account, from_date, to_date), as_dict=True)[0]
 
     total_in = round(flt(period_sums.total_in or 0.0), 2)
@@ -2232,6 +2239,7 @@ def get_cash_accounts_overview(account=None, from_date=None, to_date=None, searc
         WHERE account = %s 
           AND posting_date >= %s AND posting_date <= %s 
           AND is_cancelled = 0
+          {supp_gl_clause}
           {where_extra}
         ORDER BY posting_date ASC, creation ASC, name ASC
     """, tuple(params), as_dict=True)
@@ -2708,7 +2716,7 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
         LEFT JOIN `tabEmployee` e ON sc.csa = e.name
         LEFT JOIN `tabShift` s ON sc.shift = s.name
         WHERE {where_str}
-        ORDER BY sc.date DESC, sc.creation DESC
+        ORDER BY sc.date ASC, sc.creation ASC, sc.name ASC
         LIMIT %(limit)s OFFSET %(offset)s
     """, {**params, "limit": page_length, "offset": offset}, as_dict=True)
 
@@ -2761,7 +2769,7 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
 
 
 @frappe.whitelist()
-def post_station_cards_to_supplier(card_names, supplier_account, posting_date=None, credited_amount=None, reference=None, variance_account=None, notes=None, create_gl_entry=0):
+def post_station_cards_to_supplier(card_names, supplier_account, posting_date=None, credited_amount=None, reference=None, variance_account=None, notes=None, create_gl_entry=1):
     """
     Posts selected station cards from holding to the supplier account with the amount actually credited.
     """
@@ -2792,10 +2800,9 @@ def post_station_cards_to_supplier(card_names, supplier_account, posting_date=No
     now_dt = now_datetime()
 
     jv_name = None
-    if cint(create_gl_entry):
+    if cint(create_gl_entry) != 0:
         company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
-        card_type = cards[0].card if cards else "Card"
-        source_account = frappe.db.get_value("Station Card Type", card_type, "default_account") or "Shift Control Account - KIL"
+        source_account = "Cards Holding Account - KIL" if frappe.db.exists("Account", "Cards Holding Account - KIL") else "Shift Control Account - KIL"
 
         je = frappe.new_doc("Journal Entry")
         je.voucher_type = "Journal Entry"
@@ -2899,6 +2906,172 @@ def undo_station_cards_posting(card_names):
 
     frappe.db.commit()
     return {"success": True, "message": f"{len(card_names)} card(s) reverted to pending in holding."}
+
+
+@frappe.whitelist()
+def auto_match_cards_to_amount(target_amount, selected_card_names=None, from_date=None, to_date=None, card_type=None, station=None):
+    """
+    Finds and selects cards from holding in chronological order (earliest date first)
+    to match the specified supplier statement remittance amount.
+    """
+    from frappe.utils import flt, cint
+    import json
+
+    target_amt = round(flt(target_amount), 2)
+    if target_amt <= 0:
+        frappe.throw("Please enter a valid positive statement amount.")
+
+    if isinstance(selected_card_names, str):
+        try:
+            selected_card_names = json.loads(selected_card_names)
+        except Exception:
+            selected_card_names = [n.strip() for n in selected_card_names.split(",") if n.strip()]
+    selected_card_names = selected_card_names or []
+
+    # Get already selected cards sum
+    already_selected_sum = 0.0
+    if selected_card_names:
+        already_selected_sum = flt(frappe.db.sql("""
+            SELECT SUM(amount) FROM `tabStation Cards` WHERE name IN %s
+        """, (tuple(selected_card_names),))[0][0] or 0.0)
+
+    needed_amt = round(target_amt - already_selected_sum, 2)
+    if needed_amt <= 0:
+        all_records = frappe.db.sql("""
+            SELECT sc.name, sc.date, sc.amount, sc.card, sc.receipt_no, sc.shift
+            FROM `tabStation Cards` sc
+            WHERE sc.name IN %s
+            ORDER BY sc.date ASC, sc.creation ASC
+        """, (tuple(selected_card_names),), as_dict=True) if selected_card_names else []
+
+        return {
+            "success": True,
+            "selected_names": selected_card_names,
+            "selected_records": all_records,
+            "total_selected": already_selected_sum,
+            "variance": round(target_amt - already_selected_sum, 2),
+            "is_exact": abs(target_amt - already_selected_sum) < 0.01,
+            "message": f"Already selected cards (KES {already_selected_sum:,.2f}) meet or exceed target amount (KES {target_amt:,.2f})."
+        }
+
+    # Query unselected pending cards in chronological order (earliest date first)
+    where_clauses = ["COALESCE(sc.is_reconciled, 0) = 0"]
+    params = {}
+
+    if selected_card_names:
+        where_clauses.append("sc.name NOT IN %(sel)s")
+        params["sel"] = tuple(selected_card_names)
+
+    if from_date:
+        where_clauses.append("sc.date >= %(from_date)s")
+        params["from_date"] = from_date
+    if to_date:
+        where_clauses.append("sc.date <= %(to_date)s")
+        params["to_date"] = to_date
+    if card_type and card_type != "ALL":
+        where_clauses.append("sc.card = %(card_type)s")
+        params["card_type"] = card_type
+    if station and station not in ("ALL", "All Stations", ""):
+        where_clauses.append("s.station = %(station)s")
+        params["station"] = station
+
+    where_str = " AND ".join(where_clauses)
+    unselected_cards = frappe.db.sql(f"""
+        SELECT sc.name, sc.date, sc.amount, sc.card, sc.receipt_no, sc.shift
+        FROM `tabStation Cards` sc
+        LEFT JOIN `tabShift` s ON sc.shift = s.name
+        WHERE {where_str}
+        ORDER BY sc.date ASC, sc.creation ASC, sc.name ASC
+    """, params, as_dict=True)
+
+    if not unselected_cards:
+        return {
+            "success": True,
+            "selected_names": selected_card_names,
+            "selected_records": [],
+            "total_selected": already_selected_sum,
+            "variance": needed_amt,
+            "is_exact": False,
+            "message": f"No additional pending cards found in holding for this period."
+        }
+
+    target_cents = int(round(needed_amt * 100))
+    chosen_cards = []
+
+    # 1. Single card exact match
+    for c in unselected_cards:
+        if int(round(flt(c.amount) * 100)) == target_cents:
+            chosen_cards = [c]
+            break
+
+    # 2. Pair exact match
+    if not chosen_cards:
+        pool = unselected_cards[:120]
+        for i in range(len(pool)):
+            rem_cents = target_cents - int(round(flt(pool[i].amount) * 100))
+            if rem_cents < 0:
+                continue
+            for j in range(i + 1, len(pool)):
+                if int(round(flt(pool[j].amount) * 100)) == rem_cents:
+                    chosen_cards = [pool[i], pool[j]]
+                    break
+            if chosen_cards:
+                break
+
+    # 3. Dynamic programming subset sum on first 80 candidates (earliest dates prioritized)
+    if not chosen_cards and len(unselected_cards) > 0:
+        pool = [c for c in unselected_cards[:80] if int(round(flt(c.amount) * 100)) <= target_cents]
+        dp = {0: []}
+        for idx, c in enumerate(pool):
+            val = int(round(flt(c.amount) * 100))
+            new_dp = {}
+            for s_val, path in dp.items():
+                new_s = s_val + val
+                if new_s <= target_cents and new_s not in dp and new_s not in new_dp:
+                    new_dp[new_s] = path + [idx]
+            dp.update(new_dp)
+            if target_cents in dp:
+                chosen_cards = [pool[k] for k in dp[target_cents]]
+                break
+
+    # 4. Greedy chronological fallback (earliest dates first)
+    if not chosen_cards:
+        curr_cents = 0
+        for c in unselected_cards:
+            val = int(round(flt(c.amount) * 100))
+            if curr_cents + val <= target_cents:
+                chosen_cards.append(c)
+                curr_cents += val
+            elif curr_cents == 0:
+                chosen_cards.append(c)
+                curr_cents += val
+                break
+
+    all_selected = list(selected_card_names) + [c["name"] for c in chosen_cards]
+    chosen_sum = sum(flt(c["amount"]) for c in chosen_cards)
+    total_selected = round(already_selected_sum + chosen_sum, 2)
+    variance = round(target_amt - total_selected, 2)
+    is_exact = abs(variance) < 0.01
+
+    all_records = frappe.db.sql("""
+        SELECT sc.name, sc.date, sc.amount, sc.card, sc.receipt_no, sc.shift
+        FROM `tabStation Cards` sc
+        WHERE sc.name IN %s
+        ORDER BY sc.date ASC, sc.creation ASC
+    """, (tuple(all_selected),), as_dict=True) if all_selected else []
+
+    return {
+        "success": True,
+        "selected_names": all_selected,
+        "selected_records": all_records,
+        "newly_added_count": len(chosen_cards),
+        "total_count": len(all_selected),
+        "total_selected": total_selected,
+        "target_amount": target_amt,
+        "variance": variance,
+        "is_exact": is_exact,
+        "message": f"Auto-matched {len(all_selected)} cards totaling KES {total_selected:,.2f}" + (" (Exact match!)" if is_exact else f" (Variance: KES {variance:,.2f})")
+    }
 
 
 @frappe.whitelist()

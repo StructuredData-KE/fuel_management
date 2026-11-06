@@ -723,6 +723,10 @@ class Shift(Document):
                 if not mop_account:
                     mop_account = frappe.db.get_value("Mode of Payment Account", {"parent": "Card", "company": company}, "default_account")
                     
+                # Cards must be held in Cards Holding Account awaiting executive audit & posting to supplier accounts
+                if not mop_account or "RUBIS A/C" in (mop_account or "").upper() or "GALANA A/C" in (mop_account or "").upper():
+                    mop_account = "Cards Holding Account - KIL" if frappe.db.exists("Account", "Cards Holding Account - KIL") else mop_account
+
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for Card '{card_name or 'Card'}' at Station '{self.station}'. Please configure the Account in Station Card Type '{card_name}'.")
                     
