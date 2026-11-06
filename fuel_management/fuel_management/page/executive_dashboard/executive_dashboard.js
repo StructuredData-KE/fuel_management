@@ -6990,24 +6990,29 @@ function render_exec_exp_table(wrapper) {
         let vLink = `<a href="/app/journal-entry/${r.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">${r.voucher_no}</a>`;
         let catShort = (r.expense_account || '').replace(' - KIL', '');
         let paidShort = (r.paid_from_account || '').replace(' - KIL', '');
-        let escapedPayee = frappe.utils.escape_html(r.payee || '');
+        let rawDesc = r.description || '';
+        let escapedDesc = frappe.utils.escape_html(rawDesc);
 
         rowsHtml += `
             <tr style="border-bottom: 1px solid #f1f5f9;">
-                <td style="font-size: 12px; color: #475569; white-space: nowrap;">${r.date_formatted}</td>
-                <td style="font-size: 12px; font-family: monospace;">${vLink}</td>
-                <td style="font-size: 13px; font-weight: 700; color: #0f172a;">${r.payee}</td>
-                <td style="font-size: 12px; color: #1e293b;">
+                <td style="font-size: 12px; color: #475569; white-space: nowrap; vertical-align: middle;">${r.date_formatted}</td>
+                <td style="font-size: 12px; font-family: monospace; white-space: nowrap; vertical-align: middle;">${vLink}</td>
+                <td style="font-size: 13px; font-weight: 700; color: #0f172a; vertical-align: middle;">${r.payee}</td>
+                <td style="font-size: 12px; color: #1e293b; vertical-align: middle;">
                     <span style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px;">${catShort}</span>
                 </td>
-                <td style="font-size: 12px; color: #475569;">
+                <td style="font-size: 12px; color: #475569; vertical-align: middle;">
                     <span style="font-size: 11px;">${paidShort}</span>
                 </td>
-                <td style="font-size: 11px; font-family: monospace; color: #64748b;">${r.reference_no}</td>
-                <td style="font-size: 12px; color: #334155; max-width: 280px; word-break: break-word;">${r.description}</td>
-                <td style="text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #dc2626;">${amtStr}</td>
-                <td style="text-align: center; font-size: 11px; color: #64748b;">${r.owner}</td>
-                <td style="text-align: center; white-space: nowrap;">
+                <td style="font-size: 11px; font-family: monospace; color: #64748b; text-align: center; vertical-align: middle;">${r.reference_no}</td>
+                <td style="font-size: 12px; color: #334155; min-width: 240px; max-width: 440px; vertical-align: middle;">
+                    <div class="exec-exp-desc-clamp" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.45; cursor: pointer;" title="Click to expand / collapse full description">
+                        ${escapedDesc}
+                    </div>
+                </td>
+                <td style="text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #dc2626; white-space: nowrap; vertical-align: middle;">${amtStr}</td>
+                <td style="text-align: center; font-size: 11px; color: #64748b; vertical-align: middle;">${r.owner}</td>
+                <td style="text-align: center; white-space: nowrap; vertical-align: middle;">
                     <button type="button" class="btn btn-xs btn-default btn-edit-exec-expense" data-voucher="${r.voucher_no}" title="Edit Expense" style="padding: 4px 8px; font-size: 11px; font-weight: 700; color: #2563eb; border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 5px; margin-right: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">
                         <span class="material-symbols-outlined" style="font-size: 13px;">edit</span> Edit
                     </button>
@@ -7020,6 +7025,26 @@ function render_exec_exp_table(wrapper) {
     });
 
     $(wrapper).find('#exec-exp-table-body').html(rowsHtml);
+
+    // Toggle description expand / collapse on click
+    $(wrapper).find('.exec-exp-desc-clamp').off('click').on('click', function(e) {
+        e.stopPropagation();
+        let isClamped = $(this).attr('data-expanded') === 'true';
+        if (!isClamped) {
+            $(this).css({
+                'display': 'block',
+                '-webkit-line-clamp': 'unset',
+                'overflow': 'visible'
+            }).attr('data-expanded', 'true');
+        } else {
+            $(this).css({
+                'display': '-webkit-box',
+                '-webkit-line-clamp': '2',
+                '-webkit-box-orient': 'vertical',
+                'overflow': 'hidden'
+            }).attr('data-expanded', 'false');
+        }
+    });
 
     // Attach Action Handlers
     $(wrapper).find('.btn-edit-exec-expense').off('click').on('click', function(e) {
