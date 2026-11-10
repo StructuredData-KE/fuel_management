@@ -3265,6 +3265,9 @@
                 <button class="btn btn-sm" id="btn-exec-clear-shorts-payroll" style="height: 36px; padding: 0 15px; font-weight: 700; background: #0284c7; color: #fff; border: 1px solid #0284c7; border-radius: 6px; display: flex; align-items: center; gap: 6px; cursor: pointer; box-shadow: 0 1px 3px rgba(2,132,199,0.3);">
                     <span class="material-symbols-outlined" style="font-size: 18px;">lock_clock</span> Clear to Salary Deductions
                 </button>
+                <button class="btn btn-sm" id="btn-exec-clear-credits" style="height: 36px; padding: 0 15px; font-weight: 700; background: #059669; color: #fff; border: 1px solid #059669; border-radius: 6px; display: flex; align-items: center; gap: 6px; cursor: pointer; box-shadow: 0 1px 3px rgba(5,150,105,0.3);" title="Clear or absorb negative balances (credits / overages) so they do not roll over to next month">
+                    <span class="material-symbols-outlined" style="font-size: 18px;">savings</span> Clear / Absorb Credits
+                </button>
                 <button class="btn btn-sm btn-secondary" id="btn-exec-print-shorts-report" style="height: 36px; padding: 0 14px; font-weight: 600; border: 1px solid #cbd5e1; background: #fff; color: #334155; display: flex; align-items: center; gap: 6px;">
                     <span class="material-symbols-outlined" style="font-size: 18px;">print</span> Print
                 </button>
@@ -3348,11 +3351,13 @@
                     <div style="display: flex; background: #e2e8f0; padding: 2px; border-radius: 8px; gap: 2px;">
                         <button type="button" class="btn btn-xs exec-sr-status-filter active" data-filter="all" style="padding: 4px 12px; font-weight: 700; border-radius: 6px; border: none; background: #fff; color: #0f172a; cursor: pointer;">All Staff</button>
                         <button type="button" class="btn btn-xs exec-sr-status-filter" data-filter="outstanding" style="padding: 4px 12px; font-weight: 600; border-radius: 6px; border: none; background: transparent; color: #64748b; cursor: pointer;">Outstanding Only</button>
+                        <button type="button" class="btn btn-xs exec-sr-status-filter" data-filter="credits" style="padding: 4px 12px; font-weight: 600; border-radius: 6px; border: none; background: transparent; color: #1d4ed8; cursor: pointer;">Credits Only</button>
                         <button type="button" class="btn btn-xs exec-sr-status-filter" data-filter="cleared" style="padding: 4px 12px; font-weight: 600; border-radius: 6px; border: none; background: transparent; color: #64748b; cursor: pointer;">Cleared / Zero</button>
                     </div>
 
                     <select id="exec-sr-sort-select" class="form-control" style="width: 220px; height: 36px; font-size: 12px;">
                         <option value="balance_desc">Sort: Highest Closing Balance</option>
+                        <option value="credit_desc">Sort: Highest Negative Credit</option>
                         <option value="shorts_desc">Sort: Highest Period Shorts</option>
                         <option value="paid_desc">Sort: Highest Recoveries</option>
                         <option value="opening_desc">Sort: Highest Opening Balance</option>
@@ -3526,6 +3531,125 @@
 
             <div style="display:flex; justify-content:flex-end; margin-top: 14px;">
                 <button type="button" class="btn btn-primary" id="btn-exec-deductions-sched-done" style="padding: 7px 22px; font-weight: 700; border-radius: 6px;">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Clearing / Absorbing Month-End Credits & Overages -->
+    <div id="exec-clear-credits-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+        <div style="background:#fff; width:94%; max-width:880px; border-radius:12px; padding:24px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); max-height:90vh; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; border-bottom:1px solid #e2e8f0; padding-bottom:14px;">
+                <div>
+                    <h3 style="margin:0; font-size: 1.25rem; font-weight: 800; color:#0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span class="material-symbols-outlined" style="color: #059669; font-size: 24px;">savings</span>
+                        Clear / Absorb Month-End Staff Credits
+                    </h3>
+                    <div style="font-size: 0.82rem; color: #64748b; margin-top: 3px;">
+                        Clears negative balances (shift overages, overpayments, corrections) to zero out attendant closing balances so they do not roll forward into the next month.
+                    </div>
+                </div>
+                <button id="exec-clear-credits-modal-close" style="background:#f1f5f9; border:none; width: 32px; height: 32px; border-radius: 6px; font-size:1.25rem; cursor:pointer; color:#64748b; display: flex; align-items: center; justify-content: center;">&times;</button>
+            </div>
+
+            <!-- Parameters Bar -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Operating Station</label>
+                    <div id="exec-clear-credits-station-display" style="font-size: 13px; font-weight: 700; color: #0f172a; margin-top: 3px;">RUBIS POA PLACE</div>
+                </div>
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Clearance / Effective Date</label>
+                    <input type="date" id="exec-clear-credits-date" class="form-control" style="height: 34px; font-size: 12px; margin-top: 2px;">
+                </div>
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Treatment Method</label>
+                    <select id="exec-clear-credits-treatment" class="form-control" style="height: 34px; font-size: 12px; margin-top: 2px; font-weight: 600;">
+                        <option value="absorb">Absorb to Station Income (Shift Overages)</option>
+                        <option value="refund">Refund to Attendant (Cash / Payroll)</option>
+                        <option value="adjust">Balance Adjustment / Correction</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Reason / Description</label>
+                    <input type="text" id="exec-clear-credits-reason" class="form-control" style="height: 34px; font-size: 12px; margin-top: 2px;" placeholder="e.g. Month-End Credit Absorbed into Station Income">
+                </div>
+            </div>
+
+            <!-- Staff Credits Table -->
+            <div style="overflow-y:auto; flex-grow:1; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 14px;">
+                <table class="table table-bordered" style="width: 100%; margin: 0; font-size: 12.5px;">
+                    <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2;">
+                        <tr>
+                            <th style="width: 36px; text-align: center;">
+                                <input type="checkbox" id="exec-clear-credits-check-all" checked style="cursor: pointer;">
+                            </th>
+                            <th>Attendant / Staff</th>
+                            <th style="text-align: right; width: 140px;">Current Credit Balance</th>
+                            <th style="text-align: right; width: 160px;">Amount to Clear (KES)</th>
+                            <th style="text-align: right; width: 130px;">Remaining Bal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exec-clear-credits-tbody">
+                        <tr><td colspan="5" style="text-align: center; padding: 20px; color: #94a3b8;">Loading staff with credit balances...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Summary KPI & Accounting Toggle -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase;">Total Credits to Clear / Absorb</div>
+                    <div style="font-size: 18px; font-weight: 800; color: #15803d; font-family: monospace;" id="exec-clear-credits-total-display">KES 0.00</div>
+                    <div style="font-size: 11px; color: #16a34a;" id="exec-clear-credits-count-display">0 attendants selected</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="exec-clear-credits-post-journal" style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="exec-clear-credits-post-journal" id="exec-clear-credits-post-journal-label" style="font-size: 12px; font-weight: 600; color: #166534; margin: 0; cursor: pointer;">
+                        Also post Accounting Journal Entry (Debit CSA Shortfalls, Credit Shift Overages - KIL)
+                    </label>
+                </div>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn btn-secondary" id="btn-exec-clear-credits-cancel" style="padding: 7px 18px; font-weight: 600; border-radius: 6px;">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-exec-submit-clear-credits" style="padding: 7px 22px; font-weight: 700; background: #059669; border: 1px solid #059669; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;">
+                    <span class="spinner-border spinner-border-sm hidden" style="width: 14px; height: 14px; border-width: 2px;"></span>
+                    <span class="material-symbols-outlined" style="font-size: 18px;">check_circle</span> Confirm & Clear Credits
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Confirmed Credits Clearance Schedule (Print / Export) -->
+    <div id="exec-credits-schedule-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:10000; justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+        <div style="background:#fff; width:94%; max-width:800px; border-radius:12px; padding:24px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2); max-height:90vh; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; border-bottom:1px solid #e2e8f0; padding-bottom:12px;">
+                <div>
+                    <h3 style="margin:0; font-size: 1.2rem; font-weight: 800; color:#0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span class="material-symbols-outlined" style="color: #059669; font-size: 24px;">verified</span>
+                        Confirmed Staff Credits Clearance Schedule
+                    </h3>
+                    <div style="font-size: 0.82rem; color: #64748b; margin-top: 3px;">
+                        Negative staff balances have been cleared and attendant closing balances reset to <b>0.00</b>.
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="button" id="btn-exec-print-credits-sched" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-weight: 600; font-size: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">print</span> Print Schedule
+                    </button>
+                    <button type="button" id="btn-exec-csv-credits-sched" class="btn btn-sm btn-secondary" style="padding: 4px 12px; font-weight: 600; font-size: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">download</span> Export CSV
+                    </button>
+                    <button id="exec-credits-schedule-modal-close" style="background:#f1f5f9; border:none; width: 32px; height: 32px; border-radius: 6px; font-size:1.25rem; cursor:pointer; color:#64748b; display: flex; align-items: center; justify-content: center;">&times;</button>
+                </div>
+            </div>
+
+            <div id="exec-credits-schedule-content" style="overflow-y:auto; flex-grow:1; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; background: #fafafa;">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top: 14px;">
+                <button type="button" class="btn btn-primary" id="btn-exec-credits-sched-done" style="padding: 7px 22px; font-weight: 700; border-radius: 6px; background: #059669; border-color: #059669;">Done</button>
             </div>
         </div>
     </div>

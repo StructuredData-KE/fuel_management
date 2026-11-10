@@ -4144,6 +4144,152 @@ def clear_staff_shorts_to_deductions(station=None, clearance_date=None, reason=N
 
 
 @frappe.whitelist()
+def clear_staff_credits_to_income(station=None, clearance_date=None, treatment="absorb", reason=None, credits=None, post_journal=0):
+    """
+    Clears month-end negative staff shortage balances (credits / overages) in bulk or individually.
+    Creates positive entries in Staff Liability Ledger to bring the attendant's net balance to 0.00.
+    Optionally generates a balanced Journal Entry:
+      - If treatment == 'absorb': Debit CSA Shortfalls (Asset), Credit Shift Overages (Income).
+      - If treatment == 'refund': Debit CSA Shortfalls (Asset), Credit Station Cash / Petty Cash (Asset).
+      - If treatment == 'adjust': Debit CSA Shortfalls (Asset), Credit Shift Overages (Income).
+    """
+    import json
+    from frappe.utils import flt, getdate, nowdate
+    
+    if not station:
+        station = frappe.defaults.get_user_default("station") or "RUBIS POA PLACE"
+        
+    if not clearance_date:
+        clearance_date = nowdate()
+        
+    if isinstance(credits, str):
+        credits = json.loads(credits)
+        
+    if not credits or not isinstance(credits, list):
+        frappe.throw("No attendants provided for credit clearance.")
+        
+    if not treatment:
+        treatment = "absorb"
+        
+    if not reason:
+        try:
+            m_name = getdate(clearance_date).strftime('%B %Y')
+        except Exception:
+            m_name = "Month-End"
+        if treatment == "absorb":
+            reason = f"Month-End Credit Absorbed into Station Income - {m_name}"
+        elif treatment == "refund":
+            reason = f"Credit Refund to Attendant - {m_name}"
+        else:
+            reason = f"Credit Balance Adjustment - {m_name}"
+        
+    created_entries = []
+    total_cleared = 0.0
+    
+    for item in credits:
+        emp_id = item.get("employee")
+        amt = flt(item.get("amount"))
+        if not emp_id or amt <= 0:
+            continue
+            
+        emp_name = frappe.db.get_value("Employee", emp_id, "employee_name") or emp_id
+        
+        # Insert entry in Staff Liability Ledger with POSITIVE amount (debit/charge to zero out the credit)
+        sll = frappe.get_doc({
+            "doctype": "Staff Liability Ledger",
+            "employee": emp_id,
+            "date": clearance_date,
+            "amount": amt,
+            "reason": f"{reason} ({emp_name})",
+            "status": "Deducted"
+        })
+        sll.flags.ignore_permissions = True
+        sll.insert()
+        sll.submit()
+        
+        created_entries.append({
+            "name": sll.name,
+            "employee": emp_id,
+            "employee_name": emp_name,
+            "amount": amt,
+            "date": clearance_date,
+            "reason": sll.reason
+        })
+        total_cleared += amt
+        
+    # Optional: if post_journal is requested, post a Journal Entry
+    je_name = None
+    if (str(post_journal) in ("1", "true", "True")) and total_cleared > 0:
+        company = frappe.defaults.get_user_default("company") or "KILIBET INVESTMENT LTD"
+        st_doc = frappe.get_doc("Fuel Station", station) if frappe.db.exists("Fuel Station", station) else None
+        
+        shortfall_acc = None
+        if st_doc and getattr(st_doc, "shortfall_account", None):
+            shortfall_acc = st_doc.shortfall_account
+        if not shortfall_acc or not frappe.db.exists("Account", shortfall_acc):
+            shortfall_acc = "CSA Shortfalls (Staff Liability) - KIL"
+            if not frappe.db.exists("Account", shortfall_acc):
+                shortfall_acc = "CSA Shortfalls - Galana Annex - KIL"
+                
+        # Offset account depending on treatment
+        if treatment == "refund":
+            offset_acc = getattr(st_doc, "cash_account", None)
+            if not offset_acc or not frappe.db.exists("Account", offset_acc):
+                offset_acc = "Shift Main Cash - KIL"
+        else:
+            # Absorb to Station Income / Shift Overages
+            if station and "GALANA" in station.upper():
+                offset_acc = "Shift Overages - Galana Annex - KIL"
+            else:
+                offset_acc = "Shift Overages - KIL"
+            if not frappe.db.exists("Account", offset_acc):
+                accs = frappe.db.sql_list("SELECT name FROM tabAccount WHERE account_name LIKE '%Overage%' AND root_type = 'Income'")
+                if accs:
+                    offset_acc = accs[0]
+                else:
+                    offset_acc = "Direct Income - KIL"
+                    
+        cost_center = getattr(st_doc, "cost_center", None) or "Main - KIL"
+        
+        je = frappe.new_doc("Journal Entry")
+        je.voucher_type = "Journal Entry"
+        je.posting_date = clearance_date
+        je.company = company
+        je.user_remark = f"{reason} - {station} (Staff Credits Cleared/Absorbed)"
+        
+        # Debit Shortfall Account (reduces credit / restores asset to 0)
+        je.append("accounts", {
+            "account": shortfall_acc,
+            "debit_in_account_currency": total_cleared,
+            "cost_center": cost_center
+        })
+        # Credit Offset Account (Income or Cash)
+        je.append("accounts", {
+            "account": offset_acc,
+            "credit_in_account_currency": total_cleared,
+            "cost_center": cost_center
+        })
+        
+        je.insert(ignore_permissions=True)
+        je.submit()
+        je_name = je.name
+
+    frappe.db.commit()
+    
+    return {
+        "success": True,
+        "total_cleared": round(total_cleared, 2),
+        "count": len(created_entries),
+        "station": station,
+        "clearance_date": clearance_date,
+        "reason": reason,
+        "treatment": treatment,
+        "journal_entry": je_name,
+        "entries": created_entries
+    }
+
+
+@frappe.whitelist()
 def create_spa_bulk_stock_transfer(station_id, items, direction="Store to Forecourt"):
     if not station_id or not items:
         frappe.throw("Station ID and Items are required")
