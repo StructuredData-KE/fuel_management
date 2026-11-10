@@ -12027,8 +12027,8 @@ function render_borrowed_products($wrapper) {
             $(this).css({background: '#10b981', color: '#ffffff', fontWeight: '700'});
             if (!$wrapper.find('#bp-filter-from-date').val()) {
                 let d = new Date();
-                $wrapper.find('#bp-filter-from-date').val(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
-                $wrapper.find('#bp-filter-to-date').val(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]);
+                $wrapper.find('#bp-filter-from-date').val(format_local_iso_date(new Date(d.getFullYear(), d.getMonth(), 1)));
+                $wrapper.find('#bp-filter-to-date').val(format_local_iso_date(new Date(d.getFullYear(), d.getMonth() + 1, 0)));
             }
         } else {
             $(this).css({background: '#1e3a8a', color: '#ffffff', fontWeight: '700'});
@@ -17140,13 +17140,23 @@ function render_shorts_report($wrapper) {
     window.init_shorts_report();
 }
 
+function format_local_iso_date(d) {
+    if (!d) return '';
+    if (typeof d === 'string') return d;
+    let y = d.getFullYear();
+    let m = String(d.getMonth() + 1).padStart(2, '0');
+    let day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+window.format_local_iso_date = format_local_iso_date;
+
 window.init_shorts_report = function() {
     // Set default dates if empty (start of current month to today)
     if (!$('#shorts-report-start').val()) {
         let today = new Date();
         let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        $('#shorts-report-start').val(firstDay.toISOString().split('T')[0]);
-        $('#shorts-report-end').val(today.toISOString().split('T')[0]);
+        $('#shorts-report-start').val(format_local_iso_date(firstDay));
+        $('#shorts-report-end').val(format_local_iso_date(today));
     }
     window.setup_shorts_report_events();
     window.load_shortage_balances();
@@ -17173,21 +17183,24 @@ window.setup_shorts_report_events = function() {
 
         let preset = $(this).attr('data-preset');
         let today = new Date();
-        let start = '', end = today.toISOString().split('T')[0];
+        let start = '', end = format_local_iso_date(today);
 
         if (preset === 'this_month') {
             let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            start = firstDay.toISOString().split('T')[0];
+            start = format_local_iso_date(firstDay);
+            end = format_local_iso_date(today);
         } else if (preset === 'last_month') {
             let firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
             let lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-            start = firstDayLastMonth.toISOString().split('T')[0];
-            end = lastDayLastMonth.toISOString().split('T')[0];
+            start = format_local_iso_date(firstDayLastMonth);
+            end = format_local_iso_date(lastDayLastMonth);
         } else if (preset === 'this_year') {
             let firstDayYear = new Date(today.getFullYear(), 0, 1);
-            start = firstDayYear.toISOString().split('T')[0];
+            start = format_local_iso_date(firstDayYear);
+            end = format_local_iso_date(today);
         } else if (preset === 'all_time') {
             start = '2020-01-01';
+            end = format_local_iso_date(today);
         }
 
         $('#shorts-report-start').val(start);
