@@ -2110,7 +2110,14 @@ def get_executive_accounts(station=None):
         SELECT name, account_name, account_type, parent_account
         FROM `tabAccount`
         WHERE is_group = 0 
-          AND (account_type IN ('Cash', 'Bank') OR LOCATE('A/C', name) > 0 OR LOCATE('GALANA', name) > 0 OR LOCATE('RUBIS', name) > 0 OR LOCATE('Holding', name) > 0 OR LOCATE('Card', name) > 0 OR LOCATE('Top Up', name) > 0)
+          AND (
+            account_type IN ('Cash', 'Bank') 
+            OR LOCATE('Holding', name) > 0 
+            OR LOCATE('Top Up', name) > 0 
+            OR LOCATE('Card', name) > 0 
+            OR LOCATE('A/C', name) > 0 
+            OR LOCATE('Supplier', name) > 0
+          )
           AND company = %s
           AND docstatus < 2
         ORDER BY FIELD(account_type, 'Cash', 'Bank'), name
@@ -2144,21 +2151,33 @@ def get_executive_accounts(station=None):
         # Determine station association
         if "GALANA" in upper_name:
             item["station"] = "Galana Annex"
-        elif "RUBIS" in upper_name or "POA PLACE" in upper_name:
-            item["station"] = "RUBIS POA PLACE"
-        elif acc_name == "Shift Main Cash - KIL":
+        elif (
+            "RUBIS" in upper_name
+            or "POA PLACE" in upper_name
+            or acc_name in (
+                "Shift Main Cash - KIL",
+                "MPESA TILLS - KIL",
+                "Equity Cards Holding Account - KIL",
+                "KCB Cards Holding Account - KIL",
+                "Cash - KIL"
+            )
+        ):
             item["station"] = "RUBIS POA PLACE"
         else:
-            item["station"] = "" # Shared / General
+            item["station"] = ""  # Shared / General
 
         # Filter by station context if provided
         if station and station not in ("ALL", "All Stations", ""):
-            # If account has station and doesn't match selected station, skip
-            if item["station"] and item["station"].lower() != station.lower():
+            # Strictly match selected station - never leak accounts from other stations or unassigned accounts
+            if item["station"].lower() != station.lower():
+                continue
+        else:
+            # When viewing ALL stations, hide empty unassigned placeholder accounts
+            if not item["station"] and item["current_balance"] == 0:
                 continue
 
         # Separate Supplier Accounts, Holding Accounts, and Cash & Bank
-        if "GALANA A/C" in upper_name or "RUBIS A/C" in upper_name or "SUPPLIER" in upper_name or acc_type == "Payable":
+        if "GALANA A/C" in upper_name or "RUBIS A/C" in upper_name or "SUPPLIER" in upper_name:
             suppliers.append(item)
         elif "HOLDING" in upper_name or "TOP UP" in upper_name or ("CARD" in upper_name and acc_type not in ("Cash", "Bank")):
             holding_accounts.append(item)
