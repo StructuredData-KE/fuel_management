@@ -2222,6 +2222,273 @@ def get_executive_accounts(station=None):
     }
 
 
+def enrich_cash_account_transactions(txns):
+    """
+    Enriches GL entries for Cash and Bank accounts so directors see crystal-clear,
+    human-friendly descriptions (e.g. which customer paid, attendant cash remittances,
+    till sweeps, expense payee, etc.) and category badges instead of raw technical memos.
+    """
+    if not txns:
+        return
+
+    import re
+
+    shift_ids = set()
+    emp_ids = set()
+    pe_ids = set()
+
+    for t in txns:
+        rem = t.get("remarks") or ""
+        m_shift = re.search(r'SHIFT-\d{2}-\d{2}-\d{2}-\d{4}', rem)
+        if m_shift:
+            shift_ids.add(m_shift.group(0))
+
+        m_emp = re.search(r'HR-EMP-\d{4,5}', rem)
+        if m_emp:
+            emp_ids.add(m_emp.group(0))
+
+        if t.get("party_type") == "Employee" and t.get("party"):
+            emp_ids.add(t.get("party"))
+
+        if t.get("voucher_type") == "Payment Entry" and t.get("voucher_no"):
+            pe_ids.add(t.get("voucher_no"))
+
+    # Bulk customer payments for shifts
+    cp_by_shift_amt = {}
+    if shift_ids:
+        cps = frappe.db.sql("""
+            SELECT cp.name, cp.shift, cp.customer, cp.amount, cp.mode_of_payment, cp.trans_no, 
+                   COALESCE(c.customer_name, cp.customer) as customer_name
+            FROM `tabCustomer Payment` cp
+            LEFT JOIN `tabCustomer` c ON cp.customer = c.name
+            WHERE cp.shift IN %s AND cp.docstatus < 2
+        """, (list(shift_ids),), as_dict=True)
+        for cp in cps:
+            key = (cp.shift, round(flt(cp.amount), 2))
+            cp_by_shift_amt.setdefault(key, []).append(cp)
+
+    # Bulk employees
+    emp_name_map = {}
+    if emp_ids:
+        emps = frappe.db.sql("""
+            SELECT name, employee_name FROM `tabEmployee` WHERE name IN %s
+        """, (list(emp_ids),), as_dict=True)
+        emp_name_map = {e.name: e.employee_name for e in emps}
+
+    # Bulk payment entries
+    pe_map = {}
+    if pe_ids:
+        pes = frappe.db.sql("""
+            SELECT name, party_type, party, party_name, payment_type, mode_of_payment, reference_no, remarks
+            FROM `tabPayment Entry` WHERE name IN %s
+        """, (list(pe_ids),), as_dict=True)
+        pe_map = {p.name: p for p in pes}
+
+    for t in txns:
+        rem = (t.get("remarks") or "").strip()
+        v_type = t.get("voucher_type") or ""
+        v_no = t.get("voucher_no") or ""
+        d = flt(t.get("debit"))
+        c = flt(t.get("credit"))
+        amt = round(d if d > 0 else c, 2)
+
+        m_shift = re.search(r'SHIFT-\d{2}-\d{2}-\d{2}-\d{4}', rem)
+        shift_id = m_shift.group(0) if m_shift else None
+
+        category = "Other"
+        category_color = "slate"
+        clean_title = ""
+        clean_subtitle = ""
+        party_name = ""
+
+        # 1. Payment Entry
+        if v_type == "Payment Entry" and v_no in pe_map:
+            pe = pe_map[v_no]
+            p_type = pe.get("party_type") or "Party"
+            p_name = pe.get("party_name") or pe.get("party") or ""
+            party_name = p_name
+            ref_no = pe.get("reference_no") or ""
+            mop = pe.get("mode_of_payment") or ""
+            pay_type = pe.get("payment_type") or ""
+
+            if p_type == "Supplier":
+                category = "Supplier Payment"
+                category_color = "teal"
+                clean_title = f"Supplier Payment: {p_name}"
+            elif p_type == "Customer":
+                category = "Customer Payment"
+                category_color = "blue"
+                clean_title = f"Customer Payment: {p_name}"
+            else:
+                category = f"{pay_type} Payment" if pay_type else "Payment Entry"
+                category_color = "purple"
+                clean_title = f"{p_type}: {p_name}"
+
+            sub_parts = []
+            if ref_no:
+                sub_parts.append(f"Ref: {ref_no}")
+            if mop:
+                sub_parts.append(mop)
+            clean_subtitle = " · ".join(sub_parts)
+
+        # 2. Non-Cash Customer Payment (Shift Closure)
+        elif "Customer Payment" in rem or "Clear Non-Cash Customer Payment" in rem:
+            category = "Customer Payment"
+            category_color = "blue"
+            matched_cp = None
+            if shift_id and (shift_id, amt) in cp_by_shift_amt:
+                candidates = cp_by_shift_amt[(shift_id, amt)]
+                if candidates:
+                    matched_cp = candidates[0]
+                    for cand in candidates:
+                        if cand.mode_of_payment and cand.mode_of_payment.lower() in rem.lower():
+                            matched_cp = cand
+                            break
+
+            if matched_cp:
+                party_name = matched_cp.customer_name
+                clean_title = f"Customer: {matched_cp.customer_name}"
+                sub_parts = []
+                if matched_cp.trans_no:
+                    sub_parts.append(f"Ref: {matched_cp.trans_no}")
+                if matched_cp.mode_of_payment:
+                    sub_parts.append(matched_cp.mode_of_payment)
+                if shift_id:
+                    sub_parts.append(f"Shift {shift_id}")
+                clean_subtitle = " · ".join(sub_parts)
+            else:
+                # Check if remark already has Customer Payment: {Customer} (from updated shift closure)
+                m_cp_rem = re.search(r'Customer Payment:\s*([^v]+)via\s*([^(]+)(?:\(Ref:\s*([^)]+)\))?', rem)
+                if m_cp_rem:
+                    party_name = m_cp_rem.group(1).strip()
+                    mop_name = m_cp_rem.group(2).strip()
+                    ref_name = m_cp_rem.group(3).strip() if m_cp_rem.group(3) else ""
+                    clean_title = f"Customer: {party_name}"
+                    sub_parts = []
+                    if ref_name:
+                        sub_parts.append(f"Ref: {ref_name}")
+                    if mop_name:
+                        sub_parts.append(mop_name)
+                    if shift_id:
+                        sub_parts.append(f"Shift {shift_id}")
+                    clean_subtitle = " · ".join(sub_parts)
+                else:
+                    mop_str = rem.split("via")[-1].split("\n")[0].split("·")[0].strip() if "via" in rem else "Non-Cash"
+                    clean_title = f"Customer Payment via {mop_str}"
+                    clean_subtitle = f"Shift {shift_id}" if shift_id else ""
+
+        # 3. Forecourt Cash Submission by CSA
+        elif "Cash Submitted by" in rem:
+            category = "Forecourt Cash"
+            category_color = "emerald"
+            part = rem.split("Cash Submitted by")[-1]
+            raw_name = part.split("\n")[0].split(".")[0].split("·")[0].strip()
+            name = emp_name_map.get(raw_name, raw_name)
+            party_name = name
+            clean_title = f"Forecourt Cash: {name}" if name else "Forecourt Cash Submission"
+            clean_subtitle = f"Shift {shift_id}" if shift_id else ""
+
+        # 4. Till Sweep / Bank Transfer from Till
+        elif "Bank Transfer from" in rem or "Till Sweep" in rem:
+            category = "Till Sweep"
+            category_color = "indigo"
+            part = rem.split("Bank Transfer from")[-1] if "Bank Transfer from" in rem else rem
+            till = part.split("\n")[0].split(".")[0].split("·")[0].strip()
+            clean_title = f"Till Sweep: {till}"
+            clean_subtitle = f"Shift {shift_id}" if shift_id else ""
+
+        # 5. Account Transfer (Inter-account transfer or sweep)
+        elif "[ACCOUNT TRANSFER]" in rem or "Transfer Between Accounts" in rem:
+            category = "Account Transfer"
+            category_color = "purple"
+            clean_title = "Account Transfer"
+            sub_text = rem
+            if "Transfer KES" in rem:
+                m_txt = re.search(r'Transfer KES [^ ]+ from (.*)', rem)
+                if m_txt:
+                    sub_text = m_txt.group(1).split(". Ref:")[0]
+            clean_subtitle = sub_text.replace("\n", " · ")[:90]
+
+        # 6. Executive / Director Expense
+        elif "[EXECUTIVE EXPENSE]" in rem:
+            category = "Director Expense"
+            category_color = "rose"
+            m_payee = re.search(r'Payee:\s*([^|\n]+)', rem)
+            payee = m_payee.group(1).strip() if m_payee else ""
+            m_note = re.search(r'\[EXECUTIVE EXPENSE\]\s*([^|\n]+)', rem)
+            note = m_note.group(1).strip() if m_note else ""
+            m_ref = re.search(r'Ref:\s*([^|\n]+)', rem)
+            ref = m_ref.group(1).strip() if m_ref else ""
+            party_name = payee
+            clean_title = f"Expense: {payee}" if payee else "Executive Expense"
+            sub_parts = []
+            if note:
+                sub_parts.append(note)
+            if ref:
+                sub_parts.append(f"Ref: {ref}")
+            clean_subtitle = " · ".join(sub_parts)
+
+        # 7. Supplier Cash Top-Up
+        elif "Supplier Cash Top-Ups" in rem or "Supplier Top-Ups" in rem:
+            category = "Supplier Top-Up"
+            category_color = "teal"
+            against_supp = t.get("against") or ""
+            clean_title = f"Supplier Top-Up: {against_supp}" if against_supp else "Supplier Cash Top-Up"
+            clean_subtitle = f"Shift {shift_id}" if shift_id else ""
+
+        # 8. Petty Cash Entry
+        elif "Petty Cash" in rem:
+            category = "Petty Cash"
+            category_color = "amber"
+            m_item = re.search(r'Petty Cash \(([^)]+)\)', rem)
+            item = m_item.group(1).strip() if m_item else ""
+            m_paid = re.search(r'Paid by ([^·\n]+)', rem)
+            paid_by = m_paid.group(1).strip() if m_paid else ""
+            party_name = paid_by
+            clean_title = f"Petty Cash: {item}" if item else "Petty Cash Expense"
+            sub_parts = []
+            if paid_by:
+                sub_parts.append(f"Paid by {paid_by}")
+            if shift_id:
+                sub_parts.append(f"Shift {shift_id}")
+            clean_subtitle = " · ".join(sub_parts)
+
+        # 9. Shortage Recovery / Payment
+        elif "Shortage Payment" in rem or "Shortage Recovery" in rem or "Shortage for" in rem:
+            category = "Shortage Recovery"
+            category_color = "cyan"
+            m_emp = re.search(r'from (HR-EMP-\d{4,5})', rem)
+            emp_code = m_emp.group(1) if m_emp else ""
+            emp_name = emp_name_map.get(emp_code, emp_code)
+            party_name = emp_name
+            clean_title = f"Shortage Recovery: {emp_name}" if emp_name else "Shortage Recovery"
+            m_sref = re.search(r'Ref:\s*([^)]+)', rem)
+            clean_subtitle = f"Ref: {m_sref.group(1)}" if m_sref else (f"Shift {shift_id}" if shift_id else "")
+
+        # 10. Reversal / Cancellation
+        elif "On cancellation of" in rem:
+            category = "Reversal"
+            category_color = "slate"
+            cancelled_v = rem.split()[-1] if rem.split() else ""
+            clean_title = f"Cancellation Reversal ({cancelled_v})"
+            clean_subtitle = f"Cancelled voucher {cancelled_v}"
+
+        # 11. Generic / Fallback
+        else:
+            first_line = rem.split("\n")[0].split("·")[0].strip()
+            clean_title = first_line if first_line else f"{v_type} {v_no}"
+            if shift_id:
+                clean_subtitle = f"Shift {shift_id}"
+            elif t.get("against"):
+                clean_subtitle = f"Against: {t.get('against')}"[:70]
+
+        t["category"] = category
+        t["category_color"] = category_color
+        t["clean_title"] = clean_title
+        t["clean_subtitle"] = clean_subtitle
+        t["party_name"] = party_name
+
+
 @frappe.whitelist()
 def get_cash_accounts_overview(account=None, from_date=None, to_date=None, search=None, is_supplier=0):
     """
@@ -2288,7 +2555,8 @@ def get_cash_accounts_overview(account=None, from_date=None, to_date=None, searc
     txns = frappe.db.sql(f"""
         SELECT 
             name, posting_date, voucher_type, voucher_no, 
-            debit, credit, against, remarks, creation
+            debit, credit, against, remarks, creation,
+            party_type, party
         FROM `tabGL Entry`
         WHERE account = %s 
           AND posting_date >= %s AND posting_date <= %s 
@@ -2297,6 +2565,8 @@ def get_cash_accounts_overview(account=None, from_date=None, to_date=None, searc
           {where_extra}
         ORDER BY posting_date ASC, creation ASC, name ASC
     """, tuple(params), as_dict=True)
+
+    enrich_cash_account_transactions(txns)
 
     running = opening_bal
     for t in txns:

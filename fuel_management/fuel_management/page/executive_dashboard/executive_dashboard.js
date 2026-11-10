@@ -6681,7 +6681,7 @@ function render_exec_ca_table(wrapper) {
         if (typeFilter === 'outflows' && (t.credit <= 0)) return false;
 
         if (search) {
-            let text = `${t.voucher_no || ''} ${t.voucher_type || ''} ${t.remarks || ''} ${t.against || ''}`.toLowerCase();
+            let text = `${t.voucher_no || ''} ${t.voucher_type || ''} ${t.remarks || ''} ${t.category || ''} ${t.clean_title || ''} ${t.clean_subtitle || ''} ${t.party_name || ''} ${t.against || ''}`.toLowerCase();
             if (!text.includes(search)) return false;
         }
         return true;
@@ -6692,6 +6692,18 @@ function render_exec_ca_table(wrapper) {
         return;
     }
 
+    const badgePalette = {
+        blue: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+        emerald: { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
+        indigo: { bg: '#eef2ff', color: '#4338ca', border: '#c7d2fe' },
+        purple: { bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff' },
+        teal: { bg: '#f0fdfa', color: '#0f766e', border: '#99f6e4' },
+        amber: { bg: '#fffbeb', color: '#b45309', border: '#fde68a' },
+        cyan: { bg: '#ecfeff', color: '#0e7490', border: '#a5f3fc' },
+        rose: { bg: '#fff1f2', color: '#be123c', border: '#fecdd3' },
+        slate: { bg: '#f8fafc', color: '#475569', border: '#e2e8f0' }
+    };
+
     let rowsHtml = '';
     filtered.forEach(t => {
         let debitStr = t.debit > 0 ? `KES ${Number(t.debit).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '-';
@@ -6700,23 +6712,31 @@ function render_exec_ca_table(wrapper) {
 
         let vLink = t.voucher_no;
         if (t.voucher_type && t.voucher_no) {
-            vLink = `<a href="/app/${frappe.router.slug(t.voucher_type)}/${t.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 600; text-decoration: underline;">${t.voucher_no}</a>`;
+            vLink = `<a href="/app/${frappe.router.slug(t.voucher_type)}/${t.voucher_no}" target="_blank" style="color: #2563eb; font-weight: 700; text-decoration: underline;">${t.voucher_no}</a>`;
         }
 
-        let memo = (t.remarks || '').replace(/\n/g, ' · ');
+        let catColor = badgePalette[t.category_color] || badgePalette.slate;
+        let catBadge = `<span style="display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10.5px; font-weight: 700; background: ${catColor.bg}; color: ${catColor.color}; border: 1px solid ${catColor.border}; white-space: nowrap;">${frappe.utils.escape_html(t.category || 'Other')}</span>`;
+
+        let titleText = t.clean_title || (t.remarks || '').split('\n')[0].replace(/\n/g, ' · ') || t.voucher_no;
+        let subText = t.clean_subtitle || '';
+        let againstTooltip = t.against ? `Against: ${frappe.utils.escape_html(t.against)}` : '';
 
         rowsHtml += `
-            <tr style="border-bottom: 1px solid #f1f5f9;">
-                <td style="font-size: 12px; color: #475569; white-space: nowrap;">${t.date_formatted}</td>
-                <td style="font-size: 12px; font-family: monospace;">
-                    <div style="font-weight: 700; color: #0f172a;">${vLink}</div>
-                    <div style="font-size: 10px; color: #94a3b8;">${t.voucher_type}</div>
+            <tr style="border-bottom: 1px solid #f1f5f9; height: 38px;">
+                <td style="padding: 6px 10px; font-size: 12px; color: #475569; white-space: nowrap; vertical-align: middle;">${t.date_formatted}</td>
+                <td style="padding: 6px 10px; font-size: 11.5px; font-family: monospace; vertical-align: middle; white-space: nowrap;">
+                    <div style="font-weight: 700; color: #0f172a; line-height: 1.2;">${vLink}</div>
+                    <div style="font-size: 10px; color: #94a3b8; line-height: 1.1;">${t.voucher_type}</div>
                 </td>
-                <td style="font-size: 12px; color: #1e293b; max-width: 320px; word-break: break-word;">${memo}</td>
-                <td style="font-size: 11px; color: #64748b; max-width: 220px; word-break: break-word;">${t.against || '-'}</td>
-                <td style="text-align: right; font-family: monospace; font-size: 13px; color: ${t.debit > 0 ? '#16a34a' : '#94a3b8'}; font-weight: ${t.debit > 0 ? '700' : 'normal'};">${debitStr}</td>
-                <td style="text-align: right; font-family: monospace; font-size: 13px; color: ${t.credit > 0 ? '#dc2626' : '#94a3b8'}; font-weight: ${t.credit > 0 ? '700' : 'normal'};">${creditStr}</td>
-                <td style="text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">${runningStr}</td>
+                <td style="padding: 6px 10px; vertical-align: middle; white-space: nowrap;">${catBadge}</td>
+                <td style="padding: 6px 10px; vertical-align: middle;" title="${againstTooltip}">
+                    <div style="font-weight: 600; color: #0f172a; font-size: 12px; line-height: 1.25;">${frappe.utils.escape_html(titleText)}</div>
+                    ${subText ? `<div style="font-size: 11px; color: #64748b; line-height: 1.2; margin-top: 2px;">${frappe.utils.escape_html(subText)}</div>` : ''}
+                </td>
+                <td style="padding: 6px 10px; text-align: right; font-family: monospace; font-size: 12.5px; color: ${t.debit > 0 ? '#16a34a' : '#94a3b8'}; font-weight: ${t.debit > 0 ? '700' : 'normal'}; vertical-align: middle; white-space: nowrap;">${debitStr}</td>
+                <td style="padding: 6px 10px; text-align: right; font-family: monospace; font-size: 12.5px; color: ${t.credit > 0 ? '#dc2626' : '#94a3b8'}; font-weight: ${t.credit > 0 ? '700' : 'normal'}; vertical-align: middle; white-space: nowrap;">${creditStr}</td>
+                <td style="padding: 6px 10px; text-align: right; font-family: monospace; font-size: 12.5px; font-weight: 800; color: #0f172a; vertical-align: middle; white-space: nowrap;">${runningStr}</td>
             </tr>
         `;
     });
@@ -6737,17 +6757,18 @@ function print_exec_ca_ledger(wrapper) {
         let debitStr = t.debit > 0 ? Number(t.debit).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-';
         let creditStr = t.credit > 0 ? Number(t.credit).toLocaleString('en-US', {minimumFractionDigits: 2}) : '-';
         let runningStr = Number(t.running_balance).toLocaleString('en-US', {minimumFractionDigits: 2});
-        let memo = (t.remarks || '').replace(/\n/g, ' · ');
+        let desc = t.clean_title || (t.remarks || '').split('\n')[0];
+        let sub = t.clean_subtitle ? ` (${t.clean_subtitle})` : '';
 
         rowsHtml += `
             <tr>
-                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${t.date_formatted}</td>
-                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-family: monospace;">${t.voucher_no} (${t.voucher_type})</td>
-                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${memo}</td>
-                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${t.against || '-'}</td>
-                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace;">${debitStr}</td>
-                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace;">${creditStr}</td>
-                <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; font-weight: bold;">${runningStr}</td>
+                <td style="padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${t.date_formatted}</td>
+                <td style="padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-family: monospace;">${t.voucher_no}</td>
+                <td style="padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; font-weight: 600;">${t.category || '-'}</td>
+                <td style="padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px;">${desc}${sub}</td>
+                <td style="padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; color: #16a34a;">${debitStr}</td>
+                <td style="padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; color: #dc2626;">${creditStr}</td>
+                <td style="padding: 5px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; text-align: right; font-family: monospace; font-weight: bold;">${runningStr}</td>
             </tr>
         `;
     });
@@ -6760,7 +6781,7 @@ function print_exec_ca_ledger(wrapper) {
             <style>
                 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 20px; color: #1e293b; }
                 table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                th { background: #f8fafc; text-align: left; padding: 8px; border-bottom: 2px solid #cbd5e1; font-size: 11px; }
+                th { background: #f8fafc; text-align: left; padding: 8px; border-bottom: 2px solid #cbd5e1; font-size: 11px; text-transform: uppercase; }
                 @media print { body { padding: 0; } }
             </style>
         </head>
@@ -6784,8 +6805,8 @@ function print_exec_ca_ledger(wrapper) {
                     <tr>
                         <th>Date</th>
                         <th>Voucher #</th>
-                        <th>Description / Memo</th>
-                        <th>Against</th>
+                        <th>Category</th>
+                        <th>Description & Counterparty</th>
                         <th style="text-align: right;">Inflow (Debit)</th>
                         <th style="text-align: right;">Outflow (Credit)</th>
                         <th style="text-align: right;">Running Bal</th>
@@ -6813,16 +6834,17 @@ function export_exec_ca_csv(wrapper) {
     }
 
     let csv = "data:text/csv;charset=utf-8,";
-    csv += "Date,Voucher Type,Voucher No,Description,Against Account,Inflow Debit (KES),Outflow Credit (KES),Running Balance (KES)\n";
+    csv += "Date,Voucher Type,Voucher No,Category,Description / Counterparty,Details / Ref,Inflow Debit (KES),Outflow Credit (KES),Running Balance (KES)\n";
 
     data.transactions.forEach(t => {
-        let memo = (t.remarks || '').replace(/"/g, '""').replace(/\n/g, ' ');
-        let against = (t.against || '').replace(/"/g, '""');
+        let cat = (t.category || '').replace(/"/g, '""');
+        let title = (t.clean_title || t.remarks || '').replace(/"/g, '""').replace(/\n/g, ' ');
+        let sub = (t.clean_subtitle || '').replace(/"/g, '""');
         let d = (t.debit || 0).toFixed(2);
         let c = (t.credit || 0).toFixed(2);
         let b = (t.running_balance || 0).toFixed(2);
 
-        csv += `"${t.posting_date}","${t.voucher_type}","${t.voucher_no}","${memo}","${against}",${d},${c},${b}\n`;
+        csv += `"${t.posting_date}","${t.voucher_type}","${t.voucher_no}","${cat}","${title}","${sub}",${d},${c},${b}\n`;
     });
 
     let uri = encodeURI(csv);

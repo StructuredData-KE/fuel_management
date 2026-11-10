@@ -843,15 +843,17 @@ class Shift(Document):
                     mop_account = frappe.db.get_value("M-Pesa Till", {"station": self.station, "is_active": 1}, "default_account")
                 if not mop_account:
                     frappe.throw(f"No Default Account mapped for Mode of Payment: {cp_doc.mode_of_payment} (Customer Payment {cp_doc.name})")
+                cust_display = frappe.db.get_value("Customer", cp_doc.customer, "customer_name") or cp_doc.customer
+                ref_str = f" (Ref: {cp_doc.trans_no})" if cp_doc.trans_no else ""
                 je.append("accounts", {
                     "account": mop_account,
                     "debit_in_account_currency": cp_amt,
-                    "user_remark": f"Clear Non-Cash Customer Payment via {cp_doc.mode_of_payment}"
+                    "user_remark": f"Customer Payment: {cust_display} via {cp_doc.mode_of_payment}{ref_str}"
                 })
                 je.append("accounts", {
                     "account": station_doc.shift_control_account,
                     "credit_in_account_currency": cp_amt,
-                    "user_remark": f"Clear Customer Payment for {cp_doc.customer}"
+                    "user_remark": f"Clear Customer Payment for {cust_display}{ref_str}"
                 })
 
         if len(je.accounts) > 0:
