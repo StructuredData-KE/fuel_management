@@ -4741,6 +4741,15 @@ function render_reconciliation_table($w, data) {
 window.EXEC_SHORTS_DATA = [];
 window.EXEC_SHORTS_SUMMARY = {};
 
+function format_local_iso_date(d) {
+    if (!d) return '';
+    if (typeof d === 'string') return d;
+    let y = d.getFullYear();
+    let m = String(d.getMonth() + 1).padStart(2, '0');
+    let day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 function init_exec_shorts_report(wrapper) {
     let $w = $(wrapper);
     
@@ -4750,8 +4759,8 @@ function init_exec_shorts_report(wrapper) {
     if (!$startInput.val()) {
         let today = new Date();
         let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        $startInput.val(firstDay.toISOString().split('T')[0]);
-        $endInput.val(today.toISOString().split('T')[0]);
+        $startInput.val(format_local_iso_date(firstDay));
+        $endInput.val(format_local_iso_date(today));
     }
 
     setup_exec_shorts_events(wrapper);
@@ -4781,21 +4790,24 @@ function setup_exec_shorts_events(wrapper) {
 
         let preset = $(this).attr('data-preset');
         let today = new Date();
-        let start = '', end = today.toISOString().split('T')[0];
+        let start = '', end = format_local_iso_date(today);
 
         if (preset === 'this_month') {
             let firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            start = firstDay.toISOString().split('T')[0];
+            start = format_local_iso_date(firstDay);
+            end = format_local_iso_date(today);
         } else if (preset === 'last_month') {
             let firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
             let lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-            start = firstDayLastMonth.toISOString().split('T')[0];
-            end = lastDayLastMonth.toISOString().split('T')[0];
+            start = format_local_iso_date(firstDayLastMonth);
+            end = format_local_iso_date(lastDayLastMonth);
         } else if (preset === 'this_year') {
             let firstDayYear = new Date(today.getFullYear(), 0, 1);
-            start = firstDayYear.toISOString().split('T')[0];
+            start = format_local_iso_date(firstDayYear);
+            end = format_local_iso_date(today);
         } else if (preset === 'all_time') {
             start = '2020-01-01';
+            end = format_local_iso_date(today);
         }
 
         $w.find('#exec-shorts-report-start').val(start);
