@@ -589,7 +589,7 @@ def get_pnl_summary(from_date=None, to_date=None, company=None, station=None):
         accounts_agg[acc]["total_credit"] += flt(r['credit'])
 
     # Calculate underlying Fuel vs Lube COGS components
-    fuel_items = set(frappe.db.sql_list("SELECT name FROM tabItem WHERE item_group = 'FUELS' OR name IN ('DIESEL', 'Petrol 001', 'PMS', 'AGO', 'DPK')"))
+    fuel_items = set(frappe.db.sql_list("SELECT name FROM tabItem WHERE item_group = 'FUELS' OR name IN ('DIESEL', 'PETROL', 'Petrol 001', 'PMS', 'AGO', 'DPK')"))
     
     wh_pattern = None
     if station:

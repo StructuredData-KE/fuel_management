@@ -1828,7 +1828,7 @@ function load_analytics_data(wrapper) {
                     </thead>
                     <tbody>`;
                 
-                let prodColors = {'DIESEL': '#f59e0b', 'PETROL 001': '#0f172a', 'SUPER': '#0f172a', 'KEROSENE': '#10b981'};
+                let prodColors = {'DIESEL': '#f59e0b', 'PETROL': '#0f172a', 'PETROL 001': '#0f172a', 'SUPER': '#0f172a', 'KEROSENE': '#10b981'};
                 let sumFuelDay = 0, sumFuelNight = 0, sumFuelVolume = 0, sumFuelRevenue = 0;
 
                 Object.values(data.fuel.summary || {}).forEach(fs => {
