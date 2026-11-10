@@ -2246,11 +2246,11 @@ def get_executive_accounts(station=None):
     }
 
 
-def enrich_cash_account_transactions(txns):
+def enrich_cash_account_transactions(txns, account=None, is_supplier=False):
     """
-    Enriches GL entries for Cash and Bank accounts so directors see crystal-clear,
+    Enriches GL entries for Cash, Bank, and Supplier accounts so directors see crystal-clear,
     human-friendly descriptions (e.g. which customer paid, attendant cash remittances,
-    till sweeps, expense payee, etc.) and category badges instead of raw technical memos.
+    till sweeps, fuel deliveries, supplier settlements, etc.) and category badges instead of raw technical memos.
     """
     if not txns:
         return
@@ -2308,6 +2308,8 @@ def enrich_cash_account_transactions(txns):
         """, (list(pe_ids),), as_dict=True)
         pe_map = {p.name: p for p in pes}
 
+    is_supp_acc = is_supplier or (account and ("A/C" in account or "SUPPLIER" in account.upper()))
+
     for t in txns:
         rem = (t.get("remarks") or "").strip()
         v_type = t.get("voucher_type") or ""
@@ -2355,9 +2357,27 @@ def enrich_cash_account_transactions(txns):
                 sub_parts.append(mop)
             clean_subtitle = " · ".join(sub_parts)
 
-        # 2. Non-Cash Customer Payment (Shift Closure)
+        # 2. Fuel / Product Delivery (Purchase Invoice or Reconciliation)
+        elif "Fuel Delivery" in rem or "[PURCHASE RECONCILIATION]" in rem or "Purchase Invoice" in rem or v_type == "Purchase Invoice":
+            category = "Fuel Delivery"
+            category_color = "amber"
+            m_pur = re.search(r'PUR-\d{4}-\d{5}', rem)
+            pur_no = m_pur.group(0) if m_pur else ""
+            m_inv = re.search(r'\((\d+)\)', rem)
+            inv_no = m_inv.group(1) if m_inv else ""
+            clean_title = f"Fuel Delivery: {pur_no}" if pur_no else "Fuel Delivery"
+            sub_parts = []
+            if inv_no:
+                sub_parts.append(f"Invoice #{inv_no}")
+            if "[PURCHASE RECONCILIATION]" in rem:
+                sub_parts.append("Reconciled Purchase")
+            if not sub_parts and shift_id:
+                sub_parts.append(f"Shift {shift_id}")
+            clean_subtitle = " · ".join(sub_parts)
+
+        # 3. Non-Cash Customer Payment (Shift Closure)
         elif "Customer Payment" in rem or "Clear Non-Cash Customer Payment" in rem:
-            category = "Customer Payment"
+            category = "Card Settlement" if is_supp_acc else "Customer Payment"
             category_color = "blue"
             matched_cp = None
             if shift_id and (shift_id, amt) in cp_by_shift_amt:
@@ -2381,7 +2401,6 @@ def enrich_cash_account_transactions(txns):
                     sub_parts.append(f"Shift {shift_id}")
                 clean_subtitle = " · ".join(sub_parts)
             else:
-                # Check if remark already has Customer Payment: {Customer} (from updated shift closure)
                 m_cp_rem = re.search(r'Customer Payment:\s*([^v]+)via\s*([^(]+)(?:\(Ref:\s*([^)]+)\))?', rem)
                 if m_cp_rem:
                     party_name = m_cp_rem.group(1).strip()
@@ -2401,7 +2420,7 @@ def enrich_cash_account_transactions(txns):
                     clean_title = f"Customer Payment via {mop_str}"
                     clean_subtitle = f"Shift {shift_id}" if shift_id else ""
 
-        # 3. Forecourt Cash Submission by CSA
+        # 4. Forecourt Cash Submission by CSA
         elif "Cash Submitted by" in rem:
             category = "Forecourt Cash"
             category_color = "emerald"
@@ -2412,20 +2431,25 @@ def enrich_cash_account_transactions(txns):
             clean_title = f"Forecourt Cash: {name}" if name else "Forecourt Cash Submission"
             clean_subtitle = f"Shift {shift_id}" if shift_id else ""
 
-        # 4. Till Sweep / Bank Transfer from Till
+        # 5. Till Sweep / Bank Transfer from Till
         elif "Bank Transfer from" in rem or "Till Sweep" in rem:
-            category = "Till Sweep"
-            category_color = "indigo"
             part = rem.split("Bank Transfer from")[-1] if "Bank Transfer from" in rem else rem
             till = part.split("\n")[0].split(".")[0].split("·")[0].strip()
-            clean_title = f"Till Sweep: {till}"
+            if is_supp_acc:
+                category = "Till Remittance"
+                category_color = "indigo"
+                clean_title = f"Till Remittance: {till}"
+            else:
+                category = "Till Sweep"
+                category_color = "indigo"
+                clean_title = f"Till Sweep: {till}"
             clean_subtitle = f"Shift {shift_id}" if shift_id else ""
 
-        # 5. Account Transfer (Inter-account transfer or sweep)
+        # 6. Account Transfer (Inter-account transfer or sweep)
         elif "[ACCOUNT TRANSFER]" in rem or "Transfer Between Accounts" in rem:
-            category = "Account Transfer"
-            category_color = "purple"
-            clean_title = "Account Transfer"
+            category = "Supplier Settlement" if is_supp_acc else "Account Transfer"
+            category_color = "teal" if is_supp_acc else "purple"
+            clean_title = "Supplier Settlement" if is_supp_acc else "Account Transfer"
             sub_text = rem
             if "Transfer KES" in rem:
                 m_txt = re.search(r'Transfer KES [^ ]+ from (.*)', rem)
@@ -2433,7 +2457,7 @@ def enrich_cash_account_transactions(txns):
                     sub_text = m_txt.group(1).split(". Ref:")[0]
             clean_subtitle = sub_text.replace("\n", " · ")[:90]
 
-        # 6. Executive / Director Expense
+        # 7. Executive / Director Expense
         elif "[EXECUTIVE EXPENSE]" in rem:
             category = "Director Expense"
             category_color = "rose"
@@ -2452,15 +2476,15 @@ def enrich_cash_account_transactions(txns):
                 sub_parts.append(f"Ref: {ref}")
             clean_subtitle = " · ".join(sub_parts)
 
-        # 7. Supplier Cash Top-Up
+        # 8. Supplier Cash Top-Up
         elif "Supplier Cash Top-Ups" in rem or "Supplier Top-Ups" in rem:
             category = "Supplier Top-Up"
-            category_color = "teal"
+            category_color = "cyan"
             against_supp = t.get("against") or ""
             clean_title = f"Supplier Top-Up: {against_supp}" if against_supp else "Supplier Cash Top-Up"
             clean_subtitle = f"Shift {shift_id}" if shift_id else ""
 
-        # 8. Petty Cash Entry
+        # 9. Petty Cash Entry
         elif "Petty Cash" in rem:
             category = "Petty Cash"
             category_color = "amber"
@@ -2477,7 +2501,7 @@ def enrich_cash_account_transactions(txns):
                 sub_parts.append(f"Shift {shift_id}")
             clean_subtitle = " · ".join(sub_parts)
 
-        # 9. Shortage Recovery / Payment
+        # 10. Shortage Recovery / Payment
         elif "Shortage Payment" in rem or "Shortage Recovery" in rem or "Shortage for" in rem:
             category = "Shortage Recovery"
             category_color = "cyan"
@@ -2489,7 +2513,7 @@ def enrich_cash_account_transactions(txns):
             m_sref = re.search(r'Ref:\s*([^)]+)', rem)
             clean_subtitle = f"Ref: {m_sref.group(1)}" if m_sref else (f"Shift {shift_id}" if shift_id else "")
 
-        # 10. Reversal / Cancellation
+        # 11. Reversal / Cancellation
         elif "On cancellation of" in rem:
             category = "Reversal"
             category_color = "slate"
@@ -2497,7 +2521,7 @@ def enrich_cash_account_transactions(txns):
             clean_title = f"Cancellation Reversal ({cancelled_v})"
             clean_subtitle = f"Cancelled voucher {cancelled_v}"
 
-        # 11. Generic / Fallback
+        # 12. Generic / Fallback
         else:
             first_line = rem.split("\n")[0].split("·")[0].strip()
             clean_title = first_line if first_line else f"{v_type} {v_no}"
@@ -2590,7 +2614,7 @@ def get_cash_accounts_overview(account=None, from_date=None, to_date=None, searc
         ORDER BY posting_date ASC, creation ASC, name ASC
     """, tuple(params), as_dict=True)
 
-    enrich_cash_account_transactions(txns)
+    enrich_cash_account_transactions(txns, account=account, is_supplier=is_supp)
 
     running = opening_bal
     for t in txns:
