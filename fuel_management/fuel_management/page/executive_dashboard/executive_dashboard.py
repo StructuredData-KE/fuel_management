@@ -2110,13 +2110,14 @@ def get_executive_accounts(station=None):
         SELECT name, account_name, account_type, parent_account
         FROM `tabAccount`
         WHERE is_group = 0 
-          AND (account_type IN ('Cash', 'Bank') OR LOCATE('A/C', name) > 0 OR LOCATE('GALANA', name) > 0 OR LOCATE('RUBIS', name) > 0 OR LOCATE('Holding', name) > 0)
+          AND (account_type IN ('Cash', 'Bank') OR LOCATE('A/C', name) > 0 OR LOCATE('GALANA', name) > 0 OR LOCATE('RUBIS', name) > 0 OR LOCATE('Holding', name) > 0 OR LOCATE('Card', name) > 0 OR LOCATE('Top Up', name) > 0)
           AND company = %s
           AND docstatus < 2
         ORDER BY FIELD(account_type, 'Cash', 'Bank'), name
     """, (company,), as_dict=True)
 
     cash_bank = []
+    holding_accounts = []
     suppliers = []
 
     for acc in raw_accounts:
@@ -2143,9 +2144,9 @@ def get_executive_accounts(station=None):
         # Determine station association
         if "GALANA" in upper_name:
             item["station"] = "Galana Annex"
-        elif "RUBIS" in upper_name:
+        elif "RUBIS" in upper_name or "POA PLACE" in upper_name:
             item["station"] = "RUBIS POA PLACE"
-        elif "SHIFT MAIN CASH" in upper_name:
+        elif acc_name == "Shift Main Cash - KIL":
             item["station"] = "RUBIS POA PLACE"
         else:
             item["station"] = "" # Shared / General
@@ -2156,10 +2157,12 @@ def get_executive_accounts(station=None):
             if item["station"] and item["station"].lower() != station.lower():
                 continue
 
-        # Separate Supplier Accounts from Cash & Bank
+        # Separate Supplier Accounts, Holding Accounts, and Cash & Bank
         if "GALANA A/C" in upper_name or "RUBIS A/C" in upper_name or "SUPPLIER" in upper_name or acc_type == "Payable":
             suppliers.append(item)
-        elif acc_type in ("Cash", "Bank") or "HOLDING" in upper_name:
+        elif "HOLDING" in upper_name or "TOP UP" in upper_name or ("CARD" in upper_name and acc_type not in ("Cash", "Bank")):
+            holding_accounts.append(item)
+        elif acc_type in ("Cash", "Bank"):
             cash_bank.append(item)
 
     # 3. Query M-Pesa Tills individually with live operational balances
@@ -2215,10 +2218,12 @@ def get_executive_accounts(station=None):
 
     return {
         "cash_bank_accounts": cash_bank,
+        "holding_accounts": holding_accounts,
         "supplier_accounts": suppliers,
         "mpesa_tills": tills_list,
         "total_mpesa_balance": round(flt(total_mpesa_balance), 2),
-        "total_cash_balance": round(sum(flt(a["current_balance"]) for a in cash_bank), 2)
+        "total_cash_balance": round(sum(flt(a["current_balance"]) for a in cash_bank), 2),
+        "total_holding_balance": round(sum(flt(a["current_balance"]) for a in holding_accounts), 2)
     }
 
 
@@ -3021,17 +3026,22 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
     for k in ["total_amount", "posted_amount", "pending_amount"]:
         summary[k] = round(float(summary.get(k) or 0.0), 2)
 
-    # Live holding balances per card brand
+    # Live holding balances per card brand (including station-specific accounts)
     holding_bals = {}
     for h_name, h_key in [
         ("Rubis Cards Holding Account - KIL", "rubis_bal"),
-        ("KCB Cards Holding Account - KIL", "kcb_bal"),
         ("Galana Cards Holding Account - KIL", "galana_bal"),
-        ("Equity Cards Holding Account - KIL", "equity_bal")
+        (["KCB Cards Holding Account - KIL", "KCB Cards Holding - Rubis - KIL", "KCB Cards Holding - Galana - KIL"], "kcb_bal"),
+        (["Equity Cards Holding Account - KIL", "Equity Cards Holding - Rubis - KIL", "Equity Cards Holding - Galana - KIL"], "equity_bal")
     ]:
-        b = frappe.db.sql("""
-            SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account = %s AND is_cancelled = 0
-        """, (h_name,))[0][0] or 0.0
+        if isinstance(h_name, list):
+            b = frappe.db.sql("""
+                SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account IN %s AND is_cancelled = 0
+            """, (tuple(h_name),))[0][0] or 0.0
+        else:
+            b = frappe.db.sql("""
+                SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account = %s AND is_cancelled = 0
+            """, (h_name,))[0][0] or 0.0
         holding_bals[h_key] = round(float(b), 2)
     summary["holding_balances"] = holding_bals
 
@@ -3188,14 +3198,30 @@ def post_station_cards_to_supplier(card_names, supplier_account, posting_date=No
         for c in cards:
             c_name = c.get("card") or ""
             c_upper = c_name.upper()
+            st_name = (c.get("station") or "").upper()
+            if not st_name and c.get("shift"):
+                st_name = (frappe.db.get_value("Shift", c.get("shift"), "station") or "").upper()
+            is_rub = "RUBIS" in st_name
+            is_gal = "GALANA" in st_name
+
             if "RUBIS" in c_upper:
                 acc = f"Rubis Cards Holding Account - {company_abbr}"
             elif "GALANA" in c_upper:
                 acc = f"Galana Cards Holding Account - {company_abbr}"
             elif "KCB" in c_upper:
-                acc = f"KCB Cards Holding Account - {company_abbr}"
+                if is_rub and frappe.db.exists("Account", f"KCB Cards Holding - Rubis - {company_abbr}"):
+                    acc = f"KCB Cards Holding - Rubis - {company_abbr}"
+                elif is_gal and frappe.db.exists("Account", f"KCB Cards Holding - Galana - {company_abbr}"):
+                    acc = f"KCB Cards Holding - Galana - {company_abbr}"
+                else:
+                    acc = f"KCB Cards Holding Account - {company_abbr}"
             elif "EQUITY" in c_upper:
-                acc = f"Equity Cards Holding Account - {company_abbr}"
+                if is_rub and frappe.db.exists("Account", f"Equity Cards Holding - Rubis - {company_abbr}"):
+                    acc = f"Equity Cards Holding - Rubis - {company_abbr}"
+                elif is_gal and frappe.db.exists("Account", f"Equity Cards Holding - Galana - {company_abbr}"):
+                    acc = f"Equity Cards Holding - Galana - {company_abbr}"
+                else:
+                    acc = f"Equity Cards Holding Account - {company_abbr}"
             else:
                 acc = f"Cards Holding Account - {company_abbr}"
 

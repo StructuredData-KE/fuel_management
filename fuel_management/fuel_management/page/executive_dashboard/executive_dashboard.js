@@ -6374,11 +6374,13 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
         callback: function(r) {
             if (!r.message) return;
             let cashAccounts = r.message.cash_bank_accounts || [];
+            let holdingAccounts = r.message.holding_accounts || [];
             let supplierAccounts = r.message.supplier_accounts || [];
             let mpesaTills = r.message.mpesa_tills || [];
 
             window.EXEC_ACCOUNTS_CACHE = {
                 cash_bank: cashAccounts,
+                holding: holdingAccounts,
                 suppliers: supplierAccounts,
                 mpesa_tills: mpesaTills
             };
@@ -6397,9 +6399,7 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
 
                 let icon = 'payments';
                 let upper = (acc.name || '').toUpperCase();
-                if (upper.includes('HOLDING')) {
-                    icon = 'credit_card';
-                } else if (acc.account_type === 'Bank' || upper.includes('EQUITY') || upper.includes('KCB')) {
+                if (acc.account_type === 'Bank' || upper.includes('EQUITY') || upper.includes('KCB')) {
                     icon = 'account_balance';
                 }
 
@@ -6407,11 +6407,24 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
                 let balBadge = get_sidebar_balance_badge(acc.current_balance);
                 let fullBal = Number(acc.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
+                let stTag = '';
+                if (!selectedStation || selectedStation === '' || selectedStation.toLowerCase() === 'all stations') {
+                    let stShort = (acc.station || '').toLowerCase().includes('galana') ? 'Galana' : ((acc.station || '').toLowerCase().includes('rubis') ? 'Rubis' : acc.station);
+                    if (stShort) {
+                        stTag = `<span style="background:#ecfdf5; color:#065f46; padding:0 4px; border-radius:3px; font-size:9px; font-weight:700;">${stShort}</span>`;
+                    }
+                }
+
                 cashHtml += `
                     <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-cash-accounts" data-account="${acc.name}" title="${acc.name}\nLive Balance: KES ${fullBal}" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:7px 10px;">
                         <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
-                            <span class="material-symbols-outlined" style="font-size:17px; flex-shrink:0;">${icon}</span>
-                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600;">${shortLabel}</span>
+                            <span class="material-symbols-outlined" style="font-size:17px; color:#059669; flex-shrink:0;">${icon}</span>
+                            <div style="min-width:0; overflow:hidden;">
+                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600; color:#1e293b;">
+                                    ${shortLabel}
+                                </div>
+                                ${stTag ? `<div style="font-size:9.5px; line-height:1; margin-top:2px;">${stTag}</div>` : ''}
+                            </div>
                         </div>
                         ${balBadge}
                     </a>
@@ -6422,7 +6435,51 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
             }
             $(wrapper).find('#exec-sidebar-cash-accounts').html(cashHtml);
 
-            // 2. Render M-Pesa Tills individually with live balances
+            // 2. Render Holding Accounts in sidebar with live balances
+            let holdingHtml = '';
+            holdingAccounts.forEach(acc => {
+                let isCurrent = (activeTab === 'tab-cash-accounts' && acc.name === activeCashAcc);
+                if (acc.name === activeCashAcc) validCashFound = true;
+
+                let icon = 'credit_card';
+                let upper = (acc.name || '').toUpperCase();
+                if (upper.includes('TOP UP')) {
+                    icon = 'upgrade';
+                }
+
+                let shortLabel = acc.label || acc.name.replace(' - KIL', '');
+                let balBadge = get_sidebar_balance_badge(acc.current_balance);
+                let fullBal = Number(acc.current_balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+                let stTag = '';
+                if (!selectedStation || selectedStation === '' || selectedStation.toLowerCase() === 'all stations') {
+                    let stShort = (acc.station || '').toLowerCase().includes('galana') ? 'Galana' : ((acc.station || '').toLowerCase().includes('rubis') ? 'Rubis' : acc.station);
+                    if (stShort) {
+                        stTag = `<span style="background:#e0f2fe; color:#0369a1; padding:0 4px; border-radius:3px; font-size:9px; font-weight:700;">${stShort}</span>`;
+                    }
+                }
+
+                holdingHtml += `
+                    <a class="exec-nav-item ${isCurrent ? 'active' : ''}" data-tab="tab-cash-accounts" data-account="${acc.name}" title="${acc.name}\nLive Balance: KES ${fullBal}" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:7px 10px;">
+                        <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+                            <span class="material-symbols-outlined" style="font-size:17px; color:#0284c7; flex-shrink:0;">${icon}</span>
+                            <div style="min-width:0; overflow:hidden;">
+                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:600; color:#1e293b;">
+                                    ${shortLabel}
+                                </div>
+                                ${stTag ? `<div style="font-size:9.5px; line-height:1; margin-top:2px;">${stTag}</div>` : ''}
+                            </div>
+                        </div>
+                        ${balBadge}
+                    </a>
+                `;
+            });
+            if (holdingAccounts.length === 0) {
+                holdingHtml = '<div style="font-size: 11px; color: #94a3b8; padding: 6px 16px;">No holding accounts found</div>';
+            }
+            $(wrapper).find('#exec-sidebar-holding-accounts').html(holdingHtml);
+
+            // 3. Render M-Pesa Tills individually with live balances
             let mpesaHtml = '';
             mpesaTills.forEach(t => {
                 let isCurrent = (activeTab === 'tab-mpesa-reconciliation' && (t.name === activeTill || t.till_name === activeTill));
@@ -6461,7 +6518,7 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
             }
             $(wrapper).find('#exec-sidebar-mpesa-tills').html(mpesaHtml);
 
-            // 3. Render Supplier Accounts in sidebar with live balances
+            // 4. Render Supplier Accounts in sidebar with live balances
             let suppHtml = '';
             let validSuppFound = false;
             supplierAccounts.forEach(acc => {
@@ -6489,19 +6546,22 @@ function render_sidebar_account_modules(wrapper, selectedStation) {
 
             // Update section count badges
             $(wrapper).find('#exec-badge-cash-count').text(cashAccounts.length);
+            $(wrapper).find('#exec-badge-holding-count').text(holdingAccounts.length);
             $(wrapper).find('#exec-badge-mpesa-count').text(mpesaTills.length);
             $(wrapper).find('#exec-badge-supp-count').text(supplierAccounts.length);
 
             // If user is currently on cash accounts tab and active account is no longer in list, switch to first available
             if (activeTab === 'tab-cash-accounts') {
-                let cashSec = $(wrapper).find('#sec-cash-accounts');
-                cashSec.find('.exec-nav-section-header').removeClass('collapsed');
-                cashSec.find('.exec-nav-section-body').removeClass('collapsed').show();
+                let isHoldingActive = (activeCashAcc || '').toUpperCase().includes('HOLDING') || (activeCashAcc || '').toUpperCase().includes('TOP UP');
+                let targetSec = isHoldingActive ? $(wrapper).find('#sec-holding-accounts') : $(wrapper).find('#sec-cash-accounts');
+                targetSec.find('.exec-nav-section-header').removeClass('collapsed');
+                targetSec.find('.exec-nav-section-body').removeClass('collapsed').show();
 
-                if (!validCashFound && cashAccounts.length > 0) {
+                if (!validCashFound && (cashAccounts.length > 0 || holdingAccounts.length > 0)) {
+                    let firstAcc = (cashAccounts.length > 0 ? cashAccounts[0] : holdingAccounts[0]);
                     window.EXEC_CA_STATE = window.EXEC_CA_STATE || {};
-                    window.EXEC_CA_STATE.active_account = cashAccounts[0].name;
-                    $(wrapper).find(`#exec-sidebar-cash-accounts .exec-nav-item[data-account="${cashAccounts[0].name}"]`).addClass('active');
+                    window.EXEC_CA_STATE.active_account = firstAcc.name;
+                    $(wrapper).find(`#exec-sidebar-cash-accounts .exec-nav-item[data-account="${firstAcc.name}"], #exec-sidebar-holding-accounts .exec-nav-item[data-account="${firstAcc.name}"]`).addClass('active');
                     load_exec_cash_accounts(wrapper);
                 }
             } else if (activeTab === 'tab-supplier-accounts') {
@@ -6637,12 +6697,14 @@ function load_exec_cash_accounts(wrapper) {
                 window.EXEC_CA_STATE.active_account = data.account;
 
                 // Sync sidebar active state
-                $(wrapper).find('#exec-sidebar-cash-accounts .exec-nav-item').removeClass('active');
-                $(wrapper).find(`#exec-sidebar-cash-accounts .exec-nav-item[data-account="${data.account}"]`).addClass('active');
+                $(wrapper).find('#exec-sidebar-cash-accounts .exec-nav-item, #exec-sidebar-holding-accounts .exec-nav-item').removeClass('active');
+                $(wrapper).find(`#exec-sidebar-cash-accounts .exec-nav-item[data-account="${data.account}"], #exec-sidebar-holding-accounts .exec-nav-item[data-account="${data.account}"]`).addClass('active');
 
                 // Update Header and Active Badge
                 let cleanName = (data.account || '').replace(' - KIL', '');
-                $(wrapper).find('#exec-ca-header-title').text(`${cleanName} (Cash & Bank Account)`);
+                let upperAcc = (data.account || '').toUpperCase();
+                let accountTypeLabel = (upperAcc.includes('HOLDING') || upperAcc.includes('TOP UP')) ? 'Holding Account' : 'Cash & Bank Account';
+                $(wrapper).find('#exec-ca-header-title').text(`${cleanName} (${accountTypeLabel})`);
                 $(wrapper).find('#exec-ca-active-account-badge').text(data.account);
 
                 // Update 5 KPIs

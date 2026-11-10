@@ -726,15 +726,29 @@ class Shift(Document):
                 # Each card brand must be held in its respective Card Holding Account awaiting executive audit & posting
                 company_abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
                 card_upper = (card_name or "").upper()
+                station_name = (self.station or "").upper()
+                is_rubis = "RUBIS" in station_name
+                is_galana = "GALANA" in station_name
+
                 holding_acc = None
                 if "RUBIS" in card_upper:
                     holding_acc = f"Rubis Cards Holding Account - {company_abbr}"
                 elif "GALANA" in card_upper:
                     holding_acc = f"Galana Cards Holding Account - {company_abbr}"
                 elif "KCB" in card_upper:
-                    holding_acc = f"KCB Cards Holding Account - {company_abbr}"
+                    if is_rubis and frappe.db.exists("Account", f"KCB Cards Holding - Rubis - {company_abbr}"):
+                        holding_acc = f"KCB Cards Holding - Rubis - {company_abbr}"
+                    elif is_galana and frappe.db.exists("Account", f"KCB Cards Holding - Galana - {company_abbr}"):
+                        holding_acc = f"KCB Cards Holding - Galana - {company_abbr}"
+                    else:
+                        holding_acc = f"KCB Cards Holding Account - {company_abbr}"
                 elif "EQUITY" in card_upper:
-                    holding_acc = f"Equity Cards Holding Account - {company_abbr}"
+                    if is_rubis and frappe.db.exists("Account", f"Equity Cards Holding - Rubis - {company_abbr}"):
+                        holding_acc = f"Equity Cards Holding - Rubis - {company_abbr}"
+                    elif is_galana and frappe.db.exists("Account", f"Equity Cards Holding - Galana - {company_abbr}"):
+                        holding_acc = f"Equity Cards Holding - Galana - {company_abbr}"
+                    else:
+                        holding_acc = f"Equity Cards Holding Account - {company_abbr}"
                 else:
                     holding_acc = f"Cards Holding Account - {company_abbr}"
 
