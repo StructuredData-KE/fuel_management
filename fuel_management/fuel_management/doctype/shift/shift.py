@@ -1651,8 +1651,8 @@ def send_end_shift_report(shift_name, html_content):
     </body>
     </html>
     """
-    
-    pdf_bytes = frappe.utils.pdf.get_pdf(styled_html)
+    from frappe.utils.pdf import get_pdf
+    pdf_bytes = get_pdf(styled_html)
     
     recipients = [e.strip() for e in owner_email.replace(';', ',').split(',') if e.strip()]
     frappe.sendmail(
