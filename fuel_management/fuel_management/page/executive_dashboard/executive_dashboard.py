@@ -5614,9 +5614,9 @@ def get_executive_past_shifts(station=None, from_date=None, to_date=None, shift_
     kpi_query = f"""
         SELECT 
             COUNT(*) as total_shifts,
-            SUM(CASE WHEN (LOWER(IFNULL(s.shift_template, '')) LIKE '%day%' OR LOWER(IFNULL(s.shift_name_display, '')) LIKE '%day%') THEN 1 ELSE 0 END) as day_shifts,
-            SUM(CASE WHEN (LOWER(IFNULL(s.shift_template, '')) LIKE '%night%' OR LOWER(IFNULL(s.shift_name_display, '')) LIKE '%night%') THEN 1 ELSE 0 END) as night_shifts,
-            SUM(CASE WHEN s.report_sent = 1 THEN 1 ELSE 0 END) as reports_sent
+            SUM(CASE WHEN (LOCATE('day', LOWER(IFNULL(s.shift_template, ''))) > 0 OR LOCATE('day', LOWER(IFNULL(s.shift_name_display, ''))) > 0) THEN 1 ELSE 0 END) as day_shifts,
+            SUM(CASE WHEN (LOCATE('night', LOWER(IFNULL(s.shift_template, ''))) > 0 OR LOCATE('night', LOWER(IFNULL(s.shift_name_display, ''))) > 0) THEN 1 ELSE 0 END) as night_shifts,
+            SUM(CASE WHEN IFNULL(s.report_sent, 0) = 1 THEN 1 ELSE 0 END) as reports_sent
         FROM `tabShift` s
         LEFT JOIN `tabEmployee` e ON s.head_csa = e.name
         LEFT JOIN `tabUser` u ON s.head_csa = u.name
