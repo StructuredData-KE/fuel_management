@@ -4025,12 +4025,18 @@ function init_topups_holding_tab(wrapper) {
         open_topup_reconciliation_modal(wrapper, selectedRows);
     });
 
-    // Main KPI card reconcile button
+    // Main KPI card reconcile button (all pending)
     $(wrapper).off('click', '#btn-reconcile-topups').on('click', '#btn-reconcile-topups', function(e) {
         e.preventDefault();
         let state = window.TOPUPS_STATE;
         let pendingRows = (state.statement || []).filter(r => !r.is_opening && r.supplier !== 'RECONCILIATION' && !r.is_reconciled);
         open_topup_reconciliation_modal(wrapper, pendingRows);
+    });
+
+    // Top KPI card reconcile button (selected items)
+    $(wrapper).off('click', '#btn-reconcile-selected-topups-kpi').on('click', '#btn-reconcile-selected-topups-kpi', function(e) {
+        e.preventDefault();
+        $('#btn-reconcile-selected-topups').trigger('click');
     });
 }
 
@@ -4039,12 +4045,39 @@ function update_topups_selection_ui(wrapper) {
     if (!state) return;
 
     let selectedCount = state.selected_items.size;
-    $(wrapper).find('#topups-selected-count').text(selectedCount);
+    let selectedAmount = 0;
+    (state.statement || []).forEach(r => {
+        let name = r.entry_name || r.name;
+        if (state.selected_items.has(name)) {
+            selectedAmount += (parseFloat(r.amount) || 0);
+        }
+    });
+
+    let formattedAmount = format_currency(selectedAmount, "KES");
+
+    // Update count labels across top card and toolbar
+    $(wrapper).find('#topups-selected-count, .topups-selected-count-span').text(selectedCount);
+    $(wrapper).find('#topup-selected-badge').text(`${selectedCount} Selected`);
+    $(wrapper).find('#topup-selected-total-amount').text(formattedAmount);
 
     if (selectedCount > 0) {
-        $(wrapper).find('#btn-reconcile-selected-topups').css('display', 'inline-flex');
+        $(wrapper).find('#btn-reconcile-selected-topups')
+            .html(`<span>⚡ Reconcile Selected (${selectedCount}) &bull; <strong style="font-family:monospace;">${formattedAmount}</strong></span>`)
+            .css('display', 'inline-flex');
+        $(wrapper).find('#btn-reconcile-selected-topups-kpi').css('display', 'inline-flex');
+        $(wrapper).find('#topup-selected-kpi-card').css({
+            'background': '#eff6ff',
+            'border-color': '#93c5fd'
+        });
+        $(wrapper).find('#topup-selected-subtitle').html(`<strong style="color:#1d4ed8;">Ready to reconcile:</strong> ${selectedCount} entry(ies) totaling <b style="font-family:monospace; color:#1e40af;">${formattedAmount}</b>`);
     } else {
         $(wrapper).find('#btn-reconcile-selected-topups').hide();
+        $(wrapper).find('#btn-reconcile-selected-topups-kpi').hide();
+        $(wrapper).find('#topup-selected-kpi-card').css({
+            'background': '#f8fafc',
+            'border-color': '#e2e8f0'
+        });
+        $(wrapper).find('#topup-selected-subtitle').text('Select checkboxes below to reconcile specific top-ups');
     }
 
     let checkableRows = $(wrapper).find('.topup-row-check');
@@ -4119,6 +4152,8 @@ function load_topups_statement(wrapper) {
             $(wrapper).find('#exec-holding-subtitle').html(`<strong>${pending_count}</strong> Total Pending Top-up(s) awaiting reconciliation`);
             $(wrapper).find('#topup-filter-pending-count').text(period_pending_count);
             $(wrapper).find('#exec-topups-total').text(format_currency(period_topups_sum, "KES"));
+            $(wrapper).find('#topup-kpi-period-total').text(format_currency(period_topups_sum, "KES"));
+            $(wrapper).find('#topup-kpi-period-unrec').html(`Unreconciled in Period: <strong style="color:#b45309;">${format_currency(period_pending_amount, "KES")}</strong>`);
 
             // Update Period Summary Pill
             if (period_topups_sum > 0 || period_pending_amount > 0) {

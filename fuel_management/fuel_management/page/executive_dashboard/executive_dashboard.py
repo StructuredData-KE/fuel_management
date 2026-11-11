@@ -1759,6 +1759,7 @@ def create_topup_deduction(station, amount=None, credit_account=None, date=None,
     je.company = company
     je.posting_date = date
     je.cheque_no = reference
+    je.cheque_date = date
     topups_tag = f" (Topups: {', '.join(parsed_topups)})" if parsed_topups else ""
     je.user_remark = f"[TOP-UP DEDUCTION] Reconciled to {credit_account} for {station}{topups_tag}"
     
@@ -3210,6 +3211,7 @@ def post_station_cards_to_supplier(card_names, supplier_account, posting_date=No
         je.company = company
         je.posting_date = posting_date
         je.cheque_no = reference or f"CARDS-{len(cards)}"
+        je.cheque_date = posting_date
         je.user_remark = f"[STATION CARDS POSTING] Posted {len(cards)} station cards (SPA Total: KES {cards_total:,.2f}) to Supplier Account: {supplier_account}. Credited: KES {credited_amt:,.2f}. {notes or ''}".strip()
 
         # Debit: Supplier account with credited amount

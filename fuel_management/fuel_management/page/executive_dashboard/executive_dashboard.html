@@ -2260,23 +2260,63 @@
                 <p class="exec-header-subtitle">Supplier top-ups holding account & reconciliation with supplier statement.</p>
             </div>
         </div>
-        <div class="exec-kpi-grid" style="margin-top: 24px;">
-            <div class="exec-card" style="border: 1px solid #f59e0b;">
-                <div class="exec-card-header">
-                    <span class="exec-card-title">Pending Supplier Top-ups</span>
-                    <span class="material-symbols-outlined" style="color:#f59e0b; font-size:18px;">payments</span>
+        <!-- Top Horizontal KPI Grid: Above table to give full width to reconciliation statement -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; margin-bottom: 20px;">
+            <!-- Card 1: Total Pending Supplier Top-ups -->
+            <div class="exec-card" style="border: 1px solid #f59e0b; border-left: 4px solid #f59e0b; padding: 18px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div class="exec-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="exec-card-title" style="font-weight: 700; color: #92400e; font-size: 13px; text-transform: uppercase;">Total Pending Top-ups</span>
+                        <span class="material-symbols-outlined" style="color:#f59e0b; font-size: 22px;">payments</span>
+                    </div>
+                    <div class="exec-card-value" id="exec-holding-balance" style="font-size: 24px; font-weight: 800; color: #b45309; margin-top: 4px;">Loading...</div>
+                    <div class="exec-progress-text" id="exec-holding-subtitle" style="color: #64748b; font-size: 11.5px; margin-top: 4px;">
+                        Unreconciled Top-up Holding Balance
+                    </div>
                 </div>
-                <div class="exec-card-value" id="exec-holding-balance">Loading...</div>
-                <div class="exec-progress-text" id="exec-holding-subtitle" style="color: #64748b; margin-top: 8px;">
-                    Unreconciled Top-up Holding Balance
-                </div>
-                <div style="margin-top: 16px;">
-                    <button id="btn-reconcile-topups" class="exec-btn-primary" style="width: 100%; background-color: #f59e0b; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                        <span>⚡ Reconcile with Statement</span>
+                <div style="margin-top: 14px;">
+                    <button id="btn-reconcile-topups" class="exec-btn-primary" style="width: 100%; background-color: #f59e0b; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; margin-top: 0;">
+                        <span>⚡ Reconcile All Pending</span>
                     </button>
                 </div>
             </div>
-        <div class="exec-chart-area" style="margin-top:24px;">
+
+            <!-- Card 2: Selected for Reconciliation (Dynamic Real-time Totals) -->
+            <div class="exec-card" id="topup-selected-kpi-card" style="border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; padding: 18px; background: #f8fafc; transition: all 0.2s ease; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div class="exec-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="exec-card-title" style="font-weight: 700; color: #1e40af; font-size: 13px; text-transform: uppercase;">Selected for Reconciliation</span>
+                        <span id="topup-selected-badge" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: #e2e8f0; color: #475569;">0 Selected</span>
+                    </div>
+                    <div class="exec-card-value" id="topup-selected-total-amount" style="font-size: 24px; font-weight: 800; color: #1e40af; font-family: monospace; margin-top: 4px;">KES 0.00</div>
+                    <div class="exec-progress-text" id="topup-selected-subtitle" style="color: #64748b; font-size: 11.5px; margin-top: 4px;">
+                        Select checkboxes below to reconcile specific top-ups
+                    </div>
+                </div>
+                <div style="margin-top: 14px;">
+                    <button id="btn-reconcile-selected-topups-kpi" class="exec-btn-primary" style="display: none; width: 100%; background-color: #2563eb; border: none; font-weight: 700; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; box-shadow: 0 2px 4px rgba(37,99,235,0.25); margin-top: 0;">
+                        <span>⚡ Reconcile Selected (<span class="topups-selected-count-span">0</span>)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Card 3: Period Statement Total -->
+            <div class="exec-card" style="border: 1px solid #e2e8f0; border-left: 4px solid #10b981; padding: 18px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div class="exec-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="exec-card-title" style="font-weight: 700; color: #065f46; font-size: 13px; text-transform: uppercase;">Period Statement Total</span>
+                        <span class="material-symbols-outlined" style="color:#10b981; font-size: 22px;">date_range</span>
+                    </div>
+                    <div class="exec-card-value" id="topup-kpi-period-total" style="font-size: 24px; font-weight: 800; color: #047857; font-family: monospace; margin-top: 4px;">KES 0.00</div>
+                    <div class="exec-progress-text" id="topup-kpi-period-unrec" style="color: #64748b; font-size: 11.5px; margin-top: 4px;">
+                        Unreconciled in Period: KES 0.00
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Full-Width Statement Table Area -->
+        <div class="exec-chart-area" style="width: 100%; margin-top: 0;">
             <!-- Top Toolbar: Title, Period Summary Badge, Status Tabs, Search, Reconcile Selected & Refresh -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -2357,7 +2397,6 @@
                     </tfoot>
                 </table>
             </div>
-        </div>
         </div>
     </main>
 
