@@ -170,6 +170,8 @@ function init_spa_ui(wrapper) {
                 init_purchases_reconciliation(wrapper);
             } else if (target === 'tab-volume-tracker') {
                 init_exec_volume_tracker(wrapper);
+            } else if (target === 'tab-shift-reports') {
+                init_exec_shift_reports(wrapper);
             }
 
             // Close sidebar on mobile
@@ -12099,6 +12101,366 @@ function export_mvr_tracker_csv(wrapper) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// =========================================================================
+// PAST SHIFT REPORTS MODULE FOR DIRECTORS
+// =========================================================================
+
+window.EXEC_SR_STATE = window.EXEC_SR_STATE || {
+    initialized: false,
+    preset: 'last_7_days',
+    station: 'ALL',
+    from_date: null,
+    to_date: null,
+    shift_type: '',
+    status: 'Closed',
+    search: '',
+    current_report_html: ''
+};
+
+function init_exec_shift_reports(wrapper) {
+    let $pane = $(wrapper).find('#tab-shift-reports');
+    if (!$pane.length) return;
+
+    let state = window.EXEC_SR_STATE;
+
+    // Populate station dropdown if empty
+    let $stnSelect = $pane.find('#exec-sr-station-filter');
+    if ($stnSelect.find('option').length <= 1) {
+        let globalStation = $(wrapper).find('#exec-station-select').val() || 'ALL';
+        $(wrapper).find('#exec-station-select option').each(function() {
+            let val = $(this).val();
+            let text = $(this).text();
+            if (val && val !== 'ALL' && !$stnSelect.find(`option[value="${val}"]`).length) {
+                $stnSelect.append(`<option value="${val}">${text}</option>`);
+            }
+        });
+        if (globalStation) {
+            $stnSelect.val(globalStation);
+            state.station = globalStation;
+        }
+    }
+
+    // Set dates from preset if not already set
+    if (!state.from_date || !state.to_date) {
+        set_sr_preset_dates(state.preset, $pane);
+    }
+
+    update_sr_station_badge($pane);
+
+    if (!state.initialized) {
+        state.initialized = true;
+
+        // Preset button clicks
+        $pane.off('click', '.exec-sr-preset-btn').on('click', '.exec-sr-preset-btn', function(e) {
+            e.preventDefault();
+            $pane.find('.exec-sr-preset-btn').removeClass('active');
+            $(this).addClass('active');
+            let preset = $(this).data('preset');
+            state.preset = preset;
+            set_sr_preset_dates(preset, $pane);
+            load_exec_past_shifts(wrapper);
+        });
+
+        // Apply filter button
+        $pane.off('click', '#btn-exec-sr-apply').on('click', '#btn-exec-sr-apply', function(e) {
+            e.preventDefault();
+            load_exec_past_shifts(wrapper);
+        });
+
+        // Refresh button
+        $pane.off('click', '#btn-shift-reports-refresh').on('click', '#btn-shift-reports-refresh', function(e) {
+            e.preventDefault();
+            load_exec_past_shifts(wrapper);
+        });
+
+        // Station change
+        $pane.off('change', '#exec-sr-station-filter').on('change', '#exec-sr-station-filter', function() {
+            state.station = $(this).val();
+            update_sr_station_badge($pane);
+            load_exec_past_shifts(wrapper);
+        });
+
+        // Shift type or status change
+        $pane.off('change', '#exec-sr-type-filter, #exec-sr-status-filter').on('change', '#exec-sr-type-filter, #exec-sr-status-filter', function() {
+            load_exec_past_shifts(wrapper);
+        });
+
+        // Search enter key
+        $pane.off('keypress', '#exec-sr-search-input').on('keypress', '#exec-sr-search-input', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                load_exec_past_shifts(wrapper);
+            }
+        });
+
+        // View Report button click (delegated)
+        $pane.off('click', '.btn-exec-view-shift-report').on('click', '.btn-exec-view-shift-report', function(e) {
+            e.preventDefault();
+            let shiftName = $(this).data('shift');
+            if (shiftName) {
+                open_exec_shift_report_modal(wrapper, shiftName);
+            }
+        });
+
+        // Modal Close buttons
+        $(wrapper).off('click', '#btn-exec-modal-sr-close').on('click', '#btn-exec-modal-sr-close', function(e) {
+            e.preventDefault();
+            $(wrapper).find('#modal-exec-shift-report').hide();
+        });
+
+        $(wrapper).off('click', '#modal-exec-shift-report').on('click', '#modal-exec-shift-report', function(e) {
+            if ($(e.target).is('#modal-exec-shift-report')) {
+                $(this).hide();
+            }
+        });
+
+        // Modal Print button
+        $(wrapper).off('click', '#btn-exec-modal-sr-print').on('click', '#btn-exec-modal-sr-print', function(e) {
+            e.preventDefault();
+            print_exec_shift_report();
+        });
+    }
+
+    load_exec_past_shifts(wrapper);
+}
+
+function update_sr_station_badge($pane) {
+    let stn = $pane.find('#exec-sr-station-filter').val() || 'ALL';
+    let $badge = $pane.find('#exec-sr-station-badge');
+    if (stn === 'ALL' || !stn) {
+        $badge.text('ALL STATIONS').css({ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' });
+    } else {
+        $badge.text(stn).css({ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' });
+    }
+}
+
+function set_sr_preset_dates(preset, $pane) {
+    let today = frappe.datetime.get_today();
+    let from_date = today;
+    let to_date = today;
+
+    if (preset === 'today') {
+        from_date = today;
+        to_date = today;
+    } else if (preset === 'yesterday') {
+        from_date = frappe.datetime.add_days(today, -1);
+        to_date = from_date;
+    } else if (preset === 'last_7_days') {
+        from_date = frappe.datetime.add_days(today, -7);
+        to_date = today;
+    } else if (preset === 'this_month') {
+        let d = frappe.datetime.str_to_obj(today);
+        from_date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+        to_date = today;
+    } else if (preset === 'last_month') {
+        let d = frappe.datetime.str_to_obj(today);
+        let firstCurrent = new Date(d.getFullYear(), d.getMonth(), 1);
+        let lastPrev = new Date(firstCurrent - 1);
+        let firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);
+        from_date = `${firstPrev.getFullYear()}-${String(firstPrev.getMonth() + 1).padStart(2, '0')}-01`;
+        to_date = `${lastPrev.getFullYear()}-${String(lastPrev.getMonth() + 1).padStart(2, '0')}-${String(lastPrev.getDate()).padStart(2, '0')}`;
+    } else if (preset === 'this_year') {
+        let d = frappe.datetime.str_to_obj(today);
+        from_date = `${d.getFullYear()}-01-01`;
+        to_date = today;
+    } else if (preset === 'all') {
+        from_date = '';
+        to_date = '';
+    }
+
+    $pane.find('#exec-sr-from-date').val(from_date);
+    $pane.find('#exec-sr-to-date').val(to_date);
+    window.EXEC_SR_STATE.from_date = from_date;
+    window.EXEC_SR_STATE.to_date = to_date;
+}
+
+function load_exec_past_shifts(wrapper) {
+    let $pane = $(wrapper).find('#tab-shift-reports');
+    if (!$pane.length) return;
+
+    let station = $pane.find('#exec-sr-station-filter').val();
+    let from_date = $pane.find('#exec-sr-from-date').val();
+    let to_date = $pane.find('#exec-sr-to-date').val();
+    let shift_type = $pane.find('#exec-sr-type-filter').val();
+    let status = $pane.find('#exec-sr-status-filter').val();
+    let search = $pane.find('#exec-sr-search-input').val();
+
+    let $body = $pane.find('#exec-sr-table-body');
+    $body.html('<tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;"><div class="spinner" style="display:inline-block; margin-right:8px;"></div> Loading past shift reports...</td></tr>');
+
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_executive_past_shifts",
+        args: {
+            station: station,
+            from_date: from_date,
+            to_date: to_date,
+            shift_type: shift_type,
+            status: status,
+            search: search,
+            limit: 60
+        },
+        callback: function(r) {
+            if (!r.message) {
+                $body.html('<tr><td colspan="8" style="text-align:center; padding:32px; color:#ef4444;">Failed to load shift records.</td></tr>');
+                return;
+            }
+
+            let data = r.message;
+            let shifts = data.shifts || [];
+            let kpis = data.kpis || {};
+
+            // Update KPI strip
+            $pane.find('#exec-sr-kpi-total').text(kpis.total_shifts || 0);
+            $pane.find('#exec-sr-kpi-day').text(kpis.day_shifts || 0);
+            $pane.find('#exec-sr-kpi-night').text(kpis.night_shifts || 0);
+            $pane.find('#exec-sr-kpi-sent').text(kpis.reports_sent || 0);
+            $pane.find('#exec-sr-count-label').text(shifts.length);
+
+            if (from_date && to_date) {
+                $pane.find('#exec-sr-kpi-period').text(`${from_date} to ${to_date}`);
+            } else if (from_date) {
+                $pane.find('#exec-sr-kpi-period').text(`From ${from_date}`);
+            } else if (to_date) {
+                $pane.find('#exec-sr-kpi-period').text(`Until ${to_date}`);
+            } else {
+                $pane.find('#exec-sr-kpi-period').text('All Historical Records');
+            }
+
+            if (!shifts.length) {
+                $body.html('<tr><td colspan="8" style="text-align:center; padding:32px; color:#94a3b8;">No past shifts matching the selected criteria.</td></tr>');
+                return;
+            }
+
+            let html = '';
+            shifts.forEach(s => {
+                let isDay = s.is_day;
+                let shiftIcon = isDay ? '☀️' : '🌙';
+                let shiftBadgeBg = isDay ? '#fef3c7' : '#e0e7ff';
+                let shiftBadgeColor = isDay ? '#92400e' : '#3730a3';
+                let shiftBadgeBorder = isDay ? '#fde68a' : '#c7d2fe';
+                let shiftDisplayName = s.shift_name_display || s.shift_template || 'Shift';
+
+                let statusBadge = (s.status === 'Open')
+                    ? `<span class="badge" style="background:#dcfce7; color:#166534; font-weight:700; padding:3px 8px; border-radius:4px; font-size:11px; border:1px solid #bbf7d0;">Open</span>`
+                    : `<span class="badge" style="background:#f1f5f9; color:#475569; font-weight:700; padding:3px 8px; border-radius:4px; font-size:11px; border:1px solid #e2e8f0;">Closed</span>`;
+
+                let sentBadge = (s.report_sent == 1)
+                    ? `<span class="badge" style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; font-weight:700; padding:3px 10px; border-radius:6px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">🟢 Dispatched</span>`
+                    : `<span class="badge" style="background:#f1f5f9; color:#94a3b8; border:1px solid #e2e8f0; font-weight:600; padding:3px 10px; border-radius:6px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">⚪ Pending</span>`;
+
+                html += `
+                    <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                        <td style="padding:12px 16px;">
+                            <span style="display:inline-flex; align-items:center; gap:6px; background:${shiftBadgeBg}; color:${shiftBadgeColor}; border:1px solid ${shiftBadgeBorder}; font-weight:800; font-size:12px; padding:3px 9px; border-radius:6px;">
+                                ${shiftIcon} ${frappe.utils.escape_html(shiftDisplayName)}
+                            </span>
+                        </td>
+                        <td style="padding:12px 16px; font-family:monospace; font-weight:700; color:#1e293b;">
+                            <span style="background:#f8fafc; border:1px solid #e2e8f0; padding:3px 8px; border-radius:4px; font-size:11.5px;">
+                                ${frappe.utils.escape_html(s.name)}
+                            </span>
+                        </td>
+                        <td style="padding:12px 16px; font-weight:700; color:#0f172a;">${frappe.utils.escape_html(s.station)}</td>
+                        <td style="padding:12px 16px; font-weight:600; color:#475569;">${s.formatted_date || s.shift_date}</td>
+                        <td style="padding:12px 16px; font-weight:600; color:#1e293b;">${frappe.utils.escape_html(s.cashier_name || 'N/A')}</td>
+                        <td style="padding:12px 16px; text-align:center;">${statusBadge}</td>
+                        <td style="padding:12px 16px; text-align:center;">${sentBadge}</td>
+                        <td style="padding:12px 16px; text-align:right;">
+                            <button type="button" class="btn btn-xs btn-primary btn-exec-view-shift-report" data-shift="${s.name}" style="padding:5px 12px; font-size:11.5px; font-weight:700; border-radius:6px; background:#2563eb; color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; box-shadow:0 1px 2px rgba(37,99,235,0.2);">
+                                <span class="material-symbols-outlined" style="font-size:15px;">visibility</span> View Report
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            $body.html(html);
+        }
+    });
+}
+
+function open_exec_shift_report_modal(wrapper, shift_name) {
+    let $modal = $(wrapper).find('#modal-exec-shift-report');
+    if (!$modal.length) return;
+
+    $modal.css('display', 'flex');
+    let $content = $(wrapper).find('#exec-modal-sr-content');
+    $content.html('<div style="text-align:center; padding:50px; color:#94a3b8;"><div class="spinner" style="display:inline-block; margin-right:8px;"></div> Loading report details...</div>');
+
+    frappe.call({
+        method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_executive_shift_report_detail",
+        args: { shift_name: shift_name },
+        callback: function(r) {
+            if (!r.message) {
+                $content.html('<div style="text-align:center; padding:50px; color:#ef4444;">Failed to load shift report details.</div>');
+                return;
+            }
+
+            let meta = r.message.meta || {};
+            let html = r.message.html || '<div style="padding:20px; color:#64748b;">No report content available.</div>';
+
+            window.EXEC_SR_STATE.current_report_html = html;
+
+            $(wrapper).find('#exec-modal-sr-title').text(`${meta.station} • ${meta.shift_name_display || meta.shift_template}`);
+            $(wrapper).find('#exec-modal-sr-subtitle').html(`Ref: <b>${meta.name}</b> &bull; Date: <b>${meta.formatted_date || meta.shift_date}</b> &bull; In-Charge: <b>${meta.cashier_name}</b>`);
+
+            let $sentBadge = $(wrapper).find('#exec-modal-sr-sent-badge');
+            if (meta.report_sent == 1) {
+                $sentBadge.html('<span style="background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px;">🟢 Emailed to Directors</span>');
+            } else {
+                $sentBadge.html('<span style="background:#fef3c7; color:#92400e; border:1px solid #fde68a; font-size:11px; font-weight:700; padding:2px 8px; border-radius:4px;">⚪ Report Pending Dispatch</span>');
+            }
+
+            $content.html(html);
+        }
+    });
+}
+
+function print_exec_shift_report() {
+    let reportHtml = window.EXEC_SR_STATE.current_report_html;
+    if (!reportHtml) {
+        frappe.msgprint(__('No report content to print.'));
+        return;
+    }
+
+    let printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        frappe.msgprint(__('Please allow popups to print the report.'));
+        return;
+    }
+
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>End of Shift Report</title>
+            <meta charset="utf-8">
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    padding: 20px;
+                    color: #0f172a;
+                    background: #fff;
+                }
+                @media print {
+                    body { padding: 0; }
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            ${reportHtml}
+            <script>
+                window.onload = function() {
+                    window.print();
+                };
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
 }
 
 

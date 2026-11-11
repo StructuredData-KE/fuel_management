@@ -5551,6 +5551,374 @@ def get_monthly_volumes_and_variances(station=None, from_date=None, to_date=None
     }
 
 
+@frappe.whitelist()
+def get_executive_past_shifts(station=None, from_date=None, to_date=None, shift_type=None, status=None, search=None, limit=50):
+    """
+    Returns list of past shifts and KPI summary for the Executive Panel.
+    """
+    conditions = ["s.docstatus < 2"]
+    params = []
+
+    if station and station not in ("ALL", "All Stations", ""):
+        conditions.append("s.station = %s")
+        params.append(station)
+
+    if from_date:
+        conditions.append("s.shift_date >= %s")
+        params.append(from_date)
+
+    if to_date:
+        conditions.append("s.shift_date <= %s")
+        params.append(to_date)
+
+    if shift_type:
+        if shift_type.lower() == "day":
+            conditions.append("(LOWER(IFNULL(s.shift_template, '')) LIKE %s OR LOWER(IFNULL(s.shift_name_display, '')) LIKE %s)")
+            params.extend(["%day%", "%day%"])
+        elif shift_type.lower() == "night":
+            conditions.append("(LOWER(IFNULL(s.shift_template, '')) LIKE %s OR LOWER(IFNULL(s.shift_name_display, '')) LIKE %s)")
+            params.extend(["%night%", "%night%"])
+
+    if status and status not in ("ALL", ""):
+        conditions.append("s.status = %s")
+        params.append(status)
+
+    if search:
+        s_term = f"%{search}%"
+        conditions.append("(s.name LIKE %s OR s.head_csa LIKE %s OR s.shift_name_display LIKE %s OR e.employee_name LIKE %s)")
+        params.extend([s_term, s_term, s_term, s_term])
+
+    where_clause = " AND ".join(conditions)
+
+    query = f"""
+        SELECT 
+            s.name, s.station, s.shift_date, s.shift_template, s.shift_name_display,
+            s.head_csa, s.status, IFNULL(s.report_sent, 0) as report_sent, s.creation, s.modified,
+            COALESCE(e.employee_name, u.full_name, s.head_csa) as cashier_name
+        FROM `tabShift` s
+        LEFT JOIN `tabEmployee` e ON s.head_csa = e.name
+        LEFT JOIN `tabUser` u ON s.head_csa = u.name
+        WHERE {where_clause}
+        ORDER BY s.shift_date DESC, s.creation DESC
+        LIMIT %s
+    """
+    query_params = list(params)
+    query_params.append(int(limit) if limit else 50)
+    shifts = frappe.db.sql(query, query_params, as_dict=True)
+
+    for s in shifts:
+        s["formatted_date"] = formatdate(s.shift_date) if s.shift_date else ""
+        s["shift_date"] = str(s.shift_date) if s.shift_date else ""
+        s["is_day"] = "day" in (s.shift_template or "").lower() or "day" in (s.shift_name_display or "").lower()
+
+    kpi_query = f"""
+        SELECT 
+            COUNT(*) as total_shifts,
+            SUM(CASE WHEN (LOWER(IFNULL(s.shift_template, '')) LIKE '%day%' OR LOWER(IFNULL(s.shift_name_display, '')) LIKE '%day%') THEN 1 ELSE 0 END) as day_shifts,
+            SUM(CASE WHEN (LOWER(IFNULL(s.shift_template, '')) LIKE '%night%' OR LOWER(IFNULL(s.shift_name_display, '')) LIKE '%night%') THEN 1 ELSE 0 END) as night_shifts,
+            SUM(CASE WHEN s.report_sent = 1 THEN 1 ELSE 0 END) as reports_sent
+        FROM `tabShift` s
+        LEFT JOIN `tabEmployee` e ON s.head_csa = e.name
+        LEFT JOIN `tabUser` u ON s.head_csa = u.name
+        WHERE {where_clause}
+    """
+    kpis_res = frappe.db.sql(kpi_query, params, as_dict=True)
+    kpis = kpis_res[0] if kpis_res else {
+        "total_shifts": len(shifts),
+        "day_shifts": 0,
+        "night_shifts": 0,
+        "reports_sent": 0
+    }
+
+    return {
+        "shifts": shifts,
+        "kpis": {
+            "total_shifts": kpis.get("total_shifts") or 0,
+            "day_shifts": kpis.get("day_shifts") or 0,
+            "night_shifts": kpis.get("night_shifts") or 0,
+            "reports_sent": kpis.get("reports_sent") or 0
+        }
+    }
+
+
+def build_shift_report_html(shift):
+    """
+    Constructs an executive-level End of Shift Report HTML
+    matching the format sent to the directors.
+    """
+    from frappe.utils import flt, formatdate
+
+    formatted_date = formatdate(shift.shift_date) if getattr(shift, "shift_date", None) else str(shift.shift_date or "")
+    shift_title = shift.shift_name_display or shift.shift_template or "Shift"
+    emp_name = frappe.db.get_value("Employee", shift.head_csa, "employee_name") or frappe.db.get_value("User", shift.head_csa, "full_name") or shift.head_csa or "N/A"
+    is_sent = bool(getattr(shift, "report_sent", 0))
+
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; max-width: 900px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px;">
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
+            <div>
+                <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #2563eb;">Fuel Station Shift Audit</div>
+                <h2 style="margin: 4px 0 0 0; font-size: 22px; font-weight: 800; color: #0f172a;">{shift.station}</h2>
+                <div style="margin-top: 6px; font-size: 13px; color: #475569;">
+                    <span><b>{shift_title}</b></span> &bull; 
+                    <span>Date: <b>{formatted_date}</b></span> &bull; 
+                    <span>Head CSA: <b>{emp_name}</b></span>
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-family: monospace; font-size: 13px; font-weight: 700; background: #f1f5f9; padding: 4px 10px; border-radius: 6px; display: inline-block;">{shift.name}</div>
+                <div style="margin-top: 8px;">
+                    {'<span style=\"background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:4px;\">🟢 Report Emailed to Directors</span>' if is_sent else '<span style=\"background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; font-size:11px; font-weight:700; padding:3px 8px; border-radius:4px;\">⚪ Report Pending Dispatch</span>'}
+                </div>
+            </div>
+        </div>
+    """
+
+    # 1. Wet Stock / Dip Stick Readings
+    dips = getattr(shift, "dip_stick_readings", []) or []
+    if dips:
+        html += """
+        <div style="margin-bottom: 24px;">
+            <div style="background: #0284c7; color: #fff; font-weight: 800; font-size: 12px; text-transform: uppercase; padding: 8px 14px; border-radius: 6px 6px 0 0; letter-spacing: 0.5px;">
+                Wet Stock &amp; Tank Dip Stick Readings
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #cbd5e1; border-top: none;">
+                <thead style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                    <tr style="text-align: right; color: #475569; font-weight: 700;">
+                        <th style="padding: 8px 12px; text-align: left;">Tank</th>
+                        <th style="padding: 8px 12px;">Opening Dip (L)</th>
+                        <th style="padding: 8px 12px; color: #059669;">+ Purchases (L)</th>
+                        <th style="padding: 8px 12px;">Closing Dip (L)</th>
+                        <th style="padding: 8px 12px; font-weight: 800; background: #f1f5f9;">= Tank Sales (L)</th>
+                        <th style="padding: 8px 12px;">Meter Sales (L)</th>
+                        <th style="padding: 8px 12px; font-weight: 800;">Daily Variance (L)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        for d in dips:
+            op = flt(getattr(d, "opening_dip", 0), 2)
+            pu = flt(getattr(d, "purchases", 0), 2)
+            cl = flt(getattr(d, "closing_dip", 0), 2)
+            ts = flt(getattr(d, "tank_sales", (op + pu - cl)), 2)
+            ms = flt(getattr(d, "meter_sales", 0), 2)
+            va = flt(getattr(d, "variance", (ts - ms)), 2)
+            var_color = "#16a34a" if va >= 0 else "#dc2626"
+            html += f"""
+                    <tr style="border-bottom: 1px solid #f1f5f9; text-align: right;">
+                        <td style="padding: 8px 12px; text-align: left; font-weight: 700;">{getattr(d, 'fuel_tank', '')}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">{op:,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; color: #059669;">{f'+{pu:,.2f}' if pu > 0 else '0.00'}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: 700;">{cl:,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: 800; background: #f8fafc;">{ts:,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">{ms:,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: 800; color: {var_color};">{va:+,.2f}</td>
+                    </tr>
+            """
+        html += "</tbody></table></div>"
+
+    # 2. Pump Meter Readings
+    pumps = getattr(shift, "pump_meter_readings", []) or []
+    if pumps:
+        html += """
+        <div style="margin-bottom: 24px;">
+            <div style="background: #1e293b; color: #fff; font-weight: 800; font-size: 12px; text-transform: uppercase; padding: 8px 14px; border-radius: 6px 6px 0 0; letter-spacing: 0.5px;">
+                Pump Meter Readings &amp; Fuel Sales
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #cbd5e1; border-top: none;">
+                <thead style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                    <tr style="text-align: right; color: #475569; font-weight: 700;">
+                        <th style="padding: 8px 12px; text-align: left;">Pump / Nozzle</th>
+                        <th style="padding: 8px 12px; text-align: left;">Product</th>
+                        <th style="padding: 8px 12px;">Opening Meter</th>
+                        <th style="padding: 8px 12px;">Closing Meter</th>
+                        <th style="padding: 8px 12px; font-weight: 800;">Litres Sold</th>
+                        <th style="padding: 8px 12px;">Price (KES)</th>
+                        <th style="padding: 8px 12px; font-weight: 800;">Amount (KES)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        tot_litres = 0.0
+        tot_amount = 0.0
+        for p in pumps:
+            l = flt(getattr(p, "total_litres", 0), 2)
+            rate = flt(getattr(p, "rate", 0), 2)
+            amt = flt(getattr(p, "amount", 0), 2)
+            tot_litres += l
+            tot_amount += amt
+            html += f"""
+                    <tr style="border-bottom: 1px solid #f1f5f9; text-align: right;">
+                        <td style="padding: 8px 12px; text-align: left; font-weight: 600;">{getattr(p, 'pump', '')} / {getattr(p, 'nozzle', '')}</td>
+                        <td style="padding: 8px 12px; text-align: left; font-weight: 700; color: #0284c7;">{getattr(p, 'product', '')}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">{flt(getattr(p, 'opening_meter', 0), 2):,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">{flt(getattr(p, 'closing_meter', 0), 2):,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: 800;">{l:,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace;">{rate:,.2f}</td>
+                        <td style="padding: 8px 12px; font-family: monospace; font-weight: 800;">{amt:,.2f}</td>
+                    </tr>
+            """
+        html += f"""
+                </tbody>
+                <tfoot style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1; text-align: right;">
+                    <tr>
+                        <td colspan="4" style="padding: 10px 12px; text-align: right;">TOTAL FUEL SALES:</td>
+                        <td style="padding: 10px 12px; font-family: monospace;">{tot_litres:,.2f} L</td>
+                        <td></td>
+                        <td style="padding: 10px 12px; font-family: monospace; color: #2563eb;">KES {tot_amount:,.2f}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        """
+
+    # 3. CSA Cash Reconciliation
+    recons = frappe.db.sql("""
+        SELECT * FROM `tabShift Cash Reconciliation`
+        WHERE shift = %s
+    """, (shift.name,), as_dict=True)
+    if recons:
+        html += """
+        <div style="margin-bottom: 24px;">
+            <div style="background: #334155; color: #fff; font-weight: 800; font-size: 12px; text-transform: uppercase; padding: 8px 14px; border-radius: 6px 6px 0 0; letter-spacing: 0.5px;">
+                CSA Cash Reconciliation Summary
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #cbd5e1; border-top: none;">
+                <thead style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                    <tr style="text-align: right; color: #475569; font-weight: 700;">
+                        <th style="padding: 8px 10px; text-align: left;">CSA Name</th>
+                        <th style="padding: 8px 10px;">Meter Sales</th>
+                        <th style="padding: 8px 10px;">Invoices &amp; Cards</th>
+                        <th style="padding: 8px 10px;">M-Pesa</th>
+                        <th style="padding: 8px 10px;">Expenses</th>
+                        <th style="padding: 8px 10px; font-weight: 800;">Expected Cash</th>
+                        <th style="padding: 8px 10px; font-weight: 800;">Submitted Cash</th>
+                        <th style="padding: 8px 10px; font-weight: 800;">Excess / Short</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        tot_exp_cash = 0.0
+        tot_act_cash = 0.0
+        tot_var = 0.0
+        for r in recons:
+            csa_name = frappe.db.get_value("Employee", r.csa, "employee_name") or r.csa
+            inv_card = flt(r.invoices, 2) + flt(r.cards, 2)
+            exp_c = flt(r.expected_cash, 2)
+            act_c = flt(r.actual_cash, 2)
+            vr = flt(r.variance, 2)
+            tot_exp_cash += exp_c
+            tot_act_cash += act_c
+            tot_var += vr
+            vr_color = "#16a34a" if vr >= 0 else "#dc2626"
+            html += f"""
+                    <tr style="border-bottom: 1px solid #f1f5f9; text-align: right;">
+                        <td style="padding: 8px 10px; text-align: left; font-weight: 700;">{csa_name}</td>
+                        <td style="padding: 8px 10px; font-family: monospace;">{flt(r.meter_sales, 2):,.2f}</td>
+                        <td style="padding: 8px 10px; font-family: monospace;">{inv_card:,.2f}</td>
+                        <td style="padding: 8px 10px; font-family: monospace;">{flt(r.mpesa, 2):,.2f}</td>
+                        <td style="padding: 8px 10px; font-family: monospace;">{flt(r.expenses, 2):,.2f}</td>
+                        <td style="padding: 8px 10px; font-family: monospace; font-weight: 800;">{exp_c:,.2f}</td>
+                        <td style="padding: 8px 10px; font-family: monospace; font-weight: 800;">{act_c:,.2f}</td>
+                        <td style="padding: 8px 10px; font-family: monospace; font-weight: 800; color: {vr_color};">{vr:+,.2f}</td>
+                    </tr>
+            """
+        tot_var_color = "#16a34a" if tot_var >= 0 else "#dc2626"
+        html += f"""
+                </tbody>
+                <tfoot style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1; text-align: right;">
+                    <tr>
+                        <td style="padding: 10px 10px; text-align: left;">TOTALS:</td>
+                        <td colspan="4"></td>
+                        <td style="padding: 10px 10px; font-family: monospace;">KES {tot_exp_cash:,.2f}</td>
+                        <td style="padding: 10px 10px; font-family: monospace;">KES {tot_act_cash:,.2f}</td>
+                        <td style="padding: 10px 10px; font-family: monospace; color: {tot_var_color};">{tot_var:+,.2f}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        """
+
+    # 4. Grand Financial Collections Summary
+    mpesa_sum = sum([flt(getattr(m, "amount", 0)) for m in (getattr(shift, "mpesa_payments", []) or [])])
+    card_sum = sum([flt(getattr(c, "amount", 0)) for c in (getattr(shift, "card_payments", []) or [])])
+    inv_sum = sum([flt(getattr(i, "amount", 0)) for i in (getattr(shift, "invoices", []) or [])])
+    exp_sum = sum([flt(getattr(e, "amount", 0)) for e in (getattr(shift, "expenses", []) or [])])
+    actual_cash = flt(getattr(shift, "actual_cash", 0), 2)
+
+    html += f"""
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+            <div style="font-size: 13px; font-weight: 800; color: #166534; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">
+                Grand Financial Reconciliation &amp; Collections
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; font-size: 12.5px;">
+                <div style="background: #fff; padding: 10px 14px; border-radius: 6px; border: 1px solid #dcfce7;">
+                    <div style="color: #64748b; font-size: 11px;">💵 CASH SUBMITTED</div>
+                    <div style="font-weight: 800; font-family: monospace; font-size: 15px; color: #166534; margin-top: 2px;">KES {actual_cash:,.2f}</div>
+                </div>
+                <div style="background: #fff; padding: 10px 14px; border-radius: 6px; border: 1px solid #dcfce7;">
+                    <div style="color: #64748b; font-size: 11px;">📱 M-PESA COLLECTIONS</div>
+                    <div style="font-weight: 800; font-family: monospace; font-size: 15px; color: #16a34a; margin-top: 2px;">KES {mpesa_sum:,.2f}</div>
+                </div>
+                <div style="background: #fff; padding: 10px 14px; border-radius: 6px; border: 1px solid #dcfce7;">
+                    <div style="color: #64748b; font-size: 11px;">💳 CARD PAYMENTS</div>
+                    <div style="font-weight: 800; font-family: monospace; font-size: 15px; color: #0284c7; margin-top: 2px;">KES {card_sum:,.2f}</div>
+                </div>
+                <div style="background: #fff; padding: 10px 14px; border-radius: 6px; border: 1px solid #dcfce7;">
+                    <div style="color: #64748b; font-size: 11px;">📄 INVOICES ON ACCOUNT</div>
+                    <div style="font-weight: 800; font-family: monospace; font-size: 15px; color: #7c3aed; margin-top: 2px;">KES {inv_sum:,.2f}</div>
+                </div>
+                <div style="background: #fff; padding: 10px 14px; border-radius: 6px; border: 1px solid #dcfce7;">
+                    <div style="color: #64748b; font-size: 11px;">🧾 PETTY CASH / EXPENSES</div>
+                    <div style="font-weight: 800; font-family: monospace; font-size: 15px; color: #dc2626; margin-top: 2px;">KES {exp_sum:,.2f}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    return html
+
+
+@frappe.whitelist()
+def get_executive_shift_report_detail(shift_name):
+    """
+    Returns full detail of a shift report for director inspection.
+    """
+    if not shift_name:
+        frappe.throw("Shift name is required.")
+
+    shift = frappe.get_doc("Shift", shift_name)
+    cashier_name = frappe.db.get_value("Employee", shift.head_csa, "employee_name") or frappe.db.get_value("User", shift.head_csa, "full_name") or shift.head_csa
+
+    meta = {
+        "name": shift.name,
+        "station": shift.station,
+        "shift_date": str(shift.shift_date) if shift.shift_date else "",
+        "formatted_date": formatdate(shift.shift_date) if shift.shift_date else "",
+        "shift_template": shift.shift_template or "Shift",
+        "shift_name_display": getattr(shift, "shift_name_display", "") or shift.shift_template or "Shift",
+        "cashier_name": cashier_name or "N/A",
+        "status": shift.status,
+        "report_sent": getattr(shift, "report_sent", 0) or 0
+    }
+
+    saved_html = getattr(shift, "report_html", None)
+    if saved_html:
+        return {
+            "meta": meta,
+            "html": saved_html,
+            "source": "stored"
+        }
+
+    rendered_html = build_shift_report_html(shift)
+    return {
+        "meta": meta,
+        "html": rendered_html,
+        "source": "generated"
+    }
+
+
 
 
 

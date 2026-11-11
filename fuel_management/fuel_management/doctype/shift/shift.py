@@ -1504,9 +1504,37 @@ def get_till_pump_groups():
 
 @frappe.whitelist()
 def send_end_shift_report(shift_name, html_content):
+    from frappe.utils import flt
+
     shift = frappe.get_doc("Shift", shift_name)
     if not shift.station:
         frappe.throw("No Fuel Station linked to this shift.")
+
+    # Check 1: Restrict sending to once per shift (cannot be sent twice)
+    if getattr(shift, "report_sent", 0):
+        frappe.throw(
+            "This End of Shift Report has ALREADY been sent to the owner and cannot be sent again. "
+            "Please view the historical report in Past Shift Reports."
+        )
+
+    # Check 2: Night shift closing dip validation
+    is_day = 'day' in (shift.shift_template or '').lower() or 'day' in (getattr(shift, "shift_name_display", "") or '').lower()
+    if not is_day:
+        readings = shift.dip_stick_readings or []
+        if not readings:
+            frappe.throw(
+                "Cannot send report: This is a Night Shift, but closing tank dips have not been entered yet. "
+                "Please go to the Dips tab, record closing dips for all tanks, and click Save Closing Dips before sending."
+            )
+        missing_tanks = []
+        for d in readings:
+            if d.closing_dip is None or flt(d.closing_dip) <= 0:
+                missing_tanks.append(d.fuel_tank or f"Tank #{d.idx}")
+        if missing_tanks:
+            frappe.throw(
+                f"Cannot send report: Closing dip readings are missing or zero for: {', '.join(missing_tanks)}. "
+                "Night shifts require closing dips for all active tanks before sending the report to the owner."
+            )
         
     station = frappe.get_doc("Fuel Station", shift.station)
     owner_email = station.owner_email

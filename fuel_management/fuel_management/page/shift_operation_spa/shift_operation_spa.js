@@ -13715,11 +13715,32 @@ window.generate_end_shift_report = function($wrapper, targetShiftName = null) {
                                     <textarea id="shift-notes-input" style="width: 100%; min-height: 100px; border: 1px solid #cbd5e1; border-radius: 0 0 4px 4px; padding: 12px; font-family: inherit; font-size: 13px; resize: vertical;" placeholder="Type notes here to explain variances before printing...">${doc.shift_notes || ''}</textarea>
                                 </div>`;
                                 
-                                h += `<div style="margin-top: 20px; text-align: center; display:flex; justify-content:center; gap:1rem;">
-                                    <button id="btn-send-owner-report" class="btn btn-success btn-lg" style="padding: 10px 24px; font-size: 15px; font-weight: bold; background-color: #16a34a; border-color: #16a34a; border-radius:6px; cursor:pointer;">
-                                        Send Report to Owner
-                                    </button>
-                                </div>`;
+                                let reportAlreadySent = Boolean(doc.report_sent);
+                                let sendButtonHtml = '';
+                                if (reportAlreadySent) {
+                                    sendButtonHtml = `
+                                        <div style="margin-top: 20px; text-align: center; display:flex; flex-direction:column; align-items:center; gap:8px;">
+                                            <div style="display:inline-flex; align-items:center; gap:8px; padding: 10px 24px; font-size: 14px; font-weight: 800; background-color: #ecfdf5; color: #047857; border: 1.5px solid #a7f3d0; border-radius:8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                                <span style="font-size: 18px;">✅</span> Report Already Dispatched to Owner
+                                            </div>
+                                            <div style="font-size: 0.82rem; color: #64748b;">
+                                                This shift's report was already emailed to the directors and cannot be resent. Past reports can be reviewed in <a href="#" class="btn-goto-past-shifts" style="color:#2563eb; font-weight:700; text-decoration:underline;">Past Shift Reports</a>.
+                                            </div>
+                                        </div>
+                                    `;
+                                } else {
+                                    sendButtonHtml = `
+                                        <div style="margin-top: 20px; text-align: center; display:flex; flex-direction:column; align-items:center; gap:8px;">
+                                            <button id="btn-send-owner-report" class="btn btn-success btn-lg" style="padding: 10px 28px; font-size: 15px; font-weight: 800; background-color: #16a34a; border-color: #16a34a; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; box-shadow: 0 2px 4px rgba(22,163,74,0.25);">
+                                                <i class="fa fa-envelope" style="font-size: 16px;"></i> Send Report to Owner
+                                            </button>
+                                            <div style="font-size: 0.8rem; color: #64748b;">
+                                                ⚠️ Note: Once sent, this report is dispatched to the directors and cannot be sent again for this shift.
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                                h += sendButtonHtml;
                                 
                                 let isPastShift = Boolean(targetShiftName && (!window.ACTIVE_SHIFT || targetShiftName !== window.ACTIVE_SHIFT.name));
                                 let bannerHtml = '';
@@ -13750,7 +13771,8 @@ window.generate_end_shift_report = function($wrapper, targetShiftName = null) {
                                 }
                                 
                                 $wrapper.find('#shift-report-container').html(bannerHtml + h);
-                                $wrapper.find('#btn-back-to-past-shifts').off('click').on('click', function() {
+                                $wrapper.find('#btn-back-to-past-shifts, .btn-goto-past-shifts').off('click').on('click', function(e) {
+                                    e.preventDefault();
                                     window.switch_tab('tab-past-reports');
                                 });
                                 
@@ -13797,32 +13819,195 @@ window.generate_end_shift_report = function($wrapper, targetShiftName = null) {
                                     }, 400);
                                 });
 
-                                // Wire Send to Owner
+                                // Wire Send to Owner with Validations & Wet Stock Confirmation Modal
                                 $wrapper.find('#btn-send-owner-report').off('click').on('click', function() {
                                     let $btn = $(this);
-                                    let notes = $wrapper.find('#shift-notes-input').val();
-                                    
-                                    let $reportClone = $wrapper.find('#shift-report-container').clone();
-                                    $reportClone.find('#shift-notes-input').replaceWith(`<div style="padding: 15px; border: 1px solid #cbd5e1; min-height: 120px; white-space: pre-wrap; font-size: 14px;">${frappe.utils.escape_html(notes || 'No notes provided.')}</div>`);
-                                    $reportClone.find('#btn-send-owner-report').parent().remove();
-                                    
-                                    let html_content = $reportClone.html();
-                                    $btn.prop('disabled', true).text('Sending...');
-                                    
-                                    frappe.call({
-                                        method: "fuel_management.fuel_management.doctype.shift.shift.send_end_shift_report",
-                                        args: {
-                                            shift_name: doc.name,
-                                            html_content: html_content
-                                        },
-                                        callback: function(r) {
-                                            if (!r.exc) {
-                                                frappe.show_alert({message: "Report successfully emailed to owner!", indicator: "green"});
-                                                $btn.text('Sent Successfully').removeClass('btn-success').addClass('btn-primary').css('background-color', '#2563eb');
-                                                if (window.ACTIVE_SHIFT) window.ACTIVE_SHIFT.report_sent = 1;
-                                            } else {
-                                                $btn.prop('disabled', false).text('Send Report to Owner');
+
+                                    // Check 1: Already Sent Lock
+                                    if (doc.report_sent) {
+                                        frappe.msgprint({
+                                            title: __('Report Already Sent'),
+                                            indicator: 'orange',
+                                            message: __('The End of Shift Report for this shift has already been sent to the directors and cannot be resent. Please view the historical record in Past Shift Reports.')
+                                        });
+                                        return;
+                                    }
+
+                                    // Check 2: Night Shift Closing Dip Requirement
+                                    if (!is_day_shift) {
+                                        let readings = doc.dip_stick_readings || [];
+                                        let missing = [];
+                                        if (!readings.length) {
+                                            missing = ['All Tanks'];
+                                        } else {
+                                            readings.forEach(d => {
+                                                if (d.closing_dip === null || d.closing_dip === undefined || d.closing_dip === "" || parseFloat(d.closing_dip) <= 0) {
+                                                    missing.push(d.fuel_tank || `Tank #${d.idx}`);
+                                                }
+                                            });
+                                        }
+
+                                        if (missing.length > 0) {
+                                            frappe.msgprint({
+                                                title: __('Closing Dips Required'),
+                                                indicator: 'red',
+                                                message: `<div style="font-size: 13.5px; line-height: 1.6;">
+                                                    <p style="color: #b91c1c; font-weight: 700; font-size: 14px; margin-bottom: 8px;">
+                                                        ⛔ Cannot Send Report: Night Shift Closing Dips Missing!
+                                                    </p>
+                                                    <p>This is a <b>Night Shift</b> and the closing tank dips have not been entered yet for:</p>
+                                                    <p style="color: #991b1b; font-weight: 800; background: #fee2e2; border: 1px solid #fecdd3; padding: 8px 12px; border-radius: 6px;">
+                                                        ${frappe.utils.escape_html(missing.join(', '))}
+                                                    </p>
+                                                    <p style="margin-top: 10px; color: #334155;">
+                                                        Please switch to the <b>Dips</b> tab in the sidebar, record closing dips for all tanks, click <b>Save Closing Dips</b>, and return here to send the report.
+                                                    </p>
+                                                </div>`
+                                            });
+                                            return;
+                                        }
+                                    }
+
+                                    // Function to execute the actual email dispatch
+                                    let execute_send = function() {
+                                        let notes = $wrapper.find('#shift-notes-input').val();
+                                        let $reportClone = $wrapper.find('#shift-report-container').clone();
+                                        $reportClone.find('#shift-notes-input').replaceWith(`<div style="padding: 15px; border: 1px solid #cbd5e1; min-height: 120px; white-space: pre-wrap; font-size: 14px;">${frappe.utils.escape_html(notes || 'No notes provided.')}</div>`);
+                                        $reportClone.find('#btn-send-owner-report').parent().remove();
+                                        
+                                        let html_content = $reportClone.html();
+                                        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Sending Report...');
+                                        
+                                        frappe.call({
+                                            method: "fuel_management.fuel_management.doctype.shift.shift.send_end_shift_report",
+                                            args: {
+                                                shift_name: doc.name,
+                                                html_content: html_content
+                                            },
+                                            callback: function(r) {
+                                                if (!r.exc) {
+                                                    frappe.show_alert({message: "Report successfully emailed to owner!", indicator: "green"});
+                                                    doc.report_sent = 1;
+                                                    if (window.ACTIVE_SHIFT && window.ACTIVE_SHIFT.name === doc.name) {
+                                                        window.ACTIVE_SHIFT.report_sent = 1;
+                                                    }
+                                                    // Replace button with locked status badge
+                                                    $btn.closest('div').replaceWith(`
+                                                        <div style="margin-top: 20px; text-align: center; display:flex; flex-direction:column; align-items:center; gap:8px;">
+                                                            <div style="display:inline-flex; align-items:center; gap:8px; padding: 10px 24px; font-size: 14px; font-weight: 800; background-color: #ecfdf5; color: #047857; border: 1.5px solid #a7f3d0; border-radius:8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                                                <span style="font-size: 18px;">✅</span> Report Already Dispatched to Owner
+                                                            </div>
+                                                            <div style="font-size: 0.82rem; color: #64748b;">
+                                                                This shift's report was successfully emailed to the directors and cannot be resent. Past reports can be reviewed in <a href="#" class="btn-goto-past-shifts" style="color:#2563eb; font-weight:700; text-decoration:underline;">Past Shift Reports</a>.
+                                                            </div>
+                                                        </div>
+                                                    `);
+                                                } else {
+                                                    $btn.prop('disabled', false).html('<i class="fa fa-envelope"></i> Send Report to Owner');
+                                                }
                                             }
+                                        });
+                                    };
+
+                                    // Check 3: Wet Stock Confirmation Dialog
+                                    frappe.call({
+                                        method: 'fuel_management.fuel_management.api.get_daily_dip_summary',
+                                        args: { shift_id: doc.name },
+                                        callback: function(dip_res) {
+                                            let dipRows = dip_res.message || [];
+                                            let dipsTableHtml = '';
+                                            if (dipRows.length > 0) {
+                                                dipsTableHtml = `
+                                                    <table style="width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 8px; border: 1px solid #e2e8f0;">
+                                                        <thead>
+                                                            <tr style="background: #f1f5f9; color: #334155; font-size: 11px; text-transform: uppercase;">
+                                                                <th style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: left;">Tank</th>
+                                                                <th style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right;">Opening Dip</th>
+                                                                <th style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right;">Purchases</th>
+                                                                <th style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right;">Closing Dip</th>
+                                                                <th style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right;">Tank Sales</th>
+                                                                <th style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right;">Meter Sales</th>
+                                                                <th style="padding: 6px 8px; border: 1px solid #cbd5e1; text-align: right;">Daily Variance</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                `;
+                                                dipRows.forEach(r => {
+                                                    let vc = (r.variance || 0) < 0 ? '#dc2626' : '#16a34a';
+                                                    dipsTableHtml += `
+                                                        <tr>
+                                                            <td style="padding: 6px 8px; border: 1px solid #e2e8f0; font-weight: 700;">${frappe.utils.escape_html(r.fuel_tank || '')}</td>
+                                                            <td style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${frappe.format(r.opening_dip || 0, {fieldtype:'Float'})}</td>
+                                                            <td style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${frappe.format(r.injected_purchases || 0, {fieldtype:'Float'})}</td>
+                                                            <td style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${frappe.format(r.closing_dip || 0, {fieldtype:'Float'})}</td>
+                                                            <td style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; font-weight: 700;">${frappe.format(r.sales_quantity || 0, {fieldtype:'Float'})}</td>
+                                                            <td style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${frappe.format(r.meter_sales || 0, {fieldtype:'Float'})}</td>
+                                                            <td style="padding: 6px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; font-weight: 800; color: ${vc};">${frappe.format(r.variance || 0, {fieldtype:'Float'})}</td>
+                                                        </tr>
+                                                    `;
+                                                });
+                                                dipsTableHtml += `</tbody></table>`;
+                                            } else {
+                                                dipsTableHtml = `<div style="padding: 10px; color: #64748b; font-size: 12px; font-style: italic; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;">Day Shift &bull; Dips and 24h tank variances are calculated at the end of the Night Shift.</div>`;
+                                            }
+
+                                            let confirmDialog = new frappe.ui.Dialog({
+                                                title: __('Confirm End of Shift Report Dispatch'),
+                                                fields: [
+                                                    {
+                                                        fieldname: 'info_html',
+                                                        fieldtype: 'HTML'
+                                                    }
+                                                ],
+                                                primary_action_label: __('Confirm & Send to Owner'),
+                                                primary_action: function() {
+                                                    confirmDialog.hide();
+                                                    execute_send();
+                                                }
+                                            });
+
+                                            let shiftDateFmt = doc.shift_date ? frappe.datetime.str_to_user(doc.shift_date) : '';
+                                            let headCsaDisplay = doc.head_csa || 'Assigned CSA';
+                                            if (window.USERS_LIST) {
+                                                let u = window.USERS_LIST.find(u => u.name === doc.head_csa || u.user_id === doc.head_csa);
+                                                if (u) headCsaDisplay = u.employee_name || u.full_name || u.name;
+                                            }
+
+                                            let modalContent = `
+                                                <div style="font-size: 13px;">
+                                                    <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
+                                                        <div>
+                                                            <strong style="color: #0f172a; font-size: 14px;">${frappe.utils.escape_html(doc.station || '')}</strong>
+                                                            <div style="color: #64748b; font-size: 12px; margin-top: 2px;">
+                                                                ${frappe.utils.escape_html(doc.shift_template || '')} &bull; ${shiftDateFmt} &bull; Ref: <span style="font-family: monospace; font-weight: 700;">${doc.name}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div style="text-align: right;">
+                                                            <div style="font-size: 11px; color: #64748b;">Head Cashier</div>
+                                                            <div style="font-weight: 700; color: #0f172a;">${frappe.utils.escape_html(headCsaDisplay)}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style="margin-bottom: 4px;">
+                                                        <strong style="font-size: 12px; color: #1e293b; text-transform: uppercase;">Wet Stock Information & Daily Variance Audit:</strong>
+                                                    </div>
+                                                    ${dipsTableHtml}
+
+                                                    <div style="background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; padding: 10px 14px; border-radius: 6px; margin-top: 14px; color: #92400e; font-size: 12px; line-height: 1.5;">
+                                                        <div style="font-weight: 800; font-size: 12.5px; margin-bottom: 2px;">⚠️ Critical Confirmation:</div>
+                                                        Please verify that the wet stock daily variances and sales numbers above are 100% accurate. <b>Once sent, this report is emailed to the directors and CANNOT be resent or modified for this shift.</b>
+                                                    </div>
+                                                </div>
+                                            `;
+
+                                            confirmDialog.fields_dict.info_html.$wrapper.html(modalContent);
+                                            confirmDialog.show();
+
+                                            confirmDialog.$wrapper.find('.modal-footer .btn-primary').css({
+                                                'background-color': '#16a34a',
+                                                'border-color': '#16a34a',
+                                                'font-weight': '700'
+                                            });
                                         }
                                     });
                                 });
