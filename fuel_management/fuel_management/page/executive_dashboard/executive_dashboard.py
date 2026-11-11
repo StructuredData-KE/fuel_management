@@ -1746,7 +1746,13 @@ def create_topup_deduction(station, amount=None, credit_account=None, date=None,
         supplier = "RUBIS KENYA"
         
     if not credit_account:
-        credit_account = frappe.get_cached_value("Company", company, "default_payable_account") or "Creditors - KIL"
+        st_upper = (station or "").upper()
+        if "RUBIS" in st_upper and frappe.db.exists("Account", "RUBIS A/C - KIL"):
+            credit_account = "RUBIS A/C - KIL"
+        elif "GALANA" in st_upper and frappe.db.exists("Account", "GALANA A/C - KIL"):
+            credit_account = "GALANA A/C - KIL"
+        else:
+            credit_account = frappe.get_cached_value("Company", company, "default_payable_account") or "Creditors - KIL"
         
     if not date:
         date = today()
@@ -2487,7 +2493,23 @@ def enrich_cash_account_transactions(txns, account=None, is_supplier=False):
                 sub_parts.append(f"Ref: {ref}")
             clean_subtitle = " · ".join(sub_parts)
 
-        # 8. Supplier Cash Top-Up
+        # 8. Top-Up Deduction (Reconciled to Supplier Portal)
+        elif "[TOP-UP DEDUCTION]" in rem or "Top-Up Deduction" in rem:
+            category = "Top-Up Deduction"
+            category_color = "cyan"
+            m_top = re.search(r'\(Topups:\s*([^)]+)\)', rem)
+            top_info = m_top.group(1).strip() if m_top else ""
+            m_ref = re.search(r'Ref(?:erence)?[:\s#]+([^\n·\)]+)', rem)
+            ref_str = m_ref.group(1).strip() if m_ref else ""
+            clean_title = "Top-Up Deduction"
+            sub_parts = []
+            if top_info:
+                sub_parts.append(f"Top-ups: {top_info}")
+            if ref_str:
+                sub_parts.append(f"Ref: {ref_str}")
+            clean_subtitle = " · ".join(sub_parts) if sub_parts else "Top-Up Reconciled to Supplier"
+
+        # 9. Supplier Cash Top-Up
         elif "Supplier Cash Top-Ups" in rem or "Supplier Top-Ups" in rem:
             category = "Supplier Top-Up"
             category_color = "cyan"

@@ -4280,6 +4280,14 @@ function open_topup_reconciliation_modal(wrapper, topup_records) {
         defaultRef = `STMT-RECON-${frappe.datetime.get_today()}`;
     }
 
+    let defaultCreditAccount = 'Creditors - KIL';
+    let sUpper = (defaultStation || '').toUpperCase();
+    if (sUpper.includes('RUBIS')) {
+        defaultCreditAccount = 'RUBIS A/C - KIL';
+    } else if (sUpper.includes('GALANA')) {
+        defaultCreditAccount = 'GALANA A/C - KIL';
+    }
+
     let summaryHtml = `
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px;">
             <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
@@ -4301,7 +4309,7 @@ function open_topup_reconciliation_modal(wrapper, topup_records) {
             <div style="margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: #eff6ff; border: 1px solid #bfdbfe; font-size: 11px; color: #1e40af; line-height: 1.4;">
                 <strong>Accounting Posting:</strong><br>
                 • <strong>Debit:</strong> Station Top-Up Holding Account (Clears Holding Asset balance)<br>
-                • <strong>Credit:</strong> Creditors / Supplier Account (Party: ${defaultSupplier})
+                • <strong>Credit:</strong> Supplier Account (${defaultCreditAccount})
             </div>
         </div>
     `;
@@ -4335,12 +4343,12 @@ function open_topup_reconciliation_modal(wrapper, topup_records) {
                 fieldname: 'credit_account',
                 fieldtype: 'Link',
                 options: 'Account',
-                default: 'Creditors - KIL',
+                default: defaultCreditAccount,
                 get_query: function() {
                     return { filters: { is_group: 0 } };
                 },
                 reqd: 1,
-                description: __('Supplier Payable Account (e.g. Creditors - KIL) or Bank Account')
+                description: __('Supplier Account (e.g. RUBIS A/C - KIL, GALANA A/C - KIL) or Creditors - KIL')
             },
             {
                 label: __('Amount Credited / Confirmed on Statement (KES)'),
@@ -4402,6 +4410,19 @@ function open_topup_reconciliation_modal(wrapper, topup_records) {
     });
 
     d.show();
+
+    if (d.fields_dict.station) {
+        d.fields_dict.station.df.onchange = function() {
+            let st = (d.get_value('station') || '').toUpperCase();
+            if (st.includes('RUBIS')) {
+                d.set_value('credit_account', 'RUBIS A/C - KIL');
+                d.set_value('supplier', 'RUBIS KENYA');
+            } else if (st.includes('GALANA')) {
+                d.set_value('credit_account', 'GALANA A/C - KIL');
+                d.set_value('supplier', 'GALANA OIL KENYA LTD');
+            }
+        };
+    }
 }
 
 /* =========================================================================
