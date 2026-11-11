@@ -435,7 +435,12 @@ function init_spa_ui(wrapper) {
         } else if (activeTab === 'tab-topups') {
             load_topups_statement(wrapper);
         } else if (activeTab === 'tab-cards-holding') {
-            if (window.CARDS_HOLDING_STATE) window.CARDS_HOLDING_STATE.page = 1;
+            if (window.CARDS_HOLDING_STATE) {
+                window.CARDS_HOLDING_STATE.page = 1;
+                window.CARDS_HOLDING_STATE.card_type = "ALL";
+                window.CARDS_HOLDING_STATE.selected_items.clear();
+                window.CARDS_HOLDING_STATE.active_selected_card_type = null;
+            }
             load_cards_holding_data(wrapper);
         } else if (activeTab === 'tab-mpesa-reconciliation') {
             load_mpesa_reconciliation_data(wrapper);
@@ -8666,9 +8671,12 @@ window.CARDS_HOLDING_STATE = {
     page_length: 50,
     total_pages: 1,
     total_records: 0,
+    opening_balance: 0.0,
+    active_selected_card_type: null,
     selected_items: new Map(), // name -> { name, amount, card, receipt_no, shift, date }
     current_records: [],
     supplier_accounts: [],
+    card_breakdown: [],
     card_types: [],
     search_timer: null,
     loading: false
@@ -8869,6 +8877,42 @@ function init_cards_holding(wrapper) {
         // Master Checkbox
         $(wrapper).find('#cards-master-checkbox').off('change').on('change', function() {
             let checked = $(this).is(':checked');
+            if (!checked) {
+                state.selected_items.clear();
+                state.active_selected_card_type = null;
+                $(wrapper).find('.cards-row-checkbox').prop('checked', false);
+                update_cards_selection_ui(wrapper);
+                return;
+            }
+
+            // Check if rows on current page contain mixed card brands
+            let pageCards = [];
+            $(wrapper).find('.cards-row-checkbox').each(function() {
+                let card = $(this).data('card') || '';
+                if (card) pageCards.push(card);
+            });
+            let uniqueCards = [...new Set(pageCards)];
+            if (uniqueCards.length > 1) {
+                frappe.msgprint({
+                    title: __('Mixed Card Types on Page'),
+                    message: __('This page contains multiple card brands (' + uniqueCards.join(', ') + '). To prevent mixing postings across different bank/supplier accounts, please click on the specific Card Brand tab at the top (e.g. Rubis Card or KCB Card) before using Select All.'),
+                    indicator: 'orange'
+                });
+                $(this).prop('checked', false);
+                return;
+            }
+
+            let targetCardType = uniqueCards[0] || '';
+            if (state.selected_items.size > 0 && state.active_selected_card_type && state.active_selected_card_type !== targetCardType) {
+                frappe.show_alert({
+                    message: `Cannot mix card types in a single batch! You currently have "${state.active_selected_card_type}" selected.`,
+                    indicator: 'red'
+                }, 5);
+                $(this).prop('checked', false);
+                return;
+            }
+
+            state.active_selected_card_type = targetCardType;
             $(wrapper).find('.cards-row-checkbox').each(function() {
                 let name = $(this).val();
                 let amount = parseFloat($(this).data('amount')) || 0;
@@ -8877,17 +8921,13 @@ function init_cards_holding(wrapper) {
                 let shift = $(this).data('shift') || '';
                 let date = $(this).data('date') || '';
 
-                $(this).prop('checked', checked);
-                if (checked) {
-                    state.selected_items.set(name, { name, amount, card, receipt_no: receipt, shift, date });
-                } else {
-                    state.selected_items.delete(name);
-                }
+                $(this).prop('checked', true);
+                state.selected_items.set(name, { name, amount, card, receipt_no: receipt, shift, date });
             });
             update_cards_selection_ui(wrapper);
         });
 
-        // Row Checkboxes Delegation
+        // Row Checkboxes Delegation with Strict Single-Brand Enforcement
         $(wrapper).find('#exec-cards-holding-table').off('change', '.cards-row-checkbox').on('change', '.cards-row-checkbox', function() {
             let name = $(this).val();
             let amount = parseFloat($(this).data('amount')) || 0;
@@ -8895,11 +8935,25 @@ function init_cards_holding(wrapper) {
             let receipt = $(this).data('receipt') || '';
             let shift = $(this).data('shift') || '';
             let date = $(this).data('date') || '';
+            let isChecked = $(this).is(':checked');
 
-            if ($(this).is(':checked')) {
+            if (isChecked) {
+                // Enforce card brand consistency
+                if (state.selected_items.size > 0 && state.active_selected_card_type && state.active_selected_card_type !== card) {
+                    frappe.show_alert({
+                        message: `Cannot mix card types in a single batch! You currently have "${state.active_selected_card_type}" selected. Please reconcile or deselect them before selecting "${card}".`,
+                        indicator: 'red'
+                    }, 6);
+                    $(this).prop('checked', false);
+                    return;
+                }
+                state.active_selected_card_type = card;
                 state.selected_items.set(name, { name, amount, card, receipt_no: receipt, shift, date });
             } else {
                 state.selected_items.delete(name);
+                if (state.selected_items.size === 0) {
+                    state.active_selected_card_type = null;
+                }
             }
             update_cards_selection_ui(wrapper);
         });
@@ -8908,6 +8962,7 @@ function init_cards_holding(wrapper) {
         $(wrapper).find('#btn-cards-quick-clear').off('click').on('click', function(e) {
             e.preventDefault();
             state.selected_items.clear();
+            state.active_selected_card_type = null;
             $(wrapper).find('.cards-row-checkbox').prop('checked', false);
             $(wrapper).find('#cards-master-checkbox').prop('checked', false).prop('indeterminate', false);
             update_cards_selection_ui(wrapper);
@@ -8955,8 +9010,12 @@ function load_cards_holding_data(wrapper) {
 
     let station = $(wrapper).find('#exec-global-station-select').val() || $(wrapper).find('#exec-header-station-select').val() || '';
 
+    // Synchronize station badge in cards header
+    let stationLabel = station ? (station === 'RUBIS POA PLACE' ? 'Rubis Poa Place' : station) : 'Consolidated';
+    $(wrapper).find('#exec-cards-station-badge').text(stationLabel);
+
     $(wrapper).find('#exec-cards-holding-table tbody').html(
-        '<tr><td colspan="11" style="text-align: center; padding: 32px; color: #64748b;"><span class="material-symbols-outlined" style="animation: spin 1s linear infinite; vertical-align: middle; margin-right: 6px;">progress_activity</span> Loading cards holding data...</td></tr>'
+        '<tr><td colspan="12" style="text-align: center; padding: 32px; color: #64748b;"><span class="material-symbols-outlined" style="animation: spin 1s linear infinite; vertical-align: middle; margin-right: 6px;">progress_activity</span> Loading cards holding data...</td></tr>'
     );
 
     frappe.call({
@@ -8980,17 +9039,107 @@ function load_cards_holding_data(wrapper) {
                 state.total_records = (data.summary && data.summary.total_count) || 0;
                 state.supplier_accounts = data.supplier_accounts || [];
                 state.card_types = data.card_types || [];
+                state.card_breakdown = data.card_breakdown || [];
+                state.opening_balance = parseFloat(data.opening_balance) || 0.0;
 
-                // Populate Card Types dropdown if empty
+                // 1. Populate Card Brand Filter Dropdown dynamically with current station's cards
                 let cardSelect = $(wrapper).find('#cards-filter-card-type');
-                if (cardSelect.children('option').length <= 1 && state.card_types.length > 0) {
+                cardSelect.empty().append('<option value="ALL">All Card Types</option>');
+                if (state.card_types && state.card_types.length > 0) {
                     state.card_types.forEach(ct => {
-                        cardSelect.append(`<option value="${ct.id}">${ct.label}</option>`);
+                        cardSelect.append(`<option value="${frappe.utils.escape_html(ct.id)}">${frappe.utils.escape_html(ct.label)}</option>`);
                     });
-                    if (state.card_type) cardSelect.val(state.card_type);
                 }
+                cardSelect.val(state.card_type || 'ALL');
 
-                // Update KPI Cards
+                // 2. Render Distinct Card Brand Tabs / Cards at Top
+                let breakdownHtml = '';
+                let isAllActive = !state.card_type || state.card_type === 'ALL';
+                let totalPendAmt = (data.summary && data.summary.pending_amount) || 0;
+                let totalPendCnt = (data.summary && data.summary.pending_count) || 0;
+
+                breakdownHtml += `
+                    <div class="cards-brand-tab ${isAllActive ? 'active' : ''}" data-card-type="ALL" style="cursor: pointer; padding: 10px 16px; border-radius: 10px; border: 2px solid ${isAllActive ? '#0284c7' : '#e2e8f0'}; background: ${isAllActive ? '#f0f9ff' : '#ffffff'}; min-width: 175px; flex: 1; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 12px; font-weight: 700; color: ${isAllActive ? '#0369a1' : '#475569'}; text-transform: uppercase;">💳 All Cards</span>
+                            ${isAllActive ? '<span style="background: #0284c7; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px;">Active</span>' : ''}
+                        </div>
+                        <div style="font-size: 16px; font-weight: 800; font-family: monospace; color: #0f172a;">${format_currency(totalPendAmt, "KES")}</div>
+                        <div style="font-size: 11px; color: #64748b; margin-top: 3px;">
+                            <strong style="color: #0f172a;">${totalPendCnt.toLocaleString()}</strong> pending in holding
+                        </div>
+                    </div>
+                `;
+
+                if (state.card_breakdown && state.card_breakdown.length > 0) {
+                    state.card_breakdown.forEach(cb => {
+                        let isActive = state.card_type === cb.card_type;
+                        breakdownHtml += `
+                            <div class="cards-brand-tab ${isActive ? 'active' : ''}" data-card-type="${frappe.utils.escape_html(cb.card_type)}" style="cursor: pointer; padding: 10px 16px; border-radius: 10px; border: 2px solid ${isActive ? cb.brand_color : '#e2e8f0'}; background: ${isActive ? cb.brand_bg : '#ffffff'}; min-width: 195px; flex: 1; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="font-size: 12px; font-weight: 800; color: ${cb.brand_color}; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">${cb.icon || 'credit_card'}</span>
+                                        ${frappe.utils.escape_html(cb.card_type)}
+                                    </span>
+                                    ${isActive ? `<span style="background: ${cb.brand_color}; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px;">Active</span>` : ''}
+                                </div>
+                                <div style="font-size: 16px; font-weight: 800; font-family: monospace; color: #0f172a;">${format_currency(cb.pending_amount || 0, "KES")}</div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #64748b; margin-top: 4px;">
+                                    <span><strong style="color: #0f172a;">${(cb.pending_count || 0).toLocaleString()}</strong> pending</span>
+                                    <span style="font-size: 10.5px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #334155;" title="GL Holding Balance">
+                                        GL: ${format_currency(cb.gl_holding_balance || 0, "KES")}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                $(wrapper).find('#cards-type-pills-container').html(breakdownHtml);
+
+                // Bind Brand Card tabs click
+                $(wrapper).find('.cards-brand-tab').off('click').on('click', function(e) {
+                    e.preventDefault();
+                    let selectedType = $(this).data('card-type');
+                    state.card_type = selectedType;
+                    state.page = 1;
+                    state.selected_items.clear();
+                    state.active_selected_card_type = null;
+                    $(wrapper).find('#cards-filter-card-type').val(selectedType);
+                    load_cards_holding_data(wrapper);
+                });
+
+                // 3. Render Station Holding Accounts Strip
+                let hbHtml = '';
+                if (data.summary && data.summary.holding_balances) {
+                    let hb = data.summary.holding_balances;
+                    if (hb.rubis_bal !== undefined) {
+                        hbHtml += `<div style="flex: 1; min-width: 190px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: 700; color: #991b1b;">Rubis Cards Holding:</span>
+                            <span style="font-family: monospace; font-size: 13px; font-weight: 800; color: #7f1d1d;">${format_currency(hb.rubis_bal || 0, "KES")}</span>
+                        </div>`;
+                    }
+                    if (hb.galana_bal !== undefined) {
+                        hbHtml += `<div style="flex: 1; min-width: 190px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: 700; color: #075985;">Galana Cards Holding:</span>
+                            <span style="font-family: monospace; font-size: 13px; font-weight: 800; color: #0c4a6e;">${format_currency(hb.galana_bal || 0, "KES")}</span>
+                        </div>`;
+                    }
+                    if (hb.kcb_bal !== undefined) {
+                        hbHtml += `<div style="flex: 1; min-width: 190px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: 700; color: #166534;">KCB Cards Holding:</span>
+                            <span style="font-family: monospace; font-size: 13px; font-weight: 800; color: #14532d;">${format_currency(hb.kcb_bal || 0, "KES")}</span>
+                        </div>`;
+                    }
+                    if (hb.equity_bal !== undefined) {
+                        hbHtml += `<div style="flex: 1; min-width: 190px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: 700; color: #92400e;">Equity Cards Holding:</span>
+                            <span style="font-family: monospace; font-size: 13px; font-weight: 800; color: #78350f;">${format_currency(hb.equity_bal || 0, "KES")}</span>
+                        </div>`;
+                    }
+                }
+                $(wrapper).find('#cards-holding-breakdown-strip').html(hbHtml);
+
+                // 4. Update KPI Cards
                 if (data.summary) {
                     let s = data.summary;
                     $(wrapper).find('#cards-kpi-pending-amt').text(format_currency(s.pending_amount || 0, "KES"));
@@ -9001,20 +9150,12 @@ function load_cards_holding_data(wrapper) {
 
                     $(wrapper).find('#cards-kpi-total-amt').text(format_currency(s.total_amount || 0, "KES"));
                     $(wrapper).find('#cards-kpi-total-count').text((s.total_count || 0).toLocaleString());
-
-                    if (s.holding_balances) {
-                        let hb = s.holding_balances;
-                        $(wrapper).find('#holding-bal-rubis').text(format_currency(hb.rubis_bal || 0, "KES"));
-                        $(wrapper).find('#holding-bal-kcb').text(format_currency(hb.kcb_bal || 0, "KES"));
-                        $(wrapper).find('#holding-bal-galana').text(format_currency(hb.galana_bal || 0, "KES"));
-                        $(wrapper).find('#holding-bal-equity').text(format_currency(hb.equity_bal || 0, "KES"));
-                    }
                 }
 
-                // Render Table rows
+                // 5. Render Table rows with Running Balance
                 render_cards_holding_table(wrapper, data.records || []);
 
-                // Update Pagination Controls
+                // 6. Update Pagination Controls
                 let totalShown = 0;
                 if (data.summary) {
                     if (state.status === 'pending') totalShown = data.summary.pending_count;
@@ -9038,14 +9179,14 @@ function load_cards_holding_data(wrapper) {
                 update_cards_selection_ui(wrapper);
             } else {
                 $(wrapper).find('#exec-cards-holding-table tbody').html(
-                    '<tr><td colspan="11" style="text-align: center; padding: 30px; color: #ef4444;">Failed to load cards holding data.</td></tr>'
+                    '<tr><td colspan="12" style="text-align: center; padding: 30px; color: #ef4444;">Failed to load cards holding data.</td></tr>'
                 );
             }
         },
         error: function() {
             state.loading = false;
             $(wrapper).find('#exec-cards-holding-table tbody').html(
-                '<tr><td colspan="11" style="text-align: center; padding: 30px; color: #ef4444;">Network or server error while loading cards holding.</td></tr>'
+                '<tr><td colspan="12" style="text-align: center; padding: 30px; color: #ef4444;">Network or server error while loading cards holding.</td></tr>'
             );
         }
     });
@@ -9055,17 +9196,36 @@ function render_cards_holding_table(wrapper, records) {
     let state = window.CARDS_HOLDING_STATE;
     let tbody = $(wrapper).find('#exec-cards-holding-table tbody');
     let pageTotal = 0;
+    let lastRunningBal = state.opening_balance || 0;
 
     if (!records || records.length === 0) {
-        tbody.html('<tr><td colspan="11" style="text-align: center; padding: 36px; color: #64748b; font-size: 13px;">No station card transactions found matching current filters.</td></tr>');
+        tbody.html('<tr><td colspan="12" style="text-align: center; padding: 36px; color: #64748b; font-size: 13px;">No station card transactions found matching current filters.</td></tr>');
         $(wrapper).find('#cards-page-total').text('KES 0.00');
+        $(wrapper).find('#cards-page-ending-bal').text(format_currency(state.opening_balance || 0, "KES"));
         return;
     }
 
     let html = '';
+
+    // Show Opening Balance row on Page 1 if opening_balance > 0 or from_date is set
+    if (state.page === 1 && (state.opening_balance > 0 || state.from_date)) {
+        html += `<tr style="background: #f8fafc; font-weight: 700; border-bottom: 2px solid #cbd5e1;">
+            <td style="text-align: center; color: #94a3b8;">-</td>
+            <td style="padding: 10px 14px; color: #334155;" colspan="6">
+                <span class="material-symbols-outlined" style="font-size: 15px; vertical-align: middle; margin-right: 4px; color: #0284c7;">account_balance_wallet</span>
+                OPENING PENDING BALANCE (Before ${state.from_date ? frappe.datetime.str_to_user(state.from_date) : 'Period'})
+            </td>
+            <td style="padding: 10px 14px; text-align: right; color: #94a3b8; font-family: monospace;">-</td>
+            <td style="padding: 10px 14px; text-align: right; font-family: monospace; font-size: 13px; font-weight: 800; color: #166534; background: #f0fdf4;">${format_currency(state.opening_balance || 0, "KES")}</td>
+            <td colspan="3"></td>
+        </tr>`;
+    }
+
     records.forEach(r => {
         let amt = parseFloat(r.amount) || 0;
         pageTotal += amt;
+        let runningBal = parseFloat(r.running_balance) || 0;
+        lastRunningBal = runningBal;
         let isSelected = state.selected_items.has(r.name);
         let isReconciled = r.is_reconciled == 1;
 
@@ -9104,6 +9264,7 @@ function render_cards_holding_table(wrapper, records) {
             </td>
             <td style="padding: 10px 14px; font-size: 12px; color: #475569;">${frappe.utils.escape_html(r.csa_name || r.csa || '-')}</td>
             <td style="padding: 10px 14px; text-align: right; font-family: monospace; font-weight: 700; color: #0f172a; font-size: 13px;">${format_currency(amt, "KES")}</td>
+            <td style="padding: 10px 14px; text-align: right; font-family: monospace; font-weight: 800; color: #166534; font-size: 12.5px; background: #fafffc;">${format_currency(runningBal, "KES")}</td>
             <td style="padding: 10px 14px; text-align: center;">${statusBadge}</td>
             <td style="padding: 10px 14px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${postingInfo}</td>
             <td style="padding: 10px 14px; text-align: center; white-space: nowrap;">${actionHtml}</td>
@@ -9112,6 +9273,7 @@ function render_cards_holding_table(wrapper, records) {
 
     tbody.html(html);
     $(wrapper).find('#cards-page-total').text(format_currency(pageTotal, "KES"));
+    $(wrapper).find('#cards-page-ending-bal').text(format_currency(lastRunningBal, "KES"));
 }
 
 function update_cards_selection_ui(wrapper) {
@@ -9124,6 +9286,12 @@ function update_cards_selection_ui(wrapper) {
 
     $(wrapper).find('#cards-selected-count').text(count);
     $(wrapper).find('#cards-selected-amt').text(format_currency(totalAmt, "KES"));
+
+    if (state.active_selected_card_type) {
+        $(wrapper).find('#cards-selected-type-badge').show().text('Batch: ' + state.active_selected_card_type);
+    } else {
+        $(wrapper).find('#cards-selected-type-badge').hide();
+    }
 
     let bulkInput = $(wrapper).find('#cards-bulk-target-input');
     if (!bulkInput.is(':focus')) {
@@ -9167,50 +9335,79 @@ function open_cards_posting_dialog(wrapper, card_records) {
         if (r.card) cardTypeSet.add(r.card);
     });
 
-    let cardTypesStr = Array.from(cardTypeSet).join(', ');
+    let cardTypesList = Array.from(cardTypeSet);
+    if (cardTypesList.length > 1) {
+        frappe.throw(__('Cannot post multiple card types together in one batch (' + cardTypesList.join(', ') + '). Please select cards of only one brand to prevent wrong account postings.'));
+        return;
+    }
 
-    // Available supplier accounts
+    let cardBrand = cardTypesList[0] || 'Card';
+    let cardUpper = cardBrand.toUpperCase();
+    let currentStation = $(wrapper).find('#exec-global-station-select').val() || $(wrapper).find('#exec-header-station-select').val() || '';
+    let isGalana = currentStation.toUpperCase().includes('GALANA');
+
+    // Available supplier/bank accounts filtered
     let accountOptions = [];
     if (state.supplier_accounts && state.supplier_accounts.length > 0) {
         accountOptions = state.supplier_accounts.map(a => a.name);
-    } else {
-        accountOptions = [
-            "RUBIS A/C - KIL",
-            "EQUITY (RUBIS) - KIL",
-            "KCB(RUBIS) - KIL",
-            "Creditors - KIL"
-        ];
     }
 
-    // Default supplier account detection
-    let defaultAcc = "RUBIS A/C - KIL";
-    if (cardTypesStr.toUpperCase().includes("EQUITY")) {
-        defaultAcc = "EQUITY (RUBIS) - KIL";
-    } else if (cardTypesStr.toUpperCase().includes("KCB")) {
-        defaultAcc = "KCB(RUBIS) - KIL";
-    }
-    if (accountOptions.indexOf(defaultAcc) === -1) {
-        accountOptions.unshift(defaultAcc);
+    // Default account & holding account detection based on brand and station
+    let defaultAcc = "";
+    let holdingAccExpected = "";
+    let supplierPartyName = "";
+
+    if (cardUpper.includes("RUBIS")) {
+        defaultAcc = "Creditors - KIL";
+        supplierPartyName = "RUBIS KENYA";
+        holdingAccExpected = "Rubis Cards Holding Account - KIL";
+        if (accountOptions.indexOf("Creditors - KIL") === -1) accountOptions.unshift("Creditors - KIL");
+        if (accountOptions.indexOf("RUBIS A/C - KIL") === -1) accountOptions.push("RUBIS A/C - KIL");
+    } else if (cardUpper.includes("GALANA")) {
+        defaultAcc = "Creditors - KIL";
+        supplierPartyName = "Galana Annex";
+        holdingAccExpected = "Galana Cards Holding Account - KIL";
+        if (accountOptions.indexOf("Creditors - KIL") === -1) accountOptions.unshift("Creditors - KIL");
+        if (accountOptions.indexOf("GALANA A/C - KIL") === -1) accountOptions.push("GALANA A/C - KIL");
+    } else if (cardUpper.includes("KCB")) {
+        defaultAcc = isGalana ? "KCB (GALANA) - KIL" : "KCB(RUBIS) - KIL";
+        holdingAccExpected = isGalana ? "KCB Cards Holding - Galana - KIL" : "KCB Cards Holding - Rubis - KIL";
+        if (accountOptions.indexOf(defaultAcc) === -1) accountOptions.unshift(defaultAcc);
+    } else if (cardUpper.includes("EQUITY")) {
+        defaultAcc = isGalana ? "EQUITY (GALANA) - KIL" : "EQUITY (RUBIS) - KIL";
+        holdingAccExpected = isGalana ? "Equity Cards Holding - Galana - KIL" : "Equity Cards Holding - Rubis - KIL";
+        if (accountOptions.indexOf(defaultAcc) === -1) accountOptions.unshift(defaultAcc);
+    } else {
+        defaultAcc = "Creditors - KIL";
+        holdingAccExpected = "Cards Holding Account - KIL";
     }
 
     let summaryHtml = `
-        <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
-            <div style="font-size: 13px; font-weight: 700; color: #0369a1; margin-bottom: 6px;">Cards Holding Summary</div>
+        <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
+            <div style="font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 6px; display: flex; justify-content: space-between;">
+                <span>💳 ${frappe.utils.escape_html(cardBrand)} Posting Batch</span>
+                <span style="background: #dcfce7; padding: 2px 8px; border-radius: 12px; font-size: 11px;">Single Brand Verified</span>
+            </div>
             <div style="display: flex; justify-content: space-between; font-size: 12px; color: #334155; margin-bottom: 3px;">
                 <span>Total Cards to Post:</span>
                 <strong>${card_records.length} card(s)</strong>
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 12px; color: #334155; margin-bottom: 3px;">
-                <span>Card Types:</span>
-                <span>${cardTypesStr || 'Station Cards'}</span>
+                <span>Clearing Holding Account:</span>
+                <span style="font-family: monospace; font-weight: 600; color: #0f172a;">${holdingAccExpected}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #0f172a; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #cbd5e1;">
-                <span>SPA Recorded Value:</span>
-                <span style="font-family: monospace; color: #0284c7; font-size: 14px;">${format_currency(cardsTotal, "KES")}</span>
+            ${supplierPartyName ? `
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #334155; margin-bottom: 3px;">
+                <span>Target Supplier Party:</span>
+                <strong style="color: #0284c7;">${supplierPartyName}</strong>
+            </div>` : ''}
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #0f172a; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #86efac;">
+                <span>SPA Recorded Total:</span>
+                <span style="font-family: monospace; color: #166534; font-size: 14px;">${format_currency(cardsTotal, "KES")}</span>
             </div>
         </div>
         <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
-            Verify the amount actually credited to your supplier portal/statement. You can adjust the credited amount below if supplier commissions or merchant deductions were applied.
+            Confirm the destination account credited on your statement/portal. The system will automatically debit this account and credit the card holding account.
         </p>
     `;
 

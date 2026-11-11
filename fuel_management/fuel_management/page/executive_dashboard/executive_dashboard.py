@@ -3014,6 +3014,7 @@ def get_director_expenses_register(from_date=None, to_date=None, expense_account
 def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=None, search=None, page=1, page_length=50, station=None):
     """
     Returns station cards from SPA for Cards Holding Account review, summary, and posting.
+    Includes station-aware card brand breakdowns, running balance, and pre-mapped accounts.
     """
     from frappe.utils import formatdate, cint, flt
     import json
@@ -3022,32 +3023,28 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
     page_length = cint(page_length) or 50
     offset = (page - 1) * page_length
 
-    where_clauses = ["1=1"]
-    params = {}
+    station_clean = station if (station and station not in ("ALL", "All Stations", "")) else None
 
-    if from_date:
-        where_clauses.append("sc.date >= %(from_date)s")
-        params["from_date"] = from_date
-    if to_date:
-        where_clauses.append("sc.date <= %(to_date)s")
-        params["to_date"] = to_date
+    # Base WHERE clauses (common to summary, opening balance, and rows)
+    base_where = ["1=1"]
+    base_params = {}
+
+    if station_clean:
+        base_where.append("s.station = %(station)s")
+        base_params["station"] = station_clean
 
     if card_type and card_type != "ALL":
-        where_clauses.append("sc.card = %(card_type)s")
-        params["card_type"] = card_type
-
-    if station and station not in ("ALL", "All Stations", ""):
-        where_clauses.append("s.station = %(station)s")
-        params["station"] = station
+        base_where.append("sc.card = %(card_type)s")
+        base_params["card_type"] = card_type
 
     if status == "pending":
-        where_clauses.append("COALESCE(sc.is_reconciled, 0) = 0")
+        base_where.append("COALESCE(sc.is_reconciled, 0) = 0")
     elif status == "posted":
-        where_clauses.append("COALESCE(sc.is_reconciled, 0) = 1")
+        base_where.append("COALESCE(sc.is_reconciled, 0) = 1")
 
     if search:
         search_pattern = f"%{search.strip()}%"
-        where_clauses.append("""(
+        base_where.append("""(
             sc.name LIKE %(s)s 
             OR sc.receipt_no LIKE %(s)s 
             OR sc.shift LIKE %(s)s 
@@ -3055,11 +3052,22 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
             OR e.employee_name LIKE %(s)s 
             OR sc.memo LIKE %(s)s
         )""")
-        params["s"] = search_pattern
+        base_params["s"] = search_pattern
 
-    where_str = " AND ".join(where_clauses)
+    # Period WHERE clauses (adds date bounds)
+    main_where = list(base_where)
+    main_params = dict(base_params)
 
-    # 1. Summary Query
+    if from_date:
+        main_where.append("sc.date >= %(from_date)s")
+        main_params["from_date"] = from_date
+    if to_date:
+        main_where.append("sc.date <= %(to_date)s")
+        main_params["to_date"] = to_date
+
+    where_str = " AND ".join(main_where)
+
+    # 1. Summary Query for the active period & filters
     summary_res = frappe.db.sql(f"""
         SELECT 
             COUNT(*) as total_count,
@@ -3072,7 +3080,7 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
         LEFT JOIN `tabEmployee` e ON sc.csa = e.name
         LEFT JOIN `tabShift` s ON sc.shift = s.name
         WHERE {where_str}
-    """, params, as_dict=True)
+    """, main_params, as_dict=True)
 
     summary = summary_res[0] if summary_res else {}
     for k in ["total_count", "posted_count", "pending_count"]:
@@ -3080,78 +3088,219 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
     for k in ["total_amount", "posted_amount", "pending_amount"]:
         summary[k] = round(float(summary.get(k) or 0.0), 2)
 
-    # Live holding balances per card brand (including station-specific accounts)
-    holding_bals = {}
-    for h_name, h_key in [
-        ("Rubis Cards Holding Account - KIL", "rubis_bal"),
-        ("Galana Cards Holding Account - KIL", "galana_bal"),
-        (["KCB Cards Holding Account - KIL", "KCB Cards Holding - Rubis - KIL", "KCB Cards Holding - Galana - KIL"], "kcb_bal"),
-        (["Equity Cards Holding Account - KIL", "Equity Cards Holding - Rubis - KIL", "Equity Cards Holding - Galana - KIL"], "equity_bal")
-    ]:
-        if isinstance(h_name, list):
+    # 2. Distinct Card Types & Pending Breakdowns for this Station
+    st_filter_where = "1=1"
+    st_filter_params = {}
+    if station_clean:
+        st_filter_where = "s.station = %(station)s"
+        st_filter_params["station"] = station_clean
+
+    card_breakdown_raw = frappe.db.sql(f"""
+        SELECT 
+            sc.card as card_type,
+            COUNT(*) as total_count,
+            SUM(sc.amount) as total_amount,
+            SUM(CASE WHEN COALESCE(sc.is_reconciled, 0) = 0 THEN 1 ELSE 0 END) as pending_count,
+            SUM(CASE WHEN COALESCE(sc.is_reconciled, 0) = 0 THEN sc.amount ELSE 0 END) as pending_amount
+        FROM `tabStation Cards` sc
+        LEFT JOIN `tabShift` s ON sc.shift = s.name
+        WHERE {st_filter_where} AND sc.card IS NOT NULL AND sc.card != ''
+        GROUP BY sc.card
+        ORDER BY sc.card ASC
+    """, st_filter_params, as_dict=True)
+
+    company = frappe.db.get_single_value('Global Defaults', 'default_company') or "KILIBET INVESTMENT LTD"
+    company_abbr = frappe.get_cached_value('Company', company, 'abbr') or "KIL"
+
+    card_breakdown = []
+    card_types = []
+    for cb in card_breakdown_raw:
+        c_type = cb["card_type"]
+        c_upper = c_type.upper()
+        p_count = int(cb["pending_count"] or 0)
+        p_amount = round(float(cb["pending_amount"] or 0.0), 2)
+        t_count = int(cb["total_count"] or 0)
+        t_amount = round(float(cb["total_amount"] or 0.0), 2)
+
+        is_gal = bool(station_clean and "GALANA" in station_clean.upper())
+        is_rub = bool(station_clean and "RUBIS" in station_clean.upper())
+
+        holding_accounts = []
+        default_destination = "Creditors - KIL"
+        supplier_name = ""
+        brand_color = "#0284c7"
+        brand_bg = "#f0f9ff"
+        brand_border = "#bae6fd"
+        icon = "credit_card"
+
+        if "RUBIS" in c_upper:
+            holding_accounts = [f"Rubis Cards Holding Account - {company_abbr}"]
+            default_destination = "Creditors - KIL"
+            supplier_name = "RUBIS KENYA"
+            brand_color = "#dc2626"
+            brand_bg = "#fef2f2"
+            brand_border = "#fca5a5"
+            icon = "local_gas_station"
+        elif "GALANA" in c_upper:
+            holding_accounts = [f"Galana Cards Holding Account - {company_abbr}"]
+            default_destination = "Creditors - KIL"
+            supplier_name = "Galana Annex"
+            brand_color = "#0284c7"
+            brand_bg = "#f0f9ff"
+            brand_border = "#bae6fd"
+            icon = "local_gas_station"
+        elif "KCB" in c_upper:
+            if is_gal:
+                holding_accounts = [f"KCB Cards Holding - Galana - {company_abbr}", f"KCB Cards Holding Account - {company_abbr}"]
+                default_destination = f"KCB (GALANA) - {company_abbr}"
+            else:
+                holding_accounts = [f"KCB Cards Holding - Rubis - {company_abbr}", f"KCB Cards Holding Account - {company_abbr}"]
+                default_destination = f"KCB(RUBIS) - {company_abbr}"
+            brand_color = "#16a34a"
+            brand_bg = "#f0fdf4"
+            brand_border = "#86efac"
+            icon = "contactless"
+        elif "EQUITY" in c_upper:
+            if is_gal:
+                holding_accounts = [f"Equity Cards Holding - Galana - {company_abbr}", f"Equity Cards Holding Account - {company_abbr}"]
+                default_destination = f"EQUITY (GALANA) - {company_abbr}"
+            else:
+                holding_accounts = [f"Equity Cards Holding - Rubis - {company_abbr}", f"Equity Cards Holding Account - {company_abbr}"]
+                default_destination = f"EQUITY (RUBIS) - {company_abbr}"
+            brand_color = "#b45309"
+            brand_bg = "#fffbeb"
+            brand_border = "#fde68a"
+            icon = "credit_card"
+        else:
+            holding_accounts = [f"Cards Holding Account - {company_abbr}"]
+            default_destination = "Creditors - KIL"
+
+        # Calculate live GL holding balance
+        gl_balance = 0.0
+        existing_accs = [a for a in holding_accounts if frappe.db.exists("Account", a)]
+        if existing_accs:
             b = frappe.db.sql("""
                 SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account IN %s AND is_cancelled = 0
-            """, (tuple(h_name),))[0][0] or 0.0
-        else:
-            b = frappe.db.sql("""
-                SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account = %s AND is_cancelled = 0
-            """, (h_name,))[0][0] or 0.0
-        holding_bals[h_key] = round(float(b), 2)
+            """, (tuple(existing_accs),))[0][0] or 0.0
+            gl_balance = round(float(b), 2)
+
+        item = {
+            "card_type": c_type,
+            "pending_count": p_count,
+            "pending_amount": p_amount,
+            "total_count": t_count,
+            "total_amount": t_amount,
+            "holding_accounts": existing_accs or holding_accounts,
+            "gl_holding_balance": gl_balance,
+            "default_destination": default_destination,
+            "supplier_name": supplier_name,
+            "brand_color": brand_color,
+            "brand_bg": brand_bg,
+            "brand_border": brand_border,
+            "icon": icon
+        }
+        card_breakdown.append(item)
+        card_types.append({"id": c_type, "label": c_type})
+
+    # Station-filtered live holding balances for legacy strip / summary
+    holding_bals = {}
+    is_gal_st = bool(station_clean and "GALANA" in station_clean.upper())
+    is_rub_st = bool(station_clean and "RUBIS" in station_clean.upper())
+
+    if not is_gal_st:
+        r_bal = frappe.db.sql("SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account = %s AND is_cancelled = 0", f"Rubis Cards Holding Account - {company_abbr}")[0][0] or 0.0
+        holding_bals["rubis_bal"] = round(float(r_bal), 2)
+    if not is_rub_st:
+        g_bal = frappe.db.sql("SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account = %s AND is_cancelled = 0", f"Galana Cards Holding Account - {company_abbr}")[0][0] or 0.0
+        holding_bals["galana_bal"] = round(float(g_bal), 2)
+
+    # KCB
+    kcb_accs = []
+    if is_gal_st:
+        kcb_accs = [f"KCB Cards Holding - Galana - {company_abbr}"]
+    elif is_rub_st:
+        kcb_accs = [f"KCB Cards Holding - Rubis - {company_abbr}", f"KCB Cards Holding Account - {company_abbr}"]
+    else:
+        kcb_accs = [f"KCB Cards Holding Account - {company_abbr}", f"KCB Cards Holding - Rubis - {company_abbr}", f"KCB Cards Holding - Galana - {company_abbr}"]
+    kcb_existing = [a for a in kcb_accs if frappe.db.exists("Account", a)]
+    if kcb_existing:
+        k_bal = frappe.db.sql("SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account IN %s AND is_cancelled = 0", (tuple(kcb_existing),))[0][0] or 0.0
+        holding_bals["kcb_bal"] = round(float(k_bal), 2)
+
+    # Equity
+    if not is_gal_st:
+        eq_accs = [f"Equity Cards Holding - Rubis - {company_abbr}", f"Equity Cards Holding Account - {company_abbr}"]
+        eq_existing = [a for a in eq_accs if frappe.db.exists("Account", a)]
+        if eq_existing:
+            eq_bal = frappe.db.sql("SELECT SUM(debit - credit) FROM `tabGL Entry` WHERE account IN %s AND is_cancelled = 0", (tuple(eq_existing),))[0][0] or 0.0
+            holding_bals["equity_bal"] = round(float(eq_bal), 2)
+
     summary["holding_balances"] = holding_bals
 
-    # 2. Paginated rows
+    # 3. Opening Balance Calculation (prior to from_date)
+    opening_balance = 0.0
+    if from_date:
+        op_where = list(base_where)
+        op_where.append("sc.date < %(from_date)s")
+        op_params = dict(base_params)
+        op_params["from_date"] = from_date
+        op_res = frappe.db.sql(f"""
+            SELECT COALESCE(SUM(sc.amount), 0) as op_bal
+            FROM `tabStation Cards` sc
+            LEFT JOIN `tabEmployee` e ON sc.csa = e.name
+            LEFT JOIN `tabShift` s ON sc.shift = s.name
+            WHERE {" AND ".join(op_where)}
+        """, op_params, as_dict=True)
+        opening_balance = round(float(op_res[0].op_bal or 0.0), 2)
+
+    # 4. Paginated rows with Cumulative Running Balance
+    query_params = dict(main_params)
+    query_params["opening_balance"] = opening_balance
+    query_params["limit"] = page_length
+    query_params["offset"] = offset
+
     rows = frappe.db.sql(f"""
-        SELECT 
-            sc.name,
-            sc.date,
-            sc.shift,
-            sc.receipt_no,
-            sc.card,
-            sc.csa,
-            COALESCE(e.employee_name, sc.csa) as csa_name,
-            sc.amount,
-            sc.memo,
-            COALESCE(sc.is_reconciled, 0) as is_reconciled,
-            sc.reconciled_by,
-            sc.reconciled_date
-        FROM `tabStation Cards` sc
-        LEFT JOIN `tabEmployee` e ON sc.csa = e.name
-        LEFT JOIN `tabShift` s ON sc.shift = s.name
-        WHERE {where_str}
-        ORDER BY sc.date ASC, sc.creation ASC, sc.name ASC
+        SELECT * FROM (
+            SELECT 
+                sc.name,
+                sc.date,
+                sc.shift,
+                sc.receipt_no,
+                sc.card,
+                sc.csa,
+                COALESCE(e.employee_name, sc.csa) as csa_name,
+                sc.amount,
+                sc.memo,
+                COALESCE(sc.is_reconciled, 0) as is_reconciled,
+                sc.reconciled_by,
+                sc.reconciled_date,
+                ROUND(%(opening_balance)s + SUM(sc.amount) OVER (ORDER BY sc.date ASC, sc.creation ASC, sc.name ASC), 2) as running_balance
+            FROM `tabStation Cards` sc
+            LEFT JOIN `tabEmployee` e ON sc.csa = e.name
+            LEFT JOIN `tabShift` s ON sc.shift = s.name
+            WHERE {where_str}
+        ) sub
+        ORDER BY sub.date ASC, sub.name ASC
         LIMIT %(limit)s OFFSET %(offset)s
-    """, {**params, "limit": page_length, "offset": offset}, as_dict=True)
+    """, query_params, as_dict=True)
 
     for r in rows:
         r["amount"] = round(float(r["amount"] or 0.0), 2)
+        r["running_balance"] = round(float(r["running_balance"] or 0.0), 2)
         r["date_formatted"] = formatdate(r["date"])
         r["reconciled_date_formatted"] = frappe.utils.format_datetime(r["reconciled_date"]) if r.get("reconciled_date") else ""
 
-    # Available Card Types for dropdown
-    ct_where = "sc.card IS NOT NULL AND sc.card != ''"
-    ct_params = {}
-    if station and station not in ("ALL", "All Stations", ""):
-        ct_where += " AND s.station = %(station)s"
-        ct_params["station"] = station
+    # Available Supplier / Bank Accounts filtered by station
+    supp_acc_where = ["is_group = 0", "(name LIKE '%RUBIS%' OR name LIKE '%GALANA%' OR name LIKE '%CARD%' OR name LIKE '%Creditor%' OR account_type IN ('Bank', 'Payable'))"]
+    if is_gal_st:
+        supp_acc_where.append("name NOT LIKE '%RUBIS%'")
+    elif is_rub_st:
+        supp_acc_where.append("name NOT LIKE '%GALANA%'")
 
-    card_types = frappe.db.sql(f"""
-        SELECT DISTINCT sc.card as id, sc.card as label
-        FROM `tabStation Cards` sc
-        LEFT JOIN `tabShift` s ON sc.shift = s.name
-        WHERE {ct_where}
-        ORDER BY sc.card ASC
-    """, ct_params, as_dict=True)
-
-    # Available Supplier / Bank Accounts for posting dialog
-    supplier_accounts = frappe.db.sql("""
+    supplier_accounts = frappe.db.sql(f"""
         SELECT name, account_name, account_type
         FROM `tabAccount`
-        WHERE is_group = 0 AND (
-            name LIKE '%RUBIS%' 
-            OR name LIKE '%CARD%' 
-            OR name LIKE '%Creditor%'
-            OR account_type IN ('Bank', 'Cash', 'Payable', 'Current Asset')
-        )
+        WHERE {" AND ".join(supp_acc_where)}
         ORDER BY name ASC
     """, as_dict=True)
 
@@ -3160,9 +3309,12 @@ def get_cards_holding_data(from_date=None, to_date=None, card_type=None, status=
         "to_date": to_date,
         "status": status,
         "card_type": card_type,
+        "station": station_clean,
+        "opening_balance": opening_balance,
+        "card_breakdown": card_breakdown,
+        "card_types": card_types,
         "summary": summary,
         "records": rows,
-        "card_types": card_types,
         "supplier_accounts": supplier_accounts,
         "page": page,
         "page_length": page_length,
@@ -3223,7 +3375,13 @@ def post_station_cards_to_supplier(card_names, supplier_account, posting_date=No
         acc_type = frappe.db.get_value("Account", supplier_account, "account_type")
         if acc_type == "Payable":
             supp_row["party_type"] = "Supplier"
-            supp_row["party"] = "RUBIS KENYA" if "RUBIS" in supplier_account.upper() else (frappe.get_all("Supplier", limit=1)[0].name if frappe.get_all("Supplier", limit=1) else None)
+            first_card = (cards[0].get("card") or "").upper() if cards else ""
+            if "RUBIS" in first_card or "RUBIS" in supplier_account.upper():
+                supp_row["party"] = "RUBIS KENYA"
+            elif "GALANA" in first_card or "GALANA" in supplier_account.upper():
+                supp_row["party"] = "Galana Annex"
+            else:
+                supp_row["party"] = frappe.get_all("Supplier", limit=1)[0].name if frappe.get_all("Supplier", limit=1) else None
         je.append("accounts", supp_row)
 
         # Variance / Commission handling if credited differs from cards total

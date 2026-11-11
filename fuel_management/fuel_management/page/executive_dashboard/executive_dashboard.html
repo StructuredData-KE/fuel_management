@@ -2417,7 +2417,10 @@
         <!-- Header -->
         <div class="exec-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
             <div>
-                <h1 class="exec-header-title">Cards Holding Account</h1>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h1 class="exec-header-title">Cards Holding Account</h1>
+                    <span id="exec-cards-station-badge" style="background: #e0f2fe; color: #0369a1; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; border: 1px solid #bae6fd;">Consolidated</span>
+                </div>
                 <p class="exec-header-subtitle">All station cards saved in the SPA awaiting verification and posting to supplier accounts.</p>
             </div>
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -2469,24 +2472,20 @@
             </div>
         </div>
 
-        <!-- Holding Accounts Breakdown Strip -->
-        <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 190px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 11.5px; font-weight: 700; color: #475569;">Rubis Cards Holding:</span>
-                <span id="holding-bal-rubis" style="font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">KES 0.00</span>
+        <!-- Distinct Card Types & Pending Balances Tabs (Clickable Filters) -->
+        <div style="margin-top: 18px;">
+            <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 5px;">
+                <span class="material-symbols-outlined" style="font-size: 15px; color: #0284c7;">credit_card</span>
+                Card Types at Selected Station (Click to filter & separate batches)
             </div>
-            <div style="flex: 1; min-width: 190px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 11.5px; font-weight: 700; color: #475569;">KCB Cards Holding:</span>
-                <span id="holding-bal-kcb" style="font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">KES 0.00</span>
+            <div id="cards-type-pills-container" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <!-- Populated dynamically: [All Cards] [Rubis Card] [KCB Card] etc. -->
             </div>
-            <div style="flex: 1; min-width: 190px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 11.5px; font-weight: 700; color: #475569;">Galana Cards Holding:</span>
-                <span id="holding-bal-galana" style="font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">KES 0.00</span>
-            </div>
-            <div style="flex: 1; min-width: 190px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 11.5px; font-weight: 700; color: #475569;">Equity Cards Holding:</span>
-                <span id="holding-bal-equity" style="font-family: monospace; font-size: 13px; font-weight: 800; color: #0f172a;">KES 0.00</span>
-            </div>
+        </div>
+
+        <!-- Station Holding Accounts Breakdown Strip -->
+        <div id="cards-holding-breakdown-strip" style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;">
+            <!-- Populated dynamically based on station -->
         </div>
 
         <!-- Filters Toolbar -->
@@ -2541,6 +2540,7 @@
                 <div style="font-size: 13px; font-weight: 700; color: #166534; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <span class="material-symbols-outlined" style="font-size: 20px; color: #15803d;">check_circle</span>
                     <span><strong id="cards-selected-count">0</strong> card(s) selected &bull; Total: <span style="font-family: monospace; font-size: 15px;" id="cards-selected-amt">KES 0.00</span></span>
+                    <span id="cards-selected-type-badge" style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; border: 1px solid #86efac; display: none;"></span>
                     <div style="display: flex; align-items: center; gap: 6px; background: #fff; padding: 3px 8px; border: 1px solid #86efac; border-radius: 6px;">
                         <span style="font-size: 11px; font-weight: 700; color: #15803d;">Edit Statement Amount:</span>
                         <input type="number" step="0.01" id="cards-bulk-target-input" placeholder="KES Statement Amt" style="width: 120px; height: 26px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0 6px; font-size: 12px; font-weight: 800; font-family: monospace; color: #0f172a; outline: none;">
@@ -2577,18 +2577,20 @@
                             <th style="padding: 12px 14px;">Shift</th>
                             <th style="padding: 12px 14px;">Cashier / CSA</th>
                             <th style="padding: 12px 14px; text-align: right;">Card Amount (KES)</th>
+                            <th style="padding: 12px 14px; text-align: right; background: #f0fdf4; color: #166534; font-weight: 800;">Running Bal (KES)</th>
                             <th style="padding: 12px 14px; text-align: center;">Status</th>
                             <th style="padding: 12px 14px;">Supplier Posting Info</th>
                             <th style="padding: 12px 14px; text-align: center;">Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td colspan="11" style="text-align: center; padding: 30px; color: #64748b;">Loading cards in holding...</td></tr>
+                        <tr><td colspan="12" style="text-align: center; padding: 30px; color: #64748b;">Loading cards in holding...</td></tr>
                     </tbody>
                     <tfoot>
                         <tr style="background-color: #f8fafc; border-top: 2px solid #e2e8f0; font-weight: bold;">
                             <td colspan="7" style="padding: 12px 16px; text-align: right; color: #475569;">PAGE TOTAL:</td>
                             <td id="cards-page-total" style="padding: 12px 14px; text-align: right; color: #0284c7; font-family: monospace; font-size: 14px;">0.00</td>
+                            <td id="cards-page-ending-bal" style="padding: 12px 14px; text-align: right; color: #166534; font-family: monospace; font-size: 14px; background: #f0fdf4;">0.00</td>
                             <td colspan="3"></td>
                         </tr>
                     </tfoot>
