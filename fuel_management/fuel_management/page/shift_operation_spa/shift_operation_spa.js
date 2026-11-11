@@ -8651,24 +8651,110 @@ function render_purchases($wrapper) {
             callback: function(r) {
                 window.PURCHASE_HISTORY_CACHE = r.message || [];
                 let count = window.PURCHASE_HISTORY_CACHE.length;
+                let total_spend = window.PURCHASE_HISTORY_CACHE.reduce((acc, row) => acc + (parseFloat(row.grand_total) || 0), 0);
                 let station_badge = active_st ? ` &bull; <b>${frappe.utils.escape_html(active_st)}</b>` : '';
-                if (!date_from && !date_to) {
-                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#64748b; font-size:0.825rem;">(Showing latest ${count} entries${station_badge} &bull; Use date filter for custom ranges)</span>`);
+                
+                // Show total spend pill
+                if (count > 0) {
+                    $wrapper.find('#pur-history-total-spend').text(`Total Purchases: ${format_currency(total_spend)}`).show();
                 } else {
-                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#047857; font-size:0.825rem; font-weight:700;">(Found ${count} delivery records${station_badge} for selected dates)</span>`);
+                    $wrapper.find('#pur-history-total-spend').text(`Total Purchases: KES 0.00`).show();
+                }
+
+                let range_info = '';
+                if (date_from && date_to) {
+                    range_info = ` (${date_from} to ${date_to})`;
+                } else if (date_from) {
+                    range_info = ` (From ${date_from})`;
+                } else if (date_to) {
+                    range_info = ` (Up to ${date_to})`;
+                }
+
+                if (!date_from && !date_to) {
+                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#64748b; font-size:0.825rem;">(Showing latest ${count} entries${station_badge} &bull; Use date presets or filter for custom ranges)</span>`);
+                } else {
+                    $wrapper.find('#pur-history-subtitle').html(`<span style="color:#047857; font-size:0.825rem; font-weight:700;">(Found ${count} delivery records${range_info}${station_badge})</span>`);
                 }
                 render_history_rows(window.PURCHASE_HISTORY_CACHE);
             }
         });
     };
+
+    // Initialize with 'This Month' preset on load
+    (function init_pur_dates() {
+        let now = new Date();
+        let y = now.getFullYear();
+        let m = String(now.getMonth() + 1).padStart(2, '0');
+        let d = String(now.getDate()).padStart(2, '0');
+        $wrapper.find('#pur-filter-date-from').val(`${y}-${m}-01`);
+        $wrapper.find('#pur-filter-date-to').val(`${y}-${m}-${d}`);
+    })();
+
     fetch_history();
+
+    // Preset button click handler with precise dates
+    $wrapper.off('click', '.pur-preset-btn').on('click', '.pur-preset-btn', function(e) {
+        e.preventDefault();
+        $wrapper.find('.pur-preset-btn').removeClass('active').css({ 'background': '#f8fafc', 'color': '#64748b', 'border-color': '#e2e8f0', 'font-weight': '500' });
+        $(this).addClass('active').css({ 'background': '#e0e7ff', 'color': '#3730a3', 'border-color': '#cbd5e1', 'font-weight': '600' });
+
+        let preset = $(this).attr('data-preset');
+        let now = new Date();
+        let format_ymd = function(d) {
+            let y = d.getFullYear();
+            let m = String(d.getMonth() + 1).padStart(2, '0');
+            let day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
+        let today = format_ymd(now);
+        let start = today;
+        let end = today;
+
+        if (preset === 'today') {
+            start = today;
+            end = today;
+        } else if (preset === 'yesterday') {
+            let y_obj = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+            start = format_ymd(y_obj);
+            end = start;
+        } else if (preset === 'last_7_days') {
+            let d7_obj = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+            start = format_ymd(d7_obj);
+            end = today;
+        } else if (preset === 'this_month') {
+            let m_first = new Date(now.getFullYear(), now.getMonth(), 1);
+            start = format_ymd(m_first);
+            end = today;
+        } else if (preset === 'last_month') {
+            let prev_first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            let prev_last = new Date(now.getFullYear(), now.getMonth(), 0); // 0th of current month = true last day of previous month
+            start = format_ymd(prev_first);
+            end = format_ymd(prev_last);
+        } else if (preset === 'this_year') {
+            start = `${now.getFullYear()}-01-01`;
+            end = today;
+        } else if (preset === 'all_time') {
+            start = '2020-01-01';
+            end = today;
+        }
+
+        $wrapper.find('#pur-filter-date-from').val(start);
+        $wrapper.find('#pur-filter-date-to').val(end);
+        fetch_history();
+    });
 
     $wrapper.find('#pur-history-search').off('input').on('input', function() {
         render_history_rows(window.PURCHASE_HISTORY_CACHE);
     });
-    $wrapper.find('#btn-pur-history-filter-apply').off('click').on('click', fetch_history);
+    $wrapper.find('#btn-pur-history-filter-apply').off('click').on('click', function() {
+        $wrapper.find('.pur-preset-btn').removeClass('active').css({ 'background': '#f8fafc', 'color': '#64748b', 'border-color': '#e2e8f0', 'font-weight': '500' });
+        fetch_history();
+    });
     $wrapper.find('#btn-pur-history-refresh').off('click').on('click', fetch_history);
-    $wrapper.find('#pur-filter-date-from, #pur-filter-date-to').off('change').on('change', fetch_history);
+    $wrapper.find('#pur-filter-date-from, #pur-filter-date-to').off('change').on('change', function() {
+        $wrapper.find('.pur-preset-btn').removeClass('active').css({ 'background': '#f8fafc', 'color': '#64748b', 'border-color': '#e2e8f0', 'font-weight': '500' });
+        fetch_history();
+    });
 
     // 11. Delete & Edit Handlers
     $wrapper.off('click', '.btn-delete-pur').on('click', '.btn-delete-pur', function() {
