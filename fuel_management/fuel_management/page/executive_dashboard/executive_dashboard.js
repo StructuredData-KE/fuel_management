@@ -3841,6 +3841,102 @@ function init_topups_holding_tab(wrapper) {
         };
     }
 
+    // Preset buttons click handler with accurate date calculation
+    $(wrapper).off('click', '.topup-preset-btn').on('click', '.topup-preset-btn', function(e) {
+        e.preventDefault();
+        $(wrapper).find('.topup-preset-btn').removeClass('active').css({
+            'background': '#ffffff',
+            'color': '#64748b',
+            'border-color': '#e2e8f0',
+            'font-weight': '500'
+        });
+        $(this).addClass('active').css({
+            'background': '#e0e7ff',
+            'color': '#3730a3',
+            'border-color': '#cbd5e1',
+            'font-weight': '600'
+        });
+
+        let preset = $(this).attr('data-preset');
+        let now = new Date();
+        let format_ymd = function(d) {
+            let y = d.getFullYear();
+            let m = String(d.getMonth() + 1).padStart(2, '0');
+            let day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        };
+        let today = format_ymd(now);
+        let start = today;
+        let end = today;
+
+        if (preset === 'today') {
+            start = today;
+            end = today;
+        } else if (preset === 'yesterday') {
+            let y_obj = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+            start = format_ymd(y_obj);
+            end = start;
+        } else if (preset === 'last_7_days') {
+            let d7_obj = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+            start = format_ymd(d7_obj);
+            end = today;
+        } else if (preset === 'this_month') {
+            let m_first = new Date(now.getFullYear(), now.getMonth(), 1);
+            start = format_ymd(m_first);
+            end = today;
+        } else if (preset === 'last_month') {
+            let prev_first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            let prev_last = new Date(now.getFullYear(), now.getMonth(), 0); // 0th of current month = exact last day of previous month
+            start = format_ymd(prev_first);
+            end = format_ymd(prev_last);
+        } else if (preset === 'this_year') {
+            start = `${now.getFullYear()}-01-01`;
+            end = today;
+        } else if (preset === 'all_time') {
+            start = '2020-01-01';
+            end = today;
+        }
+
+        $(wrapper).find('#topup-filter-from').val(start);
+        $(wrapper).find('#topup-filter-to').val(end);
+        if (window.TOPUPS_STATE) {
+            window.TOPUPS_STATE.from_date = start;
+            window.TOPUPS_STATE.to_date = end;
+        }
+        load_topups_statement(wrapper);
+    });
+
+    // Date inputs change handler
+    $(wrapper).find('#topup-filter-from, #topup-filter-to').off('change').on('change', function() {
+        $(wrapper).find('.topup-preset-btn').removeClass('active').css({
+            'background': '#ffffff',
+            'color': '#64748b',
+            'border-color': '#e2e8f0',
+            'font-weight': '500'
+        });
+        if (window.TOPUPS_STATE) {
+            window.TOPUPS_STATE.from_date = $(wrapper).find('#topup-filter-from').val();
+            window.TOPUPS_STATE.to_date = $(wrapper).find('#topup-filter-to').val();
+        }
+        load_topups_statement(wrapper);
+    });
+
+    // Filter Apply button
+    $(wrapper).off('click', '#btn-topup-filter-apply').on('click', '#btn-topup-filter-apply', function(e) {
+        e.preventDefault();
+        $(wrapper).find('.topup-preset-btn').removeClass('active').css({
+            'background': '#ffffff',
+            'color': '#64748b',
+            'border-color': '#e2e8f0',
+            'font-weight': '500'
+        });
+        if (window.TOPUPS_STATE) {
+            window.TOPUPS_STATE.from_date = $(wrapper).find('#topup-filter-from').val();
+            window.TOPUPS_STATE.to_date = $(wrapper).find('#topup-filter-to').val();
+        }
+        load_topups_statement(wrapper);
+    });
+
     // Status filter buttons
     $(wrapper).off('click', '.topup-status-filter').on('click', '.topup-status-filter', function(e) {
         e.preventDefault();
@@ -3962,16 +4058,43 @@ function load_topups_statement(wrapper) {
         window.TOPUPS_STATE = {
             status: 'all',
             search: '',
+            from_date: '',
+            to_date: '',
             selected_items: new Set(),
             statement: []
         };
     }
     let state = window.TOPUPS_STATE;
-    let filters = get_date_filters(wrapper);
-    filters.status = state.status;
-    filters.search = state.search;
 
-    $(wrapper).find('#exec-topups-table tbody').html('<tr><td colspan="11" style="text-align: center; padding: 24px; color: #64748b;">Loading statement...</td></tr>');
+    let from_date = $(wrapper).find('#topup-filter-from').val() || state.from_date;
+    let to_date = $(wrapper).find('#topup-filter-to').val() || state.to_date;
+
+    // Default to 'This Month' if empty
+    if (!from_date || !to_date) {
+        let now = new Date();
+        let y = now.getFullYear();
+        let m = String(now.getMonth() + 1).padStart(2, '0');
+        let d = String(now.getDate()).padStart(2, '0');
+        from_date = `${y}-${m}-01`;
+        to_date = `${y}-${m}-${d}`;
+        $(wrapper).find('#topup-filter-from').val(from_date);
+        $(wrapper).find('#topup-filter-to').val(to_date);
+    }
+    state.from_date = from_date;
+    state.to_date = to_date;
+
+    let station = window.ACTIVE_STATION || $(wrapper).find('#exec-global-station-select').val() || $(wrapper).find('#exec-header-station-select').val() || '';
+    if (station === "ALL" || station === "All Stations") station = '';
+
+    let filters = {
+        from_date: from_date,
+        to_date: to_date,
+        station: station,
+        status: state.status,
+        search: state.search
+    };
+
+    $(wrapper).find('#exec-topups-table tbody').html('<tr><td colspan="11" style="text-align: center; padding: 24px; color: #64748b;"><i class="fa fa-spinner fa-spin"></i> Loading statement...</td></tr>');
 
     frappe.call({
         method: "fuel_management.fuel_management.page.executive_dashboard.executive_dashboard.get_topup_statement",
@@ -3982,13 +4105,27 @@ function load_topups_statement(wrapper) {
             let pending_amount = res.pending_amount !== undefined ? res.pending_amount : 0;
             let pending_count = res.pending_count !== undefined ? res.pending_count : 0;
             let period_topups_sum = res.period_topups_sum !== undefined ? res.period_topups_sum : 0;
+            let period_pending_count = res.period_pending_count !== undefined ? res.period_pending_count : 
+                (stmt || []).filter(r => !r.is_opening && r.supplier !== 'RECONCILIATION' && !r.is_reconciled).length;
+            let period_pending_amount = res.period_pending_amount !== undefined ? res.period_pending_amount : 
+                (stmt || []).filter(r => !r.is_opening && r.supplier !== 'RECONCILIATION' && !r.is_reconciled).reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+            
             state.statement = stmt;
 
             // Update KPI and badges
             $(wrapper).find('#exec-holding-balance').text(format_currency(pending_amount, "KES"));
-            $(wrapper).find('#exec-holding-subtitle').html(`<strong>${pending_count}</strong> Pending Top-up(s) awaiting reconciliation`);
-            $(wrapper).find('#topup-filter-pending-count').text(pending_count);
+            $(wrapper).find('#exec-holding-subtitle').html(`<strong>${pending_count}</strong> Total Pending Top-up(s) awaiting reconciliation`);
+            $(wrapper).find('#topup-filter-pending-count').text(period_pending_count);
             $(wrapper).find('#exec-topups-total').text(format_currency(period_topups_sum, "KES"));
+
+            // Update Period Summary Pill
+            if (period_topups_sum > 0 || period_pending_amount > 0) {
+                $(wrapper).find('#topup-period-summary-pill')
+                    .html(`Period Total: <b>${format_currency(period_topups_sum, "KES")}</b> &bull; Unreconciled: <b style="color:#b45309;">${format_currency(period_pending_amount, "KES")}</b>`)
+                    .show();
+            } else {
+                $(wrapper).find('#topup-period-summary-pill').hide();
+            }
 
             let html = '';
             if (stmt && stmt.length > 0) {

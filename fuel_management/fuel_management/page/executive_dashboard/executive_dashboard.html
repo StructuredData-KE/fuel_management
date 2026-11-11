@@ -2250,22 +2250,54 @@
                 </div>
             </div>
         <div class="exec-chart-area" style="margin-top:24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <!-- Top Toolbar: Title, Period Summary Badge, Status Tabs, Search, Reconcile Selected & Refresh -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <h2 class="exec-chart-title" style="margin: 0;">Top-Up Holding Statement</h2>
+                    <span id="topup-period-summary-pill" style="display:none; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 10px; border-radius: 9999px; font-weight: 800; font-family: monospace; font-size: 0.75rem;">Period Total: KES 0.00</span>
                     <div style="display: flex; gap: 4px; background: #f1f5f9; padding: 2px; border-radius: 6px; border: 1px solid #e2e8f0;">
                         <button type="button" class="topup-status-filter active" data-filter="all" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 4px; border: none; background: #ffffff; color: #1e293b; font-weight: 600; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">All</button>
                         <button type="button" class="topup-status-filter" data-filter="pending" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 4px; border: none; background: transparent; color: #b45309; font-weight: 600; cursor: pointer;">🟡 Pending (<span id="topup-filter-pending-count">0</span>)</button>
                         <button type="button" class="topup-status-filter" data-filter="reconciled" style="font-size: 0.72rem; padding: 3px 10px; border-radius: 4px; border: none; background: transparent; color: #15803d; font-weight: 600; cursor: pointer;">🟢 Reconciled</button>
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <input type="text" id="topup-search-input" placeholder="🔍 Search entry, RRN, card..." style="padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 0.75rem; width: 190px;">
                     <button type="button" id="btn-reconcile-selected-topups" style="display: none; padding: 4px 10px; font-weight: 700; font-size: 0.75rem; border-radius: 6px; background: #f59e0b; color: #fff; border: none; cursor: pointer; align-items: center; gap: 4px;">
                         <span>⚡ Reconcile Selected (<span id="topups-selected-count">0</span>)</span>
                     </button>
-                    <button type="button" id="btn-refresh-topups" style="padding: 4px 8px; font-weight: 600; font-size: 0.75rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer;">
-                        <span>🔄 Refresh</span>
+                    <button type="button" id="btn-refresh-topups" style="padding: 4px 10px; font-weight: 600; font-size: 0.75rem; border-radius: 6px; border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                        <span class="material-symbols-outlined" style="font-size: 14px;">refresh</span> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Date Filter Toolbar with Quick Presets -->
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                <!-- Preset Pills -->
+                <div style="display: flex; gap: 5px; align-items: center; flex-wrap: wrap;" id="topup-date-presets">
+                    <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Presets:</span>
+                    <button type="button" class="topup-preset-btn" data-preset="today" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; border: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font-weight: 500; cursor: pointer;">Today</button>
+                    <button type="button" class="topup-preset-btn" data-preset="yesterday" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; border: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font-weight: 500; cursor: pointer;">Yesterday</button>
+                    <button type="button" class="topup-preset-btn" data-preset="last_7_days" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; border: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font-weight: 500; cursor: pointer;">Last 7 Days</button>
+                    <button type="button" class="topup-preset-btn active" data-preset="this_month" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; border: 1px solid #cbd5e1; background: #e0e7ff; color: #3730a3; font-weight: 600; cursor: pointer;">This Month</button>
+                    <button type="button" class="topup-preset-btn" data-preset="last_month" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; border: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font-weight: 500; cursor: pointer;">Last Month</button>
+                    <button type="button" class="topup-preset-btn" data-preset="this_year" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; border: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font-weight: 500; cursor: pointer;">This Year</button>
+                    <button type="button" class="topup-preset-btn" data-preset="all_time" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 12px; border: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font-weight: 500; cursor: pointer;">All Time</button>
+                </div>
+
+                <!-- Date Inputs -->
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <label style="font-size: 0.72rem; font-weight: 600; color: #64748b;">From:</label>
+                        <input type="date" id="topup-filter-from" style="padding: 3px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.75rem; background: #fff;">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <label style="font-size: 0.72rem; font-weight: 600; color: #64748b;">To:</label>
+                        <input type="date" id="topup-filter-to" style="padding: 3px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.75rem; background: #fff;">
+                    </div>
+                    <button type="button" id="btn-topup-filter-apply" class="btn btn-xs" style="padding: 4px 10px; font-size: 0.72rem; font-weight: 700; background: #0284c7; color: #fff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 3px;">
+                        <span class="material-symbols-outlined" style="font-size: 13px;">filter_alt</span> Filter
                     </button>
                 </div>
             </div>

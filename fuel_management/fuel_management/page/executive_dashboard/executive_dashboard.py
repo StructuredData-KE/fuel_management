@@ -1541,7 +1541,13 @@ def get_sales_analytics(from_date=None, to_date=None, station=None):
 
 
 @frappe.whitelist()
-def get_topup_statement(from_date, to_date, station=None, status="all", search=None):
+def get_topup_statement(from_date=None, to_date=None, station=None, status="all", search=None):
+    from frappe.utils import today, flt
+    if not from_date:
+        from_date = "2020-01-01"
+    if not to_date:
+        to_date = today()
+
     station_topup_clause = ""
     station_args = []
     if station and station not in ("ALL", "All Stations", ""):
@@ -1645,6 +1651,8 @@ def get_topup_statement(from_date, to_date, station=None, status="all", search=N
     # Period totals
     period_topups_sum = sum(flt(t.get('amount', 0)) for t in topups)
     period_reconciled_sum = sum(flt(t.get('amount', 0)) for t in topups if t.get('is_reconciled') == 1)
+    period_pending_count = sum(1 for t in topups if t.get('is_reconciled') == 0)
+    period_pending_amount = sum(flt(t.get('amount', 0)) for t in topups if t.get('is_reconciled') == 0)
 
     data = topups + deductions
     # Sort by date, then creation
@@ -1676,6 +1684,8 @@ def get_topup_statement(from_date, to_date, station=None, status="all", search=N
         "statement": result,
         "pending_amount": pending_amount,
         "pending_count": pending_count,
+        "period_pending_count": period_pending_count,
+        "period_pending_amount": period_pending_amount,
         "running_balance": running_balance,
         "period_topups_sum": period_topups_sum,
         "period_reconciled_sum": period_reconciled_sum
