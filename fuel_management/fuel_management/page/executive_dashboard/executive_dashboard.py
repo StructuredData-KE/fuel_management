@@ -1709,7 +1709,7 @@ def create_topup_deduction(station, amount=None, credit_account=None, date=None,
         else:
             frappe.throw(f"No Top Up Holding Account configured for Station: {station}")
         
-    company = frappe.db.get_value("Fuel Station", station, "company") or frappe.db.get_single_value("Global Defaults", "default_company") or "KILIBET INVESTMENT LTD"
+    company = frappe.db.get_value("Account", holding_account, "company") or frappe.db.get_single_value("Global Defaults", "default_company") or "KILIBET INVESTMENT LTD"
 
     # Normalize topup_names
     parsed_topups = []
